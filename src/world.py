@@ -11,6 +11,7 @@ class Timer:
     Home = -1
 
 
+# Note: when a population is "home", its `dest` is set to the home location index, and its `timer` is set to -1.
 class Population:
     def __init__(self, compartments: Compartments, dest: int, timer: int):
         self.compartments = compartments
@@ -36,6 +37,10 @@ class Population:
 
     @classmethod
     def normalize(cls, ps: list[Population]) -> None:
+        """
+        Sorts a list of populations and combines equivalent populations.
+        Lists of populations should be normalized after creation and any modification.
+        """
         ps.sort(key=attrgetter('timer', 'dest'))
         # Iterate over all sequential pairs, starting from (0,1)
         j = 1
@@ -81,6 +86,12 @@ class Location:
 
 
 class World:
+    """
+    World tracks the state of a simulation's populations and subpopulations at a particular timeslice.
+    Each node in the Geo Model is represented as a Location; each Location has a list of Populations
+    that are considered to be well-mixed at that location; and each Population is divided into
+    Compartments as defined by the Intra-Population Model.
+    """
     @classmethod
     def initialize(cls, initial_pops: list[Compartments]):
         locations = [Location.initialize(i, cs)

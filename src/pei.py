@@ -53,14 +53,21 @@ class PeiModel(Ipm):
         return np.exp(a * humidity + b) + r0_min / self.D
 
     def initialize(self, num_nodes: int) -> list[Compartments]:
+        # The populations of all locations start off Susceptible.
         pops = [self.c() for _ in range(num_nodes)]
         for i in range(num_nodes):
             pops[i][0] = self.population(i)
+        # This is where we seed the infection.
+        # TODO: this should really be a sort of "initial condition" defined apart from the model.
         pops[0][0] -= 10_000
         pops[0][1] += 10_000
         return pops
 
     def events(self, loc: Location, tau: np.double, tick: Tick) -> Events:
+        # TODO: we need a mechanism to make sure we don't exceed the bounds of reality.
+        # For instance, in this model, we should never have more infections than there are susceptible people to infect.
+        # I don't think that's much of a concern with *this* model, but it will be in the general case, especially
+        # as population sizes shrink when we consider more granular spatial scales.
         cs = loc.compartment_totals
         total = np.sum(cs)
         rates = np.array([
@@ -69,18 +76,11 @@ class PeiModel(Ipm):
             tau * cs[2] / self.L,
         ])
         return np.random.poisson(rates)
-        # Check if we've exceeded population limits.
-        # TODO: a check like this doesn't detect if the distribution to subpops is proper, though
-        # deltas = np.sum(np.multiply(columnize(events, self.num_events),
-        #                 self.event_apply_matrix), axis=0)
-        # new_cs = cs + deltas
-        # if any(new_cs < 0):
-        #     print("WARNING: events exceeded population counts")
 
     def _draw(self, loc: Location, events: Events, ev_idx: int) -> NDArray[np.int_]:
-        # TODO: what if a compartment goes negative?!
-        # Actually we're protecting against that with "min" here becuase mvhypergeo crashes when it happens.
-        # But this is still a problem: the incidence counts are no longer entirely accurate to the degree this happens.
+        # What if a compartment goes negative?! This is best handled during the `events` stage, though.
+        # We're protecting against that with `min` here becuase mvhypergeo crashes when it happens.
+        # But this is still a problem: incidence counts are no longer entirely accurate to the degree this happens.
         compart_vec = [loc.compartments[ev_idx] for loc in loc.pops]
         # not generalized; assumes event[0] "sources" from compartment[0], etc.
         max_events = min(events[ev_idx], sum(compart_vec))

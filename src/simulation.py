@@ -8,7 +8,7 @@ from epi import Ipm
 from geo import Geo
 from movement import Movement
 from sim_context import SimContext
-from util import Compartments, Events, stutter
+from util import Compartments, Events
 from world import World
 
 

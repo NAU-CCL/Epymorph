@@ -22,7 +22,6 @@ class Clock:
         self.num_ticks = duration * num_steps
         times = range(self.num_ticks)
         days = [d for d in stutter(range(duration), num_steps)]
-        # [tau - taus[0] for tau in taus]
         tauaddend = list(accumulate(taus, lambda a, b: a + b,
                                     initial=np.double(0)))[0:-1]
         tausums = [d + t for d, t in zip(days, cycle(tauaddend))]

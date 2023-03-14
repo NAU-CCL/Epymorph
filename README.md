@@ -2,6 +2,12 @@
 
 Prototype EpiMoRPH system written in Python for exploring object-oriented design work.
 
+The primary entry point to the program (currently) is `main.py`.
+
+System submodules include `epi.py` (IPM), `geo.py` (GeoM), and `movement.py` (MM). `simulation.py` brings all of these together in an execution loop (RUME) to produce incidence and prevalence output.
+
+`pei.py` contains the implementation of an IPM and GeoM corresponding to the Pei influenza paper (pulling data from included csv files). Relevant movement clauses are available to configure its MM.
+
 ## Project setup
 
 For starters, you should have Python 3 installed and we'll assume it's accessible via the command `python3`.
