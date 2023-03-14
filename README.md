@@ -9,7 +9,8 @@ For starters, you should have Python 3 installed and we'll assume it's accessibl
 You will need system packages for virtual environments, viewing plots, and (optionally) viewing profiling charts. For example:
 
 ```bash
-sudo apt install python3-venv python3-tk snakeviz
+sudo apt install python3-venv python3-tk
+python3 -m pip install snakeviz
 ```
 
 Using VS Code, install the project's recommended extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install the modules from `requirements.txt`.
