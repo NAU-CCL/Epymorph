@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from clock import Tick
+from sim_context import SimContext
 from util import Compartments, Events
 from world import Location
 
@@ -29,11 +30,11 @@ class Ipm(ABC):
         pass
 
     @abstractmethod
-    def events(self, loc: Location, tau: np.double, tick: Tick) -> Events:
+    def events(self, ctx: SimContext, loc: Location,  tick: Tick) -> Events:
         """Calculate the events which took place in this tau step at the given location."""
         pass
 
     @abstractmethod
-    def apply_events(self, loc: Location, es: Events) -> None:
+    def apply_events(self, ctx: SimContext, loc: Location, es: Events) -> None:
         """Distribute events `es` among all populations at this location. (Modifies `loc`.)"""
         pass

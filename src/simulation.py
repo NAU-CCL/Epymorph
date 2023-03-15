@@ -39,22 +39,24 @@ class Simulation:
         self.mvm = mvm
         self.geo = geo
 
-    def run(self, start_date: date, duration: int) -> Output:
+    def run(self, start_date: date, duration: int, rng: np.random.Generator | None = None) -> Output:
         pops = self.ipm.initialize(self.geo.num_nodes)
         world = World.initialize(pops)
         clock = Clock.init(start_date, duration, self.mvm.taus)
-        self.ctx = SimContext(
+        if rng == None:
+            rng = np.random.default_rng()
+        ctx = SimContext(
             compartments=self.ipm.num_compartments,
             events=self.ipm.num_events,
             nodes=self.geo.num_nodes,
             labels=self.geo.node_labels,
             clock=clock,
-            rng=np.random.default_rng()
+            rng=rng
         )
-        out = Output(self.ctx)
+        out = Output(ctx)
 
         for t in clock.ticks:
-            tickout = self.tick(world, t)
+            tickout = self.tick(ctx, world, t)
             for i, inc in enumerate(tickout.incidence):
                 out.set_inc(i, t.index, inc)
             for i, prv in enumerate(tickout.prevalence):
@@ -62,17 +64,17 @@ class Simulation:
 
         return out
 
-    def tick(self, world: World, tick: Tick) -> TickOutput:
+    def tick(self, ctx: SimContext, world: World, tick: Tick) -> TickOutput:
         # First do movement
-        self.mvm.clause.apply(self.ctx, world, tick)
+        self.mvm.clause.apply(ctx, world, tick)
 
         # Calc events by compartment
-        incidence = [self.ipm.events(loc, tick.tau, tick)
+        incidence = [self.ipm.events(ctx, loc, tick)
                      for loc in world.locations]
 
         # Distribute events
         for loc, es in zip(world.locations, incidence):
-            self.ipm.apply_events(loc, es)
+            self.ipm.apply_events(ctx, loc, es)
 
         # Calc new effective population by compartment
         prevalence = [loc.compartment_totals for loc in world.locations]

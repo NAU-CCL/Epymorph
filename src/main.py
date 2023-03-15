@@ -37,7 +37,9 @@ def ruminate(plot_results: bool) -> None:
     t0 = time.perf_counter()
     out = sim.run(
         start_date=date(2023, 1, 1),
-        duration=150
+        duration=150,
+        # If you want consistent results, you can provide a seeded RNG.
+        # rng=np.random.default_rng(1)
     )
     t1 = time.perf_counter()
     print(f"Simulation time: {(t1 - t0):.2f}s")

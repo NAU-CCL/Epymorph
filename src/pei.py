@@ -108,7 +108,6 @@ class PeiModel(Ipm):
         self.humidity = humidity
         self.D = D  # duration of infection (days)
         self.L = L  # duration of immunity (days)
-        self.gen = np.random.default_rng()
 
     def _beta(self, loc_idx: int, tick: Tick) -> np.double:
         humidity: np.double = self.humidity(loc_idx, tick)
@@ -129,7 +128,7 @@ class PeiModel(Ipm):
         pops[0][1] += 10_000
         return pops
 
-    def events(self, loc: Location, tau: np.double, tick: Tick) -> Events:
+    def events(self, sim: SimContext, loc: Location, tick: Tick) -> Events:
         # TODO: we need a mechanism to make sure we don't exceed the bounds of reality.
         # For instance, in this model, we should never have more infections than there are susceptible people to infect.
         # I don't think that's much of a concern with *this* model, but it will be in the general case, especially
@@ -137,24 +136,24 @@ class PeiModel(Ipm):
         cs = loc.compartment_totals
         total = np.sum(cs)
         rates = np.array([
-            tau * self._beta(loc.index, tick) * cs[0] * cs[1] / total,
-            tau * cs[1] / self.D,
-            tau * cs[2] / self.L,
+            tick.tau * self._beta(loc.index, tick) * cs[0] * cs[1] / total,
+            tick.tau * cs[1] / self.D,
+            tick.tau * cs[2] / self.L,
         ])
-        return np.random.poisson(rates)
+        return sim.rng.poisson(rates)
 
-    def _draw(self, loc: Location, events: Events, ev_idx: int) -> NDArray[np.int_]:
+    def _draw(self, sim: SimContext, loc: Location, events: Events, ev_idx: int) -> NDArray[np.int_]:
         # What if a compartment goes negative?! This is best handled during the `events` stage, though.
         # We're protecting against that with `min` here becuase mvhypergeo crashes when it happens.
         # But this is still a problem: incidence counts are no longer entirely accurate to the degree this happens.
         compart_vec = [loc.compartments[ev_idx] for loc in loc.pops]
         # not generalized; assumes event[0] "sources" from compartment[0], etc.
         max_events = min(events[ev_idx], sum(compart_vec))
-        return self.gen.multivariate_hypergeometric(compart_vec, max_events)
+        return sim.rng.multivariate_hypergeometric(compart_vec, max_events)
 
-    def apply_events(self, loc: Location, es: Events) -> None:
+    def apply_events(self, sim: SimContext, loc: Location, es: Events) -> None:
         # Distribute events to subpopulations present.
-        events = [self._draw(loc, es, i) for i in range(len(es))]
+        events = [self._draw(sim, loc, es, i) for i in range(len(es))]
         for i, pop in enumerate(loc.pops):
             es_pop = [[events[0][i]], [events[1][i]], [events[2][i]]]
             deltas = np.sum(np.multiply(
