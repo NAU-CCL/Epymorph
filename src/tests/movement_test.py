@@ -5,27 +5,32 @@ from datetime import date
 import numpy as np
 
 import movement as M
-from clock import Clock, Tick
+from clock import Clock, TickDelta
 from sim_context import SimContext
 from tests.world_test import p, w
 from world import Location, Timer, World
 
 
+def testSimContext(num_nodes: int) -> SimContext:
+    clock = Clock.init(date(2023, 1, 1), 50, [np.double(1)])
+    labels = [f'node{n}' for n in range(num_nodes)]
+    return SimContext(3, 3, num_nodes, labels, clock, np.random.default_rng(1))
+
+
 class TestNoopMovement(unittest.TestCase):
     def test_noop(self):
         clause = M.Noop()
-        tick = Tick(0, 0, date(2023, 1, 1), 0, np.double(0))
-        sim = SimContext(3, 3, 3, ['A', 'B', 'C'], np.random.default_rng(1))
-        ini = w([30000, 20000, 10000])
-        exp = deepcopy(ini)
-        act = clause.apply(sim, ini, tick)
+        sim = testSimContext(3)
+        exp = w([30000, 20000, 10000])
+        act = deepcopy(exp)
+        clause.apply(sim, act, sim.clock.ticks[0])
         self.assertEqual(act, exp)
 
 
 class TestReturnMovement(unittest.TestCase):
     def test_return(self):
         clause = M.Return()
-        sim = SimContext(3, 3, 3, ['A', 'B', 'C'], np.random.default_rng(1))
+        sim = testSimContext(3)
         ini1 = World([
             Location(0, [
                 p(25000, 0, Timer.Home),
@@ -66,26 +71,34 @@ class TestReturnMovement(unittest.TestCase):
             ]),
         ])
 
-        clock = Clock(date(2023, 1, 1), 3, [np.double(1)])
-
-        act1 = clause.apply(sim, ini1, clock.ticks[0])
+        act1 = deepcopy(ini1)
+        clause.apply(sim, act1, sim.clock.ticks[0])
         self.assertEqual(act1, exp1)
 
-        act2 = clause.apply(sim, act1, clock.ticks[1])
+        act2 = deepcopy(act1)
+        clause.apply(sim, act2, sim.clock.ticks[1])
         self.assertEqual(act2, exp2)
 
-        act3 = clause.apply(sim, act2, clock.ticks[2])
+        act3 = deepcopy(act2)
+        clause.apply(sim, act3, sim.clock.ticks[2])
         self.assertEqual(act3, exp3)
 
 
-class TestFixedCrosswalkMovement(unittest.TestCase):
-    def test_fcross(self):
-        sim = SimContext(3, 3, 4, ['A', 'B', 'C', 'D'],
-                         np.random.default_rng(1))
-        clause = M.FixedCommuteMatrix(
-            duration=2, commuters=np.full((sim.nodes, sim.nodes), 100))
+class TestCrosswalkMovement(unittest.TestCase):
+    def test_crosswalk(self):
+        sim = testSimContext(4)
 
-        ini = World([
+        # Every tick, send 100 people to each other node.
+        # Self-movement is ignored, so no need to zero it out.
+        clause = M.GeneralClause(
+            name="Crosswalk",
+            predicate=M.Predicates.everyday(),
+            returns=TickDelta(2, 0),
+            equation=lambda *_: np.array([100, 100, 100, 100])
+        )
+
+        # The last node doesn't have enough locals, so it will receive movers but not send any.
+        act = World([
             Location(0, [
                 p(25000, 0, Timer.Home),
             ]),
@@ -124,51 +137,44 @@ class TestFixedCrosswalkMovement(unittest.TestCase):
             ]),
         ])
 
-        clock = Clock(date(2023, 1, 1), 1, [np.double(1)])
-
-        act = clause.apply(sim, ini, clock.ticks[0])
+        clause.apply(sim, act, sim.clock.ticks[0])
         self.assertEqual(act, exp)
 
 
 class TestSequenceMovement(unittest.TestCase):
-    def test_fcross_return(self):
-        sim = SimContext(3, 3, 3, ['A', 'B', 'C'], np.random.default_rng(1))
-        curr = w([30000, 20000, 15000])
-        exp = deepcopy(curr)
+    def test_sequence(self):
+        sim = testSimContext(3)
+        world = w([30000, 20000, 15000])
+        initial = deepcopy(world)
 
         def count_pops(world: World) -> int:
-            num_pops = 0
-            for loc in world.locations:
-                for pop in loc.pops:
-                    num_pops += 1
-            return num_pops
+            return sum([len(loc.pops) for loc in world.locations])
 
         clause = M.Sequence([
-            M.FixedCommuteMatrix(duration=2, commuters=np.full(
-                (sim.nodes, sim.nodes), 100)),
+            M.GeneralClause(
+                name="Crosswalk",
+                predicate=M.Predicates.everyday(),
+                returns=TickDelta(2, 0),
+                equation=lambda *_: np.array([100, 100, 100])
+            ),
             M.Return()
         ])
 
-        clock = Clock(date(2023, 1, 1), 22, [np.double(1)])
-        running_pops = [count_pops(curr)]
-        for i in range(1, 20):
-            clause.apply(sim, curr, clock.ticks[i])
-            running_pops.append(count_pops(curr))
+        running_pops = [count_pops(world)]
+        for i in range(0, 20):
+            clause.apply(sim, world, sim.clock.ticks[i])
+            running_pops.append(count_pops(world))
 
         # t=0: start with 3 pops (3)
         # t=1: each pop gains 2 subpops (9)
         # t=2: each pop gains 2 subpops (15)
         # t>2: each pop gains and loses 2 subpops (15)
-        exp_pops = [3, 9] + ([15] * 18)
+        exp_pops = [3, 9] + ([15] * 19)
 
         self.assertEqual(running_pops, exp_pops)
 
         # now do only returns for 2 steps and verify everyone goes home
-        M.Return().apply(sim, curr, clock.ticks[20])
-        M.Return().apply(sim, curr, clock.ticks[21])
+        M.Return().apply(sim, world, sim.clock.ticks[20])
+        M.Return().apply(sim, world, sim.clock.ticks[21])
 
-        self.assertEqual(curr, exp)
-
-
-if __name__ == '__main__':
-    unittest.main()
+        self.assertEqual(world, initial)

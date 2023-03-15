@@ -24,10 +24,16 @@ class Ipm(ABC):
         return np.zeros(self.num_events, dtype=np.int_)
 
     @abstractmethod
-    def initialize(self, num_nodes: int) -> list[Compartments]: pass
+    def initialize(self, num_nodes: int) -> list[Compartments]:
+        """Initialize by calculating starting compartments for each node."""
+        pass
 
     @abstractmethod
-    def events(self, loc: Location, tau: np.double, tick: Tick) -> Events: pass
+    def events(self, loc: Location, tau: np.double, tick: Tick) -> Events:
+        """Calculate the events which took place in this tau step at the given location."""
+        pass
 
     @abstractmethod
-    def apply_events(self, loc: Location, es: Events) -> None: pass
+    def apply_events(self, loc: Location, es: Events) -> None:
+        """Distribute events `es` among all populations at this location. (Modifies `loc`.)"""
+        pass

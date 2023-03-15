@@ -4,6 +4,7 @@ from operator import attrgetter
 
 import numpy as np
 
+from sim_context import SimContext
 from util import Compartments
 
 
@@ -30,6 +31,20 @@ class Population:
                 self.compartments == other.compartments and
                 self.dest == other.dest and
                 self.timer == other.timer)
+
+    def split(self,
+              sim: SimContext,
+              src_idx: int,
+              dst_idx: int,
+              return_tick: int,
+              requested: np.int_) -> tuple[np.int_, Population]:
+        actual = np.minimum(self.total, requested)
+        cs_probability = self.compartments / self.total
+        cs = sim.rng.multinomial(actual, cs_probability)
+        self.compartments -= cs
+        dest = dst_idx if return_tick == Timer.Home else src_idx
+        pop = Population(cs, dest, return_tick)
+        return (actual, pop)
 
     @classmethod
     def can_merge(cls, a: Population, b: Population) -> bool:
@@ -68,6 +83,7 @@ class Location:
         self.index = index
         self.pops = pops
 
+    @property
     def locals(self) -> Population:
         # NOTE: this only works if `pops` is normalized after modification
         return self.pops[0]

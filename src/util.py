@@ -1,4 +1,4 @@
-from typing import Iterable, TypeVar
+from typing import Any, Callable, Iterable, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,8 +10,12 @@ Events = NDArray[np.int_]
 T = TypeVar('T')
 
 
-def identity(x):
+def identity(x: T) -> T:
     return x
+
+
+def constant(x: T) -> Callable[..., T]:
+    return lambda *_: x
 
 
 def stutter(it: Iterable[T], times: int) -> Iterable[T]:
@@ -24,6 +28,7 @@ def stridesum(arr: NDArray[np.int_], n: int) -> NDArray[np.int_]:
     """Compute a new array by grouping every `n` rows and summing them together.
        `arr`'s length must be evenly divisible by `n`."""
     rows = len(arr)
+    assert rows % n == 0, f"Cannot stridesum array of length {rows} by {n}."
     res = np.zeros(shape=rows // n, dtype=np.int_)
     for j in range(0, rows, n):
         sum = np.int_(0)

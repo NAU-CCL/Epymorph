@@ -6,13 +6,24 @@ from numpy.typing import NDArray
 
 from clock import Tick
 
+# NOTE: I'm struggling a bit with how best to represent the geo model.
+# On the one hand, it's most flexible just to give direct access to the underlying
+# NDArrays. However this doesn't provide anything in the way of call-site guidance
+# on how to correctly access the data.
+# (Is this a 1D or 2D array? If it's time-series which axis is time and in what increment?)
+# And with this approach I might be stretching Python's type checking abilities.
+# So caveat emptor: these interfaces are far from solid.
+
 # TODO: would be ideal if these GeoParam classes were generic in the
 # foundational type (int, double, etc.). Tried it but ran into some issues.
 
 T = TypeVar('T')
 
+# A 1D array of data by node.
 ParamN = Callable[[int], T]
+# A time-series array of data by node.
 ParamNT = Callable[[int, Tick], T]
+# An matrix of data node-by-node.
 ParamNN = Callable[[int, int], T]
 
 

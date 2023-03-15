@@ -3,14 +3,18 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
-from clock import Tick
+import movement as M
+from clock import Tick, TickDelta
 from epi import Ipm
 from geo import Geo, GeoParamN, GeoParamNN, GeoParamNT, ParamN, ParamNT
-from util import Compartments, Events
+from sim_context import SimContext
+from util import Compartments, Events, is_square
 from world import Location
 
+# Geo Model
 
-def loadGeo() -> Geo:
+
+def load_geo() -> Geo:
     pop_labels = ["FL", "GA", "MD", "NC", "SC", "VA"]
     humidity = np.loadtxt('./data/pei-humidity.csv',
                           delimiter=',', dtype=np.double)
@@ -24,6 +28,68 @@ def loadGeo() -> Geo:
         GeoParamNN("commuters", commuters)
     ])
 
+# Movement Model
+
+
+def build_movement(commuters: NDArray[np.int_], move_control: float, theta: float) -> M.Movement:
+    assert 0 <= move_control <= 1.0, "Move Control must be in the range [0,1]."
+    assert 0 <= theta, "Theta must be not less than zero."
+    assert is_square(commuters), "Commuters matrix must be square."
+
+    def commuter_equation() -> M.RowEquation:
+        # Total commuters living in each state.
+        commuters_by_state = commuters.sum(axis=1, dtype=np.int_)
+        # Commuters as a ratio to the total commuters living in that state.
+        commuting_prob = commuters / \
+            commuters.sum(axis=1, keepdims=True, dtype=np.int_)
+
+        def equation(sim: SimContext, tick: Tick, src_idx: int) -> NDArray[np.int_]:
+            # Binomial draw with probability `move_control` to modulate total number of commuters.
+            typical = commuters_by_state[src_idx]
+            actual = sim.rng.binomial(typical, move_control)
+            # Multinomial draw for destination.
+            return sim.rng.multinomial(actual, commuting_prob[src_idx])
+        return equation
+
+    def disperser_equation() -> M.RowEquation:
+        # Pre-compute the average commuters between node pairs.
+        commuters_avg = np.zeros(commuters.shape)
+        for i in range(commuters.shape[0]):
+            for j in range(i + 1, commuters.shape[1]):
+                nbar = (commuters[i, j] + commuters[j, i]) // 2
+                commuters_avg[i, j] = nbar
+                commuters_avg[j, i] = nbar
+
+        def equation(sim: SimContext, tick: Tick, src_idx: int) -> NDArray[np.int_]:
+            return sim.rng.poisson(commuters_avg[src_idx] * theta)
+        return equation
+
+    return M.Movement(
+        # First step is day: 2/3 tau
+        # Second step is night: 1/3 tau
+        taus=[np.double(2/3), np.double(1/3)],
+        clause=M.Sequence([
+            # Main commuters: on step 0
+            M.GeneralClause.byRow(
+                name="Commuters",
+                predicate=M.Predicates.everyday(step=0),
+                returns=TickDelta(0, 1),  # returns today on step 1
+                equation=commuter_equation()
+            ),
+            # Random dispersers: also on step 0, cumulative effect.
+            M.GeneralClause.byRow(
+                name="Dispersers",
+                predicate=M.Predicates.everyday(step=0),
+                returns=TickDelta(0, 1),  # returns today on step 1
+                equation=disperser_equation()
+            ),
+            # Return: always triggers, but only moves pops whose return time is now.
+            M.Return()
+        ])
+    )
+
+
+# Intra-Population Model
 
 class PeiModel(Ipm):
     # for (row,col): should event (row) be added to or subtracted from compartment (col)?

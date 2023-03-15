@@ -36,7 +36,7 @@ python3 -m pip install -r requirements.txt
 
 There are VS Code tasks configured for running (or profiling) the currently open file, and its Testing view should enable running the unit tests.
 
-Alternatively, from the command line:
+Alternatively, from the command line (making sure you've activated the venv):
 
 ```bash
 # Running the main program:

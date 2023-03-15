@@ -18,9 +18,9 @@ class TickOutput(NamedTuple):
 
 
 class Output:
-    def __init__(self, ctx: SimContext, clock: Clock):
-        self.clock = clock
-        def arr(n): return np.zeros((clock.num_ticks, n), dtype=np.int_)
+    def __init__(self, ctx: SimContext):
+        self.clock = ctx.clock
+        def arr(n): return np.zeros((ctx.clock.num_ticks, n), dtype=np.int_)
         m = ctx.nodes
         self.prevalence = [arr(ctx.compartments) for _ in range(m)]
         self.incidence = [arr(ctx.events) for _ in range(m)]
@@ -38,36 +38,36 @@ class Simulation:
         self.ipm = ipm
         self.mvm = mvm
         self.geo = geo
-        self.ctx = SimContext(
-            compartments=ipm.num_compartments,
-            events=ipm.num_events,
-            nodes=geo.num_nodes,
-            labels=geo.node_labels,
-            rng=np.random.default_rng()
-        )
 
     def run(self, start_date: date, duration: int) -> Output:
         pops = self.ipm.initialize(self.geo.num_nodes)
         world = World.initialize(pops)
-        clock = Clock(start_date, duration, self.mvm.taus)
-        out = Output(self.ctx, clock)
+        clock = Clock.init(start_date, duration, self.mvm.taus)
+        self.ctx = SimContext(
+            compartments=self.ipm.num_compartments,
+            events=self.ipm.num_events,
+            nodes=self.geo.num_nodes,
+            labels=self.geo.node_labels,
+            clock=clock,
+            rng=np.random.default_rng()
+        )
+        out = Output(self.ctx)
 
         for t in clock.ticks:
             tickout = self.tick(world, t)
             for i, inc in enumerate(tickout.incidence):
-                out.set_inc(i, t.time, inc)
+                out.set_inc(i, t.index, inc)
             for i, prv in enumerate(tickout.prevalence):
-                out.set_prv(i, t.time, prv)
+                out.set_prv(i, t.index, prv)
 
         return out
 
     def tick(self, world: World, tick: Tick) -> TickOutput:
         # First do movement
-        step = self.mvm.steps[tick.step]
-        step.clause.apply(self.ctx, world, tick)
+        self.mvm.clause.apply(self.ctx, world, tick)
 
         # Calc events by compartment
-        incidence = [self.ipm.events(loc, step.tau, tick)
+        incidence = [self.ipm.events(loc, tick.tau, tick)
                      for loc in world.locations]
 
         # Distribute events
