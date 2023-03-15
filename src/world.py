@@ -14,38 +14,6 @@ class Timer:
 
 # Note: when a population is "home", its `dest` is set to the home location index, and its `timer` is set to -1.
 class Population:
-    def __init__(self, compartments: Compartments, dest: int, timer: int):
-        self.compartments = compartments
-        self.dest = dest
-        self.timer = timer
-
-    def merge(self, other: Population) -> None:
-        self.compartments += other.compartments
-
-    @property
-    def total(self) -> np.int_:
-        return np.sum(self.compartments)
-
-    def __eq__(self, other):
-        return (isinstance(other, Population) and
-                self.compartments == other.compartments and
-                self.dest == other.dest and
-                self.timer == other.timer)
-
-    def split(self,
-              sim: SimContext,
-              src_idx: int,
-              dst_idx: int,
-              return_tick: int,
-              requested: np.int_) -> tuple[np.int_, Population]:
-        actual = np.minimum(self.total, requested)
-        cs_probability = self.compartments / self.total
-        cs = sim.rng.multinomial(actual, cs_probability)
-        self.compartments -= cs
-        dest = dst_idx if return_tick == Timer.Home else src_idx
-        pop = Population(cs, dest, return_tick)
-        return (actual, pop)
-
     @classmethod
     def can_merge(cls, a: Population, b: Population) -> bool:
         return a.timer == b.timer and a.dest == b.dest
@@ -67,6 +35,38 @@ class Population:
                 del ps[j]
             else:
                 j += 1
+
+    def __init__(self, compartments: Compartments, dest: int, timer: int):
+        self.compartments = compartments
+        self.dest = dest
+        self.timer = timer
+
+    @property
+    def total(self) -> np.int_:
+        return np.sum(self.compartments)
+
+    def merge(self, other: Population) -> None:
+        self.compartments += other.compartments
+
+    def split(self,
+              sim: SimContext,
+              src_idx: int,
+              dst_idx: int,
+              return_tick: int,
+              requested: np.int_) -> tuple[np.int_, Population]:
+        actual = np.minimum(self.total, requested)
+        cs_probability = self.compartments / self.total
+        cs = sim.rng.multinomial(actual, cs_probability)
+        self.compartments -= cs
+        dest = dst_idx if return_tick == Timer.Home else src_idx
+        pop = Population(cs, dest, return_tick)
+        return (actual, pop)
+
+    def __eq__(self, other):
+        return (isinstance(other, Population) and
+                self.compartments == other.compartments and
+                self.dest == other.dest and
+                self.timer == other.timer)
 
     def __str__(self):
         return f"({self.compartments},{self.dest},{self.timer})"
