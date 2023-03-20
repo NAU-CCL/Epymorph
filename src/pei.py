@@ -64,6 +64,12 @@ def build_movement(commuters: NDArray[np.int_], move_control: float, theta: floa
             return sim.rng.poisson(commuters_avg[src_idx] * theta)
         return equation
 
+    # Example movement script:
+    #
+    # [move-steps: per-day=2; duration=[2/3, 1/3]]
+    # [mtype: daily; days=[m,t,w,th,f,st,sn]; leave-step=1; return=0d.step2; <equation for commuters>]
+    # [mtype: daily; days=[m,t,w,th,f,st,sn]; leave-step=1; return=0d.step2; <equation for dispersers>]
+
     return M.Movement(
         # First step is day: 2/3 tau
         # Second step is night: 1/3 tau
