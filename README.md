@@ -6,7 +6,7 @@ The primary entry point to the program (currently) is `main.py`.
 
 System submodules include `epi.py` (IPM), `geo.py` (GeoM), and `movement.py` (MM). `simulation.py` brings all of these together in an execution loop (RUME) to produce incidence and prevalence output.
 
-`pei.py` contains the implementation of an IPM and GeoM corresponding to the Pei influenza paper (pulling data from included csv files). Relevant movement clauses are available to configure its MM.
+The `model` directory contains the implementation of an IPM and GeoM corresponding to the Pei influenza paper (pulling data from included csv files). Relevant movement clauses are available to configure its MM.
 
 ## Project setup
 
@@ -40,11 +40,11 @@ Alternatively, from the command line (making sure you've activated the venv):
 
 ```bash
 # Running the main program:
-python3 ./src/main.py
+python3 -m epymorph.main
 
 # Running all unit tests:
-python3 -m unittest discover -v -s ./src -p '*_test.py'
+python3 -m unittest discover -v -s ./epymorph -p '*_test.py'
 
 # Profiling the main program and opening the results in snakeviz:
-TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP ./src/main.py --profile; snakeviz $TMP
+TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP -m epymorph.main --profile; snakeviz $TMP
 ```

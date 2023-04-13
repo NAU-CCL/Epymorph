@@ -6,7 +6,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from util import stutter
+from epymorph.util import stutter
 
 
 class Tick(NamedTuple):

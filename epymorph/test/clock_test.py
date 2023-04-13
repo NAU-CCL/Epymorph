@@ -3,7 +3,7 @@ from datetime import date
 
 import numpy as np
 
-from clock import Clock, Tick
+from epymorph.clock import Clock, Tick
 
 
 class TestClock(unittest.TestCase):

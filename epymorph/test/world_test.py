@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import numpy as np
 
-from world import Population, Timer, World
+from epymorph.world import Population, Timer, World
 
 
 # Test case constructor for World

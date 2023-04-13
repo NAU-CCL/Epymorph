@@ -6,14 +6,14 @@ from datetime import date
 
 import numpy as np
 
-import movement as M
-import plotting as P
-import simulation as S
-from clock import TickDelta
-from model.geo_pei import load_geo
-from model.ipm_pei import PeiModel
-from model.mvm_commuter import commuter_movement
-from model.mvm_disperser import disperser_movement
+import epymorph.movement as M
+import epymorph.plotting as P
+import epymorph.simulation as S
+from epymorph.clock import TickDelta
+from epymorph.model.geo_pei import load_geo
+from epymorph.model.ipm_pei import PeiModel
+from epymorph.model.mvm_commuter import commuter_movement
+from epymorph.model.mvm_disperser import disperser_movement
 
 
 def ruminate(plot_results: bool) -> None:

@@ -8,9 +8,9 @@ from typing import Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from clock import Tick, TickDelta
-from sim_context import SimContext
-from world import Population, Timer, World
+from epymorph.clock import Tick, TickDelta
+from epymorph.sim_context import SimContext
+from epymorph.world import Population, Timer, World
 
 ClausePred = Callable[[Tick], bool]
 RowEquation = Callable[[SimContext, Tick, int], NDArray[np.int_]]

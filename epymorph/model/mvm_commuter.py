@@ -3,10 +3,10 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
-import movement as M
-from clock import Tick
-from sim_context import SimContext
-from util import is_square
+import epymorph.movement as M
+from epymorph.clock import Tick
+from epymorph.sim_context import SimContext
+from epymorph.util import is_square
 
 
 def commuter_movement(commuters: NDArray[np.int_], move_control: float) -> M.RowEquation:

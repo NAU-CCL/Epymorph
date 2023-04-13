@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 
-import simulation as S
-from util import stridesum
+import epymorph.simulation as S
+from epymorph.util import stridesum
 
 
 def plot_pop_prevalence(out: S.Output, pop_idx: int, labels: dict[str, str], scaling) -> None:

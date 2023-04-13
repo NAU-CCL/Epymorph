@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from geo import Geo, GeoParamN, GeoParamNN, GeoParamNT
+from epymorph.geo import Geo, GeoParamN, GeoParamNN, GeoParamNT
 
 
 def load_geo() -> Geo:

@@ -4,7 +4,7 @@ from typing import Callable, TypeVar
 import numpy as np
 from numpy.typing import NDArray
 
-from clock import Tick
+from epymorph.clock import Tick
 
 # NOTE: I'm struggling a bit with how best to represent the geo model.
 # On the one hand, it's most flexible just to give direct access to the underlying

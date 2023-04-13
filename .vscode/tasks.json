@@ -4,15 +4,15 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Python - Run current file",
+            "label": "Python - Run this module",
             "type": "shell",
-            "command": "python3 ${file}",
+            "command": "MODULE=$(echo ${relativeFileDirname}.${fileBasenameNoExtension} | sed 's/\\//./g'); python3 -m $MODULE",
             "problemMatcher": []
         },
         {
-            "label": "Python - Profile",
+            "label": "Python - Profile this module",
             "type": "shell",
-            "command": "TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP ${file} --profile; snakeviz $TMP",
+            "command": "MODULE=$(echo ${relativeFileDirname}.${fileBasenameNoExtension} | sed 's/\\//./g'); TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP -m $MODULE --profile; snakeviz $TMP",
             "problemMatcher": []
         }
     ]

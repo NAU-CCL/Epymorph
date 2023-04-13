@@ -3,12 +3,12 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
-from clock import Tick
-from epi import Ipm
-from geo import ParamN, ParamNT
-from sim_context import SimContext
-from util import Compartments, Events
-from world import Location
+from epymorph.clock import Tick
+from epymorph.epi import Ipm
+from epymorph.geo import ParamN, ParamNT
+from epymorph.sim_context import SimContext
+from epymorph.util import Compartments, Events
+from epymorph.world import Location
 
 
 class PeiModel(Ipm):

@@ -4,11 +4,11 @@ from datetime import date
 
 import numpy as np
 
-import movement as M
-from clock import Clock, TickDelta
-from sim_context import SimContext
-from tests.world_test import p, w
-from world import Location, Timer, World
+import epymorph.movement as M
+from epymorph.clock import Clock, TickDelta
+from epymorph.sim_context import SimContext
+from epymorph.test.world_test import p, w
+from epymorph.world import Location, Timer, World
 
 
 def testSimContext(num_nodes: int) -> SimContext:

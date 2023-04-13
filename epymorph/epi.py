@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from clock import Tick
-from sim_context import SimContext
-from util import Compartments, Events
-from world import Location
+from epymorph.clock import Tick
+from epymorph.sim_context import SimContext
+from epymorph.util import Compartments, Events
+from epymorph.world import Location
 
 
 class Ipm(ABC):

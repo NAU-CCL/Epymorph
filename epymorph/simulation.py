@@ -3,13 +3,13 @@ from typing import NamedTuple
 
 import numpy as np
 
-from clock import Clock, Tick
-from epi import Ipm
-from geo import Geo
-from movement import Movement
-from sim_context import SimContext
-from util import Compartments, Events
-from world import World
+from epymorph.clock import Clock, Tick
+from epymorph.epi import Ipm
+from epymorph.geo import Geo
+from epymorph.movement import Movement
+from epymorph.sim_context import SimContext
+from epymorph.util import Compartments, Events
+from epymorph.world import World
 
 
 class TickOutput(NamedTuple):

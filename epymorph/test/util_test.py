@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-import util
+import epymorph.util as util
 
 
 class TestUtil(unittest.TestCase):

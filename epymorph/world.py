@@ -4,8 +4,8 @@ from operator import attrgetter
 
 import numpy as np
 
-from sim_context import SimContext
-from util import Compartments
+from epymorph.sim_context import SimContext
+from epymorph.util import Compartments
 
 
 class Timer:
