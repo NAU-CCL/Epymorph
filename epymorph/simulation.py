@@ -2,13 +2,14 @@ from datetime import date
 from typing import NamedTuple
 
 import numpy as np
+from numpy.typing import NDArray
 
 from epymorph.clock import Clock, Tick
-from epymorph.epi import Ipm
+from epymorph.context import SimContext
+from epymorph.epi import Ipm, IpmBuilder
 from epymorph.geo import Geo
-from epymorph.movement import Movement
-from epymorph.sim_context import SimContext
-from epymorph.util import Compartments, Events
+from epymorph.movement import Movement, MovementBuilder
+from epymorph.util import Compartments, DataDict, Events
 from epymorph.world import World
 
 
@@ -18,6 +19,12 @@ class TickOutput(NamedTuple):
 
 
 class Output:
+    clock: Clock
+    # TODO: these two should probably just be 2D np.arrays
+    prevalence: list[NDArray[np.int_]]
+    incidence: list[NDArray[np.int_]]
+    pop_labels: list[str]
+
     def __init__(self, ctx: SimContext):
         self.clock = ctx.clock
         def arr(n): return np.zeros((ctx.clock.num_ticks, n), dtype=np.int_)
@@ -26,55 +33,65 @@ class Output:
         self.incidence = [arr(ctx.events) for _ in range(m)]
         self.pop_labels = ctx.labels
 
-    def set_prv(self, loc_idx: int, tick: int, prv: Compartments) -> None:
-        self.prevalence[loc_idx][tick] = prv
+    def set_prv(self, loc_idx: int, tick: Tick, prv: Compartments) -> None:
+        self.prevalence[loc_idx][tick.index] = prv
 
-    def set_inc(self, loc_idx: int, tick: int, inc: Compartments) -> None:
-        self.incidence[loc_idx][tick] = inc
+    def set_inc(self, loc_idx: int, tick: Tick, inc: Compartments) -> None:
+        self.incidence[loc_idx][tick.index] = inc
 
 
 class Simulation:
-    def __init__(self, ipm: Ipm, mvm: Movement, geo: Geo):
-        self.ipm = ipm
-        self.mvm = mvm
+    geo: Geo
+    ipmBuilder: IpmBuilder
+    mvmBuilder: MovementBuilder
+
+    def __init__(self, geo: Geo, ipmBuilder: IpmBuilder, mvmBuilder: MovementBuilder):
         self.geo = geo
+        self.ipmBuilder = ipmBuilder
+        self.mvmBuilder = mvmBuilder
 
-    def run(self, start_date: date, duration: int, rng: np.random.Generator | None = None) -> Output:
-        pops = self.ipm.initialize(self.geo.num_nodes)
-        world = World.initialize(pops)
-        clock = Clock.init(start_date, duration, self.mvm.taus)
-        if rng == None:
-            rng = np.random.default_rng()
+    def run(self, param: DataDict, start_date: date, duration: int, rng: np.random.Generator | None = None) -> Output:
         ctx = SimContext(
-            compartments=self.ipm.num_compartments,
-            events=self.ipm.num_events,
-            nodes=self.geo.num_nodes,
-            labels=self.geo.node_labels,
-            clock=clock,
-            rng=rng
+            nodes=self.geo.nodes,
+            labels=self.geo.labels,
+            geo=self.geo.data,
+            compartments=self.ipmBuilder.compartments,
+            events=self.ipmBuilder.events,
+            param=param,
+            clock=Clock.init(start_date, duration, self.mvmBuilder.taus),
+            rng=np.random.default_rng() if rng is None else rng
         )
+
+        # Verification checks:
+        self.ipmBuilder.verify(ctx)
+        self.mvmBuilder.verify(ctx)
+        ipm = self.ipmBuilder.build(ctx)
+        mvm = self.mvmBuilder.build(ctx)
+
+        world = World.initialize(
+            self.ipmBuilder.initialize_compartments(ctx)
+        )
+
         out = Output(ctx)
-
-        for t in clock.ticks:
-            tickout = self.tick(ctx, world, t)
+        for t in ctx.clock.ticks:
+            tickout = self.tick(ipm, mvm, world, t)
             for i, inc in enumerate(tickout.incidence):
-                out.set_inc(i, t.index, inc)
+                out.set_inc(i, t, inc)
             for i, prv in enumerate(tickout.prevalence):
-                out.set_prv(i, t.index, prv)
-
+                out.set_prv(i, t, prv)
         return out
 
-    def tick(self, ctx: SimContext, world: World, tick: Tick) -> TickOutput:
+    def tick(self, ipm: Ipm, mvm: Movement, world: World, tick: Tick) -> TickOutput:
         # First do movement
-        self.mvm.clause.apply(ctx, world, tick)
+        mvm.clause.apply(world, tick)
 
         # Calc events by compartment
-        incidence = [self.ipm.events(ctx, loc, tick)
+        incidence = [ipm.events(loc, tick)
                      for loc in world.locations]
 
         # Distribute events
         for loc, es in zip(world.locations, incidence):
-            self.ipm.apply_events(ctx, loc, es)
+            ipm.apply_events(loc, es)
 
         # Calc new effective population by compartment
         prevalence = [loc.compartment_totals for loc in world.locations]

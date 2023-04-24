@@ -28,6 +28,11 @@ Never = TickDelta(-1, -1)
 
 
 class Clock:
+    num_days: int
+    num_steps: int
+    num_ticks: int
+    ticks: list[Tick]
+
     @classmethod
     def init(cls, start_date: date, num_days: int, tau_steps: list[np.double]) -> Clock:
         # `duration` is in days
@@ -54,6 +59,6 @@ class Clock:
         self.num_ticks = num_ticks
         self.ticks = ticks
 
-    def tickPlus(self, tick: Tick, delta: TickDelta) -> int:
+    def tick_plus(self, tick: Tick, delta: TickDelta) -> int:
         return -1 if delta.days == -1 else \
             tick.index - tick.step + (self.num_steps * delta.days) + delta.step

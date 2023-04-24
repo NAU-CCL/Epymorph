@@ -4,33 +4,40 @@ from datetime import date
 
 import numpy as np
 
-import epymorph.movement as M
+import epymorph.movement_clause as C
 from epymorph.clock import Clock, TickDelta
-from epymorph.sim_context import SimContext
+from epymorph.context import SimContext
 from epymorph.test.world_test import p, w
 from epymorph.world import Location, Timer, World
 
 
 def testSimContext(num_nodes: int) -> SimContext:
-    clock = Clock.init(date(2023, 1, 1), 50, [np.double(1)])
-    labels = [f'node{n}' for n in range(num_nodes)]
-    return SimContext(3, 3, num_nodes, labels, clock, np.random.default_rng(1))
+    return SimContext(
+        nodes=num_nodes,
+        labels=[f'node{n}' for n in range(num_nodes)],
+        geo={},
+        compartments=3,
+        events=3,
+        param={},
+        clock=Clock.init(date(2023, 1, 1), 50, [np.double(1)]),
+        rng=np.random.default_rng(1)
+    )
 
 
 class TestNoopMovement(unittest.TestCase):
     def test_noop(self):
-        clause = M.Noop()
-        sim = testSimContext(3)
+        clause = C.Noop()
+        ctx = testSimContext(3)
         exp = w([30000, 20000, 10000])
         act = deepcopy(exp)
-        clause.apply(sim, act, sim.clock.ticks[0])
+        clause.apply(act, ctx.clock.ticks[0])
         self.assertEqual(act, exp)
 
 
 class TestReturnMovement(unittest.TestCase):
     def test_return(self):
-        clause = M.Return()
-        sim = testSimContext(3)
+        ctx = testSimContext(3)
+        clause = C.Return(ctx)
         ini1 = World([
             Location(0, [
                 p(25000, 0, Timer.Home),
@@ -72,27 +79,28 @@ class TestReturnMovement(unittest.TestCase):
         ])
 
         act1 = deepcopy(ini1)
-        clause.apply(sim, act1, sim.clock.ticks[0])
+        clause.apply(act1, ctx.clock.ticks[0])
         self.assertEqual(act1, exp1)
 
         act2 = deepcopy(act1)
-        clause.apply(sim, act2, sim.clock.ticks[1])
+        clause.apply(act2, ctx.clock.ticks[1])
         self.assertEqual(act2, exp2)
 
         act3 = deepcopy(act2)
-        clause.apply(sim, act3, sim.clock.ticks[2])
+        clause.apply(act3, ctx.clock.ticks[2])
         self.assertEqual(act3, exp3)
 
 
 class TestCrosswalkMovement(unittest.TestCase):
     def test_crosswalk(self):
-        sim = testSimContext(4)
+        ctx = testSimContext(4)
 
         # Every tick, send 100 people to each other node.
         # Self-movement is ignored, so no need to zero it out.
-        clause = M.GeneralClause(
+        clause = C.GeneralClause(
+            ctx=ctx,
             name="Crosswalk",
-            predicate=M.Predicates.everyday(),
+            predicate=C.Predicates.everyday(),
             returns=TickDelta(2, 0),
             equation=lambda *_: np.array([100, 100, 100, 100])
         )
@@ -137,32 +145,35 @@ class TestCrosswalkMovement(unittest.TestCase):
             ]),
         ])
 
-        clause.apply(sim, act, sim.clock.ticks[0])
+        clause.apply(act, ctx.clock.ticks[0])
         self.assertEqual(act, exp)
 
 
 class TestSequenceMovement(unittest.TestCase):
     def test_sequence(self):
-        sim = testSimContext(3)
+        ctx = testSimContext(3)
+        clock = ctx.clock
         world = w([30000, 20000, 15000])
         initial = deepcopy(world)
 
         def count_pops(world: World) -> int:
             return sum([len(loc.pops) for loc in world.locations])
 
-        clause = M.Sequence([
-            M.GeneralClause(
+        return_clause = C.Return(ctx)
+        clause = C.Sequence([
+            C.GeneralClause(
+                ctx=ctx,
                 name="Crosswalk",
-                predicate=M.Predicates.everyday(),
+                predicate=C.Predicates.everyday(),
                 returns=TickDelta(2, 0),
                 equation=lambda *_: np.array([100, 100, 100])
             ),
-            M.Return()
+            return_clause
         ])
 
         running_pops = [count_pops(world)]
         for i in range(0, 20):
-            clause.apply(sim, world, sim.clock.ticks[i])
+            clause.apply(world, clock.ticks[i])
             running_pops.append(count_pops(world))
 
         # t=0: start with 3 pops (3)
@@ -174,7 +185,7 @@ class TestSequenceMovement(unittest.TestCase):
         self.assertEqual(running_pops, exp_pops)
 
         # now do only returns for 2 steps and verify everyone goes home
-        M.Return().apply(sim, world, sim.clock.ticks[20])
-        M.Return().apply(sim, world, sim.clock.ticks[21])
+        return_clause.apply(world, clock.ticks[20])
+        return_clause.apply(world, clock.ticks[21])
 
         self.assertEqual(world, initial)

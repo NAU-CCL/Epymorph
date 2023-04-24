@@ -5,6 +5,7 @@ from numpy.typing import NDArray
 
 Compartments = NDArray[np.int_]
 Events = NDArray[np.int_]
+DataDict = dict[str, Any]
 
 
 T = TypeVar('T')

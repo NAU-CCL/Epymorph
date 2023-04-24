@@ -2,11 +2,11 @@
 
 Prototype EpiMoRPH system written in Python for exploring object-oriented design work.
 
-The primary entry point to the program (currently) is `main.py`.
+The primary entry point to the program (currently) is `__main__.py`. It is designed to execute example scripts (found in the `examples` directory), so you'll also need to pass the `--sim` parameter (or `-s` for short) naming which script to run (the example script's name without its extension; see example below).
 
 System submodules include `epi.py` (IPM), `geo.py` (GeoM), and `movement.py` (MM). `simulation.py` brings all of these together in an execution loop (RUME) to produce incidence and prevalence output.
 
-The `model` directory contains the implementation of an IPM and GeoM corresponding to the Pei influenza paper (pulling data from included csv files). Relevant movement clauses are available to configure its MM.
+The `model` directory contains the implementation of an IPM and GeoM corresponding to the Pei influenza paper (pulling data from included csv files). Relevant movement clauses are available to configure its MM. The `examples` directory contains scripts which "compile" modules into a runnable form.
 
 ## Project setup
 
@@ -40,11 +40,11 @@ Alternatively, from the command line (making sure you've activated the venv):
 
 ```bash
 # Running the main program:
-python3 -m epymorph.main
+python3 -m epymorph -s pei_py
 
 # Running all unit tests:
 python3 -m unittest discover -v -s ./epymorph -p '*_test.py'
 
 # Profiling the main program and opening the results in snakeviz:
-TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP -m epymorph.main --profile; snakeviz $TMP
+TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP -m epymorph -s pei_py --profile; snakeviz $TMP
 ```

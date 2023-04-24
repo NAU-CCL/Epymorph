@@ -4,7 +4,7 @@ from operator import attrgetter
 
 import numpy as np
 
-from epymorph.sim_context import SimContext
+from epymorph.context import SimContext
 from epymorph.util import Compartments
 
 
@@ -114,8 +114,12 @@ class World:
                      for (i, cs) in enumerate(initial_pops)]
         return World(locations)
 
+    locations: list[Location]
+    size: int
+
     def __init__(self, locations: list[Location]):
         self.locations = locations
+        self.size = len(locations)
 
     def normalize(self) -> None:
         for loc in self.locations:
