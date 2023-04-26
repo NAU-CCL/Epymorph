@@ -14,12 +14,12 @@ class Timer:
 
 # Note: when a population is "home", its `dest` is set to the home location index, and its `timer` is set to -1.
 class Population:
-    @classmethod
-    def can_merge(cls, a: Population, b: Population) -> bool:
+    @staticmethod
+    def can_merge(a: Population, b: Population) -> bool:
         return a.timer == b.timer and a.dest == b.dest
 
-    @classmethod
-    def normalize(cls, ps: list[Population]) -> None:
+    @staticmethod
+    def normalize(ps: list[Population]) -> None:
         """
         Sorts a list of populations and combines equivalent populations.
         Lists of populations should be normalized after creation and any modification.
@@ -76,7 +76,7 @@ class Location:
     @classmethod
     def initialize(cls, index: int, initial_pop: Compartments):
         pops = [Population(initial_pop, index, Timer.Home)]
-        return Location(index, pops)
+        return cls(index, pops)
 
     def __init__(self, index: int, pops: list[Population]):
         Population.normalize(pops)
@@ -112,7 +112,7 @@ class World:
     def initialize(cls, initial_pops: list[Compartments]):
         locations = [Location.initialize(i, cs)
                      for (i, cs) in enumerate(initial_pops)]
-        return World(locations)
+        return cls(locations)
 
     locations: list[Location]
     size: int

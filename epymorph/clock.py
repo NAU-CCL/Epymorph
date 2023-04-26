@@ -51,7 +51,7 @@ class Clock:
 
         ticks = [Tick(*xs)
                  for xs in zip(indices, days, dates, steps, taus, tau_sums)]
-        return Clock(num_days, num_steps, num_ticks, ticks)
+        return cls(num_days, num_steps, num_ticks, ticks)
 
     def __init__(self, num_days: int, num_steps: int, num_ticks: int, ticks: list[Tick]):
         self.num_days = num_days

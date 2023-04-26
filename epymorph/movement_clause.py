@@ -53,7 +53,7 @@ class GeneralClause(ConditionalClause):
 
     @classmethod
     def by_row(cls, ctx: SimContext, name: str, predicate: ClausePred, returns: TickDelta, equation: RowEquation) -> GeneralClause:
-        return GeneralClause(ctx, name, predicate, returns, equation)
+        return cls(ctx, name, predicate, returns, equation)
 
     @classmethod
     def by_cross(cls, ctx: SimContext, name: str, predicate: ClausePred, returns: TickDelta, equation: CrossEquation) -> GeneralClause:
@@ -63,7 +63,7 @@ class GeneralClause(ConditionalClause):
                 row[dst_idx] = 0 if src_idx == dst_idx else \
                     equation(tick, src_idx, dst_idx)
             return row
-        return GeneralClause(ctx, name, predicate, returns, e)
+        return cls(ctx, name, predicate, returns, e)
 
     ctx: SimContext
     name: str
@@ -146,14 +146,14 @@ class Sequence(Clause):
 
 
 class Predicates:
-    @classmethod
-    def daylist(cls, days: list[DayOfWeek], step: int | None = None) -> ClausePred:
+    @staticmethod
+    def daylist(days: list[DayOfWeek], step: int | None = None) -> ClausePred:
         day_indices = [i for i in range(len(all_days)) if all_days[i] in days]
         return lambda tick: tick.date.weekday() in day_indices and \
             (step is None or step == tick.step)
 
-    @classmethod
-    def everyday(cls, step: int | None = None) -> ClausePred:
+    @staticmethod
+    def everyday(step: int | None = None) -> ClausePred:
         if step == None:
             return lambda _: True
         else:
@@ -163,15 +163,15 @@ class Predicates:
     # but many more are possible.
     # TODO: These could be cleaned up a bit.
 
-    @classmethod
-    def weekdays(cls, step: int | None = None) -> ClausePred:
+    @staticmethod
+    def weekdays(step: int | None = None) -> ClausePred:
         if step == None:
             return lambda tick: 0 <= tick.date.weekday() < 5
         else:
             return lambda tick: 0 <= tick.date.weekday() < 5 and tick.step == step
 
-    @classmethod
-    def weekends(cls, step: int | None = None) -> ClausePred:
+    @staticmethod
+    def weekends(step: int | None = None) -> ClausePred:
         if step == None:
             return lambda tick: 4 < tick.date.weekday() <= 6
         else:
