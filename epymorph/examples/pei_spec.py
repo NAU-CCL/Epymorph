@@ -69,9 +69,10 @@ def ruminate(plot_results: bool, simargs: list[str]) -> None:
         ax.set_xlabel('days')
         # ax.set_ylabel('infections (per 100k population)')
         ax.set_ylabel('infections')
-        x_axis = list(range(out.clock.num_days))
-        for pop_idx, pop_inc in enumerate(out.incidence):
-            values = stridesum(pop_inc[:, event], out.clock.num_steps)
+        x_axis = list(range(out.ctx.clock.num_days))
+        for pop_idx in range(geo.nodes):
+            values = stridesum(
+                out.incidence[:, pop_idx, event], out.ctx.clock.num_steps)
             # Scaled by population:
             # y_axis = values * 100_000 / geo.data['population'][pop_idx]
             # Unscaled:
@@ -88,10 +89,10 @@ def ruminate(plot_results: bool, simargs: list[str]) -> None:
         ax.set_xlabel('days')
         ax.set_ylabel('persons (log scale)')
         ax.set_yscale('log')
-        x_axis = [t.tausum for t in out.clock.ticks]
+        x_axis = [t.tausum for t in out.ctx.clock.ticks]
         events = ['S', 'I', 'R']
         for i, event in enumerate(events):
-            y_axis = out.prevalence[pop][:, i]
+            y_axis = out.prevalence[:, pop, i]
             ax.plot(x_axis, y_axis, label=event)
         ax.legend()
         fig.tight_layout()

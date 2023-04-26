@@ -1,22 +1,15 @@
 from datetime import date
-from typing import NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.clock import Clock, Tick
+from epymorph.clock import Clock
 from epymorph.context import SimContext
-from epymorph.epi import Ipm, IpmBuilder
+from epymorph.epi import IpmBuilder
 from epymorph.geo import Geo
-from epymorph.movement import Movement, MovementBuilder
-from epymorph.util import Compartments, DataDict, Events
+from epymorph.movement import MovementBuilder
+from epymorph.util import DataDict
 from epymorph.world import World
-
-
-# The output from a single simulation step.
-class _TickOutput(NamedTuple):
-    prevalence: list[Compartments]
-    incidence: list[Events]
 
 
 class Output:
@@ -24,25 +17,28 @@ class Output:
     The output of a simulation run, including prevalence for all populations and all IPM compartments
     and incidence for all populations and all IPM events.
     """
-    clock: Clock
-    # TODO: these two should probably just be 2D np.arrays
-    prevalence: list[NDArray[np.int_]]
-    incidence: list[NDArray[np.int_]]
-    pop_labels: list[str]
+
+    ctx: SimContext
+    """The context under which this output was generated."""
+
+    prevalence: NDArray[np.int_]
+    """
+    Prevalence data by timestep, population, and compartment.
+    Array of shape (T,P,C) where T is the number of ticks in the simulation, P is the number of populations, and C is the number of compartments.
+    """
+
+    incidence: NDArray[np.int_]
+    """
+    Incidence data by timestep, population, and event.
+    Array of shape (T,P,E) where T is the number of ticks in the simulation, P is the number of populations, and E is the number of events.
+    """
 
     def __init__(self, ctx: SimContext):
-        self.clock = ctx.clock
-        def arr(n): return np.zeros((ctx.clock.num_ticks, n), dtype=np.int_)
-        m = ctx.nodes
-        self.prevalence = [arr(ctx.compartments) for _ in range(m)]
-        self.incidence = [arr(ctx.events) for _ in range(m)]
-        self.pop_labels = ctx.labels
-
-    def set_prv(self, loc_idx: int, tick: Tick, prv: Compartments) -> None:
-        self.prevalence[loc_idx][tick.index] = prv
-
-    def set_inc(self, loc_idx: int, tick: Tick, inc: Compartments) -> None:
-        self.incidence[loc_idx][tick.index] = inc
+        self.ctx = ctx
+        t = ctx.clock.num_ticks
+        p, c, e = ctx.nodes, ctx.compartments, ctx.events
+        self.prevalence = np.zeros((t, p, c), dtype=np.int_)
+        self.incidence = np.zeros((t, p, e), dtype=np.int_)
 
 
 class Simulation:
@@ -50,6 +46,7 @@ class Simulation:
     The combination of a Geo, IPM, and MM which can be executed at a calendar date and
     for a specified duration to produce time-series output.
     """
+
     geo: Geo
     ipm_builder: IpmBuilder
     mvm_builder: MovementBuilder
@@ -61,11 +58,12 @@ class Simulation:
 
     def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> Output:
         """
-        Run the simulation!
-        - `param`: simulation parameters
-        - `start_date`: the first calendar day of the simulation
-        - `duration_days`: how many days to run
-        - `rng`: (optional) a random number generator to use.
+        Execute the simulation with the given parameters:
+
+        - param: a dictionary of named simulation parameters available for use by the IPM and MM
+        - start_date: the calendar date on which to start the simulation
+        - duration: the number of days to run the simulation
+        - rng: (optional) a psuedo-random number generator used in all stochastic calculations
         """
         ctx = SimContext(
             nodes=self.geo.nodes,
@@ -87,29 +85,23 @@ class Simulation:
         world = World.initialize(
             self.ipm_builder.initialize_compartments(ctx)
         )
-
         out = Output(ctx)
-        for t in ctx.clock.ticks:
-            tickout = self._tick(ipm, mvm, world, t)
-            for i, inc in enumerate(tickout.incidence):
-                out.set_inc(i, t, inc)
-            for i, prv in enumerate(tickout.prevalence):
-                out.set_prv(i, t, prv)
+
+        for tick in ctx.clock.ticks:
+            t = tick.index
+
+            # First do movement
+            mvm.clause.apply(world, tick)
+
+            # Then for each location:
+            for p, loc in enumerate(world.locations):
+                # Calc events by compartment
+                es = ipm.events(loc, tick)
+                # Store incidence
+                out.incidence[t, p] = es
+                # Distribute events
+                ipm.apply_events(loc, es)
+                # Store prevalence
+                out.prevalence[t, p] = loc.compartment_totals
+
         return out
-
-    def _tick(self, ipm: Ipm, mvm: Movement, world: World, tick: Tick) -> _TickOutput:
-        # First do movement
-        mvm.clause.apply(world, tick)
-
-        # Calc events by compartment
-        incidence = [ipm.events(loc, tick)
-                     for loc in world.locations]
-
-        # Distribute events
-        for loc, es in zip(world.locations, incidence):
-            ipm.apply_events(loc, es)
-
-        # Calc new effective population by compartment
-        prevalence = [loc.compartment_totals for loc in world.locations]
-
-        return _TickOutput(prevalence=prevalence, incidence=incidence)
