@@ -3,6 +3,7 @@ import logging
 import sys
 
 from epymorph.examples.pei_py import ruminate as pei_py_rume
+from epymorph.examples.pei_spec import ruminate as pei_spec_rume
 
 
 def configure_logging(profiling: bool) -> None:
@@ -29,6 +30,8 @@ def main(argv: list[str]) -> None:
 
     if sim == 'pei_py':
         pei_py_rume(plot_results=not profiling)
+    elif sim == 'pei_spec':
+        pei_spec_rume(plot_results=not profiling)
     elif sim == None:
         print("Please choose a simulation to run.")
     else:

@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Tick, TickDelta
 from epymorph.context import SimContext
+from epymorph.parser.move_clause import DayOfWeek, all_days
 from epymorph.world import Population, Timer, World
 
 ClausePred = Callable[[Tick], bool]
@@ -145,6 +146,12 @@ class Sequence(Clause):
 
 
 class Predicates:
+    @classmethod
+    def daylist(cls, days: list[DayOfWeek], step: int | None = None) -> ClausePred:
+        day_indices = [i for i in range(len(all_days)) if all_days[i] in days]
+        return lambda tick: tick.date.weekday() in day_indices and \
+            (step is None or step == tick.step)
+
     @classmethod
     def everyday(cls, step: int | None = None) -> ClausePred:
         if step == None:
