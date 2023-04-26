@@ -1,13 +1,14 @@
 import time
 from datetime import date
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 import epymorph.movement as M
-import epymorph.plotting as P
 import epymorph.simulation as S
 from epymorph.model.geo_pei import load_geo as load_pei_geo
 from epymorph.model.ipm_pei import PeiModelBuilder
+from epymorph.util import stridesum
 
 
 # An example script which runs a Pei-like simulation
@@ -20,8 +21,9 @@ def ruminate(plot_results: bool) -> None:
         mvmBuilder = M.load_movement_spec(spec_string)
 
     # Set up the simulation...
+    geo = load_pei_geo()
     sim = S.Simulation(
-        geo=load_pei_geo(),
+        geo=geo,
         ipmBuilder=PeiModelBuilder(),
         mvmBuilder=mvmBuilder
     )
@@ -47,53 +49,40 @@ def ruminate(plot_results: bool) -> None:
 
     # Output
     if plot_results:
-        # Plot infections (per-100k):
-        # P.plot_events(
-        #     out,
-        #     event_idx=0,
-        #     labels={
-        #         'title': 'Infection incidence',
-        #         'x_label': 'days',
-        #         'y_label': 'events per 100k population'
-        #     },
-        #     scaling=lambda i, values: 100_000 * values / pop(i)
-        # )
+        # Plot infections for all populations:
+        event = 0
+        fig, ax = plt.subplots()
+        ax.set_title('Infection incidence')
+        ax.set_xlabel('days')
+        # ax.set_ylabel('infections (per 100k population)')
+        ax.set_ylabel('infections')
+        x_axis = list(range(out.clock.num_days))
+        for pop_idx, pop_inc in enumerate(out.incidence):
+            values = stridesum(pop_inc[:, event], out.clock.num_steps)
+            # Scaled by population:
+            # y_axis = values * 100_000 / geo.data['population'][pop_idx]
+            # Unscaled:
+            y_axis = values
+            ax.plot(x_axis, y_axis, label=geo.labels[pop_idx])
+        ax.legend()
+        fig.tight_layout()
+        plt.show()
 
-        # Plot infections (not scaled):
-        P.plot_events(
-            out,
-            event_idx=0,
-            labels={
-                'title': 'Infection incidence',
-                'x_label': 'days',
-                'y_label': 'events'
-            },
-            scaling=lambda _, values: values
-        )
-
-        # Plot prevalence for each compartment in the first population (log scale):
-        # P.plot_pop_prevalence(
-        #     out,
-        #     pop_idx=0,
-        #     labels={
-        #         'title': 'Prevalence in FL',
-        #         'x_label': 'days',
-        #         'y_label': 'log(persons)'
-        #     },
-        #     scaling=lambda values: np.log(values)
-        # )
-
-        # Plot prevalence for each compartment in the first population (not scaled):
-        # P.plot_pop_prevalence(
-        #     out,
-        #     pop_idx=0,
-        #     labels={
-        #         'title': 'Prevalence in FL',
-        #         'x_label': 'days',
-        #         'y_label': 'persons'
-        #     },
-        #     scaling=identity
-        # )
+        # Plot prevalence for the first population:
+        pop = 0
+        fig, ax = plt.subplots()
+        ax.set_title('Prevalence in FL')
+        ax.set_xlabel('days')
+        ax.set_ylabel('persons (log scale)')
+        ax.set_yscale('log')
+        x_axis = [t.tausum for t in out.clock.ticks]
+        events = ['S', 'I', 'R']
+        for i, event in enumerate(events):
+            y_axis = out.prevalence[pop][:, i]
+            ax.plot(x_axis, y_axis, label=event)
+        ax.legend()
+        fig.tight_layout()
+        plt.show()
 
 
 if __name__ == "__main__":
