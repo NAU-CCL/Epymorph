@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import DTypeLike, NDArray
 
-from epymorph.geo import Geo
+from epymorph.geo import Geo, validate_shape
 
 
 def load_geo() -> Geo:
@@ -13,17 +14,25 @@ def load_geo() -> Geo:
     - absolute humidity by day (for 365 days)
     """
 
-    # Load base data:
-    def load_data(name, dtype):
-        return np.loadtxt(f"./data/pei-{name}.csv", delimiter=',', dtype=dtype)
+    # Note: getting the dtype parameter and the return type of the
+    # function to agree is more headache than it's worth; in large part
+    # because numpy doesn't expose the type definitions we need to do so.
+    # And the types are quickly lost when you do subsequent ops anyway.
+    # See numpy.zeros for an example of how they do it internally.
+    def load(name: str, dtype: DTypeLike, shape: tuple[int, ...]) -> NDArray:
+        data = np.loadtxt(f"./data/pei-{name}.csv", delimiter=',', dtype=dtype)
+        return validate_shape(name, data, shape)
 
-    population = load_data('population', np.int_)
-    commuters = load_data('commuters', np.int_)
-    humidity = load_data('humidity', np.double)
+    # Load base data:
+    labels = ["FL", "GA", "MD", "NC", "SC", "VA"]
+    n = len(labels)
+    population = load('population', np.int_, (n,))
+    commuters = load('commuters', np.int_, (n, n))
+    humidity = load('humidity', np.double, (365, n))
 
     # Precompute data views:
     # Average commuters between node pairs.
-    commuters_average = np.zeros(commuters.shape)
+    commuters_average = np.zeros(commuters.shape, dtype=np.double)
     for i in range(commuters.shape[0]):
         for j in range(i + 1, commuters.shape[1]):
             nbar = (commuters[i, j] + commuters[j, i]) // 2
@@ -34,9 +43,13 @@ def load_geo() -> Geo:
     # Commuters as a ratio to the total commuters living in that state.
     commuting_probability = commuters / commuters_by_state[:, None]
 
+    validate_shape('commuters_average', commuters_average, (n, n))
+    validate_shape('commuters_by_state', commuters_by_state, (n,))
+    validate_shape('commuting_probability', commuting_probability, (n, n))
+
     return Geo(
-        nodes=6,
-        labels=["FL", "GA", "MD", "NC", "SC", "VA"],
+        nodes=n,
+        labels=labels,
         data={
             'population': population,
             'commuters': commuters,
