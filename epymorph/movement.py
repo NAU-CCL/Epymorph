@@ -86,3 +86,10 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
 
     taus = [np.double(x) for x in spec.steps.steps]
     return MovementBuilder(taus, compile_clause)
+
+
+def check_movement_spec(spec_string: str) -> None:
+    movement_spec.parse_string(spec_string, parse_all=True)
+    # If no Exceptions are thrown, it's good.
+    # TODO: need to do some thinking about Exception crafting
+    # to produce the most helpful error messaging here.
