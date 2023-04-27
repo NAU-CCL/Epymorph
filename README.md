@@ -40,11 +40,11 @@ Alternatively, from the command line (making sure you've activated the venv):
 
 ```bash
 # Running the main program:
-python3 -m epymorph -s pei_py
+python3 -m epymorph sim pei_py
 
 # Running all unit tests:
 python3 -m unittest discover -v -s ./epymorph -p '*_test.py'
 
 # Profiling the main program and opening the results in snakeviz:
-TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP -m epymorph -s pei_py --profile; snakeviz $TMP
+TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP -m epymorph sim pei_py --profile; snakeviz $TMP
 ```
