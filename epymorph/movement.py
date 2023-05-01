@@ -29,8 +29,15 @@ class MovementBuilder:
 
 
 class Movement(NamedTuple):
+    """
+    The movement model divides a day into simulation parts (tau steps) under the assumption
+    that each day part will have movement characteristics relevant to the simulation.
+    That is: there is no reason to have tau steps smaller than 1 day unless it's relevant to movement.
+    """
     taus: list[np.double]
+    """The tau steps for the simulation."""
     clause: Clause
+    """A clause which expresses the movement model (most likely as a Sequence clause which is a combination of other, conditional clauses.)"""
 
 
 def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:

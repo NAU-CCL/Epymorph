@@ -33,7 +33,7 @@ def ruminate(plot_results: bool) -> None:
             'infection_seed_size': 10_000
         },
         start_date=date(2023, 1, 1),
-        duration=150,
+        duration_days=150,
         # If you want consistent results, you can provide a seeded RNG.
         rng=np.random.default_rng(1)
     )

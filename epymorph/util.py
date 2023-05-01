@@ -40,4 +40,5 @@ def stridesum(arr: NDArray[np.int_], n: int) -> NDArray[np.int_]:
 
 
 def is_square(arr: NDArray) -> bool:
+    """Is this numpy array 2 dimensions and square in shape?"""
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
