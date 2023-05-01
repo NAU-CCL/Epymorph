@@ -34,7 +34,7 @@ class TickDelta(NamedTuple):
     step: int  # which tau step within that day
 
 
-Never = TickDelta(-1, -1)
+NEVER = TickDelta(-1, -1)
 """
 A special TickDelta value which expresses an event that should never happen.
 Any Tick plus Never returns Never.

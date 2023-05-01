@@ -7,7 +7,7 @@ import numpy as np
 from epymorph.context import SimContext
 from epymorph.util import Compartments
 
-_home_tick = -1
+HOME_TICK = -1
 """The value of a population's `return_tick` when the population is home."""
 
 
@@ -78,7 +78,7 @@ class Population:
         cs_probability = self.compartments / self.total
         cs = sim.rng.multinomial(actual, cs_probability)
         self.compartments -= cs
-        return_location = dst_idx if return_tick == _home_tick else src_idx
+        return_location = dst_idx if return_tick == HOME_TICK else src_idx
         pop = Population(cs, return_location, return_tick)
         return (actual, pop)
 
@@ -95,7 +95,7 @@ class Population:
 class Location:
     @classmethod
     def initialize(cls, index: int, initial_pop: Compartments):
-        pops = [Population(initial_pop, index, _home_tick)]
+        pops = [Population(initial_pop, index, HOME_TICK)]
         return cls(index, pops)
 
     def __init__(self, index: int, pops: list[Population]):

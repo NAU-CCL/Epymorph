@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import numpy as np
 
-from epymorph.world import Population, World, _home_tick
+from epymorph.world import HOME_TICK, Population, World
 
 
 # Test case constructor for World
@@ -18,9 +18,9 @@ def p(count: int, dest: int, timer: int) -> Population:
 
 class TestPopulation(unittest.TestCase):
     def test_normalize(self):
-        a = p(100, 0, _home_tick)
-        b = p(200, 0, _home_tick)
-        ab = p(300, 0, _home_tick)
+        a = p(100, 0, HOME_TICK)
+        b = p(200, 0, HOME_TICK)
+        ab = p(300, 0, HOME_TICK)
         c = p(50, 1, 2)
         d = p(75, 2, 2)
 

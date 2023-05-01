@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABC
 from typing import Literal, NamedTuple, cast
 
 import pyparsing as P
@@ -19,7 +18,7 @@ _fn_body = P.SkipTo(P.AtLineStart(']'))\
 
 DayOfWeek = Literal['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 
-all_days: list[DayOfWeek] = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
+ALL_DAYS: list[DayOfWeek] = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 
 
 class Daily(NamedTuple):
@@ -47,7 +46,7 @@ def marshal_daily(results: P.ParseResults):
         raise Exception(
             f"Unsupported value for movement clause daily: days ({days})")
     elif days == ['all']:
-        days = list(all_days)  # copy
+        days = ALL_DAYS.copy()
     else:
         days = cast(list[DayOfWeek], days)
     return Daily(

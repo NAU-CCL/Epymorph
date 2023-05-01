@@ -10,8 +10,8 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Tick, TickDelta
 from epymorph.context import SimContext
-from epymorph.parser.move_clause import DayOfWeek, all_days
-from epymorph.world import Population, World, _home_tick
+from epymorph.parser.move_clause import ALL_DAYS, DayOfWeek
+from epymorph.world import HOME_TICK, Population, World
 
 ClausePred = Callable[[Tick], bool]
 RowEquation = Callable[[Tick, int], NDArray[np.int_]]
@@ -122,7 +122,7 @@ class Return(Clause):
             for pop in loc.pops:
                 if pop.return_tick == tick.index:
                     # pop ready to go home
-                    pop.return_tick = _home_tick
+                    pop.return_tick = HOME_TICK
                     new_pops[pop.return_location].append(pop)
                     total_movers += pop.total
                 else:
@@ -148,7 +148,7 @@ class Sequence(Clause):
 class Predicates:
     @staticmethod
     def daylist(days: list[DayOfWeek], step: int | None = None) -> ClausePred:
-        day_indices = [i for i in range(len(all_days)) if all_days[i] in days]
+        day_indices = [i for i in range(len(ALL_DAYS)) if ALL_DAYS[i] in days]
         return lambda tick: tick.date.weekday() in day_indices and \
             (step is None or step == tick.step)
 

@@ -8,10 +8,10 @@ import epymorph.movement_clause as C
 from epymorph.clock import Clock, TickDelta
 from epymorph.context import SimContext
 from epymorph.test.world_test import p, w
-from epymorph.world import Location, World, _home_tick
+from epymorph.world import HOME_TICK, Location, World
 
 
-def testSimContext(num_nodes: int) -> SimContext:
+def test_sim_context(num_nodes: int) -> SimContext:
     return SimContext(
         nodes=num_nodes,
         labels=[f'node{n}' for n in range(num_nodes)],
@@ -27,7 +27,7 @@ def testSimContext(num_nodes: int) -> SimContext:
 class TestNoopMovement(unittest.TestCase):
     def test_noop(self):
         clause = C.Noop()
-        ctx = testSimContext(3)
+        ctx = test_sim_context(3)
         exp = w([30000, 20000, 10000])
         act = deepcopy(exp)
         clause.apply(act, ctx.clock.ticks[0])
@@ -36,19 +36,19 @@ class TestNoopMovement(unittest.TestCase):
 
 class TestReturnMovement(unittest.TestCase):
     def test_return(self):
-        ctx = testSimContext(3)
+        ctx = test_sim_context(3)
         clause = C.Return(ctx)
         ini1 = World([
             Location(0, [
-                p(25000, 0, _home_tick),
+                p(25000, 0, HOME_TICK),
                 p(2500, 1, 1),
             ]),
             Location(1, [
-                p(15000, 1, _home_tick),
+                p(15000, 1, HOME_TICK),
                 p(5000, 0, 2),
             ]),
             Location(2, [
-                p(10000, 2, _home_tick),
+                p(10000, 2, HOME_TICK),
                 p(2500, 1, 1),
             ]),
         ])
@@ -56,25 +56,25 @@ class TestReturnMovement(unittest.TestCase):
         exp1 = deepcopy(ini1)
         exp2 = World([
             Location(0, [
-                p(25000, 0, _home_tick),
+                p(25000, 0, HOME_TICK),
             ]),
             Location(1, [
-                p(20000, 1, _home_tick),
+                p(20000, 1, HOME_TICK),
                 p(5000, 0, 2),
             ]),
             Location(2, [
-                p(10000, 2, _home_tick),
+                p(10000, 2, HOME_TICK),
             ]),
         ])
         exp3 = World([
             Location(0, [
-                p(30000, 0, _home_tick),
+                p(30000, 0, HOME_TICK),
             ]),
             Location(1, [
-                p(20000, 1, _home_tick),
+                p(20000, 1, HOME_TICK),
             ]),
             Location(2, [
-                p(10000, 2, _home_tick),
+                p(10000, 2, HOME_TICK),
             ]),
         ])
 
@@ -93,7 +93,7 @@ class TestReturnMovement(unittest.TestCase):
 
 class TestCrosswalkMovement(unittest.TestCase):
     def test_crosswalk(self):
-        ctx = testSimContext(4)
+        ctx = test_sim_context(4)
 
         # Every tick, send 100 people to each other node.
         # Self-movement is ignored, so no need to zero it out.
@@ -108,37 +108,37 @@ class TestCrosswalkMovement(unittest.TestCase):
         # The last node doesn't have enough locals, so it will receive movers but not send any.
         act = World([
             Location(0, [
-                p(25000, 0, _home_tick),
+                p(25000, 0, HOME_TICK),
             ]),
             Location(1, [
-                p(15000, 1, _home_tick),
+                p(15000, 1, HOME_TICK),
             ]),
             Location(2, [
-                p(10000, 2, _home_tick),
+                p(10000, 2, HOME_TICK),
             ]),
             Location(3, [
-                p(50, 3, _home_tick),
+                p(50, 3, HOME_TICK),
             ]),
         ])
 
         exp = World([
             Location(0, [
-                p(24700, 0, _home_tick),
+                p(24700, 0, HOME_TICK),
                 p(100, 1, 2),
                 p(100, 2, 2),
             ]),
             Location(1, [
-                p(14700, 1, _home_tick),
+                p(14700, 1, HOME_TICK),
                 p(100, 0, 2),
                 p(100, 2, 2),
             ]),
             Location(2, [
-                p(9700, 2, _home_tick),
+                p(9700, 2, HOME_TICK),
                 p(100, 0, 2),
                 p(100, 1, 2),
             ]),
             Location(3, [
-                p(50, 3, _home_tick),
+                p(50, 3, HOME_TICK),
                 p(100, 0, 2),
                 p(100, 1, 2),
                 p(100, 2, 2),
@@ -151,7 +151,7 @@ class TestCrosswalkMovement(unittest.TestCase):
 
 class TestSequenceMovement(unittest.TestCase):
     def test_sequence(self):
-        ctx = testSimContext(3)
+        ctx = test_sim_context(3)
         clock = ctx.clock
         world = w([30000, 20000, 15000])
         initial = deepcopy(world)
