@@ -17,8 +17,8 @@ def ruminate(plot_results: bool) -> None:
     geo = load_pei_geo()
     sim = S.Simulation(
         geo=geo,
-        ipmBuilder=PeiModelBuilder(),
-        mvmBuilder=load_pei_mvm()
+        ipm_builder=PeiModelBuilder(),
+        mvm_builder=load_pei_mvm()
     )
 
     # ... and run it.

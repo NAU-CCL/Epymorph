@@ -51,13 +51,13 @@ class Simulation:
     for a specified duration to produce time-series output.
     """
     geo: Geo
-    ipmBuilder: IpmBuilder
-    mvmBuilder: MovementBuilder
+    ipm_builder: IpmBuilder
+    mvm_builder: MovementBuilder
 
-    def __init__(self, geo: Geo, ipmBuilder: IpmBuilder, mvmBuilder: MovementBuilder):
+    def __init__(self, geo: Geo, ipm_builder: IpmBuilder, mvm_builder: MovementBuilder):
         self.geo = geo
-        self.ipmBuilder = ipmBuilder
-        self.mvmBuilder = mvmBuilder
+        self.ipm_builder = ipm_builder
+        self.mvm_builder = mvm_builder
 
     def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> Output:
         """
@@ -71,21 +71,21 @@ class Simulation:
             nodes=self.geo.nodes,
             labels=self.geo.labels,
             geo=self.geo.data,
-            compartments=self.ipmBuilder.compartments,
-            events=self.ipmBuilder.events,
+            compartments=self.ipm_builder.compartments,
+            events=self.ipm_builder.events,
             param=param,
-            clock=Clock.init(start_date, duration_days, self.mvmBuilder.taus),
+            clock=Clock.init(start_date, duration_days, self.mvm_builder.taus),
             rng=np.random.default_rng() if rng is None else rng
         )
 
         # Verification checks:
-        self.ipmBuilder.verify(ctx)
-        self.mvmBuilder.verify(ctx)
-        ipm = self.ipmBuilder.build(ctx)
-        mvm = self.mvmBuilder.build(ctx)
+        self.ipm_builder.verify(ctx)
+        self.mvm_builder.verify(ctx)
+        ipm = self.ipm_builder.build(ctx)
+        mvm = self.mvm_builder.build(ctx)
 
         world = World.initialize(
-            self.ipmBuilder.initialize_compartments(ctx)
+            self.ipm_builder.initialize_compartments(ctx)
         )
 
         out = Output(ctx)

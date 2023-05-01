@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from epymorph.clock import Tick, TickDelta
 from epymorph.context import SimContext
 from epymorph.parser.move_clause import DayOfWeek, all_days
-from epymorph.world import Population, Timer, World
+from epymorph.world import Population, World, _home_tick
 
 ClausePred = Callable[[Tick], bool]
 RowEquation = Callable[[Tick, int], NDArray[np.int_]]
@@ -120,10 +120,10 @@ class Return(Clause):
         new_pops: list[list[Population]] = [[] for _ in range(self.ctx.nodes)]
         for loc in world.locations:
             for pop in loc.pops:
-                if pop.timer == tick.index:
+                if pop.return_tick == tick.index:
                     # pop ready to go home
-                    pop.timer = Timer.Home
-                    new_pops[pop.dest].append(pop)
+                    pop.return_tick = _home_tick
+                    new_pops[pop.return_location].append(pop)
                     total_movers += pop.total
                 else:
                     # pop staying

@@ -8,7 +8,7 @@ import epymorph.movement_clause as C
 from epymorph.clock import Clock, TickDelta
 from epymorph.context import SimContext
 from epymorph.test.world_test import p, w
-from epymorph.world import Location, Timer, World
+from epymorph.world import Location, World, _home_tick
 
 
 def testSimContext(num_nodes: int) -> SimContext:
@@ -40,15 +40,15 @@ class TestReturnMovement(unittest.TestCase):
         clause = C.Return(ctx)
         ini1 = World([
             Location(0, [
-                p(25000, 0, Timer.Home),
+                p(25000, 0, _home_tick),
                 p(2500, 1, 1),
             ]),
             Location(1, [
-                p(15000, 1, Timer.Home),
+                p(15000, 1, _home_tick),
                 p(5000, 0, 2),
             ]),
             Location(2, [
-                p(10000, 2, Timer.Home),
+                p(10000, 2, _home_tick),
                 p(2500, 1, 1),
             ]),
         ])
@@ -56,25 +56,25 @@ class TestReturnMovement(unittest.TestCase):
         exp1 = deepcopy(ini1)
         exp2 = World([
             Location(0, [
-                p(25000, 0, Timer.Home),
+                p(25000, 0, _home_tick),
             ]),
             Location(1, [
-                p(20000, 1, Timer.Home),
+                p(20000, 1, _home_tick),
                 p(5000, 0, 2),
             ]),
             Location(2, [
-                p(10000, 2, Timer.Home),
+                p(10000, 2, _home_tick),
             ]),
         ])
         exp3 = World([
             Location(0, [
-                p(30000, 0, Timer.Home),
+                p(30000, 0, _home_tick),
             ]),
             Location(1, [
-                p(20000, 1, Timer.Home),
+                p(20000, 1, _home_tick),
             ]),
             Location(2, [
-                p(10000, 2, Timer.Home),
+                p(10000, 2, _home_tick),
             ]),
         ])
 
@@ -108,37 +108,37 @@ class TestCrosswalkMovement(unittest.TestCase):
         # The last node doesn't have enough locals, so it will receive movers but not send any.
         act = World([
             Location(0, [
-                p(25000, 0, Timer.Home),
+                p(25000, 0, _home_tick),
             ]),
             Location(1, [
-                p(15000, 1, Timer.Home),
+                p(15000, 1, _home_tick),
             ]),
             Location(2, [
-                p(10000, 2, Timer.Home),
+                p(10000, 2, _home_tick),
             ]),
             Location(3, [
-                p(50, 3, Timer.Home),
+                p(50, 3, _home_tick),
             ]),
         ])
 
         exp = World([
             Location(0, [
-                p(24700, 0, Timer.Home),
+                p(24700, 0, _home_tick),
                 p(100, 1, 2),
                 p(100, 2, 2),
             ]),
             Location(1, [
-                p(14700, 1, Timer.Home),
+                p(14700, 1, _home_tick),
                 p(100, 0, 2),
                 p(100, 2, 2),
             ]),
             Location(2, [
-                p(9700, 2, Timer.Home),
+                p(9700, 2, _home_tick),
                 p(100, 0, 2),
                 p(100, 1, 2),
             ]),
             Location(3, [
-                p(50, 3, Timer.Home),
+                p(50, 3, _home_tick),
                 p(100, 0, 2),
                 p(100, 1, 2),
                 p(100, 2, 2),

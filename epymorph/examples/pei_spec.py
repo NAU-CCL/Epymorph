@@ -18,14 +18,14 @@ def ruminate(plot_results: bool) -> None:
     # Load movement model from spec file
     with open('./data/pei.movement', 'r') as file:
         spec_string = file.read()
-        mvmBuilder = M.load_movement_spec(spec_string)
+        mvm_builder = M.load_movement_spec(spec_string)
 
     # Set up the simulation...
     geo = load_pei_geo()
     sim = S.Simulation(
         geo=geo,
-        ipmBuilder=PeiModelBuilder(),
-        mvmBuilder=mvmBuilder
+        ipm_builder=PeiModelBuilder(),
+        mvm_builder=mvm_builder
     )
 
     # ... and run it.

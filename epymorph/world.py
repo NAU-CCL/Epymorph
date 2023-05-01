@@ -7,24 +7,37 @@ import numpy as np
 from epymorph.context import SimContext
 from epymorph.util import Compartments
 
+_home_tick = -1
+"""The value of a population's `return_tick` when the population is home."""
 
-class Timer:
-    Home = -1
 
-
-# Note: when a population is "home", its `dest` is set to the home location index, and its `timer` is set to -1.
 class Population:
+    """
+    Represents a group of individuals, divided into IPM compartments as appropriate for the simulation.
+    These individuals share the same "home location" and a time at which they should return there.
+
+    These are somewhat abstract concepts, however: a completely nomadic group doesn't really have a home location, merely the next
+    location in a chain of movements.
+    """
+    compartments: Compartments
+    return_location: int
+    return_tick: int
+
+    # Note: when a population is "home",
+    # its `return_location` is the same as their current location,
+    # and its `return_tick` is set to -1 (the "Never" placeholder value).
+
     @staticmethod
     def can_merge(a: Population, b: Population) -> bool:
-        return a.timer == b.timer and a.dest == b.dest
+        return a.return_tick == b.return_tick and a.return_location == b.return_location
 
     @staticmethod
     def normalize(ps: list[Population]) -> None:
         """
-        Sorts a list of populations and combines equivalent populations.
+        Sorts a list of populations and combines mergeable populations (in place).
         Lists of populations should be normalized after creation and any modification.
         """
-        ps.sort(key=attrgetter('timer', 'dest'))
+        ps.sort(key=attrgetter('return_tick', 'return_location'))
         # Iterate over all sequential pairs, starting from (0,1)
         j = 1
         while j < len(ps):
@@ -36,10 +49,10 @@ class Population:
             else:
                 j += 1
 
-    def __init__(self, compartments: Compartments, dest: int, timer: int):
+    def __init__(self, compartments: Compartments, return_location: int, return_tick: int):
         self.compartments = compartments
-        self.dest = dest
-        self.timer = timer
+        self.return_location = return_location
+        self.return_tick = return_tick
 
     @property
     def total(self) -> np.int_:
@@ -54,28 +67,35 @@ class Population:
               dst_idx: int,
               return_tick: int,
               requested: np.int_) -> tuple[np.int_, Population]:
+        """
+        Divide a population by splitting off (up to) the `requested` number of individuals.
+        These individuals will be randomly drawn from the available compartments.
+        The source population (self) will be modified in place. A new Population object will
+        be returned as the second element of a tuple; the first element being the actual number
+        of individuals (in case you requested more than the number available).
+        """
         actual = np.minimum(self.total, requested)
         cs_probability = self.compartments / self.total
         cs = sim.rng.multinomial(actual, cs_probability)
         self.compartments -= cs
-        dest = dst_idx if return_tick == Timer.Home else src_idx
-        pop = Population(cs, dest, return_tick)
+        return_location = dst_idx if return_tick == _home_tick else src_idx
+        pop = Population(cs, return_location, return_tick)
         return (actual, pop)
 
     def __eq__(self, other):
         return (isinstance(other, Population) and
                 self.compartments == other.compartments and
-                self.dest == other.dest and
-                self.timer == other.timer)
+                self.return_location == other.return_location and
+                self.return_tick == other.return_tick)
 
     def __str__(self):
-        return f"({self.compartments},{self.dest},{self.timer})"
+        return f"({self.compartments},{self.return_location},{self.return_tick})"
 
 
 class Location:
     @classmethod
     def initialize(cls, index: int, initial_pop: Compartments):
-        pops = [Population(initial_pop, index, Timer.Home)]
+        pops = [Population(initial_pop, index, _home_tick)]
         return cls(index, pops)
 
     def __init__(self, index: int, pops: list[Population]):
