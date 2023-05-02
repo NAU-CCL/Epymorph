@@ -86,15 +86,24 @@ class GeneralClause(ConditionalClause):
             locals = src.locals
             # movers from src to all destinations:
             requested_arr = self.equation(tick, src_idx)
+            requested_arr[src_idx] = 0
+            self.logger.debug(f"requested[{src_idx}]: {requested_arr}")
             requested_tot = np.sum(requested_arr)
-            if 0 < requested_tot <= locals.total:
+            if requested_tot > locals.total:
+                self.logger.debug(
+                    f"   actual[{src_idx}]: <WARNING> skipped for insufficient population")
+            elif requested_tot > 0:
+                actual_arr = np.zeros_like(requested_arr)
                 for dst_idx, n in enumerate(requested_arr):
                     if src_idx == dst_idx or n == 0:
                         continue
                     actual, movers = locals.split(
                         self.ctx, src_idx, dst_idx, return_tick, n)
                     world.locations[dst_idx].pops.append(movers)
+                    actual_arr[dst_idx] = actual
                     total_movers += actual
+                if not np.array_equal(actual_arr, requested_arr):
+                    self.logger.debug(f"   actual[{src_idx}]: {actual_arr}")
         world.normalize()
         log(self.logger, total_movers, tick)
 
