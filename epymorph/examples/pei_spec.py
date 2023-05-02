@@ -99,4 +99,4 @@ def ruminate(plot_results: bool, simargs: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    ruminate(True)
+    ruminate(True, [])
