@@ -72,6 +72,33 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     return compile_clause
 
 
+def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
+    """Make a safe namespace for user-defined functions."""
+    return {
+        # simulation data
+        'geo': ctx.geo,
+        'param': ctx.param,
+        # rng functions
+        'poisson': ctx.rng.poisson,
+        'binomial': ctx.rng.binomial,
+        'multinomial': ctx.rng.multinomial,
+        # numpy utility functions
+        'array': np.array,
+        'zeros': np.zeros,
+        'zeros_like': np.zeros_like,
+        # restricted functions
+        # TODO: there are probably more restrictions to add
+        # TODO: in fact, this is probably not sufficient as a security model,
+        # though it'll do for now
+        'breakpoint': None,
+        'compile': None,
+        'eval': None,
+        'exec': None,
+        'globals': None,
+        'print': None
+    }
+
+
 def load_movement_spec(spec_string: str) -> MovementBuilder:
     results = movement_spec.parse_string(spec_string, parse_all=True)
     spec: MovementSpec = results[0]  # type: ignore
@@ -79,13 +106,7 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
     clause_compilers = map(parse_clause, spec.clauses)
 
     def compile_clause(ctx: SimContext) -> Clause:
-        global_namespace: dict[str, Any] = {
-            'geo': ctx.geo,
-            'param': ctx.param,
-            'poisson': ctx.rng.poisson,
-            'binomial': ctx.rng.binomial,
-            'multinomial': ctx.rng.multinomial
-        }
+        global_namespace = _make_global_namespace(ctx)
         clauses = [cc(ctx, global_namespace)
                    for cc in clause_compilers]
         clauses.append(Return(ctx))
