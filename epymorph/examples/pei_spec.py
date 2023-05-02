@@ -14,9 +14,22 @@ from epymorph.util import stridesum
 # An example script which runs a Pei-like simulation
 # using modules defined (to the extent possible) in
 # our custom-syntax specification files.
-def ruminate(plot_results: bool) -> None:
+# You can also override the pei movement model spec by passing
+# an extra argument with the movement model's file path.
+#
+# command examples:
+#
+# default:
+# > python3 -m epymorph sim pei_spec
+#
+# with a specific movement model (e.g., no movement):
+# > python3 -m epymorph sim pei_spec ./data/no.movement
+#
+def ruminate(plot_results: bool, simargs: list[str]) -> None:
+    movement_file = simargs[0] if len(simargs) > 0 else './data/pei.movement'
+
     # Load movement model from spec file
-    with open('./data/pei.movement', 'r') as file:
+    with open(movement_file, 'r') as file:
         spec_string = file.read()
         mvm_builder = M.load_movement_spec(spec_string)
 

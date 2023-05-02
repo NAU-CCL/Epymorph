@@ -14,8 +14,9 @@ from epymorph.movement import check_movement_spec
 
 
 # "sim" subcommand
-def do_sim(sim_name: str, profiling: bool) -> int:
+def do_sim(sim_name: str, profiling: bool, simargs: list[str]) -> int:
     """Run a named, pre-configured simulation."""
+
     # if we're profiling, disable logging, else normal logging
     if profiling:
         logging.basicConfig(level=logging.CRITICAL)
@@ -28,10 +29,10 @@ def do_sim(sim_name: str, profiling: bool) -> int:
     # loaded at runtime.
 
     if sim_name == 'pei_py':
-        pei_py_rume(plot_results=not profiling)
+        pei_py_rume(plot_results=not profiling, simargs=simargs)
         return 0  # exit code: success
     elif sim_name == 'pei_spec':
-        pei_spec_rume(plot_results=not profiling)
+        pei_spec_rume(plot_results=not profiling, simargs=simargs)
         return 0  # exit code: success
     else:
         print(f"Unknown simulation: {sim_name}")
@@ -78,6 +79,12 @@ def main() -> None:
         type=str,
         help="the name of the simulation to run")
     parser_sim.add_argument(
+        'simargs',
+        type=str,
+        nargs='*',
+        help="any simulation-specific arguments"
+    )
+    parser_sim.add_argument(
         '-p', '--profile',
         action='store_true',
         help="(optional) include this flag to run in profiling mode")
@@ -96,7 +103,7 @@ def main() -> None:
 
     exit_code = 1  # exit code: invalid command (default)
     if args.command == 'sim':
-        exit_code = do_sim(args.sim_name, args.profile)
+        exit_code = do_sim(args.sim_name, args.profile, args.simargs)
     elif args.command == 'check':
         exit_code = do_check(args.file)
     exit(exit_code)

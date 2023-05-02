@@ -2,7 +2,7 @@
 
 # Commuter movement
 [mtype: days=all; leave=1; duration=0d; return=2; function=
-def f(t, src):
+def commuters(t, src):
     typical = geo['commuters_by_state'][src]
     actual = binomial(typical, param['move_control'])
     return multinomial(actual, geo['commuting_probability'][src, ...])
@@ -10,7 +10,7 @@ def f(t, src):
 
 # Disperser movement
 [mtype: days=all; leave=1; duration=0d; return=2; function=
-def f(t, src, dst):
+def dispersers(t, src, dst):
     avg = geo['commuters_average'][src, dst]
     return poisson(avg * param['theta'])
 ]

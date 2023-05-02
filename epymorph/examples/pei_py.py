@@ -11,8 +11,15 @@ from epymorph.model.mvm_pei import load_mvm as load_pei_mvm
 from epymorph.util import stridesum
 
 
-# An example script which runs a Pei-like simulation using modules encoded in python.
-def ruminate(plot_results: bool) -> None:
+# An example script which runs a Pei-like simulation using
+# modules encoded in python.
+#
+# command examples:
+#
+# default:
+# > python3 -m epymorph sim pei_py
+#
+def ruminate(plot_results: bool, simargs: list[str]) -> None:
     # Set up the simulation...
     geo = load_pei_geo()
     sim = S.Simulation(
