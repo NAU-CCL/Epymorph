@@ -11,10 +11,9 @@ day_list: P.ParserElement = bracketed(
     P.delimited_list(P.one_of('M T W Th F Sa Su'))
 )
 
-_fn_body = P.SkipTo(P.AtLineStart(']'))\
-    .set_parse_action(lambda toks: toks.as_list()[0]
-                      .replace('\n        ', '\n    ').strip())
 
+_fn_body = P.SkipTo(P.AtLineStart(']'))\
+    .set_parse_action(lambda toks: toks.as_list()[0].strip())
 
 DayOfWeek = Literal['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 

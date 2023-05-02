@@ -9,6 +9,8 @@ def main():
 [mtype: days=[M,W,F]; leave=1; duration=1d; return=2; function=
 def f(t, src, dst):
     commuters = geo['commuters'][src, dst]
+    if True:
+        pass
     return poisson(t * commuters)
 ]
 """
@@ -17,6 +19,8 @@ def f(t, src, dst):
     # print(r[0])
 
     clause = typing.cast(Daily, r[0])
+    print(clause.f)
+
     node = ast.parse(clause.f, '<string>', mode='exec')
     # code = compile(node, '<string>', mode='exec')
 
