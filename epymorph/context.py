@@ -21,3 +21,13 @@ class SimContext(NamedTuple):
     param: DataDict
     clock: Clock
     rng: np.random.Generator
+
+    @property
+    def prv_shape(self) -> tuple[int, int, int]:
+        """The shape of the prevalence data for this sim."""
+        return (self.clock.num_ticks, self.nodes, self.compartments)
+
+    @property
+    def inc_shape(self) -> tuple[int, int, int]:
+        """The shape of the incidence data for this sim."""
+        return (self.clock.num_ticks, self.nodes, self.events)

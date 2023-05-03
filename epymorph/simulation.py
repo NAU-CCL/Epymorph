@@ -1,13 +1,17 @@
+from __future__ import annotations
+
 from datetime import date
+from functools import reduce
+from itertools import repeat
 
 import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.clock import Clock
 from epymorph.context import SimContext
-from epymorph.epi import IpmBuilder
+from epymorph.epi import Ipm, IpmBuilder
 from epymorph.geo import Geo
-from epymorph.movement import MovementBuilder
+from epymorph.movement import Movement, MovementBuilder
 from epymorph.util import DataDict
 from epymorph.world import World
 
@@ -35,10 +39,45 @@ class Output:
 
     def __init__(self, ctx: SimContext):
         self.ctx = ctx
-        t = ctx.clock.num_ticks
-        p, c, e = ctx.nodes, ctx.compartments, ctx.events
-        self.prevalence = np.zeros((t, p, c), dtype=np.int_)
-        self.incidence = np.zeros((t, p, e), dtype=np.int_)
+        self.prevalence = np.zeros(ctx.prv_shape, dtype=np.int_)
+        self.incidence = np.zeros(ctx.inc_shape, dtype=np.int_)
+
+
+class OutputAggregate:
+    """
+    The output of many simulation runs, reporting the min and max values for:
+    - prevalence for all populations and all IPM compartments, and
+    - incidence for all populations and all IPM events.
+    """
+
+    ctx: SimContext
+    min_prevalence: NDArray[np.int_]
+    max_prevalence: NDArray[np.int_]
+    min_incidence: NDArray[np.int_]
+    max_incidence: NDArray[np.int_]
+
+    def __init__(self, ctx: SimContext):
+        self.ctx = ctx
+        prv_shape = ctx.prv_shape
+        inc_shape = ctx.inc_shape
+        min_int = np.iinfo(np.int_).min
+        max_int = np.iinfo(np.int_).max
+        self.min_prevalence = np.full(prv_shape, max_int, dtype=np.int_)
+        self.max_prevalence = np.full(prv_shape, min_int, dtype=np.int_)
+        self.min_incidence = np.full(inc_shape, max_int, dtype=np.int_)
+        self.max_incidence = np.full(inc_shape, min_int, dtype=np.int_)
+
+    def __add__(self, that: Output) -> OutputAggregate:
+        """Update this aggregate by including the results from the given Output object."""
+        np.minimum(self.min_prevalence, that.prevalence,
+                   out=self.min_prevalence)
+        np.maximum(self.max_prevalence, that.prevalence,
+                   out=self.max_prevalence)
+        np.minimum(self.min_incidence, that.incidence,
+                   out=self.min_incidence)
+        np.maximum(self.max_incidence, that.incidence,
+                   out=self.max_incidence)
+        return self
 
 
 class Simulation:
@@ -56,16 +95,8 @@ class Simulation:
         self.ipm_builder = ipm_builder
         self.mvm_builder = mvm_builder
 
-    def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> Output:
-        """
-        Execute the simulation with the given parameters:
-
-        - param: a dictionary of named simulation parameters available for use by the IPM and MM
-        - start_date: the calendar date on which to start the simulation
-        - duration: the number of days to run the simulation
-        - rng: (optional) a psuedo-random number generator used in all stochastic calculations
-        """
-        ctx = SimContext(
+    def _make_context(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None) -> SimContext:
+        return SimContext(
             nodes=self.geo.nodes,
             labels=self.geo.labels,
             geo=self.geo.data,
@@ -76,23 +107,16 @@ class Simulation:
             rng=np.random.default_rng() if rng is None else rng
         )
 
-        # Verification checks:
-        self.ipm_builder.verify(ctx)
-        self.mvm_builder.verify(ctx)
-        ipm = self.ipm_builder.build(ctx)
-        mvm = self.mvm_builder.build(ctx)
-
+    def _run_internal(self, args: tuple[SimContext, Ipm, Movement]) -> Output:
+        ctx, ipm, mvm = args
         world = World.initialize(
             self.ipm_builder.initialize_compartments(ctx)
         )
         out = Output(ctx)
-
         for tick in ctx.clock.ticks:
             t = tick.index
-
             # First do movement
             mvm.clause.apply(world, tick)
-
             # Then for each location:
             for p, loc in enumerate(world.locations):
                 # Calc events by compartment
@@ -103,5 +127,41 @@ class Simulation:
                 ipm.apply_events(loc, es)
                 # Store prevalence
                 out.prevalence[t, p] = loc.compartment_totals
-
         return out
+
+    def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> Output:
+        """
+        Execute the simulation with the given parameters:
+
+        - param: a dictionary of named simulation parameters available for use by the IPM and MM
+        - start_date: the calendar date on which to start the simulation
+        - duration: the number of days to run the simulation
+        - rng: (optional) a psuedo-random number generator used in all stochastic calculations
+        """
+
+        ctx = self._make_context(param, start_date, duration_days, rng)
+
+        # Verification checks:
+        self.ipm_builder.verify(ctx)
+        self.mvm_builder.verify(ctx)
+        ipm = self.ipm_builder.build(ctx)
+        mvm = self.mvm_builder.build(ctx)
+
+        return self._run_internal((ctx, ipm, mvm))
+
+    def run_trials(self, trials: int, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> OutputAggregate:
+
+        # Note: the rng is used for all trials sequentially so each trial will produce random variation,
+        # but (if seeded) will produce the same aggregated output at the end.
+        ctx = self._make_context(param, start_date, duration_days, rng)
+
+        # Verification checks:
+        self.ipm_builder.verify(ctx)
+        self.mvm_builder.verify(ctx)
+        ipm = self.ipm_builder.build(ctx)
+        mvm = self.mvm_builder.build(ctx)
+
+        args_iterator = repeat((ctx, ipm, mvm), trials)
+        trial_iterator = map(self._run_internal, args_iterator)
+        return reduce(lambda acc, curr: acc + curr, trial_iterator,
+                      OutputAggregate(ctx))

@@ -3,6 +3,7 @@ import logging
 
 from epymorph.examples.pei_py import ruminate as pei_py_rume
 from epymorph.examples.pei_spec import ruminate as pei_spec_rume
+from epymorph.examples.pei_spec_n import ruminate as pei_spec_n_rume
 from epymorph.movement import check_movement_spec
 
 # This is the main entrypoint to Epymorph.
@@ -33,6 +34,9 @@ def do_sim(sim_name: str, profiling: bool, simargs: list[str]) -> int:
         return 0  # exit code: success
     elif sim_name == 'pei_spec':
         pei_spec_rume(plot_results=not profiling, simargs=simargs)
+        return 0  # exit code: success
+    elif sim_name == 'pei_spec_n':
+        pei_spec_n_rume(plot_results=not profiling, simargs=simargs)
         return 0  # exit code: success
     else:
         print(f"Unknown simulation: {sim_name}")
