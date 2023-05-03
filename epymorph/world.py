@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from operator import attrgetter
 
 import numpy as np
@@ -11,6 +12,7 @@ HOME_TICK = -1
 """The value of a population's `return_tick` when the population is home."""
 
 
+@dataclass
 class Population:
     """
     Represents a group of individuals, divided into IPM compartments as appropriate for the simulation.
@@ -19,13 +21,6 @@ class Population:
     These are somewhat abstract concepts, however: a completely nomadic group doesn't really have a home location, merely the next
     location in a chain of movements.
     """
-    compartments: Compartments
-    return_location: int
-    return_tick: int
-
-    # Note: when a population is "home",
-    # its `return_location` is the same as their current location,
-    # and its `return_tick` is set to -1 (the "Never" placeholder value).
 
     @staticmethod
     def can_merge(a: Population, b: Population) -> bool:
@@ -49,10 +44,13 @@ class Population:
             else:
                 j += 1
 
-    def __init__(self, compartments: Compartments, return_location: int, return_tick: int):
-        self.compartments = compartments
-        self.return_location = return_location
-        self.return_tick = return_tick
+    compartments: Compartments
+    return_location: int
+    return_tick: int
+
+    # Note: when a population is "home",
+    # its `return_location` is the same as their current location,
+    # and its `return_tick` is set to -1 (the "Never" placeholder value).
 
     @property
     def total(self) -> np.int_:
@@ -82,21 +80,17 @@ class Population:
         pop = Population(cs, return_location, return_tick)
         return (actual, pop)
 
-    def __eq__(self, other):
-        return (isinstance(other, Population) and
-                self.compartments == other.compartments and
-                self.return_location == other.return_location and
-                self.return_tick == other.return_tick)
 
-    def __str__(self):
-        return f"({self.compartments},{self.return_location},{self.return_tick})"
-
-
+@dataclass
 class Location:
+
     @classmethod
     def initialize(cls, index: int, initial_pop: Compartments):
         pops = [Population(initial_pop, index, HOME_TICK)]
         return cls(index, pops)
+
+    index: int
+    pops: list[Population]
 
     def __init__(self, index: int, pops: list[Population]):
         Population.normalize(pops)
@@ -112,15 +106,11 @@ class Location:
     def compartment_totals(self) -> Compartments:
         return np.sum([p.compartments for p in self.pops], axis=0)
 
-    def __eq__(self, other):
-        return (isinstance(other, Location) and
-                self.index == other.index and
-                self.pops == other.pops)
-
     def __str__(self):
         return ", ".join(map(str, self.pops))
 
 
+@dataclass
 class World:
     """
     World tracks the state of a simulation's populations and subpopulations at a particular timeslice.
@@ -128,6 +118,7 @@ class World:
     that are considered to be well-mixed at that location; and each Population is divided into
     Compartments as defined by the Intra-Population Model.
     """
+
     @classmethod
     def initialize(cls, initial_pops: list[Compartments]):
         locations = [Location.initialize(i, cs)
@@ -135,19 +126,10 @@ class World:
         return cls(locations)
 
     locations: list[Location]
-    size: int
-
-    def __init__(self, locations: list[Location]):
-        self.locations = locations
-        self.size = len(locations)
 
     def normalize(self) -> None:
         for loc in self.locations:
             Population.normalize(loc.pops)
-
-    def __eq__(self, other):
-        return (isinstance(other, World) and
-                self.locations == other.locations)
 
     def __str__(self):
         xs = [f"L{i}: {str(x)}" for i, x in enumerate(self.locations)]
