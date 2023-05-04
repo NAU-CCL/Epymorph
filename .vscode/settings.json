@@ -16,6 +16,7 @@
   "python.analysis.autoImportCompletions": true,
   "python.analysis.diagnosticMode": "workspace",
   "python.analysis.typeCheckingMode": "basic",
+  "python.formatting.autopep8Path": ".venv/bin/autopep8",
   "python.testing.unittestArgs": [
     "-v",
     "-s",
@@ -29,5 +30,5 @@
     "editor.detectIndentation": false,
     "editor.insertSpaces": true,
     "editor.tabSize": 4,
-  }
+  },
 }

@@ -10,28 +10,29 @@ The `model` directory contains the implementation of an IPM and GeoM correspondi
 
 ## Project setup
 
-For starters, you should have Python 3 installed and we'll assume it's accessible via the command `python3`.
+For starters, you should have Python 3.11 installed and we'll assume it's accessible via the command `python3.11`.
 
-You will need system packages for virtual environments, viewing plots, and (optionally) viewing profiling charts. For example:
+You will need system packages for virtual environments and viewing plots. For example (tested on Ubuntu 22.04 LTS - jammy):
 
 ```bash
-sudo apt install python3-venv python3-tk
-python3 -m pip install snakeviz
+sudo apt install python3.11-venv python3.11-tk
 ```
 
-Using VS Code, install the project's recommended extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install the modules from `requirements.txt`.
+Using VS Code, install the project's recommended IDE extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install the modules from `requirements.txt` and `requirements-dev.txt`.
 
 Or you can set up from the command line:
 
 ```bash
 cd $PROJECT_DIRECTORY
 # create the virtual environment
-python3 -m venv .venv
+python3.11 -m venv .venv
 # activate it
 source .venv/bin/activate
 # then install the requirements
-python3 -m pip install -r requirements.txt
+python3.11 -m pip install -r requirements.txt
+python3.11 -m pip install -r requirements-dev.txt
 ```
+
 ## Running the project
 
 There are VS Code tasks configured for running (or profiling) the currently open file, and its Testing view should enable running the unit tests.

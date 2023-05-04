@@ -1,3 +1,6 @@
+# Environments
+/.venv
+
 # Compilation
 __pycache__/
 
