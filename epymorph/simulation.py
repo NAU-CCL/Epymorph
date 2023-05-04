@@ -79,6 +79,18 @@ class OutputAggregate:
                    out=self.max_incidence)
         return self
 
+    def merge(self, that: OutputAggregate) -> OutputAggregate:
+        """Merge two OutputAggregates."""
+        np.minimum(self.min_prevalence, that.min_prevalence,
+                   out=self.min_prevalence)
+        np.maximum(self.max_prevalence, that.max_prevalence,
+                   out=self.max_prevalence)
+        np.minimum(self.min_incidence, that.min_incidence,
+                   out=self.min_incidence)
+        np.maximum(self.max_incidence, that.max_incidence,
+                    out=self.max_incidence)
+        return self
+
 
 class Simulation:
     """
