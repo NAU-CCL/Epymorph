@@ -31,4 +31,5 @@
     "editor.insertSpaces": true,
     "editor.tabSize": 4,
   },
+  "jupyter.notebookFileRoot": "${workspaceFolder}"
 }
