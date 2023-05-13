@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 from functools import reduce
 from itertools import repeat
@@ -14,6 +15,21 @@ from epymorph.geo import Geo
 from epymorph.movement import Movement, MovementBuilder
 from epymorph.util import DataDict
 from epymorph.world import World
+
+
+def configure_sim_logging(enabled: bool) -> None:
+    """
+    Configure standard logging for simulation runs.
+    `True` for verbose logging, `False` to minimize logging.
+    """
+
+    if enabled:
+        # Verbose output to file.
+        logging.basicConfig(filename='debug.log', filemode='w')
+        logging.getLogger('movement').setLevel(logging.DEBUG)
+    else:
+        # Only critical output to console.
+        logging.basicConfig(level=logging.CRITICAL)
 
 
 class Output:

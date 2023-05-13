@@ -5,8 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import epymorph.simulation as S
-from epymorph.model.geo_pei import load_geo as load_pei_geo
-from epymorph.model.ipm_pei import PeiModelBuilder
+from epymorph.data import geo_library, ipm_library
 from epymorph.model.mvm_pei import load_mvm as load_pei_mvm
 from epymorph.util import stridesum
 
@@ -21,10 +20,10 @@ from epymorph.util import stridesum
 #
 def ruminate(plot_results: bool, simargs: list[str]) -> None:
     # Set up the simulation...
-    geo = load_pei_geo()
+    geo = geo_library['pei']()
     sim = S.Simulation(
         geo=geo,
-        ipm_builder=PeiModelBuilder(),
+        ipm_builder=ipm_library['pei'](),
         mvm_builder=load_pei_mvm()
     )
 

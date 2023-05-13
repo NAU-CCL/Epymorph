@@ -1,6 +1,8 @@
+import re
 from typing import Any, Callable, Iterable, TypeVar
 
 import numpy as np
+from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
 Compartments = NDArray[np.int_]
@@ -42,3 +44,26 @@ def stridesum(arr: NDArray[np.int_], n: int) -> NDArray[np.int_]:
 def is_square(arr: NDArray) -> bool:
     """Is this numpy array 2 dimensions and square in shape?"""
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
+
+
+_duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
+
+def parse_duration(s: str) -> relativedelta | None:
+    """Parses a duration expression like "30d" to mean 30 days. Supports days (d), weeks (w), months (m), and years (y)."""
+
+    match = _duration_regex.search(s)
+    if not match:
+        return None
+    else:
+        value = int(match.group(1))
+        unit = match.group(2)
+        if unit == "d":
+            return relativedelta(days=value)
+        elif unit == "w":
+            return relativedelta(weeks=value)
+        elif unit == "m":
+            return relativedelta(months=value)
+        elif unit == "y":
+            return relativedelta(years=value)
+        else:
+            return None

@@ -10,6 +10,10 @@ from epymorph.util import Compartments, Events
 from epymorph.world import Location
 
 
+def load() -> IpmBuilder:
+    return PeiModelBuilder()
+
+
 class PeiModelBuilder(IpmBuilder):
     def __init__(self):
         super().__init__(3, 3)

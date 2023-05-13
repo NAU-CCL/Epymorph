@@ -6,8 +6,7 @@ import numpy as np
 
 import epymorph.movement as M
 import epymorph.simulation as S
-from epymorph.model.geo_pei import load_geo as load_pei_geo
-from epymorph.model.ipm_pei import PeiModelBuilder
+from epymorph.data import geo_library, ipm_library
 from epymorph.util import stridesum
 
 
@@ -26,7 +25,7 @@ from epymorph.util import stridesum
 # > python3 -m epymorph sim pei_spec ./data/no.movement
 #
 def ruminate(plot_results: bool, simargs: list[str]) -> None:
-    movement_file = simargs[0] if len(simargs) > 0 else './data/pei.movement'
+    movement_file = simargs[0] if len(simargs) > 0 else './epymorph/data/mm/pei.movement'
 
     # Load movement model from spec file
     with open(movement_file, 'r') as file:
@@ -34,10 +33,10 @@ def ruminate(plot_results: bool, simargs: list[str]) -> None:
         mvm_builder = M.load_movement_spec(spec_string)
 
     # Set up the simulation...
-    geo = load_pei_geo()
+    geo = geo_library['pei']()
     sim = S.Simulation(
         geo=geo,
-        ipm_builder=PeiModelBuilder(),
+        ipm_builder=ipm_library['pei'](),
         mvm_builder=mvm_builder
     )
 

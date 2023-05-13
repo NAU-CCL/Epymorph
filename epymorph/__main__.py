@@ -1,10 +1,11 @@
 import argparse
-import logging
 
 from epymorph.examples.pei_py import ruminate as pei_py_rume
 from epymorph.examples.pei_spec import ruminate as pei_spec_rume
 from epymorph.examples.pei_spec_n import ruminate as pei_spec_n_rume
 from epymorph.movement import check_movement_spec
+from epymorph.run import run as epymorph_run
+from epymorph.simulation import configure_sim_logging
 
 # This is the main entrypoint to Epymorph.
 # It uses command-line options to execute one of the available sub-commands:
@@ -18,12 +19,7 @@ from epymorph.movement import check_movement_spec
 def do_sim(sim_name: str, profiling: bool, simargs: list[str]) -> int:
     """Run a named, pre-configured simulation."""
 
-    # if we're profiling, disable logging, else normal logging
-    if profiling:
-        logging.basicConfig(level=logging.CRITICAL)
-    else:
-        logging.basicConfig(filename='debug.log', filemode='w')
-        logging.getLogger('movement').setLevel(logging.DEBUG)
+    configure_sim_logging(not profiling)
 
     # For now, all the simulations have to be coded in Python (at least in part),
     # but some day it will be possible to run a simulation from spec-files
@@ -75,6 +71,34 @@ def main() -> None:
         dest="command",
         required=True)
 
+    # "run" subcommand
+    # ex: python3 -m epymorph run --ipm pei --mm pei --geo pei
+    parser_run = subparsers.add_parser('run', help="run a simulation from library models")
+    parser_run.add_argument(
+        '--ipm',
+        type=str,
+        help="the name of an IPM from the library")
+    parser_run.add_argument(
+        '--mm',
+        type=str,
+        help="the name of a MM from the library")
+    parser_run.add_argument(
+        '--geo',
+        type=str,
+        help="the name of a Geo from the library")
+    parser_run.add_argument(
+        '--start_date',
+        type=str,
+        help="the start date of the simulation in ISO format, e.g.: 2023-01-27")
+    parser_run.add_argument(
+        '--duration',
+        type=str,
+        help="the timespan of the simulation, e.g.: 30d")
+    parser_run.add_argument(
+        '-p', '--profile',
+        action='store_true',
+        help="(optional) include this flag to run in profiling mode")
+
     # "sim" subcommand
     # ex: python3 -m epymorph sim pei_spec
     parser_sim = subparsers.add_parser('sim', help="run a named simulation")
@@ -86,8 +110,7 @@ def main() -> None:
         'simargs',
         type=str,
         nargs='*',
-        help="any simulation-specific arguments"
-    )
+        help="any simulation-specific arguments")
     parser_sim.add_argument(
         '-p', '--profile',
         action='store_true',
@@ -106,7 +129,16 @@ def main() -> None:
     args = parser.parse_args()
 
     exit_code = 1  # exit code: invalid command (default)
-    if args.command == 'sim':
+    if args.command == 'run':
+        exit_code = epymorph_run(
+            args.ipm, 
+            args.mm, 
+            args.geo,
+            args.start_date,
+            args.duration,
+            args.profile
+        )
+    elif args.command == 'sim':
         exit_code = do_sim(args.sim_name, args.profile, args.simargs)
     elif args.command == 'check':
         exit_code = do_check(args.file)

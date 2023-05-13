@@ -6,7 +6,7 @@ from numpy.typing import DTypeLike, NDArray
 from epymorph.geo import Geo, validate_shape
 
 
-def load_geo() -> Geo:
+def load() -> Geo:
     """
     Pei-style geo model. Defines nodes representing 6 east-coast US states, each with:
     - total population
@@ -20,7 +20,7 @@ def load_geo() -> Geo:
     # And the types are quickly lost when you do subsequent ops anyway.
     # See numpy.zeros for an example of how they do it internally.
     def load(name: str, dtype: DTypeLike, shape: tuple[int, ...]) -> NDArray:
-        data = np.loadtxt(f"./data/pei-{name}.csv", delimiter=',', dtype=dtype)
+        data = np.loadtxt(f"./epymorph/data/geo/pei-{name}.csv", delimiter=',', dtype=dtype)
         return validate_shape(name, data, shape)
 
     # Load base data:
