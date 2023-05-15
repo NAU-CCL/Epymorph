@@ -21,7 +21,7 @@ def _check_model(type: str, name: str, lib: dict[str, T]) -> T:
         print(f"[X] {type} ({name})")
         raise Exception(f"ERROR: Unknown {type}: {name}")
     else:
-        print(f"[✓] {type} ({name})\r")
+        print(f"[✓] {type} ({name})")
         return obj
 
 
