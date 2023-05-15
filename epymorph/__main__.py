@@ -77,23 +77,31 @@ def main() -> None:
     parser_run.add_argument(
         '--ipm',
         type=str,
+        required=True,
         help="the name of an IPM from the library")
     parser_run.add_argument(
         '--mm',
         type=str,
-        help="the name of a MM from the library")
+        required=True,
+        help="the name of an MM from the library")
     parser_run.add_argument(
         '--geo',
         type=str,
+        required=True,
         help="the name of a Geo from the library")
     parser_run.add_argument(
         '--start_date',
         type=str,
+        required=True,
         help="the start date of the simulation in ISO format, e.g.: 2023-01-27")
     parser_run.add_argument(
         '--duration',
         type=str,
+        required=True,
         help="the timespan of the simulation, e.g.: 30d")
+    parser_run.add_argument(
+        '--chart',
+        help="(optional) ID for chart to draw; \"e0\" for event incidence 0; \"p2\" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)")
     parser_run.add_argument(
         '-p', '--profile',
         action='store_true',
@@ -101,7 +109,7 @@ def main() -> None:
 
     # "sim" subcommand
     # ex: python3 -m epymorph sim pei_spec
-    parser_sim = subparsers.add_parser('sim', help="run a named simulation")
+    parser_sim = subparsers.add_parser('sim', help="run a named simulation (from the examples package)")
     parser_sim.add_argument(
         'sim_name',
         type=str,
@@ -136,6 +144,7 @@ def main() -> None:
             args.geo,
             args.start_date,
             args.duration,
+            args.chart,
             args.profile
         )
     elif args.command == 'sim':

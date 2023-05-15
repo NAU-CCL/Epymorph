@@ -1,6 +1,7 @@
 """
 Implements the `run` subcommand executed from __main__.
 """
+import re
 import time
 from datetime import date
 from typing import TypeVar
@@ -8,7 +9,7 @@ from typing import TypeVar
 import matplotlib.pyplot as plt
 
 from epymorph.data import geo_library, ipm_library, mm_library
-from epymorph.simulation import Simulation, configure_sim_logging
+from epymorph.simulation import Output, Simulation, configure_sim_logging
 from epymorph.util import parse_duration, stridesum
 
 T = TypeVar('T')
@@ -23,6 +24,41 @@ def _check_model(type: str, name: str, lib: dict[str, T]) -> T:
         print(f"[✓] {type} ({name})\r")
         return obj
 
+
+def plot_event(out: Output, event_idx: int) -> None:
+    fig, ax = plt.subplots()
+    ax.set_title(f"event {event_idx} incidence")
+    ax.set_xlabel('days')
+    ax.set_ylabel(f"e{event_idx}")
+    x_axis = list(range(out.ctx.clock.num_days))
+    for pop_idx in range(out.ctx.nodes):
+        values = stridesum(
+            out.incidence[:, pop_idx, event_idx], out.ctx.clock.num_steps)
+        y_axis = values
+        ax.plot(x_axis, y_axis, label=out.ctx.labels[pop_idx])
+    ax.legend()
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_pop(out: Output, pop_idx: int) -> None:
+    fig, ax = plt.subplots()
+    ax.set_title(f"Prevalence in {out.ctx.labels[pop_idx]}")
+    ax.set_xlabel('days')
+    ax.set_ylabel('persons (log scale)')
+    ax.set_yscale('log')
+    # ax.set_ylim(bottom=1, top=10 ** 8)
+    x_axis = [t.tausum for t in out.ctx.clock.ticks]
+    compartments = [f"c{n}" for n in range(out.ctx.compartments)]
+    for i, event in enumerate(compartments):
+        y_axis = out.prevalence[:, pop_idx, i]
+        ax.plot(x_axis, y_axis, label=event)
+    ax.legend()
+    fig.tight_layout()
+    plt.show()
+
+
+
 # Exit codes:
 # - 0 success
 # - 1 invalid command
@@ -32,6 +68,7 @@ def run(ipm_name: str,
         geo_name: str,
         start_date_str: str,
         duration_str: str,
+        chart: str | None,
         profiling: bool) -> int:
     """Run a simulation. Returns exit code."""
     
@@ -85,22 +122,28 @@ def run(ipm_name: str,
     t1 = time.perf_counter()
 
     print(f"|#################################| 100% ({(t1 - t0):.3f}s)")
-    print("Displaying charts...")
     
-    event = 0
-    fig, ax = plt.subplots()
-    ax.set_title('Infection incidence')
-    ax.set_xlabel('days')
-    ax.set_ylabel('infections')
-    x_axis = list(range(out.ctx.clock.num_days))
-    for pop_idx in range(geo.nodes):
-        values = stridesum(
-            out.incidence[:, pop_idx, event], out.ctx.clock.num_steps)
-        y_axis = values
-        ax.plot(x_axis, y_axis, label=geo.labels[pop_idx])
-    ax.legend()
-    fig.tight_layout()
-    plt.show()
+    # NOTE: this method of chart handling is a placeholder implementation
+    if chart is not None:
+        chart_regex = re.compile(r"^([ep])(\d+)$")
+        match = chart_regex.match(chart)
+        if match is None:
+            print(f"Unknown chart type: {chart}")
+        else:
+            print(f"Displaying chart: {chart}")
+            chart_type = match.group(1)
+            chart_idx = int(match.group(2))
+
+            if chart_type == 'e':
+                if chart_idx < out.ctx.events:
+                    plot_event(out, chart_idx)
+                else:
+                    print(f"Unable to display chart: there are not enough events!")
+            elif chart_type == 'p':
+                if chart_idx < out.ctx.nodes:
+                    plot_pop(out, chart_idx)
+                else:
+                    print(f"Unable to display chart: there are not enough nodes!")
 
     print("Done")
     return 0  # exit code: success
