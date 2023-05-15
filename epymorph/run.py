@@ -1,6 +1,7 @@
 """
 Implements the `run` subcommand executed from __main__.
 """
+import time
 from datetime import date
 from typing import TypeVar
 
@@ -68,6 +69,7 @@ def run(ipm_name: str,
 
     # TODO: how to handle params?
 
+    t0 = time.perf_counter()
     out = sim.run(
         param={
             'theta': 0.1,
@@ -80,8 +82,9 @@ def run(ipm_name: str,
         start_date=start_date,
         duration_days=duration_days
     )
+    t1 = time.perf_counter()
 
-    print("|#################################| 100%")
+    print(f"|#################################| 100% ({(t1 - t0):.3f}s)")
     print("Displaying charts...")
     
     event = 0
