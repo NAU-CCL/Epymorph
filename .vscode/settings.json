@@ -16,6 +16,7 @@
   "python.analysis.autoImportCompletions": true,
   "python.analysis.diagnosticMode": "workspace",
   "python.analysis.typeCheckingMode": "basic",
+  "python.formatting.provider": "autopep8",
   "python.formatting.autopep8Path": ".venv/bin/autopep8",
   "python.testing.unittestArgs": [
     "-v",
