@@ -1,6 +1,7 @@
 from typing import Callable
 
 from epymorph.data.geo.pei import load as geo_pei_load
+from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.movement import MovementBuilder, load_movement_spec
 
@@ -15,8 +16,9 @@ def mm_loader(path) -> Callable[[], MovementBuilder]:
 
 # THIS IS A PLACEHOLDER IMPLEMENTATION
 # Ultimately we want to index the data directory at runtime.
+
 ipm_library = {
-    # 'no': 
+    'no': ipm_no_load,
     'pei': ipm_pei_load
 }
 
