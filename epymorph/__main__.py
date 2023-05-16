@@ -1,9 +1,5 @@
 import argparse
-import logging
 
-from epymorph.examples.pei_py import ruminate as pei_py_rume
-from epymorph.examples.pei_spec import ruminate as pei_spec_rume
-from epymorph.examples.pei_spec_n import ruminate as pei_spec_n_rume
 from epymorph.movement import check_movement_spec
 
 # This is the main entrypoint to Epymorph.
@@ -12,35 +8,6 @@ from epymorph.movement import check_movement_spec
 # - check: checks the syntax of a specification file
 #
 # (More commands will likely be added over time.)
-
-
-# "sim" subcommand
-def do_sim(sim_name: str, profiling: bool, simargs: list[str]) -> int:
-    """Run a named, pre-configured simulation."""
-
-    # if we're profiling, disable logging, else normal logging
-    if profiling:
-        logging.basicConfig(level=logging.CRITICAL)
-    else:
-        logging.basicConfig(filename='debug.log', filemode='w')
-        logging.getLogger('movement').setLevel(logging.DEBUG)
-
-    # For now, all the simulations have to be coded in Python (at least in part),
-    # but some day it will be possible to run a simulation from spec-files
-    # loaded at runtime.
-
-    if sim_name == 'pei_py':
-        pei_py_rume(plot_results=not profiling, simargs=simargs)
-        return 0  # exit code: success
-    elif sim_name == 'pei_spec':
-        pei_spec_rume(plot_results=not profiling, simargs=simargs)
-        return 0  # exit code: success
-    elif sim_name == 'pei_spec_n':
-        pei_spec_n_rume(plot_results=not profiling, simargs=simargs)
-        return 0  # exit code: success
-    else:
-        print(f"Unknown simulation: {sim_name}")
-        return 1  # exit code: invalid command
 
 
 # "check" subcommand
@@ -75,24 +42,6 @@ def main() -> None:
         dest="command",
         required=True)
 
-    # "sim" subcommand
-    # ex: python3 -m epymorph sim pei_spec
-    parser_sim = subparsers.add_parser('sim', help="run a named simulation")
-    parser_sim.add_argument(
-        'sim_name',
-        type=str,
-        help="the name of the simulation to run")
-    parser_sim.add_argument(
-        'simargs',
-        type=str,
-        nargs='*',
-        help="any simulation-specific arguments"
-    )
-    parser_sim.add_argument(
-        '-p', '--profile',
-        action='store_true',
-        help="(optional) include this flag to run in profiling mode")
-
     # "check" subcommand
     # ex: python3 -m epymorph check ./data/pei.movement
     parser_check = subparsers.add_parser(
@@ -106,9 +55,7 @@ def main() -> None:
     args = parser.parse_args()
 
     exit_code = 1  # exit code: invalid command (default)
-    if args.command == 'sim':
-        exit_code = do_sim(args.sim_name, args.profile, args.simargs)
-    elif args.command == 'check':
+    if args.command == 'check':
         exit_code = do_check(args.file)
     exit(exit_code)
 
