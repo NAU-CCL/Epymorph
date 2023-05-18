@@ -3,6 +3,7 @@ from typing import Callable
 from epymorph.data.geo.pei import load as geo_pei_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
+from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
 from epymorph.movement import MovementBuilder, load_movement_spec
 
 
@@ -19,7 +20,8 @@ def mm_loader(path) -> Callable[[], MovementBuilder]:
 
 ipm_library = {
     'no': ipm_no_load,
-    'pei': ipm_pei_load
+    'pei': ipm_pei_load,
+    'simple_sirs': ipm_simple_sirs_load
 }
 
 mm_library = {

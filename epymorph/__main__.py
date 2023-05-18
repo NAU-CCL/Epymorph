@@ -73,7 +73,8 @@ def main() -> None:
 
     # "run" subcommand
     # ex: python3 -m epymorph run --ipm pei --mm pei --geo pei
-    parser_run = subparsers.add_parser('run', help="run a simulation from library models")
+    parser_run = subparsers.add_parser(
+        'run', help="run a simulation from library models")
     parser_run.add_argument(
         '--ipm',
         type=str,
@@ -100,6 +101,11 @@ def main() -> None:
         required=True,
         help="the timespan of the simulation, e.g.: 30d")
     parser_run.add_argument(
+        '--params',
+        type=str,
+        required=True,  # TODO: make this optional and use default values
+        help="the path to a params file")
+    parser_run.add_argument(
         '--chart',
         help="(optional) ID for chart to draw; \"e0\" for event incidence 0; \"p2\" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)")
     parser_run.add_argument(
@@ -109,7 +115,8 @@ def main() -> None:
 
     # "sim" subcommand
     # ex: python3 -m epymorph sim pei_spec
-    parser_sim = subparsers.add_parser('sim', help="run a named simulation (from the examples package)")
+    parser_sim = subparsers.add_parser(
+        'sim', help="run a named simulation (from the examples package)")
     parser_sim.add_argument(
         'sim_name',
         type=str,
@@ -139,11 +146,12 @@ def main() -> None:
     exit_code = 1  # exit code: invalid command (default)
     if args.command == 'run':
         exit_code = epymorph_run(
-            args.ipm, 
-            args.mm, 
+            args.ipm,
+            args.mm,
             args.geo,
             args.start_date,
             args.duration,
+            args.params,
             args.chart,
             args.profile
         )

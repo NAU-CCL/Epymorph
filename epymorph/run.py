@@ -4,9 +4,12 @@ Implements the `run` subcommand executed from __main__.
 import re
 import time
 from datetime import date
-from typing import TypeVar
+from functools import wraps
+from io import BufferedReader
+from typing import Any, Callable, TypeVar
 
 import matplotlib.pyplot as plt
+import tomllib
 
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.simulation import Output, Simulation, configure_sim_logging
@@ -14,18 +17,36 @@ from epymorph.util import parse_duration, stridesum
 
 T = TypeVar('T')
 
-def _check_model(type: str, name: str, lib: dict[str, T]) -> T:
-    print(f"[-] {type} ({name})", end="\r")
-    obj = lib.get(name)
-    if obj is None:
-        print(f"[X] {type} ({name})")
-        raise Exception(f"ERROR: Unknown {type}: {name}")
+
+def load_model(type: str, name: str, lib: dict[str, T]) -> T:
+    """Load a model from the given library dictionary and print status checkbox."""
+    text = f"{type} ({name})"
+    print(f"[-] {text}", end="\r")
+    result = lib.get(name)
+    if result is not None:
+        print(f"[✓] {text}")
+        return result
     else:
-        print(f"[✓] {type} ({name})")
-        return obj
+        print(f"[X] {text}")
+        raise Exception("ERROR: Unknown {type}: {name}")
+
+
+def load_params(path: str) -> dict[str, Any]:
+    """Load parameters from a file and print status checkbox."""
+    text = f"Parameters (file:{path})"
+    print(f"[-] {text}", end="\r")
+    try:
+        with open(path, 'rb') as file:
+            result = tomllib.load(file)
+        print(f"[✓] {text}")
+        return result
+    except Exception:
+        print(f"[X] {text}")
+        raise Exception(f"ERROR: Unable to load parameters: {path}")
 
 
 def plot_event(out: Output, event_idx: int) -> None:
+    """Charting: plot the event with the given index for all populations."""
     fig, ax = plt.subplots()
     ax.set_title(f"event {event_idx} incidence")
     ax.set_xlabel('days')
@@ -42,6 +63,7 @@ def plot_event(out: Output, event_idx: int) -> None:
 
 
 def plot_pop(out: Output, pop_idx: int) -> None:
+    """Charting: plot all compartments (per 100k people) for the population at the given index."""
     fig, ax = plt.subplots()
     ax.set_title(f"Prevalence in {out.ctx.labels[pop_idx]}")
     ax.set_xlabel('days')
@@ -58,20 +80,20 @@ def plot_pop(out: Output, pop_idx: int) -> None:
     plt.show()
 
 
-
 # Exit codes:
 # - 0 success
 # - 1 invalid command
-# - 2 unknown model
+# - 2 error loading models/files
 def run(ipm_name: str,
         mm_name: str,
         geo_name: str,
         start_date_str: str,
         duration_str: str,
+        params_path: str,
         chart: str | None,
         profiling: bool) -> int:
     """Run a simulation. Returns exit code."""
-    
+
     duration = parse_duration(duration_str)
     if duration is None:
         print(f"ERROR: invalid duration ({duration_str})")
@@ -80,19 +102,20 @@ def run(ipm_name: str,
     end_date = start_date + duration
     duration_days = (end_date - start_date).days
 
-    print("Checking models:")
-
+    print("Loading requirements:")
     try:
-        ipm_builder = _check_model("IPM", ipm_name, ipm_library)
-        mm_builder = _check_model("MM", mm_name, mm_library)
-        geo_builder = _check_model("Geo", geo_name, geo_library)
+        ipm_builder = load_model("IPM", ipm_name, ipm_library)
+        mm_builder = load_model("MM", mm_name, mm_library)
+        geo_builder = load_model("Geo", geo_name, geo_library)
+        # TODO pull param defaults from models?
+        params = load_params(params_path)
     except Exception as e:
         print(e)
         return 2
 
     # TODO: model compatibility check
     # print("[✓] Model compatibility check")
-    
+
     configure_sim_logging(enabled=not profiling)
 
     geo = geo_builder()
@@ -104,25 +127,12 @@ def run(ipm_name: str,
     print(f"• {geo.nodes} geo nodes")
     print("|                                 | 0%  ", end="\r")
 
-    # TODO: how to handle params?
-
     t0 = time.perf_counter()
-    out = sim.run(
-        param={
-            'theta': 0.1,
-            'move_control': 0.9,
-            'infection_duration': 4.0,
-            'immunity_duration': 90.0,
-            'infection_seed_loc': 0,
-            'infection_seed_size': 10_000
-        },
-        start_date=start_date,
-        duration_days=duration_days
-    )
+    out = sim.run(params, start_date, duration_days)
     t1 = time.perf_counter()
 
     print(f"|#################################| 100% ({(t1 - t0):.3f}s)")
-    
+
     # NOTE: this method of chart handling is a placeholder implementation
     if chart is not None:
         chart_regex = re.compile(r"^([ep])(\d+)$")

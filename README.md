@@ -43,7 +43,7 @@ Alternatively, from the command line (making sure you've activated the venv):
 
 ```bash
 # Running the main program:
-python3 -m epymorph run --ipm pei --mm pei --geo pei --start_date 2010-01-01 --duration 150d --chart e0
+python3 -m epymorph run --ipm pei --mm pei --geo pei --params ~/my-params.toml --start_date 2010-01-01 --duration 150d --chart e0
 
 # Running a named simulation example:
 python3 -m epymorph sim pei_py
