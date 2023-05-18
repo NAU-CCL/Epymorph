@@ -46,7 +46,38 @@ def is_square(arr: NDArray) -> bool:
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
 
 
+def expand_data(data: float | int | list | NDArray, rows: int, cols: int) -> NDArray:
+    """
+    Take the given data and try to expand it to fit a (rows, cols) numpy array.
+    If the data is already in the right shape, it is returned as-is.
+    If given a scalar: all cells will contain the same value.
+    If given a 1-dimensional array of size (cols): each row will contain the same values.
+    If given a 1-dimensional array of size (rows): all columns will contain the same values.
+    (If rows and cols are equal, you'll get repeated rows.)
+    """
+    if isinstance(data, list):
+        data = np.array(data)
+    desired_shape = (rows, cols)
+    if isinstance(data, np.ndarray):
+        if data.shape == desired_shape:
+            return data
+        elif data.shape == (cols,):
+            return np.full(desired_shape, data)
+        elif data.shape == (rows,):
+            return np.full((cols, rows), data).T
+        else:
+            print(data.shape)
+            raise Exception("Invalid beta parameter.A")
+    elif isinstance(data, int):
+        return np.full(desired_shape, data)
+    elif isinstance(data, float):
+        return np.full(desired_shape, data)
+    else:
+        raise Exception("Invalid beta parameter.B")
+
+
 _duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
+
 
 def parse_duration(s: str) -> relativedelta | None:
     """Parses a duration expression like "30d" to mean 30 days. Supports days (d), weeks (w), months (m), and years (y)."""
