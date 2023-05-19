@@ -4,6 +4,13 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Python - Format project",
+            "type": "shell",
+            "command": "${config:python.formatting.autopep8Path}",
+            "args": ["--in-place", "--recursive", "epymorph"],
+            "problemMatcher": []
+        },
+        {
             "label": "Python - Run this module",
             "type": "shell",
             "command": "MODULE=$(echo ${relativeFileDirname}.${fileBasenameNoExtension} | sed 's/\\//./g'); python3 -m $MODULE",
