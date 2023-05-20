@@ -1,6 +1,9 @@
 from typing import Callable
 
 from epymorph.data.geo.pei import load as geo_pei_load
+from epymorph.data.geo.us_counties_2015 import \
+    load as geo_us_counties_2015_load
+from epymorph.data.geo.us_states_2015 import load as geo_us_states_2015_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
@@ -31,5 +34,7 @@ mm_library = {
 }
 
 geo_library = {
-    'pei': geo_pei_load
+    'pei': geo_pei_load,
+    'us_counties_2015': geo_us_counties_2015_load,
+    'us_states_2015': geo_us_states_2015_load,
 }

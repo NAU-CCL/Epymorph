@@ -20,7 +20,8 @@ def load() -> Geo:
     # And the types are quickly lost when you do subsequent ops anyway.
     # See numpy.zeros for an example of how they do it internally.
     def load(name: str, dtype: DTypeLike, shape: tuple[int, ...]) -> NDArray:
-        data = np.loadtxt(f"./epymorph/data/geo/pei-{name}.csv", delimiter=',', dtype=dtype)
+        data = np.loadtxt(
+            f"./epymorph/data/geo/pei-{name}.csv", delimiter=',', dtype=dtype)
         return validate_shape(name, data, shape)
 
     # Load base data:
@@ -39,12 +40,12 @@ def load() -> Geo:
             commuters_average[i, j] = nbar
             commuters_average[j, i] = nbar
     # Total commuters living in each state.
-    commuters_by_state = commuters.sum(axis=1, dtype=np.int_)
+    commuters_by_node = commuters.sum(axis=1, dtype=np.int_)
     # Commuters as a ratio to the total commuters living in that state.
-    commuting_probability = commuters / commuters_by_state[:, None]
+    commuting_probability = commuters / commuters_by_node[:, None]
 
     validate_shape('commuters_average', commuters_average, (n, n))
-    validate_shape('commuters_by_state', commuters_by_state, (n,))
+    validate_shape('commuters_by_node', commuters_by_node, (n,))
     validate_shape('commuting_probability', commuting_probability, (n, n))
 
     return Geo(
@@ -54,7 +55,7 @@ def load() -> Geo:
             'population': population,
             'commuters': commuters,
             'commuters_average': commuters_average,
-            'commuters_by_state': commuters_by_state,
+            'commuters_by_node': commuters_by_node,
             'commuting_probability': commuting_probability,
             'humidity': humidity
         }
