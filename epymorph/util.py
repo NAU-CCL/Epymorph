@@ -1,5 +1,5 @@
 import re
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, Callable, Generic, Iterable, TypeVar
 
 import numpy as np
 from dateutil.relativedelta import relativedelta
@@ -98,3 +98,28 @@ def parse_duration(s: str) -> relativedelta | None:
             return relativedelta(years=value)
         else:
             return None
+
+
+def progress(percent: float) -> str:
+    """Creates a progress bar string."""
+    p = 100 * max(0.0, min(percent, 1.0))
+    n = int(p // 5)
+    bar = ('#' * n) + (' ' * (20 - n))
+    return f"|{bar}| {p:.0f}% "
+
+
+T = TypeVar('T')
+
+
+class Event(Generic[T]):
+    subscribers: list[Callable[[T], None]]
+
+    def __init__(self):
+        self.subscribers = []
+
+    def subscribe(self, sub: Callable[[T], None]) -> None:
+        self.subscribers.append(sub)
+
+    def publish(self, event: T) -> None:
+        for subscriber in self.subscribers:
+            subscriber(event)

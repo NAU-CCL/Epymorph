@@ -13,7 +13,7 @@ import tomllib
 
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.simulation import Output, Simulation, configure_sim_logging
-from epymorph.util import parse_duration, stridesum
+from epymorph.util import parse_duration, progress, stridesum
 
 T = TypeVar('T')
 
@@ -57,7 +57,8 @@ def plot_event(out: Output, event_idx: int) -> None:
             out.incidence[:, pop_idx, event_idx], out.ctx.clock.num_steps)
         y_axis = values
         ax.plot(x_axis, y_axis, label=out.ctx.labels[pop_idx])
-    ax.legend()
+    if out.ctx.nodes <= 12:
+        ax.legend()
     fig.tight_layout()
     plt.show()
 
@@ -75,7 +76,8 @@ def plot_pop(out: Output, pop_idx: int) -> None:
     for i, event in enumerate(compartments):
         y_axis = out.prevalence[:, pop_idx, i]
         ax.plot(x_axis, y_axis, label=event)
-    ax.legend()
+    if out.ctx.compartments <= 12:
+        ax.legend()
     fig.tight_layout()
     plt.show()
 
@@ -125,13 +127,17 @@ def run(ipm_name: str,
     print(f"Running simulation:")
     print(f"• {start_date} to {end_date} ({duration_days} days)")
     print(f"• {geo.nodes} geo nodes")
-    print("|                                 | 0%  ", end="\r")
+
+    # Draw a progress bar
+    sim.on_start.subscribe(lambda _: print(progress(0.0), end='\r'))
+    sim.on_tick.subscribe(lambda x: print(progress(x[1]), end='\r'))
+    sim.on_end.subscribe(lambda _: print(progress(1.0)))
 
     t0 = time.perf_counter()
-    out = sim.run(params, start_date, duration_days)
+    out = sim.run(params, start_date, duration_days, progress=True)
     t1 = time.perf_counter()
 
-    print(f"|#################################| 100% ({(t1 - t0):.3f}s)")
+    print(f"Runtime: {(t1 - t0):.3f}s")
 
     # NOTE: this method of chart handling is a placeholder implementation
     if chart is not None:
