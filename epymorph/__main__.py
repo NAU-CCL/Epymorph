@@ -3,6 +3,7 @@ import argparse
 from epymorph.examples.pei_py import ruminate as pei_py_rume
 from epymorph.examples.pei_spec import ruminate as pei_spec_rume
 from epymorph.examples.pei_spec_n import ruminate as pei_spec_n_rume
+from epymorph.examples.sparse_py import ruminate as sparese_py_rume
 from epymorph.movement import check_movement_spec
 from epymorph.run import run as epymorph_run
 from epymorph.simulation import configure_sim_logging
@@ -33,6 +34,9 @@ def do_sim(sim_name: str, profiling: bool, simargs: list[str]) -> int:
         return 0  # exit code: success
     elif sim_name == 'pei_spec_n':
         pei_spec_n_rume(plot_results=not profiling, simargs=simargs)
+        return 0  # exit code: success
+    elif sim_name == 'sparse_py':
+        sparese_py_rume(plot_results=not profiling, simargs=simargs)
         return 0  # exit code: success
     else:
         print(f"Unknown simulation: {sim_name}")
