@@ -73,8 +73,8 @@ class Population:
         of individuals (in case you requested more than the number available).
         """
         actual = np.minimum(self.total, requested)
-        cs_probability = self.compartments / self.total
-        cs = sim.rng.multinomial(actual, cs_probability)
+        cs = sim.rng.multivariate_hypergeometric(self.compartments, actual)
+
         self.compartments -= cs
         return_location = dst_idx if return_tick == HOME_TICK else src_idx
         pop = Population(cs, return_location, return_tick)
