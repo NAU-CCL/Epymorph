@@ -1,0 +1,10 @@
+# Lattitude and longitude of Pei states
+# Axis 0: states of interest, FL,GA,MD,NC,SC,VA
+# Axis 1: Lattitude and longitude of state
+# Lat,Long,
+27.6648,81.5158
+32.1574,82.9071
+39.0458,76.6413
+35.7596,79.0193
+33.8361,81.1637
+37.4316,78.6569
