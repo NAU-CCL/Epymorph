@@ -6,7 +6,7 @@ import numpy as np
 
 import epymorph.simulation as S
 from epymorph.data import geo_library, ipm_library
-from epymorph.model.mvm_sparesemod import load_mvm as load_sparse_mvm
+from epymorph.model.mvm_sparsemod import load_mvm as load_sparse_mvm
 from epymorph.util import stridesum
 
 
