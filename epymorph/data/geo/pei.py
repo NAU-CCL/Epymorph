@@ -30,7 +30,6 @@ def load() -> Geo:
     population = load('population', np.int_, (n,))
     commuters = load('commuters', np.int_, (n, n))
     humidity = load('humidity', np.double, (365, n))
-    coords = load("coords", np.double, (n, 2))
 
     # Precompute data views:
     # Average commuters between node pairs.

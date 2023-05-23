@@ -71,8 +71,6 @@ def load() -> Geo:
         # TODO: move out of loop. use np.sum
         dispersal_kernel[i, ] = dispersal_kernel[i, ] / \
             sum(dispersal_kernel[i, ])
-    print(coords_distance.shape)
-    print(dispersal_kernel)
     """TODO: Check this dispersel kernel with Joe. I am changing a few things. Number one:
     I am using Haversine distance for my d_{i,j} instead of Euclidean distance. Made more 
     sense for lat long based distance function. Number two: I am not sure I am normalizing he 
