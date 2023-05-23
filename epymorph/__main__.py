@@ -106,6 +106,9 @@ def main() -> None:
         required=True,  # TODO: make this optional and use default values
         help="the path to a params file")
     parser_run.add_argument(
+        '--out',
+        help="(optional) path to an output file to save the simulated prevalence data; specify either a .csv or .npz file")
+    parser_run.add_argument(
         '--chart',
         help="(optional) ID for chart to draw; \"e0\" for event incidence 0; \"p2\" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)")
     parser_run.add_argument(
@@ -152,6 +155,7 @@ def main() -> None:
             args.start_date,
             args.duration,
             args.params,
+            args.out,
             args.chart,
             args.profile
         )

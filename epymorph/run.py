@@ -4,11 +4,10 @@ Implements the `run` subcommand executed from __main__.
 import re
 import time
 from datetime import date
-from functools import wraps
-from io import BufferedReader
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import matplotlib.pyplot as plt
+import numpy as np
 import tomllib
 
 from epymorph.data import geo_library, ipm_library, mm_library
@@ -82,6 +81,41 @@ def plot_pop(out: Output, pop_idx: int) -> None:
     plt.show()
 
 
+def save_npz(path: str, out: Output) -> None:
+    """
+    Save output prevalence as a compressed npz file.
+    Key 'prevalence' will be a 3D array, of shape (T,P,C) -- just like it is in the Output object
+    """
+    np.savez(path, prevalence=out.prevalence)
+    # This can be loaded, for example as:
+    # with load("./path/to/my-output-file.npz") as file:
+    #     prev = file['prevalence']
+
+
+def save_csv(path: str, out: Output) -> None:
+    """
+    Save output prevalence as a csv file.
+    The data must be reshaped and labeled to fit a 2D format.
+    Columns are: tick index, population index, then each compartment in IPM-specific order; ex:
+    `t, p, c0, c1, c2`
+    """
+    T = out.ctx.clock.num_ticks
+    P = out.ctx.nodes
+    C = out.ctx.compartments
+    # reshape to 2d: (T,P,C) -> (T*P,C)
+    data = np.reshape(out.prevalence, (T * P, C))
+    # insert tick and pop index columns
+    t_indices = np.repeat(np.arange(T), P)
+    p_indices = np.tile(np.arange(P), T)
+    data = np.insert(data, 0, p_indices, axis=1)
+    data = np.insert(data, 0, t_indices, axis=1)
+    # headers
+    c_labels = [f"c{i}" for i in range(C)]
+    header = "t,p," + ",".join(c_labels)
+    np.savetxt(path, data, fmt="%d", delimiter=",",
+               header=header, comments="")
+
+
 # Exit codes:
 # - 0 success
 # - 1 invalid command
@@ -92,6 +126,7 @@ def run(ipm_name: str,
         start_date_str: str,
         duration_str: str,
         params_path: str,
+        out_path: str | None,
         chart: str | None,
         profiling: bool) -> int:
     """Run a simulation. Returns exit code."""
@@ -160,6 +195,16 @@ def run(ipm_name: str,
                     plot_pop(out, chart_idx)
                 else:
                     print(f"Unable to display chart: there are not enough nodes!")
+
+    if out_path is not None:
+        if out_path.endswith(".npz"):
+            print(f"Writing output to file: {out_path}")
+            save_npz(out_path, out)
+        elif out_path.endswith(".csv"):
+            print(f"Writing output to file: {out_path}")
+            save_csv(out_path, out)
+        else:
+            print(f"Unknown file format specified for output: {out_path}")
 
     print("Done")
     return 0  # exit code: success
