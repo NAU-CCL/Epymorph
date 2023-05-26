@@ -83,10 +83,11 @@ def plot_pop(out: Output, pop_idx: int) -> None:
 
 def save_npz(path: str, out: Output) -> None:
     """
-    Save output prevalence as a compressed npz file.
+    Save output prevalence and incidence as a compressed npz file.
     Key 'prevalence' will be a 3D array, of shape (T,P,C) -- just like it is in the Output object
+    Key 'incidence' will be a 3D array, of shape (T,P,E) -- just like it is in the Output object
     """
-    np.savez(path, prevalence=out.prevalence)
+    np.savez(path, prevalence=out.prevalence, incidence=out.incidence)
     # This can be loaded, for example as:
     # with load("./path/to/my-output-file.npz") as file:
     #     prev = file['prevalence']
@@ -94,24 +95,28 @@ def save_npz(path: str, out: Output) -> None:
 
 def save_csv(path: str, out: Output) -> None:
     """
-    Save output prevalence as a csv file.
+    Save output prevalence and incidence as a csv file.
     The data must be reshaped and labeled to fit a 2D format.
-    Columns are: tick index, population index, then each compartment in IPM-specific order; ex:
-    `t, p, c0, c1, c2`
+    Columns are: tick index, population index, then each compartment and then each event in IPM-specific order; ex:
+    `t, p, c0, c1, c2, e0, e1, e2`
     """
     T = out.ctx.clock.num_ticks
     P = out.ctx.nodes
     C = out.ctx.compartments
-    # reshape to 2d: (T,P,C) -> (T*P,C)
-    data = np.reshape(out.prevalence, (T * P, C))
-    # insert tick and pop index columns
-    t_indices = np.repeat(np.arange(T), P)
-    p_indices = np.tile(np.arange(P), T)
-    data = np.insert(data, 0, p_indices, axis=1)
-    data = np.insert(data, 0, t_indices, axis=1)
-    # headers
-    c_labels = [f"c{i}" for i in range(C)]
-    header = "t,p," + ",".join(c_labels)
+    E = out.ctx.events
+
+    # reshape to 2d: (T,P,C) -> (T*P,C) and (T,P,E) -> (T*P,E)
+    prv = np.reshape(out.prevalence, (T * P, C))
+    inc = np.reshape(out.incidence, (T * P, E))
+
+    # tick and pop index columns
+    t_indices = np.reshape(np.repeat(np.arange(T), P), (T * P, 1))
+    p_indices = np.reshape(np.tile(np.arange(P), T), (T * P, 1))
+
+    data = np.concatenate((t_indices, p_indices, prv, inc), axis=1)
+    c_labels = [f"c{i}" for i in range(C)]  # compartment headers
+    e_labels = [f"e{i}" for i in range(E)]  # event headers
+    header = "t,p," + ",".join(c_labels + e_labels)
     np.savetxt(path, data, fmt="%d", delimiter=",",
                header=header, comments="")
 
