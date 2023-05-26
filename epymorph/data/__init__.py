@@ -9,6 +9,7 @@ from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
 from epymorph.movement import MovementBuilder, load_movement_spec
+from epymorph.data.geo.single_pop_geo import load as single_pop_geo_load
 
 
 def mm_loader(path) -> Callable[[], MovementBuilder]:
@@ -38,5 +39,6 @@ geo_library = {
     'pei': geo_pei_load,
     'us_counties_2015': geo_us_counties_2015_load,
     'us_states_2015': geo_us_states_2015_load,
-    'sparse': geo_sparse_load
+    'sparse': geo_sparse_load,
+    'single_pop_geo' : single_pop_geo_load
 }
