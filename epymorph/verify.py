@@ -1,9 +1,12 @@
 import numpy as np
 
+
 # "verify" subcommand
-
-
-def verify(output_file, population_file) -> int:
+# Exit codes:
+# - 0 verification success
+# - 1 verification failed
+# - 2 error loading files
+def verify(output_file: str) -> int:
     # open output csv file
     try:
         with open(output_file, 'r') as out_file:
@@ -13,23 +16,27 @@ def verify(output_file, population_file) -> int:
         print(f"Unable to read output file: {e}")
         return 2
 
+    # determine number of populations and population totals using first row data
+    pop_total = 0
+    populations = []
+    while (data[pop_total][1] < data[pop_total + 1][1]):
+        current_population = data[pop_total][2] + \
+            data[pop_total][3] + data[pop_total][4]
+        populations.append(current_population)
+        pop_total = pop_total + 1
+
+    current_population = data[pop_total][2] + \
+        data[pop_total][3] + data[pop_total][4]
+    populations.append(current_population)
+    pop_total = pop_total + 1
+
+    time_steps = int(data.shape[0] / pop_total)
+
+    print(
+        f"Running verification assuming {pop_total} populations with totals {populations}")
+
+    print()
     print("Compartment validation")
-
-    # open population csv file
-    try:
-        with open(population_file) as pop_file:
-            # TODO: ignore leading comments
-            # placeholder
-            next(pop_file)
-            next(pop_file)
-            populations = np.loadtxt(pop_file, dtype=int)
-    except Exception as e:
-        print(f"Unable to read population file: {e}")
-        return 2
-
-    # upper bounds of nested for loops
-    time_steps = int(data.shape[0] / populations.shape[0])
-    pop_total = populations.shape[0]
 
     comp_passed = True
     error_locations = []
@@ -97,5 +104,5 @@ def verify(output_file, population_file) -> int:
 
     # return exit code according to results
     if not comp_passed or not event_passed:
-        return 3
+        return 1
     return 0
