@@ -152,7 +152,7 @@ def main() -> None:
         'file',
         type=str,
         help="the path to the specification file")
-        
+
     # "verify" subcommand
     # ex: python3 -m epymorph verify ./output.csv
     parser_verify = subparsers.add_parser(
@@ -162,6 +162,11 @@ def main() -> None:
         'file',
         type=str,
         help="the path to the output file")
+    parser_verify.add_argument(
+        '--pop',
+        type=str,
+        required=True,
+        help='the path to the population file')
 
     args = parser.parse_args()
 
@@ -183,7 +188,7 @@ def main() -> None:
     elif args.command == 'check':
         exit_code = do_check(args.file)
     elif args.command == 'verify':
-        exit_code = epymorph_verify(args.file)
+        exit_code = epymorph_verify(args.file, args.pop)
     exit(exit_code)
 
 
