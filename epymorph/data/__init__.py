@@ -1,6 +1,7 @@
 from typing import Callable
 
 from epymorph.data.geo.pei import load as geo_pei_load
+from epymorph.data.geo.single_pop_geo import load as single_pop_geo_load
 from epymorph.data.geo.sparsemod import load as geo_sparse_load
 from epymorph.data.geo.us_counties_2015 import \
     load as geo_us_counties_2015_load
@@ -38,5 +39,6 @@ geo_library = {
     'pei': geo_pei_load,
     'us_counties_2015': geo_us_counties_2015_load,
     'us_states_2015': geo_us_states_2015_load,
-    'sparse': geo_sparse_load
+    'sparse': geo_sparse_load,
+    'single_pop_geo': single_pop_geo_load
 }

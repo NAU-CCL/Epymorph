@@ -8,6 +8,7 @@ from epymorph.examples.sparse_spec import ruminate as sparse_spec_rume
 from epymorph.movement import check_movement_spec
 from epymorph.run import run as epymorph_run
 from epymorph.simulation import configure_sim_logging
+from epymorph.verify import verify as epymorph_verify
 
 # This is the main entrypoint to Epymorph.
 # It uses command-line options to execute one of the available sub-commands:
@@ -152,6 +153,16 @@ def main() -> None:
         type=str,
         help="the path to the specification file")
 
+    # "verify" subcommand
+    # ex: python3 -m epymorph verify ./output.csv
+    parser_verify = subparsers.add_parser(
+        'verify',
+        help="check output file for data consistency")
+    parser_verify.add_argument(
+        'file',
+        type=str,
+        help="the path to the output file")
+
     args = parser.parse_args()
 
     exit_code = 1  # exit code: invalid command (default)
@@ -171,6 +182,8 @@ def main() -> None:
         exit_code = do_sim(args.sim_name, args.profile, args.simargs)
     elif args.command == 'check':
         exit_code = do_check(args.file)
+    elif args.command == 'verify':
+        exit_code = epymorph_verify(args.file)
     exit(exit_code)
 
 
