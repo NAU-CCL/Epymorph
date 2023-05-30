@@ -5,15 +5,12 @@ from typing import Literal, NamedTuple, cast
 import pyparsing as P
 
 from epymorph.parser.common import (Duration, bracketed, duration, field,
-                                    integer, tag)
+                                    fn_body, integer, tag)
 
 day_list: P.ParserElement = bracketed(
     P.delimited_list(P.one_of('M T W Th F Sa Su'))
 )
 
-
-_fn_body = P.SkipTo(P.AtLineStart(']'))\
-    .set_parse_action(lambda toks: toks.as_list()[0].strip())
 
 DayOfWeek = Literal['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 
@@ -33,7 +30,7 @@ daily: P.ParserElement = tag('mtype', [
     field('leave', integer('leave')),
     field('duration', duration('duration')),
     field('return', integer('return')),
-    field('function', _fn_body('f'))
+    field('function', fn_body('f'))
 ])
 
 

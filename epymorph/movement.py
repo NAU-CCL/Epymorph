@@ -10,6 +10,7 @@ from epymorph.context import SimContext
 from epymorph.movement_clause import (Clause, GeneralClause, Predicates,
                                       Return, Sequence)
 from epymorph.parser.move_clause import Daily
+from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
 
 
@@ -72,6 +73,25 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     return compile_clause
 
 
+def _execute_predef(predef: Predef, global_namespace: dict) -> dict:
+    """Compile and execute the predef section of a movement spec, yielding its return value."""
+    # TODO: try to clean up and unify this function parsing / compiling dance that parse_clause also does
+    f_ast = ast.parse(predef.f, '<string>', mode='exec')
+    f_def = f_ast.body[0]
+    if not isinstance(f_def, ast.FunctionDef):
+        raise Exception(f"Movement predef: not a valid function")
+    f_name = f_def.name
+    code = compile(f_ast, '<string>', mode='exec')
+    local_namespace: dict[str, Any] = {}
+    exec(code, global_namespace, local_namespace)
+    f = local_namespace[f_name]
+    result = f()
+    if not isinstance(result, dict):
+        raise Exception(
+            f"Movement predef: did not return a dictionary result (got: {type(result)})")
+    return result
+
+
 def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
     """Make a safe namespace for user-defined functions."""
     return {
@@ -107,6 +127,9 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
 
     def compile_clause(ctx: SimContext) -> Clause:
         global_namespace = _make_global_namespace(ctx)
+        predef = {} if spec.predef is None else _execute_predef(
+            spec.predef, global_namespace)
+        global_namespace = global_namespace | {'predef': predef}
         clauses = [cc(ctx, global_namespace)
                    for cc in clause_compilers]
         clauses.append(Return(ctx))
