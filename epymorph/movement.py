@@ -97,6 +97,7 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
     return {
         # simulation data
         'geo': ctx.geo,
+        'nodes': ctx.nodes,
         'param': ctx.param,
         # rng functions
         'poisson': ctx.rng.poisson,
@@ -106,6 +107,7 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
         'array': np.array,
         'zeros': np.zeros,
         'zeros_like': np.zeros_like,
+        'exp': np.exp,
         # restricted functions
         # TODO: there are probably more restrictions to add
         # TODO: in fact, this is probably not sufficient as a security model,

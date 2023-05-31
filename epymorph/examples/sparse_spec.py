@@ -43,7 +43,8 @@ def ruminate(plot_results: bool, simargs: list[str]) -> None:
             'immunity_duration': np.double(90),
             'infection_seed_loc': 0,
             'infection_seed_size': 10_000,
-            'beta': np.double(0.5)
+            'beta': np.double(0.5),
+            'phi': 40
         },
         start_date=date(2023, 1, 1),
         duration_days=150,
