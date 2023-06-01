@@ -32,7 +32,8 @@ ipm_library = {
 mm_library = {
     'no': mm_loader('epymorph/data/mm/no.movement'),
     'icecube': mm_loader('epymorph/data/mm/icecube.movement'),
-    'pei': mm_loader('epymorph/data/mm/pei.movement')
+    'pei': mm_loader('epymorph/data/mm/pei.movement'),
+    'sparse': mm_loader('epymorph/data/mm/sparsemod.movement')
 }
 
 geo_library = {
