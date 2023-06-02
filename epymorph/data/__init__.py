@@ -9,14 +9,16 @@ from epymorph.data.geo.us_states_2015 import load as geo_us_states_2015_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
+from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.movement import MovementBuilder, load_movement_spec
 
 
 def mm_loader(path) -> Callable[[], MovementBuilder]:
     def load() -> MovementBuilder:
-        with open(path, 'r') as file:
+        with open(path, "r") as file:
             spec_string = file.read()
             return load_movement_spec(spec_string)
+
     return load
 
 
@@ -24,9 +26,10 @@ def mm_loader(path) -> Callable[[], MovementBuilder]:
 # Ultimately we want to index the data directory at runtime.
 
 ipm_library = {
-    'no': ipm_no_load,
-    'pei': ipm_pei_load,
-    'simple_sirs': ipm_simple_sirs_load
+    "no": ipm_no_load,
+    "pei": ipm_pei_load,
+    "simple_sirs": ipm_simple_sirs_load,
+    "sirh": ipm_sirh_load,
 }
 
 mm_library = {
