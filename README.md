@@ -2,11 +2,13 @@
 
 Prototype EpiMoRPH system written in Python for exploring object-oriented design work.
 
-The primary entry point to the program (currently) is `__main__.py`. It is designed to execute example scripts (found in the `examples` directory), so you'll also need to pass the `--sim` parameter (or `-s` for short) naming which script to run (the example script's name without its extension; see example below).
+The primary entry point to the program (currently) is `__main__.py` with a number of available subcommands. Example commands are given below, or you can consult the command help in the console.
 
 System submodules include `epi.py` (IPM), `geo.py` (GeoM), and `movement.py` (MM). `simulation.py` brings all of these together in an execution loop (RUME) to produce incidence and prevalence output.
 
-The `model` directory contains the implementation of an IPM and GeoM corresponding to the Pei influenza paper (pulling data from included csv files). Relevant movement clauses are available to configure its MM. The `examples` directory contains scripts which "compile" modules into a runnable form.
+The `epymorph/data` directory is the model library, containing named implementations of IPMs, MMs, and Geos. The `examples` directory contains scripts which "compile" modules into a runnable form.
+
+Beware: much of this code structure is experimental and subject to change!
 
 ## Project setup
 
@@ -41,7 +43,15 @@ Alternatively, from the command line (making sure you've activated the venv):
 
 ```bash
 # Running the main program:
+python3 -m epymorph run --ipm pei --mm pei --geo pei --params ~/my-params.toml --start_date 2010-01-01 --duration 150d --chart e0
+
+# Running a named simulation example:
 python3 -m epymorph sim pei_py
+
+# Getting general command help:
+python3 -m epymorph --help
+# Getting help on a specific subcommand:
+python3 -m epymorph run --help
 
 # Running all unit tests:
 python3 -m unittest discover -v -s ./epymorph -p '*_test.py'

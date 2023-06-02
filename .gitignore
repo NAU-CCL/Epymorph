@@ -1,3 +1,6 @@
+# OS files
+.DS_Store
+
 # Environments
 /.venv
 
@@ -7,4 +10,4 @@ __pycache__/
 # Testing
 .pytest_cache/
 debug.log
-scratch.ipynb
+scratch/

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 from functools import reduce
 from itertools import repeat
@@ -12,8 +13,23 @@ from epymorph.context import SimContext
 from epymorph.epi import Ipm, IpmBuilder
 from epymorph.geo import Geo
 from epymorph.movement import Movement, MovementBuilder
-from epymorph.util import DataDict
+from epymorph.util import DataDict, Event
 from epymorph.world import World
+
+
+def configure_sim_logging(enabled: bool) -> None:
+    """
+    Configure standard logging for simulation runs.
+    `True` for verbose logging, `False` to minimize logging.
+    """
+
+    if enabled:
+        # Verbose output to file.
+        logging.basicConfig(filename='debug.log', filemode='w')
+        logging.getLogger('movement').setLevel(logging.DEBUG)
+    else:
+        # Only critical output to console.
+        logging.basicConfig(level=logging.CRITICAL)
 
 
 class Output:
@@ -88,7 +104,7 @@ class OutputAggregate:
         np.minimum(self.min_incidence, that.min_incidence,
                    out=self.min_incidence)
         np.maximum(self.max_incidence, that.max_incidence,
-                    out=self.max_incidence)
+                   out=self.max_incidence)
         return self
 
 
@@ -102,10 +118,18 @@ class Simulation:
     ipm_builder: IpmBuilder
     mvm_builder: MovementBuilder
 
+    # Progress events
+    on_start: Event[None]
+    on_tick: Event[tuple[int, float]]
+    on_end: Event[None]
+
     def __init__(self, geo: Geo, ipm_builder: IpmBuilder, mvm_builder: MovementBuilder):
         self.geo = geo
         self.ipm_builder = ipm_builder
         self.mvm_builder = mvm_builder
+        self.on_start = Event()
+        self.on_tick = Event()
+        self.on_end = Event()
 
     def _make_context(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None) -> SimContext:
         return SimContext(
@@ -139,9 +163,10 @@ class Simulation:
                 ipm.apply_events(loc, es)
                 # Store prevalence
                 out.prevalence[t, p] = loc.compartment_totals
+            self.on_tick.publish((t, t / ctx.clock.num_ticks))
         return out
 
-    def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> Output:
+    def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None, progress=False) -> Output:
         """
         Execute the simulation with the given parameters:
 
@@ -159,7 +184,10 @@ class Simulation:
         ipm = self.ipm_builder.build(ctx)
         mvm = self.mvm_builder.build(ctx)
 
-        return self._run_internal((ctx, ipm, mvm))
+        self.on_start.publish(None)
+        out = self._run_internal((ctx, ipm, mvm))
+        self.on_end.publish(None)
+        return out
 
     def run_trials(self, trials: int, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> OutputAggregate:
 

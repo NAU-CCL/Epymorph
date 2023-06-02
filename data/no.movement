@@ -1,9 +1,0 @@
-[move-steps: per-day=1; duration=[1]]
-
-# No movement at all.
-# Obviously this isn't the most-efficient-imaginable way to accomplish this,
-# but this way we don't have to write any new code, so here we are.
-[mtype: days=all; leave=1; duration=0d; return=1; function=
-def f(t, src, dst):
-    return 0
-]

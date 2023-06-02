@@ -1,0 +1,38 @@
+[move-steps: per-day=2; duration=[2/3, 1/3]]
+
+[predef: function = 
+def pei_movement():
+    """Pei style movement pre definition"""
+    commuters = geo['commuters']
+    commuters_average = zeros(commuters.shape)
+    for i in range(commuters.shape[0]):
+        for j in range(i + 1, commuters.shape[1]):
+            nbar = (commuters[i, j] + commuters[j, i]) // 2
+            commuters_average[i, j] = nbar
+            commuters_average[j, i] = nbar
+    # Total commuters living in each state.
+    commuters_by_node = commuters.sum(axis=1)
+    # Commuters as a ratio to the total commuters living in that state.
+    commuting_probability = commuters / commuters_by_node[:, None]
+
+    return {
+        'commuters_average': commuters_average, 
+        'commuters_by_node': commuters_by_node,
+        'commuting_probability': commuting_probability
+    }
+]
+
+# Commuter movement
+[mtype: days=all; leave=1; duration=0d; return=2; function=
+def commuters(t, src):
+    typical = predef['commuters_by_node'][src]
+    actual = binomial(typical, param['move_control'])
+    return multinomial(actual, predef['commuting_probability'][src, ...])
+]
+
+# Disperser movement
+[mtype: days=all; leave=1; duration=0d; return=2; function=
+def dispersers(t, src, dst):
+    avg = predef['commuters_average'][src, dst]
+    return poisson(avg * param['theta'])
+]

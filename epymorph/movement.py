@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 from typing import Any, Callable, NamedTuple
 
 import numpy as np
@@ -10,7 +9,9 @@ from epymorph.context import SimContext
 from epymorph.movement_clause import (Clause, GeneralClause, Predicates,
                                       Return, Sequence)
 from epymorph.parser.move_clause import Daily
+from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
+from epymorph.util import compile_function, parse_function
 
 
 class MovementBuilder:
@@ -42,11 +43,10 @@ class Movement(NamedTuple):
 
 def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     """Parse a clause specification yielding a function capable of compiling it into a reified Clause."""
-    f_ast = ast.parse(clause_spec.f, '<string>', mode='exec')
-    f_def = f_ast.body[0]
-    if not isinstance(f_def, ast.FunctionDef):
+    try:
+        f_def = parse_function(clause_spec.f)
+    except:
         raise Exception(f"Movement clause: not a valid function")
-    f_name = f_def.name
 
     prd = Predicates.daylist(days=clause_spec.days,
                              step=clause_spec.leave_step)
@@ -63,13 +63,20 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
             f"Movement clause: invalid number of arguments ({num_args})")
 
     def compile_clause(ctx: SimContext, global_namespace: dict) -> Clause:
-        code = compile(f_ast, '<string>', mode='exec')
-        local_namespace: dict[str, Any] = {}
-        exec(code, global_namespace, local_namespace)
-        f = local_namespace[f_name]
-        return f_shape(ctx, f_name, prd, ret, f)
+        f = compile_function(f_def, global_namespace)
+        return f_shape(ctx, f_def.name, prd, ret, f)
 
     return compile_clause
+
+
+def _execute_predef(predef: Predef, global_namespace: dict) -> dict:
+    """Compile and execute the predef section of a movement spec, yielding its return value."""
+    predef_f = compile_function(parse_function(predef.f), global_namespace)
+    result = predef_f()
+    if not isinstance(result, dict):
+        raise Exception(
+            f"Movement predef: did not return a dictionary result (got: {type(result)})")
+    return result
 
 
 def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
@@ -77,6 +84,7 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
     return {
         # simulation data
         'geo': ctx.geo,
+        'nodes': ctx.nodes,
         'param': ctx.param,
         # rng functions
         'poisson': ctx.rng.poisson,
@@ -86,6 +94,7 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
         'array': np.array,
         'zeros': np.zeros,
         'zeros_like': np.zeros_like,
+        'exp': np.exp,
         # restricted functions
         # TODO: there are probably more restrictions to add
         # TODO: in fact, this is probably not sufficient as a security model,
@@ -107,6 +116,9 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
 
     def compile_clause(ctx: SimContext) -> Clause:
         global_namespace = _make_global_namespace(ctx)
+        predef = {} if spec.predef is None else _execute_predef(
+            spec.predef, global_namespace)
+        global_namespace = global_namespace | {'predef': predef}
         clauses = [cc(ctx, global_namespace)
                    for cc in clause_compilers]
         clauses.append(Return(ctx))
