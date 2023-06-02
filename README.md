@@ -6,7 +6,9 @@ The primary entry point to the program (currently) is `__main__.py` with a numbe
 
 System submodules include `epi.py` (IPM), `geo.py` (GeoM), and `movement.py` (MM). `simulation.py` brings all of these together in an execution loop (RUME) to produce incidence and prevalence output.
 
-The `epymorph/data` directory is the model library, containing named implementations of IPMs, MMs, and Geos. The `examples` directory contains scripts which "compile" modules into a runnable form.
+The `epymorph/data` directory is the model library, containing named implementations of IPMs, MMs, and Geos.
+
+The `doc/devlog` directory contains Jupyter notebooks demonstrating features of epymorph and general development progress.
 
 Beware: much of this code structure is experimental and subject to change!
 
@@ -44,9 +46,6 @@ Alternatively, from the command line (making sure you've activated the venv):
 ```bash
 # Running the main program:
 python3 -m epymorph run --ipm pei --mm pei --geo pei --params ~/my-params.toml --start_date 2010-01-01 --duration 150d --chart e0
-
-# Running a named simulation example:
-python3 -m epymorph sim pei_py
 
 # Getting general command help:
 python3 -m epymorph --help
