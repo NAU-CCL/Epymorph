@@ -13,8 +13,15 @@ from epymorph.util import is_square
 def sparse_movement(ctx: SimContext) -> C.RowEquation:
     """Sparsemod movement model"""
     commuters = ctx.geo['commuters']
-    dispersal_kernel = ctx.geo['dispersal_kernel']
-    assert is_square(dispersal_kernel)
+    distances = ctx.geo['distances']
+    n = ctx.nodes
+    dispersal_kernel = np.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            dispersal_kernel[i, j] = 1 / \
+                (np.exp(distances[i, j]*1/ctx.param['phi']))
+        dispersal_kernel[i, ] = dispersal_kernel[i, ] / \
+            sum(dispersal_kernel[i, ])
 
     def equation(tick: Tick, src_idx: int) -> NDArray[np.int_]:
         return ctx.rng.multinomial(commuters[src_idx], dispersal_kernel[src_idx, :])

@@ -9,7 +9,8 @@ from epymorph.geo import Geo, validate_shape
 def load() -> Geo:
     """
     With states from Pei model, implement the sparsemod movement model
-    via Joe's dispersel kernel.
+    via Joe's dispersel kernel. Output puts Pei populations, distances between them,
+    and their humidity over time.
     """
 
     # Note: getting the dtype parameter and the return type of the
@@ -54,29 +55,11 @@ def load() -> Geo:
 
     # Store haversine distances
     coords_distance = np.zeros((n, n))
-    """
-    Store probabilities of going from one subpopulation to the next.
-    Since haversine function commutes (makes sense intuitibely), this
-    will yield symmetric matrix.
-    """
-    dispersal_kernel = np.zeros((n, n))
     for i in range(n):
         for j in range(n):
             if i != j:
                 coords_distance[i, j] = haversine(coords[i, :], coords[j, :])
-                # Joe's function from sparsemodR paper
-                dispersal_kernel[i, j] = 1 / \
-                    (np.exp(coords_distance[i, j]*1/40))  # Insert \phi?
-        # Normalize
-        # TODO: move out of loop. use np.sum
-        dispersal_kernel[i, ] = dispersal_kernel[i, ] / \
-            sum(dispersal_kernel[i, ])
-    """TODO: Check this dispersel kernel with Joe. I am changing a few things. Number one:
-    I am using Haversine distance for my d_{i,j} instead of Euclidean distance. Made more 
-    sense for lat long based distance function. Number two: I am not sure I am normalizing he 
-    kernel the same way he does. It is hard for me to find how they did it in the cpp code."""
 
-    validate_shape('dispersel_kernel', dispersal_kernel, (n, n))
     validate_shape('commuters', summed_commuters, (n,))
 
     return Geo(
@@ -86,6 +69,6 @@ def load() -> Geo:
             'population': population,
             'commuters': summed_commuters,
             'humidity': humidity,
-            'dispersal_kernel': dispersal_kernel
+            'distances': coords_distance
         }
     )

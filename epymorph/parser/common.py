@@ -56,3 +56,7 @@ duration = P.Group(integer + P.one_of('d w m'))
 def marshal_duration(results: P.ParseResults):
     [value, unit] = results[0]
     return P.ParseResults(Duration(value, unit))
+
+
+fn_body = P.SkipTo(P.AtLineStart(']'))\
+    .set_parse_action(lambda toks: toks.as_list()[0].strip())

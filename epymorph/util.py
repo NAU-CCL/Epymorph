@@ -1,3 +1,4 @@
+import ast
 import re
 from typing import Any, Callable, Generic, Iterable, TypeVar
 
@@ -123,3 +124,36 @@ class Event(Generic[T]):
     def publish(self, event: T) -> None:
         for subscriber in self.subscribers:
             subscriber(event)
+
+
+def parse_function(code_string: str) -> ast.FunctionDef:
+    """
+    Parse a function from a code string, returning the function's AST.
+    It will be assumed that the string contains only a single Python function definition.
+    """
+
+    # Parse the code string into an AST
+    tree = ast.parse(code_string, '<string>', mode='exec')
+    # Assuming the code string contains only a single function definition
+    f_def = tree.body[0]
+    if not isinstance(f_def, ast.FunctionDef):
+        raise Exception(f"Code does not define a valid function")
+    return f_def
+
+
+def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, Any] | None) -> Callable:
+    """
+    Compile the given function's AST using the given global namespace.
+    Returns the function.
+    """
+
+    # Compile the code and execute it, providing global and local namespaces
+    module = ast.Module(body=[function_def], type_ignores=[])
+    code = compile(module, '<string>', mode='exec')
+    if global_namespace is None:
+        global_namespace = {}
+    local_namespace: dict[str, Any] = {}
+    exec(code, global_namespace, local_namespace)
+    # Now our function is defined in the local namespace, retrieve it
+    # TODO: it would be nice if this was typesafe in the signature of the returned function...
+    return local_namespace[function_def.name]

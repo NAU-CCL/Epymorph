@@ -25,7 +25,8 @@ from epymorph.util import stridesum
 # > python3 -m epymorph sim pei_spec ./data/no.movement
 #
 def ruminate(plot_results: bool, simargs: list[str]) -> None:
-    movement_file = simargs[0] if len(simargs) > 0 else './epymorph/data/mm/pei.movement'
+    movement_file = simargs[0] if len(
+        simargs) > 0 else './epymorph/data/mm/pei.movement'
 
     # Load movement model from spec file
     with open(movement_file, 'r') as file:
@@ -56,6 +57,7 @@ def ruminate(plot_results: bool, simargs: list[str]) -> None:
         # If you want consistent results, you can provide a seeded RNG.
         rng=np.random.default_rng(1)
     )
+
     t1 = time.perf_counter()
     print(f"Simulation time: {(t1 - t0):.3f}s")
 
