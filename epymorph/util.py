@@ -31,6 +31,22 @@ def constant(x: T) -> Callable[..., T]:
     return lambda *_: x
 
 
+# collection utilities
+
+
+class NotUniqueException(Exception):
+    def __init__(self):
+        super().__init__("Collection contains non-unique values.")
+
+
+def as_unique_set(xs: list[T]) -> set[T]:
+    """Transform list to set, raising a NotUniqueException if the list contains non-unique values."""
+    xs_set = set(xs)
+    if len(xs_set) != len(xs):
+        raise NotUniqueException()
+    return xs_set
+
+
 # numpy utilities
 
 
