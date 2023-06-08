@@ -28,6 +28,19 @@ def stutter(it: Iterable[T], times: int) -> Iterable[T]:
     return (xs for x in it for xs in (x,) * times)
 
 
+class NotUniqueException(Exception):
+    def __init__(self):
+        super().__init__("Collection contains non-unique values.")
+
+
+def as_unique_set(xs: list[T]) -> set[T]:
+    """Transform list to set, raising a NotUniqueException if the list contains non-unique values."""
+    xs_set = set(xs)
+    if len(xs_set) != len(xs):
+        raise NotUniqueException()
+    return xs_set
+
+
 def stridesum(arr: NDArray[np.int_], n: int) -> NDArray[np.int_]:
     """Compute a new array by grouping every `n` rows and summing them together.
        `arr`'s length must be evenly divisible by `n`."""
