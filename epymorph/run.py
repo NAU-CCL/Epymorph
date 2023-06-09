@@ -27,7 +27,7 @@ def load_model(type: str, name: str, lib: dict[str, T]) -> T:
         return result
     else:
         print(f"[X] {text}")
-        raise Exception("ERROR: Unknown {type}: {name}")
+        raise Exception(f"ERROR: Unknown {type}: {name}")
 
 
 def load_params(path: str) -> dict[str, Any]:
