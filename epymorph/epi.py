@@ -140,9 +140,17 @@ class SplitEvent:
         if len(self.sub_events) < 2:
             raise InvalidModelException(
                 "IPM SplitEvent must define at least two sub-events.")
-        if sum(self.probs) != 1.0:
+        if sum(self.probs[:-1]) >= 1.0:
+            # Note: when it comes to probability lists, numpy asserts that all elements
+            # except the last sum to a value less than one and assumes the last probability
+            # will receive the remainder (whatever that is).
+            # Basically the last value is ignored, which is a questionable design philosophy.
+            # e.g., if you gave it [0.75, 0.75], the *actual* values used internally are [0.75, 0.25]
+            # and the same goes for [0.75, 0.01]
+            # Purely for expedience, we've duplicated that behavior here.
+            # But maybe we should actually normalize to 1, or make stricter assertions.
             raise InvalidModelException(
-                "IPM SplitEvent's sub-event probabilities must sum to 1.0")
+                "IPM SplitEvent's sub-event probabilities must be numpy compatible (sum to 1.0, kinda)")
 
 
 Event = IndependentEvent | SplitEvent
