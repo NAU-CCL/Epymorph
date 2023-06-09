@@ -12,6 +12,7 @@ from epymorph.data.ipm.pei2 import load as ipm_pei2_load
 from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.data.ipm.sirh2 import load as ipm_sirh2_load
+from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
 from epymorph.movement import MovementBuilder, load_movement_spec
 
 
@@ -33,7 +34,8 @@ ipm_library = {
     "simple_sirs": ipm_simple_sirs_load,
     "sirh": ipm_sirh_load,
     "pei2": ipm_pei2_load,
-    "sirh2": ipm_sirh2_load
+    "sirh2": ipm_sirh2_load,
+    "sparsemod": ipm_sparsemod_load
 }
 
 mm_library = {
