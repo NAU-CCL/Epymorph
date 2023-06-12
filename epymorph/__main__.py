@@ -2,6 +2,7 @@ import argparse
 
 from epymorph.movement import check_movement_spec
 from epymorph.run import run as epymorph_run
+from epymorph.sim import run_sim
 from epymorph.verify import verify as epymorph_verify
 
 # This is the main entrypoint to Epymorph.
@@ -89,6 +90,11 @@ def main() -> None:
         action='store_true',
         help="(optional) include this flag to run in profiling mode")
 
+    # 'sim' subcommand
+    # ex: python3 -m epymorph sim
+    parser_sim = subparsers.add_parser(
+        'sim', help="Step by step run choices of model components")
+
     # "check" subcommand
     # ex: python3 -m epymorph check ./data/pei.movement
     parser_check = subparsers.add_parser(
@@ -128,6 +134,8 @@ def main() -> None:
         exit_code = do_check(args.file)
     elif args.command == 'verify':
         exit_code = epymorph_verify(args.file)
+    elif args.command == 'sim':
+        exit_code = run_sim()
     exit(exit_code)
 
 
