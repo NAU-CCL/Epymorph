@@ -135,6 +135,27 @@ def run(ipm_name: str,
         chart: str | None,
         profiling: bool) -> int:
     """Run a simulation. Returns exit code."""
+    if ipm_name is None:
+        ipm_names = [ipm_name for ipm_name in ipm_library.keys()]
+        print("Preset IPMs: ")
+        for i, ipm_name in enumerate(ipm_names):
+            print(f'{i+1}. {ipm_name}')
+        ipm_name = list(ipm_library.keys())[int(
+            input("Enter index of the IPM you would like to use: ")) - 1]
+    if mm_name is None:
+        mm_names = [mm_name for mm_name in mm_library.keys()]
+        print("\nPreset MMs: ")
+        for i, mm_name in enumerate(mm_names):
+            print(f'{i+1}. {mm_name}')
+        mm_name = list(mm_library.keys())[int(
+            input("Enter index of the MM you would like to use: ")) - 1]
+    if geo_name is None:
+        geos = [geo for geo in geo_library.keys()]
+        print("\nPreset Geos: ")
+        for i, geo_name in enumerate(geos):
+            print(f'{i+1}. {geo_name}')
+        geo_name = list(geo_library.keys())[int(
+            input("Enter index of the IPM you would like to use: \n")) - 1]
 
     duration = parse_duration(duration_str)
     if duration is None:
