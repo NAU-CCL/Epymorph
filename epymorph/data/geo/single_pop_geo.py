@@ -9,6 +9,6 @@ def load() -> Geo:
         nodes=1,
         labels=["AZ"],
         data={
-            'population': np.array([100000],dtype=np.int_)
+            'population': np.array([100000], dtype=np.int_)
         }
     )

@@ -170,5 +170,6 @@ class sirh(Ipm):
                 [events[3][i]],  # H -> R
                 [events[4][i]],  # R -> S
             ]
-            deltas = np.sum(np.multiply(es_pop, self.event_apply_matrix), axis=0)
+            deltas = np.sum(np.multiply(
+                es_pop, self.event_apply_matrix), axis=0)
             pop.compartments += deltas

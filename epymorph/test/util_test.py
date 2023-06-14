@@ -32,11 +32,11 @@ class TestUtil(unittest.TestCase):
         act1 = util.parse_duration("30d")
         exp1 = relativedelta(days=30)
         self.assertEqual(act1, exp1)
-        
+
         act2 = util.parse_duration("3w")
         exp2 = relativedelta(weeks=3)
         self.assertEqual(act2, exp2)
-        
+
         act3 = util.parse_duration("7m")
         exp3 = relativedelta(months=7)
         self.assertEqual(act3, exp3)

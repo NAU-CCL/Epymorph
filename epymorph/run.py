@@ -3,12 +3,12 @@ Implements the `run` subcommand executed from __main__.
 """
 import re
 import time
+import tomllib
 from datetime import date
 from typing import Any, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
-import tomllib
 
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.simulation import Output, Simulation, configure_sim_logging

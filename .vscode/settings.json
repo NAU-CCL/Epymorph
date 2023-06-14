@@ -13,6 +13,7 @@
     "**/__pycache__": true,
     ".pytest_cache": true
   },
+  "isort.importStrategy": "fromEnvironment",
   "python.analysis.autoImportCompletions": true,
   "python.analysis.diagnosticMode": "workspace",
   "python.analysis.typeCheckingMode": "basic",
