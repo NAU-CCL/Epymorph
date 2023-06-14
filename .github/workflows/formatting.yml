@@ -1,0 +1,43 @@
+name: Formatting Check (isort/autopep8)
+on:
+  pull_request:
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version-file: '.python-version'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Check imports and formatting
+        run: |
+          if isort --check .; then
+            imp_result=0
+          else
+            echo "isort detected inconsistent import sorting"
+            echo "check that isort is running on your machine!"
+            imp_result=1
+          fi
+
+          if autopep8 --recursive --in-place --exit-code .; then
+            fmt_result=0
+          else
+            echo "autopep8 detected inconsistent code formatting"
+            echo "check that autopep8 is running on your machine!"
+            fmt_result=1
+          fi
+
+          if [[ $fmt_result -ne 0 || $imp_result -ne 0 ]]; then
+            exit 1
+          else
+            echo "All checks passed."
+            exit 0
+          fi
