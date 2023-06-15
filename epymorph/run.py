@@ -154,7 +154,7 @@ def run(ipm_name: str,
             print(f'{i+1}. {name}')
         mm_idx = int(
             input("Enter index of the MM you would like to use: ")) - 1
-        mm_name = list(mm_library.keys())[mm_idx]
+        mm_name = mm_keys[mm_idx]
 
     if geo_name is None:
         geo_keys = list(geo_library.keys())
