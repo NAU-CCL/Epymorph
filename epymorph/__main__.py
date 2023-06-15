@@ -51,17 +51,14 @@ def main() -> None:
     parser_run.add_argument(
         '--ipm',
         type=str,
-        required=True,
         help="the name of an IPM from the library")
     parser_run.add_argument(
         '--mm',
         type=str,
-        required=True,
         help="the name of an MM from the library")
     parser_run.add_argument(
         '--geo',
         type=str,
-        required=True,
         help="the name of a Geo from the library")
     parser_run.add_argument(
         '--start_date',

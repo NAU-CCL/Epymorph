@@ -136,6 +136,36 @@ def run(ipm_name: str,
         profiling: bool) -> int:
     """Run a simulation. Returns exit code."""
 
+    if ipm_name is None:
+        ipm_keys = list(ipm_library.keys())
+        ipm_keys.sort()
+        print("Preset IPMs: ")
+        for i, name in enumerate(ipm_keys):
+            print(f'{i+1}. {name}')
+        ipm_idx = int(
+            input("Enter index of the IPM you would like to use: ")) - 1
+        ipm_name = ipm_keys[ipm_idx]
+
+    if mm_name is None:
+        mm_keys = list(mm_library.keys())
+        mm_keys.sort()
+        print("\nPreset MMs: ")
+        for i, name in enumerate(mm_keys):
+            print(f'{i+1}. {name}')
+        mm_idx = int(
+            input("Enter index of the MM you would like to use: ")) - 1
+        mm_name = mm_keys[mm_idx]
+
+    if geo_name is None:
+        geo_keys = list(geo_library.keys())
+        geo_keys.sort()
+        print("\nPreset Geos: ")
+        for i, name in enumerate(geo_keys):
+            print(f'{i+1}. {name}')
+        geo_idx = int(
+            input("Enter index of the geo you would like to use: \n")) - 1
+        geo_name = geo_keys[geo_idx]
+
     duration = parse_duration(duration_str)
     if duration is None:
         print(f"ERROR: invalid duration ({duration_str})")
