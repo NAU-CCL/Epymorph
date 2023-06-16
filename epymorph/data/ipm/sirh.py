@@ -93,6 +93,14 @@ class sirh(Ipm):
         # Beta (fixed value)
         self.beta = ctx.param["beta"]
 
+    def _beta(self, loc_idx: int, tick: Tick) -> np.double:
+        humidity: np.double = self.humidity[tick.day, loc_idx]
+        r0_min = np.double(1.3)
+        r0_max = np.double(2)
+        a = np.double(-180)
+        b = np.log(r0_max - r0_min)
+        return np.exp(a * humidity + b) + r0_min / self.D
+
     def events(self, loc: Location, tick: Tick) -> Events:
         # TODO: we need a mechanism to make sure we don't exceed the bounds of reality.
         # For instance, in this model, we should never have more infections than there are susceptible people to infect.
@@ -103,7 +111,11 @@ class sirh(Ipm):
         total = np.sum(cs)
         rates = np.array(
             [
-                tick.tau * self.beta * cs[0] * cs[1] / total,  # S -> I
+                tick.tau
+                * self._beta(loc.index, tick)
+                * cs[0]
+                * cs[1]
+                / total,  # S -> I
                 tick.tau * cs[1] / self.D,  # I -> R
                 0,  # I -> H
                 tick.tau * cs[3] / self.hosp,  # H -> R

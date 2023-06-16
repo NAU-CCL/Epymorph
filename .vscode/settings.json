@@ -17,7 +17,7 @@
   "python.analysis.autoImportCompletions": true,
   "python.analysis.diagnosticMode": "workspace",
   "python.analysis.typeCheckingMode": "basic",
-  "python.formatting.provider": "autopep8",
+  "python.formatting.provider": "none",
   "python.formatting.autopep8Path": ".venv/bin/autopep8",
   "python.testing.unittestArgs": [
     "-v",
@@ -32,6 +32,7 @@
     "editor.detectIndentation": false,
     "editor.insertSpaces": true,
     "editor.tabSize": 4,
+    "editor.defaultFormatter": "ms-python.black-formatter",
   },
   "jupyter.notebookFileRoot": "${workspaceFolder}"
 }
