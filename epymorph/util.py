@@ -39,6 +39,16 @@ class NotUniqueException(Exception):
         super().__init__("Collection contains non-unique values.")
 
 
+def filter_unique(xs: Iterable[T]) -> list[T]:
+    xset = set[T]()
+    ys = list[T]()
+    for x in xs:
+        if x not in xset:
+            ys.append(x)
+            xset.add(x)
+    return ys
+
+
 def as_unique_set(xs: list[T]) -> set[T]:
     """Transform list to set, raising a NotUniqueException if the list contains non-unique values."""
     xs_set = set(xs)
