@@ -36,7 +36,7 @@ class Builder(IpmBuilder):
             r0_max = 2
             a = -180.0
             b = np.log(r0_max - r0_min)
-            beta = np.exp(a * humidity + b) + r0_min / \
+            beta = (np.exp(a * humidity + b) + r0_min) / \
                 ctx.param["infection_duration"]
             return beta * cs[0] * cs[1] / cs.total
 
