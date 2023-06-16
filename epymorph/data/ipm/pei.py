@@ -56,8 +56,8 @@ class PeiModel(Ipm):
     """The Pei influenza model: an SIR model incorporating absolute humidity over time."""
     population: NDArray[np.int_]
     humidity: NDArray[np.double]
-    D: int
-    L: int
+    D: float
+    L: float
 
     # for (row,col): should event (row) be added to or subtracted from compartment (col)?
     # this array has to be [num_events] by [num_compartments] in dimension
@@ -76,11 +76,11 @@ class PeiModel(Ipm):
 
     def _beta(self, loc_idx: int, tick: Tick) -> np.double:
         humidity: np.double = self.humidity[tick.day, loc_idx]
-        r0_min = np.double(1.3)
-        r0_max = np.double(2)
-        a = np.double(-180)
+        r0_min = 1.3
+        r0_max = 2.0
+        a = -180.0
         b = np.log(r0_max - r0_min)
-        return np.exp(a * humidity + b) + r0_min / self.D
+        return (np.exp(a * humidity + b) + r0_min) / self.D
 
     def events(self, loc: Location, tick: Tick) -> Events:
         # TODO: we need a mechanism to make sure we don't exceed the bounds of reality.
