@@ -5,8 +5,6 @@ from signal import raise_signal
 
 import numpy as np
 from numpy.typing import NDArray
-from pyrsistent import b
-from scipy import stats
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
@@ -68,11 +66,12 @@ class sirh(Ipm):
 
     population: NDArray[np.int_]
     SDH: NDArray[np.double]
-    hosp_p: NDArray[np.double]
     linear: NDArray[np.double]
     alpha: NDArray[np.double]
+    hosp: int
     D: int
     L: int
+    H: float
     event_apply_matrix = np.array(
         [
             # S   I   R   H
@@ -93,15 +92,14 @@ class sirh(Ipm):
         self.L = ctx.param["immunity_duration"]
         # Hospitalization duration
         self.hosp = ctx.param["hospitalization_duration"]
-        # SDF parameters
-        self.SDH = ctx.param["SDH"]
-        #SDH = expand_data(self.SDH, len(Duration), 4)
         # Hospitalization params
-        self.hosp_p = ctx.param["hospitalization_rate"]
+        self.H = ctx.param["hospitalization_rate"]
         # alpha
         self.alpha = ctx.param["alpha"]
         # linear
         self.linear = ctx.param["linear"]
+        # SDF parameters
+        self.SDH = ctx.param["SDH"]
 
     def exp_beta(self):
         a0 = self.alpha[0]
@@ -112,16 +110,16 @@ class sirh(Ipm):
         a2 = self.alpha[2]
         x2 = self.SDH[2]
         return np.exp(a0 + (a1 * x1) * (a2 * x2))
-    
+
     def linear_beta(self):
-        b = self.linear[0] # y-intercept
-        m = self.linear[1] # slope
-        x = self.SDH[0] # independent variable
+        b = self.linear[0]  # y-intercept
+        m = self.linear[1]  # slope
+        x = self.SDH[0]  # independent variable
         return (m * x) + b
 
     def _hosp(self) -> float:
-        h1 = self.hosp_p[0]
-        h2 = self.hosp_p[1]
+        h1 = self.H[0]
+        h2 = self.H[1]
         return np.exp((h1 + h2)) / (1 + np.exp((h1 + h2)))
 
     def events(self, loc: Location, tick: Tick) -> Events:
@@ -137,7 +135,7 @@ class sirh(Ipm):
                 tick.tau * self.exp_beta() * cs[0] * cs[1] / total,  # S -> I
                 tick.tau * cs[1] / self.D,  # leaving I compartment (I -> R)
                 0,  # I -> H
-                tick.tau * cs[3] / self._hosp(),  # H -> R
+                tick.tau * cs[3] / self.hosp,  # H -> R
                 tick.tau * cs[2] / self.L,  # R -> S
             ]
         )
