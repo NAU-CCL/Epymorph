@@ -1,12 +1,12 @@
 import re
 from abc import ABC
 from datetime import date
-from typing import Any, Callable, ClassVar, Generator, cast
+from typing import Any, Callable, ClassVar, Generator, Literal, cast
 
 import numpy as np
 import sympy
 from attr import dataclass
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Clock, Tick
 from epymorph.context import SimContext
@@ -100,8 +100,9 @@ class Attribute(ABC):
     symbol_name: str
     attribute_name: str
     shape: str
+    dtype: Literal['int'] | Literal['float']
 
-    _data_source: ClassVar[str]
+    data_source: ClassVar[str]
     """Which SimContext dict is this attribute drawing from?"""
 
     def __post_init__(self):
@@ -112,13 +113,13 @@ class Attribute(ABC):
         x = self.attribute_name
         match self.shape:
             case "S":
-                return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x]
+                return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x]
             case "T":
-                return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x][tick.day]
+                return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x][tick.day]
             case "N":
-                return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x][loc.index]
+                return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x][loc.index]
             case "TxN":
-                return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x][tick.day, loc.index]
+                return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x][tick.day, loc.index]
             case shape:
                 # shape is one of: A, TxA, NxA, TxNxA (where A is an index)
                 # unfortunately Python's structural pattern matching doesn't allow regex yet
@@ -130,25 +131,25 @@ class Attribute(ABC):
                 prefix, arbitrary_index = match.groups()
                 match prefix:
                     case "":
-                        return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x][arbitrary_index]
+                        return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x][arbitrary_index]
                     case "Tx":
-                        return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x][tick.day, arbitrary_index]
+                        return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x][tick.day, arbitrary_index]
                     case "Nx":
-                        return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x][loc.index, arbitrary_index]
+                        return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x][loc.index, arbitrary_index]
                     case "TxNx":
-                        return lambda ctx, tick, loc: getattr(ctx, self._data_source)[x][tick.day, loc.index, arbitrary_index]
+                        return lambda ctx, tick, loc: getattr(ctx, self.data_source)[x][tick.day, loc.index, arbitrary_index]
                     case _:
                         raise Exception(f"Unsupported shape: {shape}")
 
 
 @dataclass(frozen=True)
 class Geo(Attribute):
-    _data_source = 'geo'
+    data_source = 'geo'
 
 
 @dataclass(frozen=True)
 class Param(Attribute):
-    _data_source = 'param'
+    data_source = 'param'
 
 
 @dataclass(frozen=True)
@@ -157,17 +158,17 @@ class CompartmentSymbols:
     attributes: list[Attribute]
 
     @property
-    def all_symbols(self) -> list[list[sympy.Symbol]]:
-        return [self.compartment_symbols, self.attribute_symbols]
+    def all_symbols(self) -> tuple[list[sympy.Symbol], list[sympy.Symbol]]:
+        return (self.compartment_symbols, self.attribute_symbols)
 
     @property
     def compartment_symbols(self) -> list[sympy.Symbol]:
-        return sympy.symbols(self.compartments)
+        return sympy.symbols(self.compartments)  # type: ignore
 
     @property
     def attribute_symbols(self) -> list[sympy.Symbol]:
         symbol_names = [a.symbol_name for a in self.attributes]
-        return sympy.symbols(symbol_names)
+        return sympy.symbols(symbol_names)  # type: ignore
 
 
 class CompartmentModel:
@@ -178,7 +179,11 @@ class CompartmentModel:
     all_symbols: list[sympy.Symbol]
     attribute_getters: list[AttributeGetter]
     events: list[Event]
+    num_compartments: int
     num_events: int
+
+    # TODO: events (rate_lambda) and to_values should only use symbols that are present in the model
+    # this will be important if we are adding additional symbols for use in compartment initialization
 
     def __init__(self, symbols: CompartmentSymbols, transitions: list[TransitionDef]):
         self.symbols = symbols
@@ -189,6 +194,7 @@ class CompartmentModel:
         self.attribute_getters = [a.to_getter() for a in symbols.attributes]
         self.events = [Event.for_transition(t, self.all_symbols)
                        for t in transitions]
+        self.num_compartments = len(self.states)
         self.num_events = event_length(transitions)
 
         # TODO: check that all symbols used in the transitions are in the `symbols` object
@@ -316,37 +322,63 @@ def test_shape():
             print(f"Not matched: {line}")
 
 
-class Builder(IpmBuilder):
-    def __init__(self):
-        super().__init__(num_compartments=3, num_events=3)
+class CompartmentalIpmBuilder(IpmBuilder):
+    model: CompartmentModel
+
+    def __init__(self, model: CompartmentModel):
+        self.model = model
+        super().__init__(model.num_compartments, model.num_events)
 
     def build(self, ctx: SimContext) -> Ipm:
-        cs = CompartmentSymbols(
-            compartments=['S', 'I', 'R'],
-            attributes=[
-                Param('D', 'infection_duration', shape='S'),
-                Param('L', 'immunity_duration', shape='S'),
-                Geo('H', 'humidity', shape='TxN')
-            ])
-
-        [[S, I, R], [D, L, H]] = cs.all_symbols
-
-        beta = (sympy.exp(-180 * H + sympy.log(2 - 1.3)) + 1.3) / D
-
-        model = CompartmentModel(
-            symbols=cs,
-            transitions=[
-                Transition(S, I, rate=beta * S * I / (S + I + R)),
-                Transition(I, R, rate=I / D),
-                Transition(R, S, rate=R / L)
-            ])
-
-        return CompartmentalIpm(ctx, model)
+        return CompartmentalIpm(ctx, self.model)
 
     def verify(self, ctx: SimContext) -> None:
-        pass
+        errors = list[str]()
+        for a in self.model.symbols.attributes:
+            source: dict[str, Any] = getattr(ctx, a.data_source)
+            # does attribute exist?
+            if not a.attribute_name in source:
+                errors.append(
+                    f"Attribute {a.attribute_name} missing from {a.data_source}.")
+                # if missing, no need to do the rest of the checks
+                continue
+
+            data = source[a.attribute_name]
+
+            if a.shape == "S":
+                # check scalar values
+                # int values must be specified as an int
+                # but float values may be specified as a float or an int
+                exp_type = int if a.dtype == 'int' else (int, float)
+                if not isinstance(data, exp_type):
+                    errors.append(
+                        f"Attribute {a.attribute_name} was expected to be a scalar {a.dtype}.")
+            else:
+                # check numpy array values
+                exp_type = np.dtype(
+                    np.int_) if a.dtype == 'int' else np.dtype(np.double)
+                if not isinstance(data, np.ndarray):
+                    errors.append(
+                        f"Attribute {a.attribute_name} was expected to be an array.")
+                elif data.dtype.type != exp_type.type:
+                    errors.append(
+                        f"Attribute {a.attribute_name} was expected to be an array of type {a.dtype}."
+                    )
+                # TODO: check shape
+
+        if len(errors) > 0:
+            raise Exception(
+                "IPM attribute requirements were not met. See errors:" + "".join(f"\n- {e}" for e in errors))
 
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
+        # Set up initial compartments this way?
+        # n is node index
+        # def initial_compartments(n):
+        #     if n == i_node:
+        #         return [P - i_size, i_size, 0]
+        #     else:
+        #         return [P, 0, 0]
+
         # Initial compartments based on population (C0)
         population = ctx.geo['population']
         # With a seeded infection (C1) in one location
@@ -360,7 +392,7 @@ class Builder(IpmBuilder):
 
 
 if __name__ == "__main__":
-    builder = Builder()
+    pass
 
     # num_nodes = 3
     # ctx = SimContext(
@@ -394,25 +426,3 @@ if __name__ == "__main__":
     # print(model.to_values(ctx, ctx.clock.ticks[0], loc0))
     # print(model.to_values(ctx, ctx.clock.ticks[0], loc1))
     # print(model.to_values(ctx, ctx.clock.ticks[0], loc2))
-
-    sim = Simulation(
-        geo=geo_library['pei'](),
-        ipm_builder=builder,
-        mvm_builder=mm_library['pei']()
-    )
-
-    out = sim.run(
-        param={
-            'theta': 0.1,
-            'move_control': 0.9,
-            'infection_duration': 4.0,
-            'immunity_duration': 90.0,
-            'infection_seed_loc': 0,
-            'infection_seed_size': 10_000
-        },
-        start_date=date(2015, 1, 1),
-        duration_days=150,
-    )
-
-    # plot_pop(out, 0)
-    plot_event(out, 0)
