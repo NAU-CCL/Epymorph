@@ -24,6 +24,8 @@ class sirhBuilder(IpmBuilder):
     def verify(self, ctx: SimContext) -> None:
         if "population" not in ctx.geo:
             raise Exception("geo missing population")
+        if "humidity" not in ctx.geo:
+            raise Exception("geo missing humidity")
         if "beta" not in ctx.param:
             raise Exception("params missing beta")
         if "infection_duration" not in ctx.param:
@@ -41,7 +43,6 @@ class sirhBuilder(IpmBuilder):
 
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
         population = ctx.geo["population"]
-        humidity: NDArray[np.double]
         num_nodes = len(population)
         cs = [self.compartment_array() for _ in range(num_nodes)]
         # The populations of all locations start off Susceptible.
@@ -82,6 +83,7 @@ class sirh(Ipm):
     def __init__(self, ctx: SimContext):
         super().__init__(ctx)
         self.population = ctx.geo["population"]
+        self.humidity = ctx.geo["humidity"]
         # duration of infection (days)
         self.D = ctx.param["infection_duration"]
         # duration of immunity (days)
@@ -99,7 +101,7 @@ class sirh(Ipm):
         r0_max = np.double(2)
         a = np.double(-180)
         b = np.log(r0_max - r0_min)
-        return np.exp(a * humidity + b) + r0_min / self.D
+        return (np.exp(a * humidity + b) + r0_min) / self.D
 
     def events(self, loc: Location, tick: Tick) -> Events:
         # TODO: we need a mechanism to make sure we don't exceed the bounds of reality.
@@ -111,11 +113,7 @@ class sirh(Ipm):
         total = np.sum(cs)
         rates = np.array(
             [
-                tick.tau
-                * self._beta(loc.index, tick)
-                * cs[0]
-                * cs[1]
-                / total,  # S -> I
+                tick.tau * self.beta * cs[0] * cs[1] / total,  # S -> I
                 tick.tau * cs[1] / self.D,  # I -> R
                 0,  # I -> H
                 tick.tau * cs[3] / self.hosp,  # H -> R

@@ -21,29 +21,29 @@ class PeiModelBuilder(IpmBuilder):
     def verify(self, ctx: SimContext) -> None:
         # TODO: custom exception type with much more useful info
         # TODO: check types and shapes of these things as well
-        if 'population' not in ctx.geo:
+        if "population" not in ctx.geo:
             raise Exception("geo missing population")
-        if 'humidity' not in ctx.geo:
+        if "humidity" not in ctx.geo:
             raise Exception("geo missing humidity")
-        if 'infection_duration' not in ctx.param:
+        if "infection_duration" not in ctx.param:
             raise Exception("params missing infection_duration")
-        if 'immunity_duration' not in ctx.param:
+        if "immunity_duration" not in ctx.param:
             raise Exception("params missing immunity_duration")
-        if 'infection_seed_loc' not in ctx.param:
+        if "infection_seed_loc" not in ctx.param:
             raise Exception("params missing infection_seed_loc")
-        if 'infection_seed_size' not in ctx.param:
+        if "infection_seed_size" not in ctx.param:
             raise Exception("params missing infection_seed_size")
 
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
-        population = ctx.geo['population']
+        population = ctx.geo["population"]
         num_nodes = len(population)
         cs = [self.compartment_array() for _ in range(num_nodes)]
         # The populations of all locations start off Susceptible.
         for i in range(num_nodes):
             cs[i][0] = population[i]
         # With a seeded infection in one location.
-        si = ctx.param['infection_seed_loc']
-        sn = ctx.param['infection_seed_size']
+        si = ctx.param["infection_seed_loc"]
+        sn = ctx.param["infection_seed_size"]
         cs[si][0] -= sn
         cs[si][1] += sn
         return cs
@@ -54,6 +54,7 @@ class PeiModelBuilder(IpmBuilder):
 
 class PeiModel(Ipm):
     """The Pei influenza model: an SIR model incorporating absolute humidity over time."""
+
     population: NDArray[np.int_]
     humidity: NDArray[np.double]
     D: float
@@ -61,18 +62,16 @@ class PeiModel(Ipm):
 
     # for (row,col): should event (row) be added to or subtracted from compartment (col)?
     # this array has to be [num_events] by [num_compartments] in dimension
-    event_apply_matrix = np.array([[-1, +1, +0],
-                                   [+0, -1, +1],
-                                   [+1, +0, -1]])
+    event_apply_matrix = np.array([[-1, +1, +0], [+0, -1, +1], [+1, +0, -1]])
 
     def __init__(self, ctx: SimContext):
         super().__init__(ctx)
-        self.population = ctx.geo['population']
-        self.humidity = ctx.geo['humidity']
+        self.population = ctx.geo["population"]
+        self.humidity = ctx.geo["humidity"]
         # duration of infection (days)
-        self.D = ctx.param['infection_duration']
+        self.D = ctx.param["infection_duration"]
         # duration of immunity (days)
-        self.L = ctx.param['immunity_duration']
+        self.L = ctx.param["immunity_duration"]
 
     def _beta(self, loc_idx: int, tick: Tick) -> np.double:
         humidity: np.double = self.humidity[tick.day, loc_idx]
@@ -89,11 +88,13 @@ class PeiModel(Ipm):
         # as population sizes shrink when we consider more granular spatial scales.
         cs = loc.compartment_totals
         total = np.sum(cs)
-        rates = np.array([
-            tick.tau * self._beta(loc.index, tick) * cs[0] * cs[1] / total,
-            tick.tau * cs[1] / self.D,
-            tick.tau * cs[2] / self.L,
-        ])
+        rates = np.array(
+            [
+                tick.tau * self._beta(loc.index, tick) * cs[0] * cs[1] / total,
+                tick.tau * cs[1] / self.D,
+                tick.tau * cs[2] / self.L,
+            ]
+        )
         return self.ctx.rng.poisson(rates)
 
     def _draw(self, loc: Location, events: Events, ev_idx: int) -> NDArray[np.int_]:
@@ -110,6 +111,5 @@ class PeiModel(Ipm):
         events = [self._draw(loc, es, i) for i in range(len(es))]
         for i, pop in enumerate(loc.pops):
             es_pop = [[events[0][i]], [events[1][i]], [events[2][i]]]
-            deltas = np.sum(np.multiply(
-                es_pop, self.event_apply_matrix), axis=0)
+            deltas = np.sum(np.multiply(es_pop, self.event_apply_matrix), axis=0)
             pop.compartments += deltas

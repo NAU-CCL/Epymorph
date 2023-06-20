@@ -4,11 +4,11 @@ from epymorph.data.geo.maricopa_cbg_2019 import load as maricopa_cbg_2019_load
 from epymorph.data.geo.pei import load as geo_pei_load
 from epymorph.data.geo.single_pop_geo import load as single_pop_geo_load
 from epymorph.data.geo.sparsemod import load as geo_sparsemod_load
-from epymorph.data.geo.us_counties_2015 import \
-    load as geo_us_counties_2015_load
+from epymorph.data.geo.us_counties_2015 import load as geo_us_counties_2015_load
 from epymorph.data.geo.us_states_2015 import load as geo_us_states_2015_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
+from epymorph.data.ipm.sdh import load as ipm_sdh_load
 from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.movement import MovementBuilder, load_movement_spec
@@ -31,20 +31,20 @@ ipm_library = {
     "pei": ipm_pei_load,
     "simple_sirs": ipm_simple_sirs_load,
     "sirh": ipm_sirh_load,
+    "sdh": ipm_sdh_load,
 }
 
 mm_library = {
-    'no': mm_loader('epymorph/data/mm/no.movement'),
-    'icecube': mm_loader('epymorph/data/mm/icecube.movement'),
-    'pei': mm_loader('epymorph/data/mm/pei.movement'),
-    'sparsemod': mm_loader('epymorph/data/mm/sparsemod.movement')
+    "no": mm_loader("epymorph/data/mm/no.movement"),
+    "icecube": mm_loader("epymorph/data/mm/icecube.movement"),
+    "pei": mm_loader("epymorph/data/mm/pei.movement"),
+    "sparsemod": mm_loader("epymorph/data/mm/sparsemod.movement"),
 }
 
 geo_library = {
-    'pei': geo_pei_load,
-    'us_counties_2015': geo_us_counties_2015_load,
-    'us_states_2015': geo_us_states_2015_load,
-    'maricopa_cbg_2019': maricopa_cbg_2019_load,
-    'sparsemod': geo_sparsemod_load,
-    'single_pop_geo': single_pop_geo_load
+    "pei": geo_pei_load,
+    "us_counties_2015": geo_us_counties_2015_load,
+    "us_states_2015": geo_us_states_2015_load,
+    "sparsemod": geo_sparsemod_load,
+    "single_pop_geo": single_pop_geo_load,
 }
