@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 import jsonpickle
+import pandas as pd
 from attr import dataclass
 from numpy.typing import NDArray
 
@@ -12,6 +13,29 @@ class ADRIO(ABC):
     @abstractmethod
     def fetch(self, **kwargs) -> NDArray:
         pass
+
+    # formats geo codes to be usable by census library function
+    # TODO: move to "census" ADRIO template
+    def format_geo_codes(self, args: dict) -> str:
+        nodes = args.get('nodes')
+        code_string = ''
+        if type(nodes) is list:
+            for i in range(len(nodes)):
+                if i < len(nodes) - 1:
+                    code_string += (nodes[i] + ',')
+                else:
+                    code_string += nodes[i]
+            return code_string
+        else:
+            msg = 'nodes parameter is not formatted correctly; must be a list of strings'
+            raise Exception(msg)
+
+    # sort census data by state and county fips codes
+    # TODO: move to "census" ADRIO template
+    def sort_counties(self, data: list[dict]) -> list[list]:
+        dataframe = pd.DataFrame.from_records(data)
+        dataframe = dataframe.sort_values(by=['state', 'county'])
+        return dataframe.values.tolist()
 
 
 # class used to reference specific ADRIO implementations"""

@@ -1,43 +1,33 @@
+import numpy as np
 from census import Census
+from numpy.typing import NDArray
 
 from epymorph.adrio import ADRIO
-from epymorph.util import DataDict
 
 
-class pop_by_age(ADRIO):
+class PopByAge(ADRIO):
     """
     ADRIO to fetch total population in all counties in a provided set of states
     as well as population broken down into age brackets 0-19, 20-64, and 64-85+
+    Returns an array of 4 element lists containing each county's total population
+    followed by the population of each age group from youngest to oldest
     """
-    key: str
     census: Census
     year = 2015
+    attribute = 'population'
 
-    def __init__(self, key: str):
-        self.attribute = 'population'
-        self.key = key
+    def __init__(self, key: str) -> None:
         self.census = Census(key)
 
     # adds up values in an integer list in the range provided (used to calculate different age bracket totals)
-    def calculate_pop(self, start: int, end: int, location: list) -> int:
+    def calculate_pop(self, start: int, end: int, location: list[int]) -> int:
         population = 0
         for i in range(start, end + 1):
             population += location[i]
         return population
 
-    def fetch(self, **kwargs) -> DataDict:
-        # format geo codes to be usable by census library function
-        geo_codes = kwargs.get("nodes")
-        code_string = ''
-        if type(geo_codes) is list:
-            for i in range(len(geo_codes)):
-                if i < len(geo_codes) - 1:
-                    code_string += (geo_codes[i] + ',')
-                else:
-                    code_string += geo_codes[i]
-        else:
-            msg = 'nodes parameter is not formatted correctly; must be a list of strings'
-            raise Exception(msg)
+    def fetch(self, **kwargs) -> NDArray:
+        code_string = self.format_geo_codes(kwargs)
 
         # get data from census (census package not working with subject tables? 2015 data in percentages?)
         # This doesn't work
@@ -116,16 +106,18 @@ class pop_by_age(ADRIO):
                                      'B01001_049E',),
                                     {'for': 'county: *',
                                         'in': 'state: {}'.format(code_string)},
-                                    year=2015)
+                                    year=self.year)
 
-        # calculate population of each age bracket, enter into DataDict, and return
-        output = DataDict()
-        for i in range(len(data)):
-            data[i] = list(data[i].values())
-            total_pop = data[i][1]
-            minor_pop = self.calculate_pop(2, 11, data[i])
-            adult_pop = self.calculate_pop(12, 35, data[i])
-            elderly_pop = self.calculate_pop(36, 47, data[i])
-            output[data[i][0]] = [total_pop, minor_pop, adult_pop, elderly_pop]
+        # sort data by state and county fips
+        datalist = self.sort_counties(data)
+
+        # calculate population of each age bracket and enter into a numpy array to return
+        output = np.zeros((len(data), 4), dtype=np.int_)
+        for i in range(len(datalist)):
+            total_pop = datalist[i][1]
+            minor_pop = self.calculate_pop(2, 11, datalist[i])
+            adult_pop = self.calculate_pop(12, 35, datalist[i])
+            elderly_pop = self.calculate_pop(36, 47, datalist[i])
+            output[i] = [total_pop, minor_pop, adult_pop, elderly_pop]
 
         return output
