@@ -44,3 +44,13 @@ class TestUtil(unittest.TestCase):
         act4 = util.parse_duration("999y")
         exp4 = relativedelta(years=999)
         self.assertEqual(act4, exp4)
+
+    def test_filter_unique(self):
+        act = util.filter_unique(['a', 'b', 'b', 'c', 'a'])
+        exp = ['a', 'b', 'c']
+        self.assertListEqual(act, exp)
+
+    def test_list_not_none(self):
+        act = util.list_not_none(['a', None, 'b', None, None, 'c', None])
+        exp = ['a', 'b', 'c']
+        self.assertListEqual(act, exp)

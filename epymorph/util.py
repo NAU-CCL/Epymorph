@@ -28,6 +28,28 @@ def stutter(it: Iterable[T], times: int) -> Iterable[T]:
     return (xs for x in it for xs in (x,) * times)
 
 
+def index_where(it: Iterable[T], predicate: Callable[[T], bool]) -> int:
+    for i, x in enumerate(it):
+        if predicate(x):
+            return i
+    return -1
+
+
+def iterator_length(it: Iterable[Any]) -> int:
+    """
+    Count the number of items in the given iterator.
+    Warning: this consumes the iterator! It also never terminates if the iterator is infinite.
+    """
+    length = 0
+    for _ in it:
+        length += 1
+    return length
+
+
+def list_not_none(it: Iterable[T]) -> list[T]:
+    return [x for x in it if x is not None]
+
+
 class NotUniqueException(Exception):
     def __init__(self):
         super().__init__("Collection contains non-unique values.")
