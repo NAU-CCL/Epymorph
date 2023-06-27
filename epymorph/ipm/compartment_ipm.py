@@ -4,9 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import sympy
 from numpy.typing import NDArray
-from sympy import Symbol
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
@@ -15,38 +13,45 @@ from epymorph.ipm.attribute import (AttributeGetter, compile_getter,
                                     verify_attribute)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                             TransitionDef)
+from epymorph.ipm.sympy_shim import (Symbol, SympyLambda, lambdify,
+                                     lambdify_list)
 from epymorph.util import Compartments, Events, list_not_none
 from epymorph.world import Location
 
 
 @dataclass(frozen=True)
 class IndependentTransition:
-    rate_lambda: Any
+    """Represents a single edge. Effectively: `poisson(rate * tau)`"""
+    rate_lambda: SympyLambda
 
 
 @dataclass(frozen=True)
 class ForkedTransition:
+    """Represents a fork. Effectively: `multinomial(poisson(rate * tau), prob)`"""
     size: int
-    rate_lambda: Any
-    prob_lambda: Any
+    rate_lambda: SympyLambda
+    prob_lambda: SympyLambda
 
 
 IpmTransition = IndependentTransition | ForkedTransition
+"""A lambdified version of the compartment model transition, for use in the IPM."""
 
 
-def compile_transition(transition: TransitionDef, rate_args: list[Symbol]) -> IpmTransition:
+def compile_transition(transition: TransitionDef, rate_params: list[Symbol]) -> IpmTransition:
+    """Compile a model transition for efficient evaluation within the IPM."""
     match transition:
-        case EdgeDef(_, _, rate):
-            rate_lambda = sympy.lambdify([rate_args], rate)
+        case EdgeDef(rate, state_from, state_to):
+            rate_lambda = lambdify(rate_params, rate)
             return IndependentTransition(rate_lambda)
         case ForkDef(rate, edges, prob):
             size = len(edges)
-            rate_lambda = sympy.lambdify([rate_args], rate)
-            prob_lambda = sympy.lambdify([rate_args], prob)
+            rate_lambda = lambdify(rate_params, rate)
+            prob_lambda = lambdify_list(rate_params, prob)
             return ForkedTransition(size, rate_lambda, prob_lambda)
 
 
 class CompartmentModelIpmBuilder(IpmBuilder):
+    """The IpmBuilder for all IPMs driven by a CompartmentModel."""
     model: CompartmentModel
 
     def __init__(self, model: CompartmentModel):
@@ -66,6 +71,7 @@ class CompartmentModelIpmBuilder(IpmBuilder):
                             + "See errors:" + "".join(f"\n- {e}" for e in errors))
 
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
+        # TODO: we need a better system for initializing the compartments.
         # Initial compartments based on population (C0)
         population = ctx.geo['population']
         # With a seeded infection (C1) in one location
@@ -78,7 +84,7 @@ class CompartmentModelIpmBuilder(IpmBuilder):
         return list(cs)
 
     def build(self, ctx: SimContext) -> Ipm:
-        rate_args = [
+        rate_params = [
             *(c.symbol for c in self.model.compartments),
             *(a.symbol for a in self.model.attributes)
         ]
@@ -87,11 +93,12 @@ class CompartmentModelIpmBuilder(IpmBuilder):
             self.model,
             attr_getters=[compile_getter(ctx, a)
                           for a in self.model.attributes],
-            transitions=[compile_transition(t, rate_args)
+            transitions=[compile_transition(t, rate_params)
                          for t in self.model.transitions])
 
 
 class CompartmentModelIpm(Ipm):
+    """The IPM instance for all IPMs driven by a CompartmentModel."""
     ctx: SimContext
     model: CompartmentModel
     attr_getters: list[AttributeGetter]
@@ -108,20 +115,20 @@ class CompartmentModelIpm(Ipm):
         attribs = (f(loc, tick) for f in self.attr_getters)
         return [*effective, *attribs]
 
-    def _eval_rates(self, params: list[Any]) -> NDArray[np.int_]:
+    def _eval_rates(self, rate_args: list[Any], tau: np.double) -> NDArray[np.int_]:
         """Evaluate the event rates and do random draws for all transition events."""
         occurrences = np.zeros(self.ctx.events, dtype=int)
         index = 0
         for t in self.transitions:
             match t:
                 case IndependentTransition(rate_lambda):
-                    rate = rate_lambda(params)
-                    occurrences[index] = self.ctx.rng.poisson(rate)
+                    rate = rate_lambda(rate_args)
+                    occurrences[index] = self.ctx.rng.poisson(rate * tau)
                     index += 1
                 case ForkedTransition(size, rate_lambda, prob_lambda):
-                    rate = rate_lambda(params)
-                    base = self.ctx.rng.poisson(rate)
-                    prob = prob_lambda(params)
+                    rate = rate_lambda(rate_args)
+                    base = self.ctx.rng.poisson(rate * tau)
+                    prob = prob_lambda(rate_args)
                     stop = index + size
                     occurrences[index:stop] = self.ctx.rng.multinomial(
                         base, prob)
@@ -135,11 +142,9 @@ class CompartmentModelIpm(Ipm):
 
         # Calculate how many events we expect to happen this tick.
         rate_args = self._rate_args(loc, effective, tick)
-        erates = self._eval_rates(rate_args)
-        expect = self.ctx.rng.poisson(erates * tick.tau)
-        actual = expect.copy()
+        occur = self._eval_rates(rate_args, tick.tau)
 
-        # Check for event overruns leaving each compartment and reduce counts.
+        # Check for event overruns leaving each compartment and correct counts.
         for cidx, eidxs in enumerate(self.model.events_leaving_compartment):
             available = effective[cidx]
             n = len(eidxs)
@@ -149,33 +154,29 @@ class CompartmentModelIpm(Ipm):
             elif n == 1:
                 # Compartment only has one outward edge; just "min".
                 eidx = eidxs[0]
-                actual[eidx] = min(expect[eidx], available)
+                occur[eidx] = min(occur[eidx], available)
             elif n == 2:
                 # Compartment has two outward edges:
                 # use hypergeo to select which events "actually" happened.
-                eidx0 = eidxs[0]
-                eidx1 = eidxs[1]
-                desired0 = expect[eidx0]
-                desired1 = expect[eidx1]
+                desired0, desired1 = occur[eidxs]
                 if desired0 + desired1 > available:
                     drawn0 = self.ctx.rng.hypergeometric(
                         desired0, desired1, available)
-                    actual[eidx0] = drawn0
-                    actual[eidx1] = available - drawn0
+                    occur[eidxs] = [drawn0, available - drawn0]
             else:
                 # Compartment has more than two outwards edges:
                 # use multivariate hypergeometric to select which events "actually" happened.
-                desired = expect[eidxs]
+                desired = occur[eidxs]
                 if np.sum(desired) > available:
-                    actual[eidxs] = self.ctx.rng.multivariate_hypergeometric(
+                    occur[eidxs] = self.ctx.rng.multivariate_hypergeometric(
                         desired, available)
-        return actual
+        return occur
 
     def apply_events(self, loc: Location, es: Events) -> None:
         # For each event, redistribute across loc's pops
         compartments = np.array([pop.compartments for pop in loc.pops])
         occurrences_by_pop = np.zeros(
-            (self.ctx.nodes, self.ctx.events), dtype=int)
+            (len(loc.pops), self.ctx.events), dtype=int)
         for eidx, occur in enumerate(es):
             cidx = self.model.source_compartment_for_event[eidx]
             occurrences_by_pop[:, eidx] = self.ctx.rng.multivariate_hypergeometric(

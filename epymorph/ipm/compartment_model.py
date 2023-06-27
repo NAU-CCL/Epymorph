@@ -2,20 +2,15 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from typing import Generator, Iterable, cast
+from typing import Generator, Iterable
 
 import numpy as np
-import sympy
 from numpy.typing import NDArray
-from sympy import Expr, Symbol
 
 from epymorph.ipm.attribute import AttributeDef
+from epymorph.ipm.sympy_shim import (Expr, Symbol, simplify, simplify_sum,
+                                     to_symbol)
 from epymorph.util import index_where, iterator_length
-
-
-def _to_symbol(name: str) -> Symbol:
-    # sympy doesn't provide explicit typing, so we adapt
-    return cast(Symbol, sympy.symbols(name))
 
 
 class InvalidModelException(Exception):
@@ -73,6 +68,7 @@ class Transition(ABC):
 
 @dataclass(frozen=True)
 class EdgeDef(Transition):
+    # rate (from super)
     compartment_from: Symbol
     compartment_to: Symbol
 
@@ -84,6 +80,7 @@ def edge(compartment_from: Symbol, compartment_to: Symbol, rate: Expr) -> EdgeDe
 
 @dataclass(frozen=True)
 class ForkDef(Transition):
+    # rate (from super)
     edges: list[EdgeDef]
     probs: list[Expr]
 
@@ -109,10 +106,10 @@ def fork(*edges: EdgeDef) -> ForkDef:
     edge_rates = [e.rate for e in edges]
     # the "base rate" -- how many individuals transition on any of these edges --
     # is the sum of all the edge rates (this defines the lambda for the poisson draw)
-    rate = sympy.simplify(sympy.Add(*edge_rates))
+    rate = simplify_sum(edge_rates)
     # the probability of following a particular edge is then the edge's rate divided by the base rate
     # (this defines the probability split in the eventual multinomial draw)
-    probs = [sympy.simplify(r / rate) for r in edge_rates]
+    probs = [simplify(r / rate) for r in edge_rates]
     return ForkDef(rate, list(edges), probs)
 
 
@@ -132,7 +129,7 @@ class CompartmentDef:
 def compartment(symbol_name: str, name: str | None = None) -> CompartmentDef:
     if name is None:
         name = symbol_name
-    return CompartmentDef(_to_symbol(symbol_name), name)
+    return CompartmentDef(to_symbol(symbol_name), name)
 
 
 def quick_compartments(symbol_names: str) -> list[CompartmentDef]:

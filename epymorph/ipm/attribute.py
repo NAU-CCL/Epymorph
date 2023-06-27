@@ -1,22 +1,15 @@
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Literal, cast
+from typing import Any, Callable, ClassVar, Literal
 
 import numpy as np
-import sympy
 from numpy.typing import NDArray
-from sympy import Symbol
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
+from epymorph.ipm.sympy_shim import Symbol, to_symbol
 from epymorph.world import Location
-
-
-def _to_symbol(name: str) -> Symbol:
-    # sympy doesn't provide explicit typing, so we adapt
-    return cast(Symbol, sympy.symbols(name))
-
 
 AttributeType = Literal['int'] | Literal['float'] | Literal['str']
 AttributeShape = str
@@ -48,33 +41,31 @@ def validate_shape(shape: AttributeShape) -> None:
 def shape_matches(ctx: SimContext, expected_shape: AttributeShape, value: NDArray) -> bool:
     match = parts_regex.fullmatch(expected_shape)
     if not match:
-        # This method should only be called on shape we know to be valid.
+        # This method should only be called if we know expected_shape to be valid.
         # But if not...
         raise Exception(f"Unsupported shape {expected_shape}.")
 
+    # note: time axis is permitted to have extra data, but node axes must be exact
+    shape = value.shape
     prefix, arbitrary_index = match.groups()
     match prefix:
         case 'S':
             # array is not a scalar
             return False
         case "T":
-            return value.shape == (ctx.clock.num_days,)
+            return len(shape) == 1 and shape[0] >= ctx.clock.num_days
         case "N":
-            return value.shape == (ctx.nodes,)
+            return len(shape) == 1 and shape[0] == ctx.nodes
         case "TxN":
-            return value.shape == (ctx.clock.num_days, ctx.nodes)
+            return len(shape) == 2 and shape[0] >= ctx.clock.num_days and shape[1] == ctx.nodes
         case "":
-            a = int(arbitrary_index)
-            return len(value.shape) == 1 and value.shape[0] > a
+            return len(shape) == 1 and shape[0] > int(arbitrary_index)
         case "Tx":
-            a = int(arbitrary_index)
-            return len(value.shape) == 2 and value.shape[0] == ctx.clock.num_days and value.shape[1] > a
+            return len(shape) == 2 and shape[0] >= ctx.clock.num_days and shape[1] > int(arbitrary_index)
         case "Nx":
-            a = int(arbitrary_index)
-            return len(value.shape) == 2 and value.shape[0] == ctx.nodes and value.shape[1] > a
+            return len(shape) == 2 and shape[0] == ctx.nodes and shape[1] > int(arbitrary_index)
         case "TxNx":
-            a = int(arbitrary_index)
-            return len(value.shape) == 3 and value.shape[0] == ctx.clock.num_days and value.shape[1] == ctx.nodes and value.shape[2] > a
+            return len(shape) == 3 and shape[0] >= ctx.clock.num_days and shape[1] == ctx.nodes and shape[2] > int(arbitrary_index)
         case _:
             raise Exception(f"Unsupported shape {expected_shape}.")
 
@@ -99,7 +90,7 @@ def geo(symbol_name: str, attribute_name: str | None = None, shape: str = 'S', d
     validate_shape(shape)
     if attribute_name is None:
         attribute_name = symbol_name
-    return GeoDef(_to_symbol(symbol_name), attribute_name, shape, dtype)
+    return GeoDef(to_symbol(symbol_name), attribute_name, shape, dtype)
 
 
 def quick_geos(symbol_names: str) -> list[AttributeDef]:
@@ -115,7 +106,7 @@ def param(symbol_name: str, attribute_name: str | None = None, shape: str = 'S',
     validate_shape(shape)
     if attribute_name is None:
         attribute_name = symbol_name
-    return ParamDef(_to_symbol(symbol_name), attribute_name, shape, dtype)
+    return ParamDef(to_symbol(symbol_name), attribute_name, shape, dtype)
 
 
 def quick_params(symbol_names: str) -> list[AttributeDef]:
@@ -207,6 +198,6 @@ def verify_attribute(ctx: SimContext, attr: AttributeDef) -> str | None:
         elif not _check_type_numpy(attr, value):
             return f"Attribute {attr.attribute_name} was expected to be an array of type {attr.dtype}."
         elif not shape_matches(ctx, attr.shape, value):
-            return f"Attribute {attr.attribute_name} was expected to be an arry of shape {attr.shape}."
+            return f"Attribute {attr.attribute_name} was expected to be an array of shape {attr.shape}."
 
     return None  # no errors!
