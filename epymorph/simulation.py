@@ -10,8 +10,8 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Clock
 from epymorph.context import SimContext
-from epymorph.epi import Ipm, IpmBuilder
 from epymorph.geo import Geo
+from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.movement import Movement, MovementBuilder
 from epymorph.util import DataDict, Event
 from epymorph.world import World

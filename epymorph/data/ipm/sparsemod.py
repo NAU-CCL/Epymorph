@@ -1,9 +1,8 @@
-from epymorph.epi import IpmBuilder
-from epymorph.ipm.attribute import param, quick_params
+from epymorph.ipm.attribute import param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
 from epymorph.ipm.compartment_model import (compartment, create_model,
-                                            create_symbols, edge, fork,
-                                            quick_compartments)
+                                            create_symbols, edge, fork)
+from epymorph.ipm.ipm import IpmBuilder
 
 
 def load() -> IpmBuilder:
