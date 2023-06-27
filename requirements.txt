@@ -3,3 +3,8 @@ numpy
 pydantic
 sympy
 tomli-w
+pandas
+geopandas
+census
+os
+jsonpickle

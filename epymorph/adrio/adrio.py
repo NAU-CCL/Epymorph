@@ -1,66 +1,64 @@
+import os
 from abc import ABC, abstractmethod
 
 import jsonpickle
-import pandas as pd
 from attr import dataclass
+from census import Census
 from numpy.typing import NDArray
 
 
-# abstract class to serve as an outline for individual ADRIO implementations
 class ADRIO(ABC):
+    """abstract class to serve as an outline for individual ADRIO implementations"""
     attribute: str
+    census: Census
+
+    def __init__(self):
+        """
+        initializer to create Census object
+        TODO: move to "census" ADRIO template
+        """
+        self.census = Census(os.environ['CENSUS_API_KEY'])
 
     @abstractmethod
     def fetch(self, **kwargs) -> NDArray:
         pass
 
-    # formats geo codes to be usable by census library function
-    # TODO: move to "census" ADRIO template
-    def format_geo_codes(self, args: dict) -> str:
+    def type_check(self, args: dict) -> list[str]:
+        """
+        type checks the 'nodes' argument to make sure data was passed in correctly
+        TODO: move to "census" ADRIO template
+        """
         nodes = args.get('nodes')
-        code_string = ''
         if type(nodes) is list:
-            for i in range(len(nodes)):
-                if i < len(nodes) - 1:
-                    code_string += (nodes[i] + ',')
-                else:
-                    code_string += nodes[i]
-            return code_string
+            return nodes
         else:
             msg = 'nodes parameter is not formatted correctly; must be a list of strings'
             raise Exception(msg)
 
-    # sort census data by state and county fips codes
-    # TODO: move to "census" ADRIO template
-    def sort_counties(self, data: list[dict]) -> list[list]:
-        dataframe = pd.DataFrame.from_records(data)
-        dataframe = dataframe.sort_values(by=['state', 'county'])
-        return dataframe.values.tolist()
 
-
-# class used to reference specific ADRIO implementations"""
 @dataclass
 class ADRIOSpec:
+    """class used to reference specific ADRIO implementations"""
     class_name: str
 
 
-# class to create geo spec files used by the ADRIO system to create geos
 @dataclass
 class GEOSpec:
+    """class to create geo spec files used by the ADRIO system to create geos"""
     id: str
     nodes: list[str]
     adrios: list[ADRIOSpec]
 
 
-# serializes a GEOSpec object
 def serialize(spec: GEOSpec, file_path: str) -> None:
+    """serializes a GEOSpec object to a file at the given path"""
     json_spec = str(jsonpickle.encode(spec, unpicklable=True))
     with open(file_path, 'w') as stream:
         stream.write(json_spec)
 
 
-# deserializes a GEOSpec object
 def deserialize(file_path: str) -> GEOSpec:
+    """deserializes a GEOSpec object from a file at the given path"""
     with open(file_path, 'r') as stream:
         spec = stream.readline()
     spec_dec = jsonpickle.decode(spec)
