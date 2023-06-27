@@ -6,5 +6,4 @@ tomli-w
 pandas
 geopandas
 census
-os
 jsonpickle
