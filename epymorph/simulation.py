@@ -225,14 +225,14 @@ def seed_crawl_until_error(sim: Simulation, start: int = 0, iterations: int = 10
             f"Seed crawl produced no errors from {start} until {start + iterations}.")
 
 
-def seed_crawl_until_success(sim: Callable[[], Simulation], start: int = 0, iterations: int = 100, **kwargs) -> None:
+def seed_crawl_until_success(sim: Simulation, start: int = 0, iterations: int = 100, **kwargs) -> None:
     """
     Simulation debugging utility. Run a simulation with many different random seeds until one succeeds.
     Very handy when you're trying to debug an issue that very rarely does succeed and you want to know why.
     """
     for seed in range(start, start + iterations):
         try:
-            sim().run(**kwargs, rng=np.random.default_rng(seed))
+            sim.run(**kwargs, rng=np.random.default_rng(seed))
             print(f"Succeeded successfully! Seed was {seed}.")
             break
         except Exception as e:
