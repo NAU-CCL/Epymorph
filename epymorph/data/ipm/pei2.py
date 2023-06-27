@@ -1,10 +1,10 @@
-from sympy import exp, log
+from sympy import Expr, exp, log
 
-from epymorph.epi import IpmBuilder
 from epymorph.ipm.attribute import geo, param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
 from epymorph.ipm.compartment_model import (create_model, create_symbols, edge,
                                             quick_compartments)
+from epymorph.ipm.ipm import IpmBuilder
 
 
 def load() -> IpmBuilder:
@@ -19,7 +19,7 @@ def load() -> IpmBuilder:
     [S, I, R] = symbols.compartment_symbols
     [D, L, H] = symbols.attribute_symbols
 
-    beta = (exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D
+    beta: Expr = (exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D  # type: ignore
 
     pei = create_model(
         symbols=symbols,

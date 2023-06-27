@@ -8,11 +8,11 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
-from epymorph.epi import Ipm, IpmBuilder
 from epymorph.ipm.attribute import (AttributeGetter, compile_getter,
                                     verify_attribute)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                             TransitionDef)
+from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.ipm.sympy_shim import (Symbol, SympyLambda, lambdify,
                                      lambdify_list)
 from epymorph.util import Compartments, Events, list_not_none
