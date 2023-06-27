@@ -82,6 +82,10 @@ def main() -> None:
         '--chart',
         help="(optional) ID for chart to draw; \"e0\" for event incidence 0; \"p2\" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)")
     parser_run.add_argument(
+        '--rng_seed',
+        type=int,
+        help="(optional) a number with which to seed the random number generator")
+    parser_run.add_argument(
         '-p', '--profile',
         action='store_true',
         help="(optional) include this flag to run in profiling mode")
@@ -111,15 +115,16 @@ def main() -> None:
     exit_code = 1  # exit code: invalid command (default)
     if args.command == 'run':
         exit_code = epymorph_run(
-            args.ipm,
-            args.mm,
-            args.geo,
-            args.start_date,
-            args.duration,
-            args.params,
-            args.out,
-            args.chart,
-            args.profile
+            ipm_name=args.ipm,
+            mm_name=args.mm,
+            geo_name=args.geo,
+            start_date_str=args.start_date,
+            duration_str=args.duration,
+            params_path=args.params,
+            out_path=args.out,
+            chart=args.chart,
+            rng_seed=args.rng_seed,
+            profiling=args.profile
         )
     elif args.command == 'check':
         exit_code = do_check(args.file)

@@ -133,6 +133,7 @@ def run(ipm_name: str,
         params_path: str,
         out_path: str | None,
         chart: str | None,
+        rng_seed: int | None,
         profiling: bool) -> int:
     """Run a simulation. Returns exit code."""
 
@@ -203,8 +204,12 @@ def run(ipm_name: str,
     sim.on_tick.subscribe(lambda x: print(progress(x[1]), end='\r'))
     sim.on_end.subscribe(lambda _: print(progress(1.0)))
 
+    rng = np.random.default_rng()
+    if rng_seed is not None:
+        rng = np.random.default_rng(rng_seed)
+
     t0 = time.perf_counter()
-    out = sim.run(params, start_date, duration_days, progress=True)
+    out = sim.run(params, start_date, duration_days, rng, progress=True)
     t1 = time.perf_counter()
 
     print(f"Runtime: {(t1 - t0):.3f}s")
