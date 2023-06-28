@@ -15,6 +15,10 @@ from epymorph.util import compile_function, parse_function
 
 
 class MovementBuilder:
+
+    taus: list[np.double]
+    clause_compiler: Callable[[SimContext], Clause]
+
     def __init__(self, taus: list[np.double], clause_compiler: Callable[[SimContext], Clause]):
         assert len(taus) > 0, "Must supply at least one tau step."
         assert np.sum(taus) == np.double(1), "Tau steps must sum to 1."

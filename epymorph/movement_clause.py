@@ -146,6 +146,8 @@ class Return(Clause):
 class Sequence(Clause):
     """A movement clause which executes a list of child clauses in sequence."""
 
+    clauses: abcSequence[Clause]
+
     def __init__(self, clauses: abcSequence[Clause]):
         self.clauses = clauses
 
