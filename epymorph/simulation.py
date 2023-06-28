@@ -4,6 +4,7 @@ import logging
 from datetime import date
 from functools import reduce
 from itertools import repeat
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -205,3 +206,37 @@ class Simulation:
         trial_iterator = map(self._run_internal, args_iterator)
         return reduce(lambda acc, curr: acc + curr, trial_iterator,
                       OutputAggregate(ctx))
+
+
+def seed_crawl_until_error(sim: Simulation, start: int = 0, iterations: int = 100, **kwargs) -> None:
+    """
+    Simulation debugging utility. Run a simulation with many different random seeds until one produces an error.
+    Very handy when you're trying to debug an issue that only happens sometimes.
+    """
+    for seed in range(start, start + iterations):
+        try:
+            sim.run(**kwargs, rng=np.random.default_rng(seed))
+        except Exception as e:
+            print(e)
+            print(f"Failed successfully! Error above. Seed was {seed}.")
+            break
+    else:
+        print(
+            f"Seed crawl produced no errors from {start} until {start + iterations}.")
+
+
+def seed_crawl_until_success(sim: Simulation, start: int = 0, iterations: int = 100, **kwargs) -> None:
+    """
+    Simulation debugging utility. Run a simulation with many different random seeds until one succeeds.
+    Very handy when you're trying to debug an issue that very rarely does succeed and you want to know why.
+    """
+    for seed in range(start, start + iterations):
+        try:
+            sim.run(**kwargs, rng=np.random.default_rng(seed))
+            print(f"Succeeded successfully! Seed was {seed}.")
+            break
+        except Exception as e:
+            pass
+    else:
+        print(
+            f"Seed crawl produced no successes from {start} until {start + iterations}.")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -172,18 +172,32 @@ class CompartmentModelIpm(Ipm):
                         desired, available)
         return occur
 
+    def _random_event_order(self) -> Iterable[int]:
+        # this function exists to convince the type system that, yes, this is in fact a 1D array of ints
+        return self.ctx.rng.permutation(self.ctx.events)
+
     def apply_events(self, loc: Location, es: Events) -> None:
-        # For each event, redistribute across loc's pops
-        compartments = np.array([pop.compartments for pop in loc.pops])
-        occurrences_by_pop = np.zeros(
-            (len(loc.pops), self.ctx.events), dtype=int)
-        for eidx, occur in enumerate(es):
+        # For each event, redistribute across loc's pops.
+        #
+        # Process events in random order as a (probably somewhat naive) way to avoid biasing
+        # events, since a fixed order risks "eating up" all the available individuals every round.
+        #
+        # The best option might be to shuffle a "deck" of event occurrences, draw an event, and then
+        # draw a random individual (without replacement) to assign to that event. Repeat until all
+        # events are distributed. However that sounds like a major performance hit if we're not careful
+        # how to do it, so we're going with this for now.
+        available = np.array([pop.compartments for pop in loc.pops])
+        occurrences = np.zeros((len(loc.pops), self.ctx.events), dtype=int)
+        for eidx in self._random_event_order():
+            occur: int = es[eidx]  # type: ignore
             cidx = self.model.source_compartment_for_event[eidx]
-            occurrences_by_pop[:, eidx] = self.ctx.rng.multivariate_hypergeometric(
-                compartments[:, cidx], occur)
+            selected = self.ctx.rng.multivariate_hypergeometric(
+                available[:, cidx], occur)
+            occurrences[:, eidx] = selected
+            available[:, cidx] -= selected
 
         # Now that events are assigned to pops, update pop compartments using apply matrix.
         for pidx, pop in enumerate(loc.pops):
             deltas = np.matmul(
-                occurrences_by_pop[pidx], self.model.apply_matrix)
+                occurrences[pidx], self.model.apply_matrix)
             pop.compartments += deltas

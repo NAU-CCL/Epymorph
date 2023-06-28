@@ -147,6 +147,7 @@ class RunInput(BaseModel):
     start_date: date
     duration: Duration
     params: dict[str, Any]
+    rng_seed: int | None = None
 
 
 def run(input_path: str,
@@ -213,8 +214,13 @@ def run(input_path: str,
     sim.on_tick.subscribe(lambda x: print(progress(x[1]), end='\r'))
     sim.on_end.subscribe(lambda _: print(progress(1.0)))
 
+    if input.rng_seed is not None:
+        rng = np.random.default_rng(input.rng_seed)
+    else:
+        rng = np.random.default_rng()
+
     t0 = time.perf_counter()
-    out = sim.run(input.params, start_date, duration_days, progress=True)
+    out = sim.run(input.params, start_date, duration_days, rng, progress=True)
     t1 = time.perf_counter()
 
     print(f"Runtime: {(t1 - t0):.3f}s")
