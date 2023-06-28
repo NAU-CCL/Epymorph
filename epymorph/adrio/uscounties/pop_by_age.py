@@ -64,8 +64,8 @@ class PopByAge(ADRIO):
     def __init__(self) -> None:
         super().__init__()
 
-    # adds up a specified group of integer values from a row of a population dataframe (used to calculate different age bracket totals)
     def calculate_pop(self, start: int, end: int, location: pd.Series) -> int:
+        """Adds up a specified group of integer values from a row of a population dataframe (used to calculate different age bracket totals)"""
         population = 0
         for i in range(start, end):
             population += int(location[i])
@@ -81,7 +81,7 @@ class PopByAge(ADRIO):
 
         # get data from census
         data = self.census.acs5.get(query_list, {
-                                    'for': 'county: *', 'in': 'state: {}'.format(code_string)}, year=self.year)
+                                    'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
         data_df = pd.DataFrame.from_records(data)
 

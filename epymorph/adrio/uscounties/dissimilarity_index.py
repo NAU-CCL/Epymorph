@@ -24,7 +24,7 @@ class DissimilarityIndex(ADRIO):
                                            'B03002_004E',  # minority population
                                            'B03002_014E'),
                                           {'for': 'tract: *', 'in': 'county: *',
-                                           'in': 'state: {}'.format(code_string)},
+                                           'in': f'state: {code_string}'},
                                           year=self.year)
 
         # fetch county level data from census
@@ -33,7 +33,7 @@ class DissimilarityIndex(ADRIO):
                                             'B03002_004E',  # minority population
                                             'B03002_014E'),
                                            {'for': 'county: *',
-                                               'in': 'state: {}'.format(code_string)},
+                                               'in': f'state: {code_string}'},
                                            year=self.year)
 
         # sort data by state, county

@@ -21,7 +21,7 @@ class NameState(ADRIO):
         # get data from census
         data = self.census.acs5.get(('NAME'),
                                     {'for': 'county: *',
-                                        'in': 'state: {}'.format(code_string)},
+                                        'in': f'state: {code_string}'},
                                     year=self.year)
 
         # sort data by state and county fips

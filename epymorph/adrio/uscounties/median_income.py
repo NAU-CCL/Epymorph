@@ -20,7 +20,7 @@ class MedianIncome(ADRIO):
 
         # fetch data from census
         data = self.census.acs5.get('B19013_001E', {
-                                    'for': 'county: *', 'in': 'state: {}'.format(code_string)}, year=self.year)
+                                    'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
         # sort data by state and county fips
         data_df = DataFrame.from_records(data)
