@@ -112,7 +112,7 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
     results = movement_spec.parse_string(spec_string, parse_all=True)
     spec: MovementSpec = results[0]  # type: ignore
 
-    clause_compilers = map(parse_clause, spec.clauses)
+    clause_compilers = [parse_clause(c) for c in spec.clauses]
 
     def compile_clause(ctx: SimContext) -> Clause:
         global_namespace = _make_global_namespace(ctx)
