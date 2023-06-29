@@ -6,8 +6,7 @@ import numpy as np
 
 from epymorph.clock import TickDelta
 from epymorph.context import SimContext
-from epymorph.movement_clause import (Clause, GeneralClause, Predicates,
-                                      Return, Sequence)
+from epymorph.movement_clause import Clause, GeneralClause, Predicates, Return, Sequence
 from epymorph.parser.move_clause import Daily
 from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
@@ -15,7 +14,9 @@ from epymorph.util import compile_function, parse_function
 
 
 class MovementBuilder:
-    def __init__(self, taus: list[np.double], clause_compiler: Callable[[SimContext], Clause]):
+    def __init__(
+        self, taus: list[np.double], clause_compiler: Callable[[SimContext], Clause]
+    ):
         assert len(taus) > 0, "Must supply at least one tau step."
         assert np.sum(taus) == np.double(1), "Tau steps must sum to 1."
         self.taus = taus
@@ -35,6 +36,7 @@ class Movement(NamedTuple):
     that each day part will have movement characteristics relevant to the simulation.
     That is: there is no reason to have tau steps smaller than 1 day unless it's relevant to movement.
     """
+
     taus: list[np.double]
     """The tau steps for the simulation."""
     clause: Clause
@@ -48,10 +50,8 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     except:
         raise Exception(f"Movement clause: not a valid function")
 
-    prd = Predicates.daylist(days=clause_spec.days,
-                             step=clause_spec.leave_step)
-    ret = TickDelta(days=clause_spec.duration.to_days(),
-                    step=clause_spec.return_step)
+    prd = Predicates.daylist(days=clause_spec.days, step=clause_spec.leave_step)
+    ret = TickDelta(days=clause_spec.duration.to_days(), step=clause_spec.return_step)
 
     num_args = len(f_def.args.args)
     if num_args == 2:
@@ -59,8 +59,7 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     elif num_args == 3:
         f_shape = GeneralClause.by_cross
     else:
-        raise Exception(
-            f"Movement clause: invalid number of arguments ({num_args})")
+        raise Exception(f"Movement clause: invalid number of arguments ({num_args})")
 
     def compile_clause(ctx: SimContext, global_namespace: dict) -> Clause:
         f = compile_function(f_def, global_namespace)
@@ -75,7 +74,8 @@ def _execute_predef(predef: Predef, global_namespace: dict) -> dict:
     result = predef_f()
     if not isinstance(result, dict):
         raise Exception(
-            f"Movement predef: did not return a dictionary result (got: {type(result)})")
+            f"Movement predef: did not return a dictionary result (got: {type(result)})"
+        )
     return result
 
 
@@ -83,28 +83,34 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
     """Make a safe namespace for user-defined functions."""
     return {
         # simulation data
-        'geo': ctx.geo,
-        'nodes': ctx.nodes,
-        'param': ctx.param,
+        "geo": ctx.geo,
+        "nodes": ctx.nodes,
+        "param": ctx.param,
         # rng functions
-        'poisson': ctx.rng.poisson,
-        'binomial': ctx.rng.binomial,
-        'multinomial': ctx.rng.multinomial,
+        "poisson": ctx.rng.poisson,
+        "binomial": ctx.rng.binomial,
+        "multinomial": ctx.rng.multinomial,
         # numpy utility functions
-        'array': np.array,
-        'zeros': np.zeros,
-        'zeros_like': np.zeros_like,
-        'exp': np.exp,
+        "array": np.array,
+        "zeros": np.zeros,
+        "zeros_like": np.zeros_like,
+        "exp": np.exp,
+        "radians": np.radians,
+        "sin": np.sin,
+        "cos": np.sin,
+        "arcsin": np.arcsin,
+        "sqrt": np.sqrt,
+        "double": np.double,
         # restricted functions
         # TODO: there are probably more restrictions to add
         # TODO: in fact, this is probably not sufficient as a security model,
         # though it'll do for now
-        'breakpoint': None,
-        'compile': None,
-        'eval': None,
-        'exec': None,
-        'globals': None,
-        'print': None
+        "breakpoint": None,
+        "compile": None,
+        "eval": None,
+        "exec": None,
+        "globals": None,
+        "print": None,
     }
 
 
@@ -116,11 +122,13 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
 
     def compile_clause(ctx: SimContext) -> Clause:
         global_namespace = _make_global_namespace(ctx)
-        predef = {} if spec.predef is None else _execute_predef(
-            spec.predef, global_namespace)
-        global_namespace = global_namespace | {'predef': predef}
-        clauses = [cc(ctx, global_namespace)
-                   for cc in clause_compilers]
+        predef = (
+            {}
+            if spec.predef is None
+            else _execute_predef(spec.predef, global_namespace)
+        )
+        global_namespace = global_namespace | {"predef": predef}
+        clauses = [cc(ctx, global_namespace) for cc in clause_compilers]
         clauses.append(Return(ctx))
         return Sequence(clauses)
 

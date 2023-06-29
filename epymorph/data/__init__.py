@@ -39,12 +39,14 @@ mm_library = {
     "icecube": mm_loader("epymorph/data/mm/icecube.movement"),
     "pei": mm_loader("epymorph/data/mm/pei.movement"),
     "sparsemod": mm_loader("epymorph/data/mm/sparsemod.movement"),
+    "centroids": mm_loader("epymorph/data/mm/centroids.movement"),
 }
 
 geo_library = {
     "pei": geo_pei_load,
     "us_counties_2015": geo_us_counties_2015_load,
     "us_states_2015": geo_us_states_2015_load,
+    "maricopa_cbg_2019": maricopa_cbg_2019_load,
     "sparsemod": geo_sparsemod_load,
     "single_pop_geo": single_pop_geo_load,
 }
