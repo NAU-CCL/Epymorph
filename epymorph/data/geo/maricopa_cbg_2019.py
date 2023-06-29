@@ -23,21 +23,18 @@ def load() -> Geo:
     with np.load(f"./epymorph/data/geo/maricopa_cbg_2019_geo.npz") as npz_data:
         data = dict(npz_data)
 
-    n = len(data['labels'])
-    validate_shape('labels', data['labels'], (n,), str)
-    validate_shape('population', data['population'], (n,), int)
-    validate_shape('centroid', data['centroid'], (n, 2), float)
-    validate_shape('median_age', data['median_age'], (n,), float)
-    validate_shape('pop_by_age', data['pop_by_age'], (n, 6), int)
-    validate_shape('median_income', data['median_income'], (n,), int)
-    validate_shape('total_income', data['total_income'], (n,), int)
-    validate_shape('average_household_size',
-                   data['average_household_size'], (n,), float)
-    validate_shape('pop_density_km2', data['pop_density_km2'], (n,), float)
-    validate_shape('tract_gini_index', data['tract_gini_index'], (n,), float)
-
-    return Geo(
-        nodes=n,
-        labels=data['labels'],
-        data=data
+    n = len(data["labels"])
+    validate_shape("labels", data["labels"], (n,), str)
+    validate_shape("population", data["population"], (n,), int)
+    validate_shape("centroid", data["centroid"], (n, 2), float)
+    validate_shape("median_age", data["median_age"], (n,), float)
+    validate_shape("pop_by_age", data["pop_by_age"], (n, 6), int)
+    validate_shape("median_income", data["median_income"], (n,), int)
+    validate_shape("total_income", data["total_income"], (n,), int)
+    validate_shape(
+        "average_household_size", data["average_household_size"], (n,), float
     )
+    validate_shape("pop_density_km2", data["pop_density_km2"], (n,), float)
+    validate_shape("tract_gini_index", data["tract_gini_index"], (n,), float)
+
+    return Geo(nodes=n, labels=data["labels"], data=data)

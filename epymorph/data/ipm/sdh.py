@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+import os
 from re import T
 from signal import raise_signal
 
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph import data
 from epymorph.clock import Tick
 from epymorph.context import SimContext
 from epymorph.epi import Ipm, IpmBuilder
 from epymorph.parser.common import Duration
 from epymorph.util import Compartments, Events, expand_data
 from epymorph.world import Location, Population
+
+dir = os.path.expanduser("~/Desktop/Github/Epymorph/scratch/output_files")
 
 
 def load() -> IpmBuilder:
@@ -26,8 +30,6 @@ class sirhBuilder(IpmBuilder):
     def verify(self, ctx: SimContext) -> None:
         if "population" not in ctx.geo:
             raise Exception("geo missing population")
-        if "SDH" not in ctx.param:
-            raise Exception("params missing SDH")
         if "infection_duration" not in ctx.param:
             raise Exception("params missing infection_duration")
         if "immunity_duration" not in ctx.param:
@@ -36,12 +38,8 @@ class sirhBuilder(IpmBuilder):
             raise Exception("params missing infection_seed_loc")
         if "infection_seed_size" not in ctx.param:
             raise Exception("params missing infection_seed_size")
-        if "hospitalization_rate" not in ctx.param:
-            raise Exception("params missing hospitalization_rate")
         if "hospitalization_duration" not in ctx.param:
             raise Exception("params missing hospitalization_duration")
-        if "SDH" not in ctx.param:
-            raise Exception("params missing SDH")
 
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
         population = ctx.geo["population"]
@@ -51,27 +49,26 @@ class sirhBuilder(IpmBuilder):
         for i in range(num_nodes):
             cs[i][0] = population[i]
         # With a seeded infection in one location.
+
         si = ctx.param["infection_seed_loc"]
         sn = ctx.param["infection_seed_size"]
+
         cs[si][0] -= sn
         cs[si][1] += sn
         return cs
 
     def build(self, ctx: SimContext) -> Ipm:
-        return sirh(ctx)
+        return sdh(ctx)
 
 
-class sirh(Ipm):
+class sdh(Ipm):
     """A simple SIRS model using a fixed, time-varying, or time-and-population-varying beta."""
 
     population: NDArray[np.int_]
-    SDH: NDArray[np.double]
-    linear: NDArray[np.double]
     alpha: NDArray[np.double]
-    hosp: int
+    hosp: float
     D: int
     L: int
-    H: float
     event_apply_matrix = np.array(
         [
             # S   I   R   H
@@ -92,35 +89,43 @@ class sirh(Ipm):
         self.L = ctx.param["immunity_duration"]
         # Hospitalization duration
         self.hosp = ctx.param["hospitalization_duration"]
-        # Hospitalization params
-        self.H = ctx.param["hospitalization_rate"]
         # alpha
         self.alpha = ctx.param["alpha"]
-        # linear
-        self.linear = ctx.param["linear"]
-        # SDF parameters
-        self.SDH = ctx.param["SDH"]
 
-    def exp_beta(self):
+    def exp_beta(self, loc_idx: int) -> np.double:
         a0 = self.alpha[0]
 
         a1 = self.alpha[1]
-        x1 = self.SDH[1]
+        x1 = self.ctx.geo["average_household_size"][loc_idx]
+        scale_x1 = (x1 - self.ctx.geo["average_household_size"].mean()) / self.ctx.geo[
+            "average_household_size"
+        ].std()
 
         a2 = self.alpha[2]
-        x2 = self.SDH[2]
-        return np.exp(a0 + (a1 * x1) * (a2 * x2))
+        x2 = self.ctx.geo["pop_density_km2"][loc_idx]
+        scale_x2 = (x2 - self.ctx.geo["pop_density_km2"].mean()) / self.ctx.geo[
+            "pop_density_km2"
+        ].std()
+        # np.exp((a0 + (a1 * scale_x1) * (a2 * scale_x2)))
+        # print(beta)
+        beta = np.exp((a0 + (a1 * scale_x1) * (a2 * scale_x2)))
 
-    def linear_beta(self):
-        b = self.linear[0]  # y-intercept
-        m = self.linear[1]  # slope
-        x = self.SDH[0]  # independent variable
-        return (m * x) + b
+        return beta
 
-    def _hosp(self) -> float:
-        h1 = self.H[0]
-        h2 = self.H[1]
-        return np.exp((h1 + h2)) / (1 + np.exp((h1 + h2)))
+    def _gamma(self, loc_idx) -> float:
+        h1 = self.ctx.geo["median_income"][loc_idx]
+        h2 = self.ctx.geo["tract_gini_index"][loc_idx]
+        g0 = 0.003
+
+        scale_h1 = (h1 - self.ctx.geo["median_income"].mean()) / self.ctx.geo[
+            "median_income"
+        ].std()
+        scale_h2 = (h2 - self.ctx.geo["tract_gini_index"].mean()) / self.ctx.geo[
+            "tract_gini_index"
+        ].std()
+
+        gamma = g0(np.exp((scale_h1 + scale_h2)) / (1 + np.exp((scale_h1 + scale_h2))))
+        return gamma
 
     def events(self, loc: Location, tick: Tick) -> Events:
         # TODO: we need a mechanism to make sure we don't exce3ed the bounds of reality.
@@ -128,21 +133,26 @@ class sirh(Ipm):
         # I don't think that's much of a conceßrn with *this* model, but it will be in the general case, especially
         # as population sizes shrink when we consider more granular spatial scales.
 
-        cs = loc.compartment_totals
+        cs = np.abs(loc.compartment_totals)
         total = np.sum(cs)
+        if total == 0:
+            return np.zeros(self.ctx.events, dtype=int)
         rates = np.array(
             [
-                tick.tau * self.exp_beta() * cs[0] * cs[1] / total,  # S -> I
+                tick.tau * self.exp_beta(loc.index) * cs[0] * cs[1] / total,  # S -> I
                 tick.tau * cs[1] / self.D,  # leaving I compartment (I -> R)
                 0,  # I -> H
                 tick.tau * cs[3] / self.hosp,  # H -> R
                 tick.tau * cs[2] / self.L,  # R -> S
             ]
         )
-        evs = self.ctx.rng.poisson(rates)
+        # print(self.ctx.geo["labels"][loc.index])
+        # print(rates)
+
+        evs = self.ctx.rng.poisson(np.abs(rates))
 
         # spilt from I to either H or R
-        I_to_H = np.random.binomial(evs[1], self._hosp())
+        I_to_H = np.random.binomial(evs[1], self._gamma(loc.index))
         I_to_R = evs[1] - I_to_H
 
         # reassigning to compartments
@@ -154,8 +164,12 @@ class sirh(Ipm):
             evs[0] = cs[0]
         if evs[1] > cs[1]:
             evs[1] = cs[1]
+        if evs[1] < 0:
+            evs[1] = 0
         if evs[2] > cs[2]:
-            evs[2] = cs[2]
+            evs[2] = 0
+        if evs[2] < 0:
+            evs[2] = 0
         if evs[3] > cs[3]:
             evs[3] = cs[3]
         if evs[4] > cs[2]:
@@ -167,25 +181,37 @@ class sirh(Ipm):
 
     def _draw(self, loc: Location, events: Events) -> list[NDArray[np.int_]]:
         # creats a 1D array of compartments (SIRH) from local population
-        cs0 = [pop.compartments[0] for pop in loc.pops]  # S
-        cs1 = [pop.compartments[1] for pop in loc.pops]  # I
-        cs2 = [pop.compartments[2] for pop in loc.pops]  # R
-        cs3 = [pop.compartments[3] for pop in loc.pops]  # H
+        cs0 = np.abs([pop.compartments[0] for pop in loc.pops])  # S
+        cs1 = np.abs([pop.compartments[1] for pop in loc.pops])  # I
+        cs2 = np.abs([pop.compartments[2] for pop in loc.pops])  # R
+        cs3 = np.abs([pop.compartments[3] for pop in loc.pops])  # H
+
+        if cs0.any() < 0:
+            cs0 = 0
+        if cs1.any() < 0:
+            cs1 = 0
+        if cs2.any() < 0:
+            cs2 = 0
+        if cs3.any() < 0:
+            cs3 = 0
+
         evs = events
         # distribute events to local compartments (SIRH)
+
         hypergeo_s_i = self.ctx.rng.multivariate_hypergeometric(cs0, evs[0])
-        hypergeo_i_h = self.ctx.rng.multivariate_hypergeometric(cs1, evs[2])
         hypergeo_i_r = self.ctx.rng.multivariate_hypergeometric(cs1, evs[1])
+        hypergeo_i_h = self.ctx.rng.multivariate_hypergeometric(cs1, evs[2])
         hypergeo_h_r = self.ctx.rng.multivariate_hypergeometric(cs3, evs[3])
         hypergeo_r_s = self.ctx.rng.multivariate_hypergeometric(cs2, evs[4])
         # creates an array for to store the hypergeo distribution
         hypergeo_sirh = [
             hypergeo_s_i,
-            hypergeo_i_h,
             hypergeo_i_r,
+            hypergeo_i_h,
             hypergeo_h_r,
             hypergeo_r_s,
         ]
+
         return hypergeo_sirh
 
     def apply_events(self, loc: Location, es: Events) -> None:

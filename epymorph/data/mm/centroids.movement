@@ -1,0 +1,51 @@
+[move-steps: per-day=2; duration=[2/3, 1/3]]
+
+[predef: function = 
+def centroids_movement():
+    """Sparsemod movement model"""
+    n = nodes
+    distance = zeros((n,n))
+    def haversine(centroid_1_lon: float,
+                centroid_1_lat: float,
+                centroid_2_lon: float, 
+                centroid_2_lat: float) -> double:
+        R = 3959.87433 
+
+        dLat = radians(centroid_1_lat - centroid_2_lat)
+        dLon = radians(centroid_1_lon - centroid_2_lon)
+        lat1 = radians(centroid_1_lat)
+        lat2 = radians(centroid_2_lat)
+
+        a = sin(dLat/2)**2 + cos(lat1)* cos(lat2)* sin(dLon/2)**2
+        c = 2*arcsin(sqrt(a))
+        
+
+        return R * c
+    
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                distance[i, j] = haversine(geo['centroid'][i][0],
+                                           geo['centroid'][i][1],
+                                           geo['centroid'][j][0], 
+                                           geo['centroid'][j][1])
+
+    centroid = geo['centroid']
+    
+    dispersal_kernel = zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            dispersal_kernel[i, j] = 1 / \
+                (exp(distance[i, j]*1/param['phi']))
+        dispersal_kernel[i, ] = dispersal_kernel[i, ] / \
+            sum(dispersal_kernel[i, ])
+
+    return {'dispersal_kernel': dispersal_kernel}
+]
+
+# Commuter movement
+[mtype: days=all; leave=1; duration=0d; return=2; function=
+def sparse_commuters(t, src):
+    actual = geo['population'][src] * 0.1
+    return multinomial(actual, predef['dispersal_kernel'][src, ...])
+]
