@@ -115,7 +115,7 @@ class sdh(Ipm):
     def _gamma(self, loc_idx) -> float:
         h1 = self.ctx.geo["median_income"][loc_idx]
         h2 = self.ctx.geo["tract_gini_index"][loc_idx]
-        g0 = 0.00290022
+        g0 = 0.0290022
 
         scale_h1 = (h1 - self.ctx.geo["median_income"].mean()) / self.ctx.geo[
             "median_income"
