@@ -66,12 +66,13 @@ class DissimilarityIndex(ADRIO):
                     county_iterator['B03002_013E']
 
                 # run calculation sum += ( |minority(tract) / minority(county) - majority(tract) / majority(county)| )
-                sum = sum + abs(tract_minority / county_minority -
-                                tract_majority / county_majority)
+                if county_minority != 0 and county_majority != 0:
+                    sum = sum + abs(tract_minority / county_minority -
+                                    tract_majority / county_majority)
                 j += 1
 
             sum *= .5
-            if np.isnan(sum) or sum == 0.:
+            if sum == 0.:
                 sum = 0.5
 
             # assign current output element to sum
