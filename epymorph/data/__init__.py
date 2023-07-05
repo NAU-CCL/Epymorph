@@ -19,10 +19,10 @@ def mm_loader(id: str) -> Callable[[], MovementBuilder]:
     return load
 
 
-def geo_loader(path) -> Callable[[], GEOBuilder]:
-    def load() -> GEOBuilder:
+def geo_loader(path) -> Callable[[], Geo]:
+    def load() -> Geo:
         spec = deserialize(path)
-        return GEOBuilder(spec)
+        return GEOBuilder(spec).build()
 
     return load
 
