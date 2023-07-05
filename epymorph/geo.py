@@ -3,7 +3,9 @@ from typing import NamedTuple, TypeVar
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
-from epymorph.util import NumpyIndices
+from epymorph.adrio import uscounties_library
+from epymorph.adrio.adrio import GEOSpec
+from epymorph.util import DataDict, NumpyIndices
 
 
 class Geo(NamedTuple):
@@ -100,3 +102,33 @@ def load_compressed_geo(id: str) -> Geo:
         raise Exception(msg)
     nodes = len(labels)
     return Geo(nodes, labels, data)
+
+
+class GEOBuilder:
+    def __init__(self, spec: GEOSpec):
+        self.spec = spec
+
+    def build(self) -> Geo:
+        # create GEOSpec object from file
+        data = DataDict()
+        current_data = []
+        print('Fetching GEO data from ADRIOs...')
+        # loop for all ADRIOSpecs
+        for i in range(len(self.spec.adrios)):
+            # get adrio class from library dictionary (library hardcoded for now)
+            current = uscounties_library.get(self.spec.adrios[i].class_name)
+            # fetch data from adrio
+            if current is not None:
+                current_obj = current()
+                print(f'Fetching {current_obj.attribute}')
+                current_data = current_obj.fetch(nodes=self.spec.nodes)
+                data[current_obj.attribute] = current_data
+
+        print('...done')
+        # build and return Geo (what to do for nodes/label?)
+        return Geo(
+            nodes=len(current_data),
+            labels=[name[0] + ', ' + name[1]
+                    for name in data['name and state']],
+            data=data
+        )

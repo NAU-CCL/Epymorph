@@ -201,7 +201,7 @@ def run(input_path: str,
 
     configure_sim_logging(enabled=not profiling)
 
-    geo = geo_builder()
+    geo = geo_builder().build()
     sim = Simulation(geo, ipm_builder(), mm_builder())
 
     print()

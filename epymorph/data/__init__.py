@@ -1,12 +1,13 @@
 from typing import Callable
 
+from epymorph.adrio.adrio import deserialize
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
-from epymorph.geo import Geo, load_compressed_geo
+from epymorph.geo import Geo, GEOBuilder, load_compressed_geo
 from epymorph.movement import MovementBuilder, load_movement_spec
 
 
@@ -15,6 +16,14 @@ def mm_loader(id: str) -> Callable[[], MovementBuilder]:
         with open(f"epymorph/data/mm/{id}.movement", "r") as file:
             spec_string = file.read()
             return load_movement_spec(spec_string)
+    return load
+
+
+def geo_loader(path) -> Callable[[], GEOBuilder]:
+    def load() -> GEOBuilder:
+        spec = deserialize(path)
+        return GEOBuilder(spec)
+
     return load
 
 
@@ -39,7 +48,8 @@ mm_library = {
 }
 
 geo_library = {
-    'single_pop': geo_single_pop_load
+    'single_pop': geo_single_pop_load,
+    'use_case': geo_loader('epymorph/data/geo/use_case.geo')
 } | {
     id: geo_npz_loader(id)
     for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']
