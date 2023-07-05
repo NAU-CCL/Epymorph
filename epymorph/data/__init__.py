@@ -49,7 +49,7 @@ mm_library = {
 
 geo_library = {
     'single_pop': geo_single_pop_load,
-    'use_case': geo_loader('epymorph/data/geo/use_case.geo')
+    'us_sw_counties_2015': geo_loader('epymorph/data/geo/us_sw_counties_2015.geo')
 } | {
     id: geo_npz_loader(id)
     for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']

@@ -111,7 +111,6 @@ class GEOBuilder:
     def build(self) -> Geo:
         # create GEOSpec object from file
         data = DataDict()
-        current_data = []
         print('Fetching GEO data from ADRIOs...')
         # loop for all ADRIOSpecs
         for i in range(len(self.spec.adrios)):
@@ -121,13 +120,13 @@ class GEOBuilder:
             if current is not None:
                 current_obj = current()
                 print(f'Fetching {current_obj.attribute}')
-                current_data = current_obj.fetch(nodes=self.spec.nodes)
-                data[current_obj.attribute] = current_data
+                data[current_obj.attribute] = current_obj.fetch(
+                    nodes=self.spec.nodes)
 
         print('...done')
         # build and return Geo (what to do for nodes/label?)
         return Geo(
-            nodes=len(current_data),
+            nodes=len(data['name and state']),
             labels=[name[0] + ', ' + name[1]
                     for name in data['name and state']],
             data=data
