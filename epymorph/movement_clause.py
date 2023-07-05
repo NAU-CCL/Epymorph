@@ -18,10 +18,6 @@ RowEquation = Callable[[Tick, int], NDArray[np.int_]]
 CrossEquation = Callable[[Tick, int, int], np.int_]
 
 
-def log(logger: logging.Logger, total_movers: np.int_, tick: Tick) -> None:
-    logger.debug(f"moved {total_movers} (t:{tick.day},{tick.step})")
-
-
 class Clause(ABC):
     """Movement clause base class. Transforms World at a given time step."""
 
@@ -80,18 +76,18 @@ class GeneralClause(ConditionalClause):
         self.logger = logging.getLogger(f'movement.{name}')
 
     def _execute(self, world: World, tick: Tick) -> None:
-        total_movers = np.int_(0)
+        total_movers = 0
         return_tick = self.ctx.clock.tick_plus(tick, self.returns)
         for src_idx, src in enumerate(world.locations):
             locals = src.locals
             # movers from src to all destinations:
             requested_arr = self.equation(tick, src_idx)
             requested_arr[src_idx] = 0
-            self.logger.debug(f"requested[{src_idx}]: {requested_arr}")
+            self.logger.debug("requested[%d]: %s", src_idx, requested_arr)
             requested_tot = np.sum(requested_arr)
             if requested_tot > locals.total:
-                self.logger.debug(
-                    f"   actual[{src_idx}]: <WARNING> skipped for insufficient population")
+                self.logger.debug("   actual[%d]: <WARNING> skipped for insufficient population",
+                                  src_idx)
             elif requested_tot > 0:
                 actual_arr = np.zeros_like(requested_arr)
                 for dst_idx, n in enumerate(requested_arr):
@@ -102,10 +98,13 @@ class GeneralClause(ConditionalClause):
                     world.locations[dst_idx].pops.append(movers)
                     actual_arr[dst_idx] = actual
                     total_movers += actual
-                if not np.array_equal(actual_arr, requested_arr):
-                    self.logger.debug(f"   actual[{src_idx}]: {actual_arr}")
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    if not np.array_equal(actual_arr, requested_arr):
+                        self.logger.debug("   actual[%d]: %s",
+                                          src_idx, actual_arr)
         world.normalize()
-        log(self.logger, total_movers, tick)
+        self.logger.debug("moved %d (t:%d,%d)",
+                          total_movers, tick.day, tick.step)
 
 
 class Noop(Clause):
@@ -117,16 +116,17 @@ class Noop(Clause):
 
 class Return(Clause):
     """A movement clause to return people to their home if it's time."""
-    log = logging.getLogger('movement.Return')
+    logger: logging.Logger
 
     ctx: SimContext
 
     def __init__(self, ctx: SimContext):
         self.ctx = ctx
+        self.logger = logging.getLogger('movement.Return')
 
     def apply(self, world: World, tick: Tick) -> None:
-        total_movers = np.int_(0)
-        new_pops: list[list[Population]] = [[] for _ in range(self.ctx.nodes)]
+        total_movers = 0
+        new_pops = [list[Population]() for _ in range(self.ctx.nodes)]
         for loc in world.locations:
             for pop in loc.pops:
                 if pop.return_tick == tick.index:
@@ -140,7 +140,8 @@ class Return(Clause):
         for i, ps in enumerate(new_pops):
             Population.normalize(ps)
             world.locations[i].pops = ps
-        log(Return.log, total_movers, tick)
+        self.logger.debug("moved %d (t:%d,%d)",
+                          total_movers, tick.day, tick.step)
 
 
 class Sequence(Clause):

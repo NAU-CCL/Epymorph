@@ -33,3 +33,16 @@ class TestPopulation(unittest.TestCase):
         act2 = deepcopy([b, d, c, a])
         Population.normalize(act2)
         self.assertEqual(exp2, act2)
+
+    def test_normalize_2(self):
+        a = p(100, 0, HOME_TICK)
+        b = p(100, 0, HOME_TICK)
+        c = p(100, 0, HOME_TICK)
+        d = p(100, 0, HOME_TICK)
+        e = p(100, 0, HOME_TICK)
+
+        exp = [p(500, 0, HOME_TICK)]
+        act = [a, b, c, d, e]
+        Population.normalize(act)
+
+        self.assertEqual(exp, act)

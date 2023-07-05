@@ -13,13 +13,13 @@
         {
             "label": "Python - Run this module",
             "type": "shell",
-            "command": "MODULE=$(echo ${relativeFileDirname}.${fileBasenameNoExtension} | sed 's/\\//./g'); python3 -m $MODULE",
+            "command": "source .venv/bin/activate; MODULE=$(echo ${relativeFileDirname}.${fileBasenameNoExtension} | sed 's/\\//./g'); python3 -m $MODULE",
             "problemMatcher": []
         },
         {
             "label": "Python - Profile this module",
             "type": "shell",
-            "command": "MODULE=$(echo ${relativeFileDirname}.${fileBasenameNoExtension} | sed 's/\\//./g'); TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python3 -m cProfile -o $TMP -m $MODULE --profile; snakeviz $TMP",
+            "command": "source .venv/bin/activate; MODULE=$(echo ${relativeFileDirname}.${fileBasenameNoExtension} | sed 's/\\//./g'); TMP=$(mktemp /tmp/py-XXXXXXXX.prof); python -m cProfile -o $TMP -m $MODULE; snakeviz $TMP",
             "problemMatcher": []
         }
     ]
