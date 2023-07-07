@@ -1,3 +1,5 @@
+from tkinter import Canvas
+
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -76,14 +78,23 @@ class PopByAge(ADRIO):
         Returns a numpy array of 4 element lists containing each county's total population
         followed by the population of each age group from youngest to oldest
         """
-        code_string = self.type_check(kwargs)
-        code_string = ','.join(code_string)
+        cache_data = self.cache_fetch(kwargs, self.attribute)
+        code_list = cache_data[0]
+        cache_df = cache_data[1]
+        code_string = ','.join(code_list)
 
-        # get data from census
-        data = self.census.acs5.get(query_list, {
-                                    'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
+        if len(code_list) > 0:
+            # get data from census
+            data = self.census.acs5.get(query_list, {
+                                        'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
-        data_df = pd.DataFrame.from_records(data)
+            data_df = pd.DataFrame.from_records(data)
+            self.cache_store(data_df, code_list, self.attribute)
+            if len(cache_df.index) > 0:
+                data_df.join(cache_df)
+
+        else:
+            data_df = cache_df
 
         # sort data by state and county fips
         data_df = data_df.sort_values(by=['state', 'county'])

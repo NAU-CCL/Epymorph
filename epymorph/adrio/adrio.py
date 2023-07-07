@@ -1,16 +1,20 @@
+import json
 import os
 from abc import ABC, abstractmethod
 
 import jsonpickle
 from attr import dataclass
 from census import Census
+from genericpath import isfile
 from numpy.typing import NDArray
+from pandas import DataFrame, concat, read_csv
 
 
 class ADRIO(ABC):
     """abstract class to serve as an outline for individual ADRIO implementations"""
     attribute: str
     census: Census
+    year: int
 
     def __init__(self):
         """
@@ -26,6 +30,7 @@ class ADRIO(ABC):
     def type_check(self, args: dict) -> list[str]:
         """
         type checks the 'nodes' argument to make sure data was passed in correctly
+        * functionality now included in cache_fetch - obsolete?
         TODO: move to "census" ADRIO template
         """
         nodes = args.get('nodes')
@@ -34,6 +39,52 @@ class ADRIO(ABC):
         else:
             msg = 'nodes parameter is not formatted correctly; must be a list of strings'
             raise Exception(msg)
+
+    def cache_fetch(self, args: dict, attribute: str) -> tuple[list[str], DataFrame]:
+        # csv file name components
+        nodes = args.get('nodes')
+        attr = attribute
+        year = str(self.year)
+
+        data = DataFrame()
+        num_cached = 0
+
+        if type(nodes) is list:
+            uncached = []
+            for i in nodes:
+                # create csv file path (attribute + node GEOID + year)
+                string = attr + i + year
+                path = f'epymorph/adrio/.cache/{string}.csv'
+                # check for csv file
+                if os.path.isfile(path):
+                    # retrieve cached data
+                    num_cached += 1
+                    curr_data = read_csv(path)
+                    data = concat([data, curr_data])
+                # append node to uncached list
+                else:
+                    uncached.append(i)
+
+            print(f'{num_cached} items retrieved from cache')
+            # return list of uncached GEOIDs and retrieved cached data
+            return uncached, data
+
+        else:
+            msg = 'nodes parameter is not formatted correctly; must be a list of strings'
+            raise Exception(msg)
+
+    def cache_store(self, data: DataFrame, nodes: list[str], attribute: str) -> None:
+        attr = attribute
+        year = str(self.year)
+        # create .cache file if needed
+        if not os.path.isdir('epymorph/adrio/.cache'):
+            os.mkdir('epymorph/adrio/.cache')
+
+        # loop through nodes and cache data for each
+        for i in nodes:
+            string = attr + i + year
+            data.loc[data['state'] == i].to_csv(
+                f'epymorph/adrio/.cache/{string}.csv')
 
 
 @dataclass

@@ -1,3 +1,5 @@
+import code
+
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -17,16 +19,28 @@ class PopulationDensity(ADRIO):
     def fetch(self, **kwargs) -> NDArray[np.float_]:
         """Returns a numpy array of floats representing the population density for each county"""
         geo_codes = self.type_check(kwargs)
-        code_string = ','.join(geo_codes)
+        cache_data = self.cache_fetch(kwargs, self.attribute)
+        code_list = cache_data[0]
+        cache_df = cache_data[1]
+        code_string = ','.join(code_list)
 
         # get county shapefiles
         county_df = counties(state=geo_codes, year=self.year, cache=True)
 
-        # fetch county population data from census
-        census_data = self.census.acs5.get(
-            'B01003_001E', {'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
+        if len(code_list) > 0:
+            # fetch county population data from census
+            census_data = self.census.acs5.get(
+                'B01003_001E', {'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
-        census_df = pd.DataFrame.from_records(census_data)
+            census_df = pd.DataFrame.from_records(census_data)
+            self.cache_store(census_df, code_list, self.attribute)
+            if len(cache_df.index) > 0:
+                census_df.join(cache_df)
+
+        else:
+            census_df = cache_df
+
+        county_df['COUNTYFP'] = county_df['COUNTYFP'].astype(int)
 
         # merge census data with shapefile data
         census_df = census_df.rename(

@@ -15,33 +15,60 @@ class DissimilarityIndex(ADRIO):
 
     def fetch(self, **kwargs) -> NDArray[np.float_]:
         """"Returns a numpy array of floats representing the disimilarity index for each county"""
-        code_string = self.type_check(kwargs)
-        code_string = ','.join(code_string)
+        cache_data_tract = self.cache_fetch(
+            kwargs, attribute=self.attribute + ' tract')
+        code_list_tract = cache_data_tract[0]
+        cache_df_tract = cache_data_tract[1]
+        code_string_tract = ','.join(code_list_tract)
 
-        # fetch tract level data from census
-        tract_data = self.census.acs5.get(('B03002_003E',  # white population
-                                           'B03002_013E',
-                                           'B03002_004E',  # minority population
-                                           'B03002_014E'),
-                                          {'for': 'tract: *', 'in': 'county: *',
-                                           'in': f'state: {code_string}'},
-                                          year=self.year)
+        cache_data_county = self.cache_fetch(
+            kwargs, attribute=self.attribute + ' county')
+        code_list_county = cache_data_county[0]
+        cache_df_county = cache_data_county[1]
+        code_string_county = ','.join(code_list_county)
 
-        # fetch county level data from census
-        county_data = self.census.acs5.get(('B03002_003E',  # white population
-                                            'B03002_013E',
-                                            'B03002_004E',  # minority population
-                                            'B03002_014E'),
-                                           {'for': 'county: *',
-                                               'in': f'state: {code_string}'},
-                                           year=self.year)
+        if len(code_list_tract) > 0:
+            # fetch tract level data from census
+            tract_data = self.census.acs5.get(('B03002_003E',  # white population
+                                               'B03002_013E',
+                                               'B03002_004E',  # minority population
+                                               'B03002_014E'),
+                                              {'for': 'tract: *', 'in': 'county: *',
+                                               'in': f'state: {code_string_tract}'},
+                                              year=self.year)
+
+            tract_data_df = DataFrame.from_records(tract_data)
+            self.cache_store(tract_data_df, code_list_tract,
+                             self.attribute + ' tract')
+            if len(cache_df_tract.index) > 0:
+                tract_data_df.join(cache_df_tract)
+
+        else:
+            tract_data_df = cache_df_tract
+
+        if len(code_list_county) > 0:
+            # fetch county level data from census
+            county_data = self.census.acs5.get(('B03002_003E',  # white population
+                                                'B03002_013E',
+                                                'B03002_004E',  # minority population
+                                                'B03002_014E'),
+                                               {'for': 'county: *',
+                                                   'in': f'state: {code_string_county}'},
+                                               year=self.year)
+
+            county_data_df = DataFrame.from_records(county_data)
+            self.cache_store(county_data_df, code_list_county,
+                             self.attribute + ' county')
+            if len(cache_df_tract.index) > 0:
+                tract_data_df.join(cache_df_tract)
+
+        else:
+            county_data_df = cache_df_county
 
         # sort data by state, county
-        tract_data_df = DataFrame.from_records(tract_data)
         tract_data_df = tract_data_df.sort_values(by=['state', 'county'])
         tract_data_df.reset_index(inplace=True)
 
-        county_data_df = DataFrame.from_records(county_data)
         county_data_df = county_data_df.sort_values(by=['state', 'county'])
         county_data_df.reset_index(inplace=True)
 
