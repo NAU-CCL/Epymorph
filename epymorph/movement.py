@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, NamedTuple
 
 import numpy as np
@@ -99,6 +100,15 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
         'zeros': np.zeros,
         'zeros_like': np.zeros_like,
         'exp': np.exp,
+        'radians': np.radians,
+        'sin': np.sin,
+        'cos': np.cos,
+        'arcsin': np.arcsin,
+        'arctan2': np.arctan2,
+        'sqrt': np.sqrt,
+        'subtract': np.subtract,
+        'multiply': np.multiply,
+        'divide': np.divide,
         # restricted functions
         # TODO: there are probably more restrictions to add
         # TODO: in fact, this is probably not sufficient as a security model,
@@ -120,8 +130,11 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
 
     def compile_clause(ctx: SimContext) -> Clause:
         global_namespace = _make_global_namespace(ctx)
+        # t0 = time.perf_counter()
         predef = {} if spec.predef is None else _execute_predef(
             spec.predef, global_namespace)
+        # t1 = time.perf_counter()
+        # print(f"Executed predef in {(1000 * (t1 - t0)):.3f} ms")
         global_namespace = global_namespace | {'predef': predef}
         clauses = [cc(ctx, global_namespace)
                    for cc in clause_compilers]

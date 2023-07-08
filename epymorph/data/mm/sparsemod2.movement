@@ -1,0 +1,43 @@
+[move-steps: per-day=2; duration=[2/3, 1/3]]
+
+[predef: function = 
+def sparsemod_predef():
+    radius = 3959.87433 # radius of earth in mi
+
+    def pairwise(arr, func):
+        row = arr[:, None]
+        col = arr[None, :]
+        return func(row, col)
+
+    def pairwise_haversine(arr):
+        lng = radians(arr['longitude'])
+        dlng = pairwise(lng, subtract)
+        lat = radians(arr['latitude'])
+        dlat = pairwise(lat, subtract)
+
+        return 2 * radius * arcsin(sqrt(
+            sin(dlat / 2.0) ** 2 +
+            pairwise(cos(lat), multiply) *
+            sin(dlng / 2.0) ** 2
+        ))
+
+    distance = pairwise_haversine(geo['centroid'])
+
+    n = nodes
+    dispersal_kernel = zeros((n, n))
+    for i in range(n):
+        dispersal_kernel[i] = 1 / exp(distance[i] / param['phi'])
+        dispersal_kernel[i] = dispersal_kernel[i] / dispersal_kernel[i].sum()
+
+    return {
+        'commuters_by_source': geo['commuters'].sum(axis=1),
+        'dispersal_kernel': dispersal_kernel
+    }
+]
+
+# Commuter movement
+[mtype: days=all; leave=1; duration=0d; return=2; function=
+def sparse_commuters(t, src):
+    actual = predef['commuters_by_source'][src]
+    return multinomial(actual, predef['dispersal_kernel'][src, ...])
+]
