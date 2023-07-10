@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
-from pandas import DataFrame
+from pandas import DataFrame, concat
 
 from epymorph.adrio.adrio import ADRIO
 
@@ -13,11 +13,16 @@ class MedianIncome(ADRIO):
     def __init__(self) -> None:
         super().__init__()
 
-    def fetch(self, **kwargs) -> NDArray[np.int_]:
+    def fetch(self, force=False, **kwargs) -> NDArray[np.int_]:
         """Returns a numpy array of integers representing the median annual household income for each county"""
-        cache_data = self.cache_fetch(kwargs, self.attribute)
-        code_list = cache_data[0]
-        cache_df = cache_data[1]
+        if force:
+            code_list = self.type_check(kwargs)
+            cache_df = DataFrame()
+        else:
+            cache_data = self.cache_fetch(kwargs, self.attribute)
+            code_list = cache_data[0]
+            cache_df = cache_data[1]
+
         code_string = ','.join(code_list)
 
         if len(code_list) > 0:
@@ -28,7 +33,7 @@ class MedianIncome(ADRIO):
             data_df = DataFrame.from_records(data)
             self.cache_store(data_df, code_list, self.attribute)
             if len(cache_df.index) > 0:
-                data_df.join(cache_df)
+                data_df = concat([data_df, cache_df])
 
         else:
             data_df = cache_df

@@ -1,11 +1,9 @@
-import json
 import os
 from abc import ABC, abstractmethod
 
 import jsonpickle
 from attr import dataclass
 from census import Census
-from genericpath import isfile
 from numpy.typing import NDArray
 from pandas import DataFrame, concat, read_csv
 
@@ -24,13 +22,12 @@ class ADRIO(ABC):
         self.census = Census(os.environ['CENSUS_API_KEY'])
 
     @abstractmethod
-    def fetch(self, **kwargs) -> NDArray:
+    def fetch(self, force=False, **kwargs) -> NDArray:
         pass
 
     def type_check(self, args: dict) -> list[str]:
         """
         type checks the 'nodes' argument to make sure data was passed in correctly
-        * functionality now included in cache_fetch - obsolete?
         TODO: move to "census" ADRIO template
         """
         nodes = args.get('nodes')
@@ -114,7 +111,7 @@ def deserialize(file_path: str) -> GEOSpec:
         spec = stream.readline()
     spec_dec = jsonpickle.decode(spec)
 
-    # ensure decoded opject is of type GEOSpec
+    # ensure decoded object is of type GEOSpec
     if type(spec_dec) is GEOSpec:
         return spec_dec
     else:

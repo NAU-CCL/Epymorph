@@ -1,8 +1,6 @@
-import code
-
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
+from pandas import DataFrame, concat
 from pygris import counties
 
 from epymorph.adrio.adrio import ADRIO
@@ -16,12 +14,18 @@ class PopulationDensity(ADRIO):
     def __init__(self):
         super().__init__()
 
-    def fetch(self, **kwargs) -> NDArray[np.float_]:
+    def fetch(self, force=False, **kwargs) -> NDArray[np.float_]:
         """Returns a numpy array of floats representing the population density for each county"""
         geo_codes = self.type_check(kwargs)
-        cache_data = self.cache_fetch(kwargs, self.attribute)
-        code_list = cache_data[0]
-        cache_df = cache_data[1]
+
+        if force:
+            code_list = geo_codes
+            cache_df = DataFrame()
+        else:
+            cache_data = self.cache_fetch(kwargs, self.attribute)
+            code_list = cache_data[0]
+            cache_df = cache_data[1]
+
         code_string = ','.join(code_list)
 
         # get county shapefiles
@@ -32,15 +36,16 @@ class PopulationDensity(ADRIO):
             census_data = self.census.acs5.get(
                 'B01003_001E', {'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
-            census_df = pd.DataFrame.from_records(census_data)
+            census_df = DataFrame.from_records(census_data)
             self.cache_store(census_df, code_list, self.attribute)
             if len(cache_df.index) > 0:
-                census_df.join(cache_df)
+                census_df = concat([census_df, cache_df])
 
         else:
             census_df = cache_df
 
         county_df['COUNTYFP'] = county_df['COUNTYFP'].astype(int)
+        census_df['county'] = census_df['county'].astype(int)
 
         # merge census data with shapefile data
         census_df = census_df.rename(

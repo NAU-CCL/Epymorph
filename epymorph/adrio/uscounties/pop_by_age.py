@@ -1,8 +1,6 @@
-from tkinter import Canvas
-
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
+from pandas import DataFrame, Series, concat
 
 from epymorph.adrio.adrio import ADRIO
 
@@ -66,21 +64,26 @@ class PopByAge(ADRIO):
     def __init__(self) -> None:
         super().__init__()
 
-    def calculate_pop(self, start: int, end: int, location: pd.Series) -> int:
+    def calculate_pop(self, start: int, end: int, location: Series) -> int:
         """Adds up a specified group of integer values from a row of a population dataframe (used to calculate different age bracket totals)"""
         population = 0
         for i in range(start, end):
             population += int(location[i])
         return population
 
-    def fetch(self, **kwargs) -> NDArray[np.int_]:
+    def fetch(self, force=False, **kwargs) -> NDArray[np.int_]:
         """
         Returns a numpy array of 4 element lists containing each county's total population
         followed by the population of each age group from youngest to oldest
         """
-        cache_data = self.cache_fetch(kwargs, self.attribute)
-        code_list = cache_data[0]
-        cache_df = cache_data[1]
+        if force:
+            code_list = self.type_check(kwargs)
+            cache_df = DataFrame()
+        else:
+            cache_data = self.cache_fetch(kwargs, self.attribute)
+            code_list = cache_data[0]
+            cache_df = cache_data[1]
+
         code_string = ','.join(code_list)
 
         if len(code_list) > 0:
@@ -88,10 +91,10 @@ class PopByAge(ADRIO):
             data = self.census.acs5.get(query_list, {
                                         'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
-            data_df = pd.DataFrame.from_records(data)
+            data_df = DataFrame.from_records(data)
             self.cache_store(data_df, code_list, self.attribute)
             if len(cache_df.index) > 0:
-                data_df.join(cache_df)
+                data_df = concat([data_df, cache_df])
 
         else:
             data_df = cache_df

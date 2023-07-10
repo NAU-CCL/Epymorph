@@ -1,6 +1,5 @@
 from typing import Callable
 
-from epymorph.adrio.adrio import deserialize
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
@@ -21,8 +20,7 @@ def mm_loader(id: str) -> Callable[[], MovementBuilder]:
 
 def geo_loader(path) -> Callable[[], Geo]:
     def load() -> Geo:
-        spec = deserialize(path)
-        return GEOBuilder(spec).build()
+        return GEOBuilder(path).build()
 
     return load
 

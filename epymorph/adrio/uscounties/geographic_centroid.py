@@ -10,7 +10,7 @@ class GeographicCentroid(ADRIO):
     attribute = 'geographic centroid'
     year = 2015
 
-    def fetch(self, **kwargs) -> NDArray[np.float_]:
+    def fetch(self, force=False, **kwargs) -> NDArray[np.float_]:
         """
         Returns a numpy array of tuples that are each an ordered pair of coordinates for each
         county's geographic centroid

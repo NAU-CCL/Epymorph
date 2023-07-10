@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
-from pandas import DataFrame
+from pandas import DataFrame, concat
 
 from epymorph.adrio.adrio import ADRIO
 
@@ -13,11 +13,15 @@ class NameState(ADRIO):
     def __init__(self) -> None:
         super().__init__()
 
-    def fetch(self, **kwargs) -> NDArray[np.str_]:
+    def fetch(self, force=False, **kwargs) -> NDArray[np.str_]:
         """Returns a numpy array of 2 element arrays each containing the name and state name of a county as strings"""
-        cache_data = self.cache_fetch(kwargs, self.attribute)
-        code_list = cache_data[0]
-        cache_df = cache_data[1]
+        if force:
+            code_list = self.type_check(kwargs)
+            cache_df = DataFrame()
+        else:
+            cache_data = self.cache_fetch(kwargs, self.attribute)
+            code_list = cache_data[0]
+            cache_df = cache_data[1]
 
         # check for uncached data
         if len(code_list) > 0:
@@ -36,7 +40,7 @@ class NameState(ADRIO):
 
             # join with data fetched from cache if there is any
             if len(cache_df.index) > 0:
-                data_df.join(cache_df)
+                data_df = concat([data_df, cache_df])
 
         else:
             data_df = cache_df

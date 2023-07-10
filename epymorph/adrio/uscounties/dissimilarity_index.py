@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
-from pandas import DataFrame
+from pandas import DataFrame, concat
 
 from epymorph.adrio.adrio import ADRIO
 
@@ -13,18 +13,24 @@ class DissimilarityIndex(ADRIO):
     def __init__(self):
         super().__init__()
 
-    def fetch(self, **kwargs) -> NDArray[np.float_]:
+    def fetch(self, force=False, **kwargs) -> NDArray[np.float_]:
         """"Returns a numpy array of floats representing the disimilarity index for each county"""
-        cache_data_tract = self.cache_fetch(
-            kwargs, attribute=self.attribute + ' tract')
-        code_list_tract = cache_data_tract[0]
-        cache_df_tract = cache_data_tract[1]
-        code_string_tract = ','.join(code_list_tract)
+        if force:
+            code_list_tract = code_list_county = self.type_check(kwargs)
+            cache_df_tract = cache_df_county = DataFrame()
 
-        cache_data_county = self.cache_fetch(
-            kwargs, attribute=self.attribute + ' county')
-        code_list_county = cache_data_county[0]
-        cache_df_county = cache_data_county[1]
+        else:
+            cache_data_tract = self.cache_fetch(
+                kwargs, attribute=self.attribute + ' tract')
+            code_list_tract = cache_data_tract[0]
+            cache_df_tract = cache_data_tract[1]
+
+            cache_data_county = self.cache_fetch(
+                kwargs, attribute=self.attribute + ' county')
+            code_list_county = cache_data_county[0]
+            cache_df_county = cache_data_county[1]
+
+        code_string_tract = ','.join(code_list_tract)
         code_string_county = ','.join(code_list_county)
 
         if len(code_list_tract) > 0:
@@ -41,7 +47,7 @@ class DissimilarityIndex(ADRIO):
             self.cache_store(tract_data_df, code_list_tract,
                              self.attribute + ' tract')
             if len(cache_df_tract.index) > 0:
-                tract_data_df.join(cache_df_tract)
+                tract_data_df = concat([tract_data_df, cache_df_tract])
 
         else:
             tract_data_df = cache_df_tract
@@ -60,7 +66,7 @@ class DissimilarityIndex(ADRIO):
             self.cache_store(county_data_df, code_list_county,
                              self.attribute + ' county')
             if len(cache_df_tract.index) > 0:
-                tract_data_df.join(cache_df_tract)
+                county_data_df = concat([county_data_df, cache_df_county])
 
         else:
             county_data_df = cache_df_county

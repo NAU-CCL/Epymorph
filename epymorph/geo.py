@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from epymorph.adrio import uscounties_library
-from epymorph.adrio.adrio import GEOSpec
+from epymorph.adrio.adrio import deserialize
 from epymorph.util import DataDict, NumpyIndices
 
 
@@ -105,10 +105,10 @@ def load_compressed_geo(id: str) -> Geo:
 
 
 class GEOBuilder:
-    def __init__(self, spec: GEOSpec):
-        self.spec = spec
+    def __init__(self, path: str):
+        self.spec = deserialize(path)
 
-    def build(self) -> Geo:
+    def build(self, force=False) -> Geo:
         # create GEOSpec object from file
         data = DataDict()
         print('Fetching GEO data from ADRIOs...')
@@ -121,7 +121,7 @@ class GEOBuilder:
                 current_obj = current()
                 print(f'Fetching {current_obj.attribute}')
                 data[current_obj.attribute] = current_obj.fetch(
-                    nodes=self.spec.nodes)
+                    force, nodes=self.spec.nodes)
 
         print('...done')
         # build and return Geo (what to do for nodes/label?)
