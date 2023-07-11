@@ -17,6 +17,7 @@ def load() -> Geo:
     - total_income: total income, past 12 months, infl. adj., dollars (int)
     - average_household_size: average household size, people (float)
     - pop_density_km2: population density, persons per km^2 (float)
+    - tract_median_income: median income of the CBG's tract, past 12 months, infl. adj., dollars (int)
     - tract_gini_index: Gini index of the CBG's tract (float)
     """
 
@@ -35,6 +36,7 @@ def load() -> Geo:
         "average_household_size", data["average_household_size"], (n,), float
     )
     validate_shape("pop_density_km2", data["pop_density_km2"], (n,), float)
+    validate_shape("tract_median_income", data["tract_median_income"], (n,), int) 
     validate_shape("tract_gini_index", data["tract_gini_index"], (n,), float)
 
     return Geo(nodes=n, labels=data["labels"], data=data)
