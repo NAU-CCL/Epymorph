@@ -1,19 +1,16 @@
 from __future__ import annotations
 
 import os
-from re import T
-from signal import raise_signal
 
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph import data
 from epymorph.clock import Tick
 from epymorph.context import SimContext
+from epymorph.data.ipm.initializer import DefaultInitializer, Initializer
 from epymorph.epi import Ipm, IpmBuilder
-from epymorph.parser.common import Duration
-from epymorph.util import Compartments, Events, expand_data
-from epymorph.world import Location, Population
+from epymorph.util import Compartments, Events
+from epymorph.world import Location
 
 dir = os.path.expanduser("~/Desktop/Github/Epymorph/scratch/output_files")
 
@@ -23,9 +20,13 @@ def load() -> IpmBuilder:
 
 
 class sirhBuilder(IpmBuilder):
+    # An initializer instance which can be overridden.
+    initializer: Initializer
+
     def __init__(self):
         # Creats compartments for SIRH events
         super().__init__(4, 5)
+        self.initializer = DefaultInitializer()
 
     def verify(self, ctx: SimContext) -> None:
         if "population" not in ctx.geo:
@@ -34,28 +35,17 @@ class sirhBuilder(IpmBuilder):
             raise Exception("params missing infection_duration")
         if "immunity_duration" not in ctx.param:
             raise Exception("params missing immunity_duration")
-        if "infection_seed_loc" not in ctx.param:
-            raise Exception("params missing infection_seed_loc")
-        if "infection_seed_size" not in ctx.param:
-            raise Exception("params missing infection_seed_size")
         if "hospitalization_duration" not in ctx.param:
             raise Exception("params missing hospitalization_duration")
 
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
-        population = ctx.geo["population"]
-        num_nodes = len(population)
-        cs = [self.compartment_array() for _ in range(num_nodes)]
-        # The populations of all locations start off Susceptible.
-        for i in range(num_nodes):
-            cs[i][0] = population[i]
-        # With a seeded infection in one location.
-
-        si = ctx.param["infection_seed_loc"]
-        sn = ctx.param["infection_seed_size"]
-
-        cs[si][0] -= sn
-        cs[si][1] += sn
-        return cs
+        # The populations of all locations start off in the first compartment.
+        # Note: four compartments is hard-coded here.
+        out = [np.array([p, 0, 0, 0], dtype=int) for p in ctx.geo["population"]]
+        # Now delegate to our initializer function, writing the result into `out`.
+        self.initializer.apply(ctx, out)
+        return out
+        
 
     def build(self, ctx: SimContext) -> Ipm:
         return sdh(ctx)
