@@ -66,6 +66,7 @@ class sdh(Ipm):
 
     population: NDArray[np.int_]
     alpha: NDArray[np.double]
+    gamma: NDArray[np.double]
     hosp: float
     D: int
     L: int
@@ -91,6 +92,8 @@ class sdh(Ipm):
         self.hosp = ctx.param["hospitalization_duration"]
         # alpha
         self.alpha = ctx.param["alpha"]
+        # gamma
+        self.gamma = ctx.param["gamma"]
 
     def exp_beta(self, loc_idx: int) -> np.double:
         a0 = self.alpha[0]
@@ -108,14 +111,14 @@ class sdh(Ipm):
         ].std()
         # np.exp((a0 + (a1 * scale_x1) * (a2 * scale_x2)))
         # print(beta)
-        beta = np.exp((a0 + (a1 * scale_x1) * (a2 * scale_x2)))
+        beta = a0 * np.exp(((a1 * scale_x1) + (a2 * scale_x2)))
 
         return beta
 
     def _gamma(self, loc_idx) -> float:
         h1 = self.ctx.geo["median_income"][loc_idx]
         h2 = self.ctx.geo["tract_gini_index"][loc_idx]
-        g0 = 0.0290022
+        g0 = self.gamma
 
         scale_h1 = (h1 - self.ctx.geo["median_income"].mean()) / self.ctx.geo[
             "median_income"
@@ -187,15 +190,6 @@ class sdh(Ipm):
         cs1 = np.abs([pop.compartments[1] for pop in loc.pops])  # I
         cs2 = np.abs([pop.compartments[2] for pop in loc.pops])  # R
         cs3 = np.abs([pop.compartments[3] for pop in loc.pops])  # H
-
-        if cs0.any() < 0:
-            cs0 = 0
-        if cs1.any() < 0:
-            cs1 = 0
-        if cs2.any() < 0:
-            cs2 = 0
-        if cs3.any() < 0:
-            cs3 = 0
 
         evs = events
         # distribute events to local compartments (SIRH)
