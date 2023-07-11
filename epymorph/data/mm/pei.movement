@@ -4,16 +4,12 @@
 def pei_movement():
     """Pei style movement pre definition"""
     commuters = geo['commuters']
-    commuters_average = zeros(commuters.shape)
-    for i in range(commuters.shape[0]):
-        for j in range(i + 1, commuters.shape[1]):
-            nbar = (commuters[i, j] + commuters[j, i]) // 2
-            commuters_average[i, j] = nbar
-            commuters_average[j, i] = nbar
+    # Average commuters between locations.
+    commuters_average = (commuters + commuters.T) // 2
     # Total commuters living in each state.
     commuters_by_node = commuters.sum(axis=1)
     # Commuters as a ratio to the total commuters living in that state.
-    commuting_probability = commuters / commuters_by_node[:, None]
+    commuting_probability = commuters / commuters_by_node[:, newaxis]
 
     return {
         'commuters_average': commuters_average, 

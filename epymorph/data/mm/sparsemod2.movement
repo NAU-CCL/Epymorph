@@ -5,9 +5,12 @@ def sparsemod_predef():
     radius = 3959.87433 # radius of earth in mi
 
     def pairwise(arr, func):
-        row = arr[:, None]
-        col = arr[None, :]
+        row = arr[:, newaxis]
+        col = arr[newaxis, :]
         return func(row, col)
+
+    def normalized_row(arr):
+        return arr / arr.sum(axis=1, keepdims=True)
 
     def pairwise_haversine(arr):
         lng = radians(arr['longitude'])
@@ -23,14 +26,10 @@ def sparsemod_predef():
 
     distance = pairwise_haversine(geo['centroid'])
 
-    n = nodes
-    dispersal_kernel = zeros((n, n))
-    for i in range(n):
-        dispersal_kernel[i] = 1 / exp(distance[i] / param['phi'])
-        dispersal_kernel[i] = dispersal_kernel[i] / dispersal_kernel[i].sum()
+    dispersal_kernel = normalized_row(1 / exp(distance / param['phi']))
 
     return {
-        'commuters_by_source': geo['commuters'].sum(axis=1),
+        'commuters_by_node': geo['commuters'].sum(axis=1),
         'dispersal_kernel': dispersal_kernel
     }
 ]
@@ -38,6 +37,6 @@ def sparsemod_predef():
 # Commuter movement
 [mtype: days=all; leave=1; duration=0d; return=2; function=
 def sparse_commuters(t, src):
-    actual = predef['commuters_by_source'][src]
+    actual = predef['commuters_by_node'][src]
     return multinomial(actual, predef['dispersal_kernel'][src, ...])
 ]

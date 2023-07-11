@@ -99,6 +99,7 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
         'array': np.array,
         'zeros': np.zeros,
         'zeros_like': np.zeros_like,
+        'newaxis': np.newaxis,
         'exp': np.exp,
         'radians': np.radians,
         'sin': np.sin,
