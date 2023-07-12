@@ -1,3 +1,7 @@
+"""
+NOTE: This Initializer system is currently a prototype. It has to be manually integrated into an IPM to work,
+and the only IPM that does this so far is the SDH IPM.
+"""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
