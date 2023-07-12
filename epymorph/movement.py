@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, NamedTuple
 
 import numpy as np
 
 from epymorph.clock import TickDelta
 from epymorph.context import SimContext
-from epymorph.movement_clause import Clause, GeneralClause, Predicates, Return, Sequence
+from epymorph.movement_clause import (Clause, GeneralClause, Predicates,
+                                      Return, Sequence)
 from epymorph.parser.move_clause import Daily
 from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
@@ -101,6 +103,8 @@ def _make_global_namespace(ctx: SimContext) -> dict[str, Any]:
         "arcsin": np.arcsin,
         "sqrt": np.sqrt,
         "double": np.double,
+        "subtract": np.subtract,
+        "multiply": np.multiply,
         # restricted functions
         # TODO: there are probably more restrictions to add
         # TODO: in fact, this is probably not sufficient as a security model,
