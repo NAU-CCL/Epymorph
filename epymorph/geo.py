@@ -57,15 +57,19 @@ def validate_shape(name: str, data: T | None, shape: tuple[int, ...], dtype: DTy
 
 # Save and Load
 
+def geo_path(id: str) -> str:
+    return f"./epymorph/data/geo/{id}_geo.npz"
+
+
 def save_compressed_geo(id: str, data: dict[str, NDArray]) -> None:
     if not 'label' in data:
         msg = f"Geo {id} must have a 'label' attribute in order to be saved and loaded."
         raise Exception(msg)
-    np.savez_compressed(f"./epymorph/data/geo/{id}_geo.npz", **data)
+    np.savez_compressed(geo_path(id), **data)
 
 
 def load_compressed_geo(id: str) -> Geo:
-    with np.load(f'./epymorph/data/geo/{id}_geo.npz') as npz_data:
+    with np.load(geo_path(id)) as npz_data:
         data = dict(npz_data)
     labels = data.get('label')
     if labels is None:
