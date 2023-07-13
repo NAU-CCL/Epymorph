@@ -4,16 +4,18 @@
 def pei_movement():
     """Pei style movement pre definition"""
     commuters = geo['commuters']
-    commuters_average = zeros(commuters.shape)
-    for i in range(commuters.shape[0]):
-        for j in range(i + 1, commuters.shape[1]):
-            nbar = (commuters[i, j] + commuters[j, i]) // 2
-            commuters_average[i, j] = nbar
-            commuters_average[j, i] = nbar
+    
+    # Average commuters between locations.
+    commuters_average = (commuters + commuters.T) // 2
+    
     # Total commuters living in each state.
     commuters_by_node = commuters.sum(axis=1)
+    
     # Commuters as a ratio to the total commuters living in that state.
-    commuting_probability = commuters / commuters_by_node[:, None]
+    # For cases where there are no commuters, avoid div-by-0 errors
+    divisor = commuters_by_node.copy()[:, newaxis]
+    divisor[divisor == 0] = 1
+    commuting_probability = commuters / divisor
 
     return {
         'commuters_average': commuters_average, 
@@ -27,12 +29,19 @@ def pei_movement():
 def commuters(t, src):
     typical = predef['commuters_by_node'][src]
     actual = binomial(typical, param['move_control'])
-    return multinomial(actual, predef['commuting_probability'][src, ...])
+    return multinomial(actual, predef['commuting_probability'][src, :])
 ]
 
 # Disperser movement
+#   We could write it this way, but this is much slower (for now...)
+#[mtype: days=all; leave=1; duration=0d; return=2; function=
+#def dispersers(t, src, dst):
+#    avg = predef['commuters_average'][src, dst]
+#    return poisson(avg * param['theta'])
+#]
+
 [mtype: days=all; leave=1; duration=0d; return=2; function=
-def dispersers(t, src, dst):
-    avg = predef['commuters_average'][src, dst]
+def dispersers(t, src):
+    avg = predef['commuters_average'][src, :]
     return poisson(avg * param['theta'])
 ]

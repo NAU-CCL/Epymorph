@@ -1,26 +1,24 @@
 from typing import Callable
 
-from epymorph.data.geo.maricopa_cbg_2019 import load as maricopa_cbg_2019_load
-from epymorph.data.geo.pei import load as geo_pei_load
-from epymorph.data.geo.single_pop_geo import load as single_pop_geo_load
-from epymorph.data.geo.sparsemod import load as geo_sparsemod_load
-from epymorph.data.geo.us_counties_2015 import \
-    load as geo_us_counties_2015_load
-from epymorph.data.geo.us_states_2015 import load as geo_us_states_2015_load
+from epymorph.data.geo.single_pop import load as geo_single_pop_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
+from epymorph.geo import Geo, load_compressed_geo
 from epymorph.movement import MovementBuilder, load_movement_spec
 
 
-def mm_loader(path) -> Callable[[], MovementBuilder]:
+def mm_loader(id: str) -> Callable[[], MovementBuilder]:
     def load() -> MovementBuilder:
-        with open(path, "r") as file:
+        with open(f"epymorph/data/mm/{id}.movement", "r") as file:
             spec_string = file.read()
             return load_movement_spec(spec_string)
-
     return load
+
+
+def geo_npz_loader(id: str) -> Callable[[], Geo]:
+    return lambda: load_compressed_geo(id)
 
 
 # THIS IS A PLACEHOLDER IMPLEMENTATION
@@ -34,17 +32,13 @@ ipm_library = {
 }
 
 mm_library = {
-    'no': mm_loader('epymorph/data/mm/no.movement'),
-    'icecube': mm_loader('epymorph/data/mm/icecube.movement'),
-    'pei': mm_loader('epymorph/data/mm/pei.movement'),
-    'sparsemod': mm_loader('epymorph/data/mm/sparsemod.movement')
+    id: mm_loader(id)
+    for id in ['no', 'icecube', 'pei', 'sparsemod']
 }
 
 geo_library = {
-    'pei': geo_pei_load,
-    'us_counties_2015': geo_us_counties_2015_load,
-    'us_states_2015': geo_us_states_2015_load,
-    'maricopa_cbg_2019': maricopa_cbg_2019_load,
-    'sparsemod': geo_sparsemod_load,
-    'single_pop_geo': single_pop_geo_load
+    'single_pop': geo_single_pop_load
+} | {
+    id: geo_npz_loader(id)
+    for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']
 }

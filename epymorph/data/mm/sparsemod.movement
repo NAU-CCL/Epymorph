@@ -1,24 +1,48 @@
 [move-steps: per-day=2; duration=[2/3, 1/3]]
 
 [predef: function = 
-def sparse_movement():
-    """Sparsemod movement model"""
-    distances = geo['distances']
-    n = nodes
-    dispersal_kernel = zeros((n, n))
-    for i in range(n):
-        for j in range(n):
-            dispersal_kernel[i, j] = 1 / \
-                (exp(distances[i, j]*1/param['phi']))
-        dispersal_kernel[i, ] = dispersal_kernel[i, ] / \
-            sum(dispersal_kernel[i, ])
+def sparsemod_predef():
+    radius = 3959.87433 # radius of earth in mi
 
-    return {'dispersal_kernel': dispersal_kernel}
+    def pairwise(arr, func):
+        row = arr[:, newaxis]
+        col = arr[newaxis, :]
+        return func(row, col)
+
+    def normalized_row(arr):
+        divisor = arr.sum(axis=1, keepdims=True)
+        divisor[divisor == 0] = 1 # avoid div-by-0 errors
+        return arr / divisor
+
+    def pairwise_haversine(arr):
+        lng = radians(arr['longitude'])
+        dlng = pairwise(lng, subtract)
+        lat = radians(arr['latitude'])
+        dlat = pairwise(lat, subtract)
+
+        return 2 * radius * arcsin(sqrt(
+            sin(dlat / 2.0) ** 2 +
+            pairwise(cos(lat), multiply) *
+            sin(dlng / 2.0) ** 2
+        ))
+
+    distance = pairwise_haversine(geo['centroid'])
+
+    dispersal_kernel = normalized_row(1 / exp(distance / param['phi']))
+    # Impose a dispersal kernel cutoff, below which we treat it as zero.
+    # This greatly speeds up the simulation.
+    # TODO: But I need to verify that this approach is sensible!
+    dispersal_kernel[dispersal_kernel < 0.005] = 0
+
+    return {
+        'commuters_by_node': geo['commuters'].sum(axis=1),
+        'dispersal_kernel': dispersal_kernel
+    }
 ]
 
 # Commuter movement
 [mtype: days=all; leave=1; duration=0d; return=2; function=
 def sparse_commuters(t, src):
-    actual = geo['commuters'][src]
-    return multinomial(actual, predef['dispersal_kernel'][src, ...])
+    actual = predef['commuters_by_node'][src]
+    return multinomial(actual, predef['dispersal_kernel'][src, :])
 ]
