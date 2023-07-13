@@ -37,10 +37,10 @@ class ADRIO(ABC):
             msg = 'nodes parameter is not formatted correctly; must be a list of strings'
             raise Exception(msg)
 
-    def cache_fetch(self, args: dict, attribute: str) -> tuple[list[str], DataFrame]:
+    def cache_fetch(self, args: dict, extension='') -> tuple[list[str], DataFrame]:
         # csv file name components
         nodes = args.get('nodes')
-        attr = attribute
+        attribute = self.attribute
         year = str(self.year)
 
         data = DataFrame()
@@ -50,8 +50,7 @@ class ADRIO(ABC):
             uncached = []
             for i in nodes:
                 # create csv file path (attribute + node GEOID + year)
-                string = attr + i + year
-                path = f'epymorph/adrio/.cache/{string}.csv'
+                path = f'.cache/adrio/{attribute}{extension}_{i}_{year}.csv'
                 # check for csv file
                 if os.path.isfile(path):
                     # retrieve cached data
@@ -70,18 +69,20 @@ class ADRIO(ABC):
             msg = 'nodes parameter is not formatted correctly; must be a list of strings'
             raise Exception(msg)
 
-    def cache_store(self, data: DataFrame, nodes: list[str], attribute: str) -> None:
-        attr = attribute
+    def cache_store(self, data: DataFrame, nodes: list[str], extension='') -> None:
         year = str(self.year)
+        attribute = self.attribute
+
         # create .cache file if needed
-        if not os.path.isdir('epymorph/adrio/.cache'):
-            os.mkdir('epymorph/adrio/.cache')
+        if not os.path.isdir('.cache'):
+            os.mkdir('.cache')
+        if not os.path.isdir('.cache/adrio'):
+            os.mkdir('.cache/adrio')
 
         # loop through nodes and cache data for each
         for i in nodes:
-            string = attr + i + year
             data.loc[data['state'] == i].to_csv(
-                f'epymorph/adrio/.cache/{string}.csv')
+                f'.cache/adrio/{attribute}{extension}_{i}_{year}.csv')
 
 
 @dataclass
@@ -95,6 +96,7 @@ class GEOSpec:
     """class to create geo spec files used by the ADRIO system to create geos"""
     id: str
     nodes: list[str]
+    label: ADRIOSpec
     adrios: list[ADRIOSpec]
 
 

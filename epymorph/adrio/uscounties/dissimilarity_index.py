@@ -8,7 +8,7 @@ from epymorph.adrio.adrio import ADRIO
 class DissimilarityIndex(ADRIO):
     """ADRIO to fetch the dissimilarity index of racial segregation for all counties in a provided set of states"""
     year = 2015
-    attribute = 'dissimilarity index'
+    attribute = 'dissimilarity_index'
 
     def __init__(self):
         super().__init__()
@@ -16,24 +16,20 @@ class DissimilarityIndex(ADRIO):
     def fetch(self, force=False, **kwargs) -> NDArray[np.float_]:
         """"Returns a numpy array of floats representing the disimilarity index for each county"""
         if force:
-            code_list_tract = code_list_county = self.type_check(kwargs)
+            uncached_tract = uncached_county = self.type_check(kwargs)
             cache_df_tract = cache_df_county = DataFrame()
 
         else:
-            cache_data_tract = self.cache_fetch(
-                kwargs, attribute=self.attribute + ' tract')
-            code_list_tract = cache_data_tract[0]
-            cache_df_tract = cache_data_tract[1]
+            uncached_tract, cache_df_tract = self.cache_fetch(
+                kwargs, '_tract')
 
-            cache_data_county = self.cache_fetch(
-                kwargs, attribute=self.attribute + ' county')
-            code_list_county = cache_data_county[0]
-            cache_df_county = cache_data_county[1]
+            uncached_county, cache_df_county = self.cache_fetch(
+                kwargs, '_county')
 
-        code_string_tract = ','.join(code_list_tract)
-        code_string_county = ','.join(code_list_county)
+        code_string_tract = ','.join(uncached_tract)
+        code_string_county = ','.join(uncached_county)
 
-        if len(code_list_tract) > 0:
+        if len(uncached_tract) > 0:
             # fetch tract level data from census
             tract_data = self.census.acs5.get(('B03002_003E',  # white population
                                                'B03002_013E',
@@ -44,15 +40,14 @@ class DissimilarityIndex(ADRIO):
                                               year=self.year)
 
             tract_data_df = DataFrame.from_records(tract_data)
-            self.cache_store(tract_data_df, code_list_tract,
-                             self.attribute + ' tract')
+            self.cache_store(tract_data_df, uncached_tract, '_tract')
             if len(cache_df_tract.index) > 0:
                 tract_data_df = concat([tract_data_df, cache_df_tract])
 
         else:
             tract_data_df = cache_df_tract
 
-        if len(code_list_county) > 0:
+        if len(uncached_county) > 0:
             # fetch county level data from census
             county_data = self.census.acs5.get(('B03002_003E',  # white population
                                                 'B03002_013E',
@@ -63,8 +58,7 @@ class DissimilarityIndex(ADRIO):
                                                year=self.year)
 
             county_data_df = DataFrame.from_records(county_data)
-            self.cache_store(county_data_df, code_list_county,
-                             self.attribute + ' county')
+            self.cache_store(county_data_df, uncached_county, '_county')
             if len(cache_df_tract.index) > 0:
                 county_data_df = concat([county_data_df, cache_df_county])
 

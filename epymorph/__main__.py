@@ -79,16 +79,16 @@ def build_cli() -> ArgumentParser:
             'cache',
             help='fetch and cache data for a Geo')
         p.add_argument(
-            'file',
+            'geo',
             type=str,
-            help="the path to the geo file")
+            help="the name of a geo from the library")
         p.add_argument(
             '-f', '--force',
             action='store_true',
             help='(optional) include this flag to force an override of previously cached data')
 
         def handler(args):
-            return handle_cache(args.file, args.force)
+            return handle_cache(args.geo, args.force)
         p.set_defaults(handler=handler)
     define_cache()
 

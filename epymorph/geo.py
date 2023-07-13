@@ -106,12 +106,19 @@ def load_compressed_geo(id: str) -> Geo:
 
 class GEOBuilder:
     def __init__(self, path: str):
+        # create GEOSpec object from file
         self.spec = deserialize(path)
 
     def build(self, force=False) -> Geo:
-        # create GEOSpec object from file
         data = DataDict()
         print('Fetching GEO data from ADRIOs...')
+        # fetch label data
+        labels = []
+        current = uscounties_library.get(self.spec.label.class_name)
+        if current is not None:
+            current_obj = current()
+            print(f'Fetching label: {current_obj.attribute}')
+            labels = current_obj.fetch(force, nodes=self.spec.nodes)
         # loop for all ADRIOSpecs
         for i in range(len(self.spec.adrios)):
             # get adrio class from library dictionary (library hardcoded for now)
@@ -124,10 +131,9 @@ class GEOBuilder:
                     force, nodes=self.spec.nodes)
 
         print('...done')
-        # build and return Geo (what to do for nodes/label?)
+        # build and return Geo
         return Geo(
-            nodes=len(data['name and state']),
-            labels=[name[0] + ', ' + name[1]
-                    for name in data['name and state']],
+            nodes=len(labels),
+            labels=labels,
             data=data
         )

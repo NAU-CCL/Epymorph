@@ -4,8 +4,7 @@ from pandas import DataFrame, Series, concat
 
 from epymorph.adrio.adrio import ADRIO
 
-query_list = ('B01001_001E',  # total population
-              'B01001_003E',  # population 0-19
+query_list = ('B01001_003E',  # population 0-19
               'B01001_004E',
               'B01001_005E',
               'B01001_006E',
@@ -53,13 +52,13 @@ query_list = ('B01001_001E',  # total population
               'B01001_049E')
 
 
-class PopByAge(ADRIO):
+class PopulationByAge(ADRIO):
     """
-    ADRIO to fetch total population in all counties in a provided set of states
-    as well as population broken down into age brackets 0-19, 20-64, and 64-85+
+    ADRIO to fetch  population in all counties in a provided set of states
+    broken down into age brackets 0-19, 20-64, and 64-85+
     """
     year = 2015
-    attribute = 'population'
+    attribute = 'population_by_age'
 
     def __init__(self) -> None:
         super().__init__()
@@ -73,26 +72,24 @@ class PopByAge(ADRIO):
 
     def fetch(self, force=False, **kwargs) -> NDArray[np.int_]:
         """
-        Returns a numpy array of 4 element lists containing each county's total population
-        followed by the population of each age group from youngest to oldest
+        Returns a numpy array of 3 element lists containing the population of each age group 
+        from youngest to oldest in each county
         """
         if force:
-            code_list = self.type_check(kwargs)
+            uncached = self.type_check(kwargs)
             cache_df = DataFrame()
         else:
-            cache_data = self.cache_fetch(kwargs, self.attribute)
-            code_list = cache_data[0]
-            cache_df = cache_data[1]
+            uncached, cache_df = self.cache_fetch(kwargs)
 
-        code_string = ','.join(code_list)
+        code_string = ','.join(uncached)
 
-        if len(code_list) > 0:
+        if len(uncached) > 0:
             # get data from census
             data = self.census.acs5.get(query_list, {
                                         'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
             data_df = DataFrame.from_records(data)
-            self.cache_store(data_df, code_list, self.attribute)
+            self.cache_store(data_df, uncached)
             if len(cache_df.index) > 0:
                 data_df = concat([data_df, cache_df])
 
@@ -104,12 +101,11 @@ class PopByAge(ADRIO):
         data_df.reset_index(inplace=True)
 
         # calculate population of each age bracket and enter into a numpy array to return
-        output = np.zeros((len(data_df.index), 4), dtype=np.int_)
-        for i, rows in data_df.iterrows():
-            total_pop = rows['B01001_001E']
-            minor_pop = self.calculate_pop(1, 11, rows)
-            adult_pop = self.calculate_pop(11, 35, rows)
-            elderly_pop = self.calculate_pop(35, 47, rows)
-            output[i] = [total_pop, minor_pop, adult_pop, elderly_pop]
+        output = np.zeros((len(data_df.index), 3), dtype=np.int_)
+        for i, row in data_df.iterrows():
+            minor_pop = self.calculate_pop(0, 10, row)
+            adult_pop = self.calculate_pop(10, 34, row)
+            elderly_pop = self.calculate_pop(34, 46, row)
+            output[i] = [minor_pop, adult_pop, elderly_pop]
 
         return output

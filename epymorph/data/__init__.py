@@ -18,9 +18,9 @@ def mm_loader(id: str) -> Callable[[], MovementBuilder]:
     return load
 
 
-def geo_loader(path) -> Callable[[], Geo]:
-    def load() -> Geo:
-        return GEOBuilder(path).build()
+def geo_loader(path) -> Callable[[bool], Geo]:
+    def load(force=False) -> Geo:
+        return GEOBuilder(path).build(force)
 
     return load
 
