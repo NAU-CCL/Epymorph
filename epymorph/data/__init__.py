@@ -1,8 +1,6 @@
 from typing import Callable
 
-from epymorph.data.geo.maricopa_cbg_2019 import load as maricopa_cbg_2019_load
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
-from epymorph.data.geo.sparsemod import load as geo_sparsemod_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
@@ -33,14 +31,14 @@ ipm_library = {
     "sirh": ipm_sirh_load,
 }
 
-mm_library = {id: mm_loader(id)
-              for id in ['no', 'icecube', 'pei', 'sparsemod', 'sparsemod2']}
+mm_library = {
+    id: mm_loader(id)
+    for id in ['no', 'icecube', 'pei', 'sparsemod']
+}
 
 geo_library = {
-    'pei': geo_npz_loader('pei'),
-    'us_counties_2015': geo_npz_loader('us_counties_2015'),
-    'us_states_2015': geo_npz_loader('us_states_2015'),
-    'maricopa_cbg_2019': maricopa_cbg_2019_load,
-    'sparsemod': geo_sparsemod_load,
     'single_pop': geo_single_pop_load
+} | {
+    id: geo_npz_loader(id)
+    for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']
 }
