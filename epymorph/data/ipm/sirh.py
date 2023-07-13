@@ -49,6 +49,8 @@ class sirhBuilder(IpmBuilder):
             cs[i][0] = population[i]
         # With a seeded infection in one location.
         si = ctx.param["infection_seed_loc"]
+        # Don't infect more people than exist!
+        sn = min(cs[si][0], ctx.param['infection_seed_size'])
         sn = ctx.param["infection_seed_size"]
         cs[si][0] -= sn
         cs[si][1] += sn
@@ -100,7 +102,8 @@ class sirh(Ipm):
         # as population sizes shrink when we consider more granular spatial scales.
 
         cs = loc.compartment_totals
-        total = np.sum(cs)
+        # if there are 0 people here, avoid div-by-0 error
+        total = max(1, sum(cs))
         rates = np.array(
             [
                 tick.tau * self.beta * cs[0] * cs[1] / total,  # S -> I
