@@ -29,7 +29,13 @@ class PopDensityKm2(ADRIO):
         if len(uncached_geo) > 0:
             county_df = counties(state=uncached_geo, year=self.year)
 
-            county_df = county_df.rename(columns={'STATEFP': 'state'})
+            county_df = county_df.rename(
+                columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
+
+            # sort data by state and county fips
+            county_df = county_df.sort_values(by=['state', 'county'])
+            county_df.reset_index(drop=True, inplace=True)
+
             self.cache_store(county_df, uncached_geo, '_geo')
             if len(cache_geo_df.index) > 0:
                 county_df = concat([county_df, cache_geo_df])
@@ -43,6 +49,11 @@ class PopDensityKm2(ADRIO):
                 'B01003_001E', {'for': 'county: *', 'in': f'state: {code_string_pop}'}, year=self.year)
 
             census_df = DataFrame.from_records(census_data)
+
+            # sort data by state and county fips
+            census_df = census_df.sort_values(by=['state', 'county'])
+            census_df.reset_index(drop=True, inplace=True)
+
             self.cache_store(census_df, uncached_pop, '_pop')
             if len(cache_pop_df.index) > 0:
                 census_df = concat([census_df, cache_pop_df])
@@ -50,14 +61,8 @@ class PopDensityKm2(ADRIO):
         else:
             census_df = cache_pop_df
 
-        county_df = county_df.rename(columns={'COUNTYFP': 'county'})
-
         # merge census data with shapefile data
         county_df = county_df.merge(census_df, on=['state', 'county'])
-
-        # sort data by state and county fips
-        county_df = county_df.sort_values(by=['state', 'county'])
-        county_df.reset_index(drop=True, inplace=True)
 
         # calculate population density, storing it in a numpy array to return
         output = np.zeros(len(county_df.index), dtype=np.float_)

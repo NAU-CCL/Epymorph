@@ -40,6 +40,11 @@ class DissimilarityIndex(ADRIO):
                                               year=self.year)
 
             tract_data_df = DataFrame.from_records(tract_data)
+
+            # sort data by state, county
+            tract_data_df = tract_data_df.sort_values(by=['state', 'county'])
+            tract_data_df.reset_index(inplace=True)
+
             self.cache_store(tract_data_df, uncached_tract, '_tract')
             if len(cache_df_tract.index) > 0:
                 tract_data_df = concat([tract_data_df, cache_df_tract])
@@ -58,19 +63,17 @@ class DissimilarityIndex(ADRIO):
                                                year=self.year)
 
             county_data_df = DataFrame.from_records(county_data)
+
+            # sort data by state, county
+            county_data_df = county_data_df.sort_values(by=['state', 'county'])
+            county_data_df.reset_index(inplace=True)
+
             self.cache_store(county_data_df, uncached_county, '_county')
             if len(cache_df_tract.index) > 0:
                 county_data_df = concat([county_data_df, cache_df_county])
 
         else:
             county_data_df = cache_df_county
-
-        # sort data by state, county
-        tract_data_df = tract_data_df.sort_values(by=['state', 'county'])
-        tract_data_df.reset_index(inplace=True)
-
-        county_data_df = county_data_df.sort_values(by=['state', 'county'])
-        county_data_df.reset_index(inplace=True)
 
         output = np.zeros(len(county_data_df.index), dtype=np.float_)
 

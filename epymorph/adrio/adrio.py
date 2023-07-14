@@ -55,7 +55,8 @@ class ADRIO(ABC):
                 if os.path.isfile(path):
                     # retrieve cached data
                     num_cached += 1
-                    curr_data = read_csv(path)
+                    curr_data = read_csv(
+                        path, dtype={'state': str, 'county': str})
                     data = concat([data, curr_data])
                 # append node to uncached list
                 else:

@@ -89,16 +89,17 @@ class PopulationByAge(ADRIO):
                                         'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
 
             data_df = DataFrame.from_records(data)
+
+            # sort data by state and county fips
+            data_df = data_df.sort_values(by=['state', 'county'])
+            data_df.reset_index(inplace=True)
+
             self.cache_store(data_df, uncached)
             if len(cache_df.index) > 0:
                 data_df = concat([data_df, cache_df])
 
         else:
             data_df = cache_df
-
-        # sort data by state and county fips
-        data_df = data_df.sort_values(by=['state', 'county'])
-        data_df.reset_index(inplace=True)
 
         # calculate population of each age bracket and enter into a numpy array to return
         output = np.zeros((len(data_df.index), 3), dtype=np.int_)

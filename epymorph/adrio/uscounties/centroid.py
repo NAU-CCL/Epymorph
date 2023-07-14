@@ -28,17 +28,19 @@ class Centroid(ADRIO):
             # get county shapefile for the specified year
             county_df = counties(state=uncached, year=self.year)
 
-            county_df = county_df.rename(columns={'STATEFP': 'state'})
+            county_df = county_df.rename(
+                columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
+
+            # retreive counties from states of interest and sort by fips
+            county_df = county_df.sort_values(by=['state', 'county'])
+            county_df.reset_index(drop=True, inplace=True)
+
             self.cache_store(county_df, uncached)
             if len(cache_df.index) > 0:
                 county_df = concat([county_df, cache_df])
 
         else:
             county_df = cache_df
-
-        # retreive counties from states of interest and sort by fips
-        county_df = county_df.sort_values(by=['state', 'COUNTYFP'])
-        county_df.reset_index(drop=True, inplace=True)
 
         # map county's name to its centroid in a numpy array and return
         output = np.zeros(len(county_df.index), dtype=tuple)

@@ -5,16 +5,16 @@ from pandas import DataFrame, concat
 from epymorph.adrio.adrio import ADRIO
 
 
-class NameAndState(ADRIO):
-    """ADRIO to fetch the names and state names of every county in a provided set of states"""
+class GEOID(ADRIO):
+    """ADRIO to fetch the geoid (state fips + county fips) of all counties in a provided set of states"""
     year = 2015
-    attribute = 'name_and_state'
+    attribute = 'geoid'
 
     def __init__(self) -> None:
         super().__init__()
 
     def fetch(self, force=False, **kwargs) -> NDArray[np.str_]:
-        """Returns a numpy array of containing the name and state name of each county as strings"""
+        """Returns a numpy array of containing the geoid of every county as strings"""
         if force:
             uncached = self.type_check(kwargs)
             cache_df = DataFrame()
@@ -26,12 +26,14 @@ class NameAndState(ADRIO):
             code_string = ','.join(uncached)
 
             # get data from census
-            data = self.census.acs5.get('NAME',
+            data = self.census.acs5.get(('NAME'),
                                         {'for': 'county: *',
                                          'in': f'state: {code_string}'},
                                         year=self.year)
 
             data_df = DataFrame.from_records(data)
+            # strange interaction here - name field is fetched only because a field is required
+            data_df = data_df.drop(columns='NAME')
 
             # sort data by state and county fips
             data_df = data_df.sort_values(by=['state', 'county'])
@@ -47,5 +49,9 @@ class NameAndState(ADRIO):
         else:
             data_df = cache_df
 
-        # store county and state names in numpy array to return
-        return data_df['NAME'].to_numpy()
+        # concatenate state and county fips to yield geoid
+        output = list()
+        for i, row in data_df.iterrows():
+            output.append(row['state'] + row['county'])
+
+        return np.array(output, dtype=np.str_)
