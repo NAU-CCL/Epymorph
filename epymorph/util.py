@@ -6,9 +6,15 @@ import numpy as np
 from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
+# epymorph common types
+
+
 Compartments = NDArray[np.int_]
 Events = NDArray[np.int_]
 DataDict = dict[str, Any]
+
+
+# function utilities
 
 
 T = TypeVar('T')
@@ -22,24 +28,54 @@ def constant(x: T) -> Callable[..., T]:
     return lambda *_: x
 
 
+# numpy utilities
+
+
+N = TypeVar('N', bound=np.number)
+
+NumpyIndices = NDArray[np.int_]
+
+
 def stutter(it: Iterable[T], times: int) -> Iterable[T]:
     """Make the iterable `it` repeat each item `times` times.
        (Unlike `itertools.repeat` which repeats whole sequences in order.)"""
     return (xs for x in it for xs in (x,) * times)
 
 
-def stridesum(arr: NDArray[np.int_], n: int) -> NDArray[np.int_]:
-    """Compute a new array by grouping every `n` rows and summing them together.
-       `arr`'s length must be evenly divisible by `n`."""
-    rows = len(arr)
-    assert rows % n == 0, f"Cannot stridesum array of length {rows} by {n}."
-    res = np.zeros(shape=rows // n, dtype=np.int_)
-    for j in range(0, rows, n):
-        sum = np.int_(0)
-        for i in range(0, n):
-            sum += arr[j + i]
-        res[j // n] = sum
-    return res
+def stridesum(arr: NDArray[N], n: int) -> NDArray[N]:
+    """Compute a new array by grouping every `n` rows and summing them together."""
+    if len(arr) % n != 0:
+        pad = n - (len(arr) % n)
+        arr = np.pad(arr,
+                     pad_width=(0, pad),
+                     mode='constant',
+                     constant_values=0)
+    return arr.reshape((-1, n)).sum(axis=1)
+
+
+def normalize(arr: NDArray[N]) -> NDArray[N]:
+    """
+    Normalize the values in an array by subtracting the min and dividing by the range.
+    """
+    min = arr.min()
+    max = arr.max()
+    return (arr - min) / (max - min)
+
+
+def top(size: int, arr: NDArray) -> NumpyIndices:
+    """
+    Find the top `size` elements in `arr` and return their indices.
+    Assumes the array is flat and the kind of thing that can be order-compared.
+    """
+    return np.argpartition(arr, -size)[-size:]
+
+
+def bottom(size: int, arr: NDArray) -> NumpyIndices:
+    """
+    Find the bottom `size` elements in `arr` and return their indices.
+    Assumes the array is flat and the kind of thing that can be order-compared.
+    """
+    return np.argpartition(arr, size)[:size]
 
 
 def is_square(arr: NDArray) -> bool:
@@ -101,6 +137,9 @@ def parse_duration(s: str) -> relativedelta | None:
             return None
 
 
+# console decorations
+
+
 def progress(percent: float) -> str:
     """Creates a progress bar string."""
     p = 100 * max(0.0, min(percent, 1.0))
@@ -109,7 +148,7 @@ def progress(percent: float) -> str:
     return f"|{bar}| {p:.0f}% "
 
 
-T = TypeVar('T')
+# pub-sub events
 
 
 class Event(Generic[T]):
@@ -124,6 +163,9 @@ class Event(Generic[T]):
     def publish(self, event: T) -> None:
         for subscriber in self.subscribers:
             subscriber(event)
+
+
+# AST function utilities
 
 
 def parse_function(code_string: str) -> ast.FunctionDef:

@@ -3,16 +3,28 @@ from typing import NamedTuple, TypeVar
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
-from epymorph.util import DataDict
+from epymorph.util import NumpyIndices
 
 
 class Geo(NamedTuple):
     nodes: int
     labels: list[str]
-    data: DataDict
+    data: dict[str, NDArray]
+
+
+# GEO processing utilities
+
+
+def filter_geo(geo: Geo, selection: NumpyIndices) -> Geo:
+    nodes = len(selection)
+    labels = (np.array(geo.labels, dtype=str)[selection]).tolist()
+    data = {key: arr[selection]
+            for key, arr in geo.data.items()}
+    return Geo(nodes, labels, data)
 
 
 # Schema and Validation
+
 
 class Attribute(NamedTuple):
     dtype: DTypeLike
@@ -56,6 +68,7 @@ def validate_shape(name: str, data: T | None, shape: tuple[int, ...], dtype: DTy
 
 
 # Save and Load
+
 
 def geo_path(id: str) -> str:
     return f"./epymorph/data/geo/{id}_geo.npz"

@@ -18,15 +18,19 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(act, exp)
 
     def test_stridesum(self):
-        arr = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 0], dtype=np.int_)
+        arr = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], dtype=np.int_)
 
         act1 = util.stridesum(arr, 2)
-        exp1 = np.array([3, 7, 11, 15, 9])
+        exp1 = np.array([3, 7, 11, 15, 19])
         self.assertTrue(all(np.equal(act1, exp1)))
 
         act2 = util.stridesum(arr, 5)
-        exp2 = np.array([15, 30])
+        exp2 = np.array([15, 40])
         self.assertTrue(all(np.equal(act2, exp2)))
+
+        act3 = util.stridesum(arr, 3)
+        exp3 = np.array([6, 15, 24, 10])
+        self.assertTrue(all(np.equal(act3, exp3)))
 
     def test_parse_duration(self):
         act1 = util.parse_duration("30d")
