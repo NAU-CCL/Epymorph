@@ -29,10 +29,6 @@ def sparsemod_predef():
     distance = pairwise_haversine(geo['centroid'])
 
     dispersal_kernel = normalized_row(1 / exp(distance / param['phi']))
-    # Impose a dispersal kernel cutoff, below which we treat it as zero.
-    # This greatly speeds up the simulation.
-    # TODO: But I need to verify that this approach is sensible!
-    dispersal_kernel[dispersal_kernel < 0.005] = 0
 
     return {
         'commuters_by_node': geo['commuters'].sum(axis=1),
