@@ -3,6 +3,10 @@
 
 # Environments
 /.venv
+.env
+
+# Cached data
+/.cache
 
 # Compilation
 __pycache__/

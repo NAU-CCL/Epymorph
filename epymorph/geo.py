@@ -5,7 +5,7 @@ from numpy.typing import DTypeLike, NDArray
 
 from epymorph.adrio import uscounties_library
 from epymorph.adrio.adrio import deserialize
-from epymorph.util import DataDict, NumpyIndices
+from epymorph.util import NumpyIndices
 
 
 class Geo(NamedTuple):
@@ -110,30 +110,37 @@ class GEOBuilder:
         self.spec = deserialize(path)
 
     def build(self, force=False) -> Geo:
-        data = DataDict()
+        data = dict[str, NDArray]()
         print('Fetching GEO data from ADRIOs...')
-        # fetch label data
-        labels = []
-        current = uscounties_library.get(self.spec.label.class_name)
-        if current is not None:
-            current_obj = current()
-            print(f'Fetching label: {current_obj.attribute}')
-            labels = current_obj.fetch(force, nodes=self.spec.nodes)
+
+        # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
+        # - a literal key to use, or
+        # - None to use the ADRIO's attribute
+        all_adrios = \
+            [('label', self.spec.label)] + \
+            [(None, x) for x in self.spec.adrios]
+
         # loop for all ADRIOSpecs
-        for i in range(len(self.spec.adrios)):
+        for key, spec in all_adrios:
             # get adrio class from library dictionary (library hardcoded for now)
-            current = uscounties_library.get(self.spec.adrios[i].class_name)
+            adrio_class = uscounties_library.get(spec.class_name)
             # fetch data from adrio
-            if current is not None:
-                current_obj = current()
-                print(f'Fetching {current_obj.attribute}')
-                data[current_obj.attribute] = current_obj.fetch(
-                    force, nodes=self.spec.nodes)
+            if adrio_class is None:
+                raise Exception(f"Unable to load ADRIO for {spec.class_name}; "
+                                "please check that your GEOSpec is valid.")
+            else:
+                adrio = adrio_class()
+                print(f'Fetching {adrio.attribute}')
+                if key is None:
+                    key = adrio.attribute
+                data[key] = adrio.fetch(force, nodes=self.spec.nodes)
 
         print('...done')
+
         # build and return Geo
+        labels = data['label']
         return Geo(
             nodes=len(labels),
-            labels=labels,
+            labels=labels.tolist(),
             data=data
         )
