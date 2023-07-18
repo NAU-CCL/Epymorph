@@ -1,132 +1,112 @@
-import argparse
+from argparse import ArgumentParser
 
-from epymorph.movement import check_movement_spec
-from epymorph.run import run as epymorph_run
-from epymorph.verify import verify as epymorph_verify
-
-# This is the main entrypoint to Epymorph.
-# It uses command-line options to execute one of the available sub-commands:
-# - sim: runs a named, pre-configured EpiMoRPH simulation
-# - check: checks the syntax of a specification file
-#
-# (More commands will likely be added over time.)
+from epymorph.prepare import prepare_run_toml as handle_prepare
+from epymorph.run import run as handle_run
+from epymorph.validate import validate_spec_file as handle_validate
+from epymorph.verify import verify as handle_verify
 
 
-# "check" subcommand
-def do_check(file_path) -> int:
-    """Parse and check the validity of a specification file."""
-    # TODO: when there are more kinds of spec files,
-    # we can switch between which we're checking based
-    # on the file extension (probably).
-    try:
-        with open(file_path, 'r') as file:
-            contents = file.read()
-        try:
-            check_movement_spec(contents)
-            print(f"[✓] Valid specification: {file_path}")
-            return 0  # exit code: success
-        except Exception as e:
-            print(f"[✗] Invalid specification: {file_path}")
-            print(e)
-            return 3  # exit code: invalid spec
-    except Exception as e:
-        print(f"Unable to read spec file: {e}")
-        return 2  # exit code: can't read file
-
-
-def main() -> None:
+def build_cli() -> ArgumentParser:
     # Using argparse to configure available commands and arguments.
-    parser = argparse.ArgumentParser(
+    cli_parser = ArgumentParser(
         prog="epymorph",
         description="EpiMoRPH spatial meta-population modeling.")
-    subparsers = parser.add_subparsers(
+
+    # Define a set of subcommands for the main program.
+    # Each is defined in an immediately-executed function below,
+    # the only requirement is that they all define a 'handler' function
+    # in their defaults.
+    command_parser = cli_parser.add_subparsers(
         title="commands",
         dest="command",
         required=True)
 
-    # "run" subcommand
-    # ex: python3 -m epymorph run --ipm pei --mm pei --geo pei
-    parser_run = subparsers.add_parser(
-        'run', help="run a simulation from library models")
-    parser_run.add_argument(
-        '--ipm',
-        type=str,
-        help="the name of an IPM from the library")
-    parser_run.add_argument(
-        '--mm',
-        type=str,
-        help="the name of an MM from the library")
-    parser_run.add_argument(
-        '--geo',
-        type=str,
-        help="the name of a Geo from the library")
-    parser_run.add_argument(
-        '--start_date',
-        type=str,
-        required=True,
-        help="the start date of the simulation in ISO format, e.g.: 2023-01-27")
-    parser_run.add_argument(
-        '--duration',
-        type=str,
-        required=True,
-        help="the timespan of the simulation, e.g.: 30d")
-    parser_run.add_argument(
-        '--params',
-        type=str,
-        required=True,  # TODO: make this optional and use default values
-        help="the path to a params file")
-    parser_run.add_argument(
-        '--out',
-        help="(optional) path to an output file to save the simulated prevalence data; specify either a .csv or .npz file")
-    parser_run.add_argument(
-        '--chart',
-        help="(optional) ID for chart to draw; \"e0\" for event incidence 0; \"p2\" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)")
-    parser_run.add_argument(
-        '-p', '--profile',
-        action='store_true',
-        help="(optional) include this flag to run in profiling mode")
+    # define "run" subcommand
+    # ex: python3 -m epymorph run ./scratch/params.toml --chart e0
+    def define_run():
+        p = command_parser.add_parser(
+            'run', help="run a simulation from library models")
+        p.add_argument(
+            'input',
+            help="the path to an input toml file")
+        p.add_argument(
+            '--out',
+            help="(optional) path to an output file to save the simulated prevalence data; specify either a .csv or .npz file")
+        p.add_argument(
+            '--chart',
+            help="(optional) ID for chart to draw; \"e0\" for event incidence 0; \"p2\" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)")
+        p.add_argument(
+            '-p', '--profile',
+            action='store_true',
+            help="(optional) include this flag to run in profiling mode")
 
-    # "check" subcommand
-    # ex: python3 -m epymorph check ./data/pei.movement
-    parser_check = subparsers.add_parser(
-        'check',
-        help="check a specification file for validity")
-    parser_check.add_argument(
-        'file',
-        type=str,
-        help="the path to the specification file")
+        def handler(args):
+            return handle_run(args.input, args.out, args.chart, args.profile)
+        p.set_defaults(handler=handler)
+    define_run()
 
-    # "verify" subcommand
+    # define "prepare" subcommand
+    # ex: python3 -m epymorph prepare ./scratch/params.toml
+    def define_prepare():
+        p = command_parser.add_parser(
+            'prepare', help="prepare an input toml file for the run command")
+        p.add_argument(
+            'file',
+            help="the path at which to save the file")
+        p.add_argument(
+            '--ipm',
+            type=str,
+            help="(optional) the name of an IPM from the library")
+        p.add_argument(
+            '--mm',
+            type=str,
+            help="(optional) the name of an MM from the library")
+        p.add_argument(
+            '--geo',
+            type=str,
+            help="(optional) the name of a Geo from the library")
+
+        def handler(args):
+            return handle_prepare(args.file, args.ipm, args.mm, args.geo)
+        p.set_defaults(handler=handler)
+    define_prepare()
+
+    # define "check" subcommand
+    # ex: python3 -m epymorph check ./epymorph/data/mm/pei.movement
+    def define_check():
+        p = command_parser.add_parser(
+            'check',
+            help="check a specification file for validity")
+        p.add_argument(
+            'file',
+            type=str,
+            help="the path to the specification file")
+
+        def handler(args):
+            return handle_validate(args.file)
+        p.set_defaults(handler=handler)
+    define_check()
+
+    # define "verify" subcommand
     # ex: python3 -m epymorph verify ./output.csv
-    parser_verify = subparsers.add_parser(
-        'verify',
-        help="check output file for data consistency")
-    parser_verify.add_argument(
-        'file',
-        type=str,
-        help="the path to the output file")
+    def define_verify():
+        p = command_parser.add_parser(
+            'verify',
+            help="check output file for data consistency")
+        p.add_argument(
+            'file',
+            type=str,
+            help="the path to the output file")
 
-    args = parser.parse_args()
+        def handler(args):
+            return handle_verify(args.file)
+        p.set_defaults(handler=handler)
+    define_verify()
 
-    exit_code = 1  # exit code: invalid command (default)
-    if args.command == 'run':
-        exit_code = epymorph_run(
-            args.ipm,
-            args.mm,
-            args.geo,
-            args.start_date,
-            args.duration,
-            args.params,
-            args.out,
-            args.chart,
-            args.profile
-        )
-    elif args.command == 'check':
-        exit_code = do_check(args.file)
-    elif args.command == 'verify':
-        exit_code = epymorph_verify(args.file)
-    exit(exit_code)
+    return cli_parser
 
 
 if __name__ == "__main__":
-    main()
+    args = build_cli().parse_args()
+    exit_code = args.handler(args)
+    exit(exit_code)

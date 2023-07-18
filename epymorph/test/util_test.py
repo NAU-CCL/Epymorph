@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 from dateutil.relativedelta import relativedelta
+from pydantic import TypeAdapter
 
 import epymorph.util as util
 
@@ -33,18 +34,19 @@ class TestUtil(unittest.TestCase):
         self.assertTrue(all(np.equal(act3, exp3)))
 
     def test_parse_duration(self):
-        act1 = util.parse_duration("30d")
+        t = TypeAdapter(util.Duration)
+        act1 = t.validate_python("30d").to_relativedelta()
         exp1 = relativedelta(days=30)
         self.assertEqual(act1, exp1)
 
-        act2 = util.parse_duration("3w")
+        act2 = t.validate_python("3w").to_relativedelta()
         exp2 = relativedelta(weeks=3)
         self.assertEqual(act2, exp2)
 
-        act3 = util.parse_duration("7m")
+        act3 = t.validate_python("7m").to_relativedelta()
         exp3 = relativedelta(months=7)
         self.assertEqual(act3, exp3)
 
-        act4 = util.parse_duration("999y")
+        act4 = t.validate_python("999y").to_relativedelta()
         exp4 = relativedelta(years=999)
         self.assertEqual(act4, exp4)
