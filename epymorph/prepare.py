@@ -4,7 +4,8 @@ from datetime import date
 import tomli_w
 
 from epymorph.data import geo_library, ipm_library, mm_library
-from epymorph.run import interactive_select
+from epymorph.run import RunInput, interactive_select
+from epymorph.util import Duration
 
 
 def prepare_run_toml(out_path: str,
@@ -29,23 +30,23 @@ def prepare_run_toml(out_path: str,
     if geo_name is None:
         geo_name = interactive_select("GEO", geo_library)
 
-    document = {
-        "ipm": ipm_name,
-        "mm": mm_name,
-        "geo": geo_name,
-        "start_date": date.today().isoformat(),
-        "duration": "14d",
-        "params": {
+    document = RunInput(
+        ipm=ipm_name,
+        mm=mm_name,
+        geo=geo_name,
+        start_date=date.today(),
+        duration=Duration(count=14, unit="d"),
+        params={
             # TODO: would like to inspect IPM/MM to figure
             # out which params are needed and list them here
             # But for now, just a placeholder...
             "example_parameter": 0.5
         }
-    }
+    )
 
     try:
         with open(out_path, mode="wb") as file:
-            tomli_w.dump(document, file)
+            tomli_w.dump(document.model_dump(), file)
         print(f"Wrote file at {out_path}")
         return 0  # success
     except Exception as e:
