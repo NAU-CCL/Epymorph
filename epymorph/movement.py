@@ -54,9 +54,9 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
         raise Exception(f"Movement clause: not a valid function")
 
     prd = Predicates.daylist(days=clause_spec.days,
-                             step=clause_spec.leave_step)
+                             step=clause_spec.leave_step - 1)
     ret = TickDelta(days=clause_spec.duration.to_days(),
-                    step=clause_spec.return_step)
+                    step=clause_spec.return_step - 1)
 
     num_args = len(f_def.args.args)
     if num_args == 2:
