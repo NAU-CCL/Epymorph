@@ -14,6 +14,7 @@ from epymorph.parser.move_clause import ALL_DAYS, DayOfWeek
 from epymorph.world import HOME_TICK, Population, World
 
 ClausePred = Callable[[Tick], bool]
+CompartmentPred = Callable[[list[str]], bool]
 RowEquation = Callable[[Tick, int], NDArray[np.int_]]
 CrossEquation = Callable[[Tick, int, int], np.int_]
 
@@ -48,31 +49,53 @@ class GeneralClause(ConditionalClause):
     """
 
     @classmethod
-    def by_row(cls, ctx: SimContext, name: str, predicate: ClausePred, returns: TickDelta, equation: RowEquation) -> GeneralClause:
-        return cls(ctx, name, predicate, returns, equation)
+    def by_row(cls,
+               ctx: SimContext,
+               name: str,
+               predicate: ClausePred,
+               returns: TickDelta,
+               equation: RowEquation,
+               compartment_tag_predicate: CompartmentPred) -> GeneralClause:
+        return cls(ctx, name, predicate, returns, equation, compartment_tag_predicate)
 
     @classmethod
-    def by_cross(cls, ctx: SimContext, name: str, predicate: ClausePred, returns: TickDelta, equation: CrossEquation) -> GeneralClause:
+    def by_cross(cls,
+                 ctx: SimContext,
+                 name: str,
+                 predicate: ClausePred,
+                 returns: TickDelta,
+                 equation: CrossEquation,
+                 compartment_tag_predicate: CompartmentPred) -> GeneralClause:
         def e(tick: Tick, src_idx: int) -> NDArray[np.int_]:
             row = np.zeros(ctx.nodes, dtype=np.int_)
             for dst_idx in range(ctx.nodes):
                 row[dst_idx] = 0 if src_idx == dst_idx else \
                     equation(tick, src_idx, dst_idx)
             return row
-        return cls(ctx, name, predicate, returns, e)
+        return cls(ctx, name, predicate, returns, e, compartment_tag_predicate)
 
     ctx: SimContext
     name: str
     returns: TickDelta
     equation: RowEquation
+    compartment_tag_predicate: CompartmentPred
+    movement_mask: NDArray[np.bool_]
     logger: logging.Logger
 
-    def __init__(self, ctx: SimContext, name: str, predicate: ClausePred, returns: TickDelta, equation: RowEquation):
+    def __init__(self,
+                 ctx: SimContext,
+                 name: str,
+                 predicate: ClausePred,
+                 returns: TickDelta,
+                 equation: RowEquation,
+                 compartment_tag_predicate: CompartmentPred):
         super().__init__(predicate)
         self.ctx = ctx
         self.name = name
         self.returns = returns
         self.equation = equation
+        self.movement_mask = np.array([compartment_tag_predicate(ts)
+                                       for ts in ctx.compartment_tags], dtype=bool)
         self.logger = logging.getLogger(f'movement.{name}')
 
     def _execute(self, world: World, tick: Tick) -> None:
@@ -80,12 +103,13 @@ class GeneralClause(ConditionalClause):
         return_tick = self.ctx.clock.tick_plus(tick, self.returns)
         for src_idx, src in enumerate(world.locations):
             locals = src.locals
+            available_movers = locals.compartments * self.movement_mask
             # movers from src to all destinations:
             requested_arr = self.equation(tick, src_idx)
             requested_arr[src_idx] = 0
             self.logger.debug("requested[%d]: %s", src_idx, requested_arr)
             requested_tot = np.sum(requested_arr)
-            if requested_tot > locals.total:
+            if requested_tot > sum(available_movers):
                 self.logger.debug("   actual[%d]: <WARNING> skipped for insufficient population",
                                   src_idx)
             elif requested_tot > 0:
@@ -94,7 +118,7 @@ class GeneralClause(ConditionalClause):
                     if src_idx == dst_idx or n == 0:
                         continue
                     actual, movers = locals.split(
-                        self.ctx, src_idx, dst_idx, return_tick, n)
+                        self.ctx, src_idx, dst_idx, return_tick, n, self.movement_mask)
                     world.locations[dst_idx].pops.append(movers)
                     actual_arr[dst_idx] = actual
                     total_movers += actual

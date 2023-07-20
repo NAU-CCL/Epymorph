@@ -124,12 +124,15 @@ TransitionDef = EdgeDef | ForkDef
 class CompartmentDef:
     symbol: Symbol
     name: str
+    tags: list[str]
 
 
-def compartment(symbol_name: str, name: str | None = None) -> CompartmentDef:
+def compartment(symbol_name: str, name: str | None = None, tags: list[str] | None = None) -> CompartmentDef:
     if name is None:
         name = symbol_name
-    return CompartmentDef(to_symbol(symbol_name), name)
+    if tags is None:
+        tags = list()
+    return CompartmentDef(to_symbol(symbol_name), name, tags)
 
 
 def quick_compartments(symbol_names: str) -> list[CompartmentDef]:

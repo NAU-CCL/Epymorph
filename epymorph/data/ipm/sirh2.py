@@ -1,13 +1,18 @@
 from epymorph.ipm.attribute import param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
-from epymorph.ipm.compartment_model import (create_model, create_symbols, edge,
-                                            fork, quick_compartments)
+from epymorph.ipm.compartment_model import (compartment, create_model,
+                                            create_symbols, edge, fork)
 from epymorph.ipm.ipm import IpmBuilder
 
 
 def load() -> IpmBuilder:
     symbols = create_symbols(
-        compartments=quick_compartments('S I R H'),
+        compartments=[
+            compartment('S'),
+            compartment('I'),
+            compartment('R'),
+            compartment('H', tags=['immobile'])
+        ],
         attributes=[
             param('beta'),
             param('gamma'),

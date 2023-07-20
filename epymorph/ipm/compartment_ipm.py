@@ -83,6 +83,9 @@ class CompartmentModelIpmBuilder(IpmBuilder):
         cs[si, 1] += sn
         return list(cs)
 
+    def compartment_tags(self) -> list[list[str]]:
+        return [c.tags for c in self.model.compartments]
+
     def build(self, ctx: SimContext) -> Ipm:
         rate_params = [
             *(c.symbol for c in self.model.compartments),
@@ -136,7 +139,7 @@ class CompartmentModelIpm(Ipm):
         return occurrences
 
     def events(self, loc: Location, tick: Tick) -> Events:
-        # Get effective population for each copmartment.
+        # Get effective population for each compartment.
         all_pops = np.array([p.compartments for p in loc.pops], dtype=int)
         effective = np.sum(all_pops, axis=0)
 

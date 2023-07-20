@@ -4,7 +4,6 @@ import logging
 from datetime import date
 from functools import reduce
 from itertools import repeat
-from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -15,7 +14,7 @@ from epymorph.geo import Geo
 from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.movement import Movement, MovementBuilder
 from epymorph.util import DataDict, Event
-from epymorph.world import World
+from epymorph.world import HOME_TICK, World
 
 
 def configure_sim_logging(enabled: bool) -> None:
@@ -28,6 +27,7 @@ def configure_sim_logging(enabled: bool) -> None:
         # Verbose output to file.
         logging.basicConfig(filename='debug.log', filemode='w')
         logging.getLogger('movement').setLevel(logging.DEBUG)
+        logging.getLogger('sim').setLevel(logging.DEBUG)
     else:
         # Only critical output to console.
         logging.basicConfig(level=logging.CRITICAL)
@@ -118,6 +118,7 @@ class Simulation:
     geo: Geo
     ipm_builder: IpmBuilder
     mvm_builder: MovementBuilder
+    logger: logging.Logger
 
     # Progress events
     on_start: Event[None]
@@ -131,6 +132,7 @@ class Simulation:
         self.on_start = Event()
         self.on_tick = Event()
         self.on_end = Event()
+        self.logger = logging.getLogger('sim')
 
     def _make_context(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None) -> SimContext:
         return SimContext(
@@ -138,6 +140,7 @@ class Simulation:
             labels=self.geo.labels,
             geo=self.geo.data,
             compartments=self.ipm_builder.compartments,
+            compartment_tags=self.ipm_builder.compartment_tags(),
             events=self.ipm_builder.events,
             param=param,
             clock=Clock.init(start_date, duration_days, self.mvm_builder.taus),
@@ -149,11 +152,25 @@ class Simulation:
         world = World.initialize(
             self.ipm_builder.initialize_compartments(ctx)
         )
+        cm_travelers = np.zeros(ctx.compartments, dtype=int)
         out = Output(ctx)
         for tick in ctx.clock.ticks:
             t = tick.index
+            self.logger.debug(
+                f'Starting simulation tick {tick.index} (length {(tick.tau):.3f})')
+
             # First do movement
             mvm.clause.apply(world, tick)
+
+            travelers = np.array(
+                object=[p.compartments
+                        for l in world.locations
+                        for p in l.pops if p.return_tick != HOME_TICK],
+                dtype=int
+            ).sum(axis=0)
+            cm_travelers += travelers
+            self.logger.debug(f'travelers by compartment: {travelers}')
+
             # Then for each location:
             for p, loc in enumerate(world.locations):
                 # Calc events by compartment
@@ -165,6 +182,10 @@ class Simulation:
                 # Store prevalence
                 out.prevalence[t, p] = loc.compartment_totals
             self.on_tick.publish((t, t / ctx.clock.num_ticks))
+
+        self.logger.debug(
+            f'cumulative travelers by compartment: {cm_travelers}')
+
         return out
 
     def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None, progress=False) -> Output:
