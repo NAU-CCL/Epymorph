@@ -9,12 +9,25 @@ from typing import Any, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
+from pydantic import BaseModel, ValidationError
 
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.simulation import Output, Simulation, configure_sim_logging
-from epymorph.util import parse_duration, progress, stridesum
+from epymorph.util import Duration, progress, stridesum
 
 T = TypeVar('T')
+
+
+def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
+    keys = list(lib.keys())
+    keys.sort()
+    print(f"Select the {lib_name} you would like to use: ")
+    for i, name in enumerate(keys):
+        print(f'{i+1}. {name}')
+    entry = input(f"Enter the number: ")
+    print()
+    index = int(entry) - 1
+    return keys[index]
 
 
 def load_model(type: str, name: str, lib: dict[str, T]) -> T:
@@ -27,7 +40,7 @@ def load_model(type: str, name: str, lib: dict[str, T]) -> T:
         return result
     else:
         print(f"[X] {text}")
-        raise Exception("ERROR: Unknown {type}: {name}")
+        raise Exception(f"ERROR: Unknown {type}: {name}")
 
 
 def load_params(path: str) -> dict[str, Any]:
@@ -123,70 +136,67 @@ def save_csv(path: str, out: Output) -> None:
 
 # Exit codes:
 # - 0 success
-# - 1 invalid command
+# - 1 invalid input
 # - 2 error loading models/files
-def run(ipm_name: str,
-        mm_name: str,
-        geo_name: str,
-        start_date_str: str,
-        duration_str: str,
-        params_path: str,
+
+class RunInput(BaseModel):
+    """Pydantic model describing the contents of the input toml file."""
+    ipm: str | None = None
+    mm: str | None = None
+    geo: str | None = None
+    start_date: date
+    duration: Duration
+    params: dict[str, Any]
+
+
+def run(input_path: str,
         out_path: str | None,
         chart: str | None,
         profiling: bool) -> int:
-    """Run a simulation. Returns exit code."""
+    """CLI command handler: run a simulation."""
 
-    if ipm_name is None:
-        ipm_keys = list(ipm_library.keys())
-        ipm_keys.sort()
-        print("Preset IPMs: ")
-        for i, name in enumerate(ipm_keys):
-            print(f'{i+1}. {name}')
-        ipm_idx = int(
-            input("Enter index of the IPM you would like to use: ")) - 1
-        ipm_name = ipm_keys[ipm_idx]
+    # Read input toml file.
 
-    if mm_name is None:
-        mm_keys = list(mm_library.keys())
-        mm_keys.sort()
-        print("\nPreset MMs: ")
-        for i, name in enumerate(mm_keys):
-            print(f'{i+1}. {name}')
-        mm_idx = int(
-            input("Enter index of the MM you would like to use: ")) - 1
-        mm_name = mm_keys[mm_idx]
-
-    if geo_name is None:
-        geo_keys = list(geo_library.keys())
-        geo_keys.sort()
-        print("\nPreset Geos: ")
-        for i, name in enumerate(geo_keys):
-            print(f'{i+1}. {name}')
-        geo_idx = int(
-            input("Enter index of the geo you would like to use: \n")) - 1
-        geo_name = geo_keys[geo_idx]
-
-    duration = parse_duration(duration_str)
-    if duration is None:
-        print(f"ERROR: invalid duration ({duration_str})")
-        return 1
-    start_date = date.fromisoformat(start_date_str)
-    end_date = start_date + duration
-    duration_days = (end_date - start_date).days
-
-    print("Loading requirements:")
     try:
+        with open(input_path, "rb") as file:
+            input = RunInput(**tomllib.load(file))
+    except ValidationError as e:
+        print(e)
+        print(f"ERROR: missing required data in input file ({input_path})")
+        return 1  # invalid input
+    except OSError as e:
+        print(e)
+        print(f"ERROR: unable to open input file ({input_path})")
+        return 1  # invalid input
+
+    # Load models.
+
+    try:
+        ipm_name = input.ipm if input.ipm is not None \
+            else interactive_select("IPM", ipm_library)
+
+        mm_name = input.mm if input.mm is not None \
+            else interactive_select("MM", mm_library)
+
+        geo_name = input.geo if input.geo is not None \
+            else interactive_select("GEO", geo_library)
+
+        print("Loading requirements:")
         ipm_builder = load_model("IPM", ipm_name, ipm_library)
         mm_builder = load_model("MM", mm_name, mm_library)
         geo_builder = load_model("Geo", geo_name, geo_library)
-        # TODO pull param defaults from models?
-        params = load_params(params_path)
     except Exception as e:
         print(e)
-        return 2
+        return 2  # error loading models
 
     # TODO: model compatibility check
     # print("[✓] Model compatibility check")
+
+    # Create and run simulation.
+
+    start_date = input.start_date
+    end_date = start_date + input.duration.to_relativedelta()
+    duration_days = (end_date - start_date).days
 
     configure_sim_logging(enabled=not profiling)
 
@@ -204,10 +214,12 @@ def run(ipm_name: str,
     sim.on_end.subscribe(lambda _: print(progress(1.0)))
 
     t0 = time.perf_counter()
-    out = sim.run(params, start_date, duration_days, progress=True)
+    out = sim.run(input.params, start_date, duration_days, progress=True)
     t1 = time.perf_counter()
 
     print(f"Runtime: {(t1 - t0):.3f}s")
+
+    # Handle output.
 
     # NOTE: this method of chart handling is a placeholder implementation
     if chart is not None:

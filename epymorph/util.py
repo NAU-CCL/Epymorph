@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import ast
 import re
-from typing import Any, Callable, Generic, Iterable, TypeVar
+from typing import Any, Callable, Generic, Iterable, Literal, TypeVar
 
 import numpy as np
 from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
+from pydantic import BaseModel, model_serializer, model_validator
 
 # epymorph common types
 
@@ -116,25 +119,47 @@ def expand_data(data: float | int | list | NDArray, rows: int, cols: int) -> NDA
 _duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
 
 
-def parse_duration(s: str) -> relativedelta | None:
-    """Parses a duration expression like "30d" to mean 30 days. Supports days (d), weeks (w), months (m), and years (y)."""
+# custom pydantic types
 
-    match = _duration_regex.search(s)
-    if not match:
-        return None
-    else:
-        value = int(match.group(1))
-        unit = match.group(2)
-        if unit == "d":
-            return relativedelta(days=value)
-        elif unit == "w":
-            return relativedelta(weeks=value)
-        elif unit == "m":
-            return relativedelta(months=value)
-        elif unit == "y":
-            return relativedelta(years=value)
+
+class Duration(BaseModel):
+    """Pydantic model describing a duration; serializes to/from a string representation."""
+    # NOTE: the JSON schema for this isn't quite right but fixing that seems non-trivial.
+    # Since we're not using JSON schema yet, a task for another day.
+    count: int
+    unit: Literal['d', 'w', 'm', 'y']
+
+    def to_relativedelta(self) -> relativedelta:
+        match self.unit:
+            case "d":
+                return relativedelta(days=self.count)
+            case "w":
+                return relativedelta(weeks=self.count)
+            case "m":
+                return relativedelta(months=self.count)
+            case "y":
+                return relativedelta(years=self.count)
+
+    def __str__(self) -> str:
+        return f"{self.count}{self.unit}"
+
+    @model_serializer
+    def _serialize(self) -> str:
+        return str(self)
+
+    @model_validator(mode='before')
+    @classmethod
+    def _validator(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            match = _duration_regex.search(value)
+            if not match:
+                raise ValueError(
+                    "not a valid duration (e.g., '100d' for 100 days)")
+            else:
+                count, unit = match.groups()
+                return {'count': count, 'unit': unit}
         else:
-            return None
+            return value
 
 
 # console decorations
