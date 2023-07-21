@@ -14,7 +14,7 @@ from epymorph.geo import Geo
 from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.movement import Movement, MovementBuilder
 from epymorph.util import DataDict, Event
-from epymorph.world import HOME_TICK, World
+from epymorph.world import World
 
 
 def configure_sim_logging(enabled: bool) -> None:
@@ -27,7 +27,6 @@ def configure_sim_logging(enabled: bool) -> None:
         # Verbose output to file.
         logging.basicConfig(filename='debug.log', filemode='w')
         logging.getLogger('movement').setLevel(logging.DEBUG)
-        logging.getLogger('sim').setLevel(logging.DEBUG)
     else:
         # Only critical output to console.
         logging.basicConfig(level=logging.CRITICAL)
@@ -118,7 +117,6 @@ class Simulation:
     geo: Geo
     ipm_builder: IpmBuilder
     mvm_builder: MovementBuilder
-    logger: logging.Logger
 
     # Progress events
     on_start: Event[None]
@@ -132,7 +130,6 @@ class Simulation:
         self.on_start = Event()
         self.on_tick = Event()
         self.on_end = Event()
-        self.logger = logging.getLogger('sim')
 
     def _make_context(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None) -> SimContext:
         return SimContext(
@@ -152,24 +149,12 @@ class Simulation:
         world = World.initialize(
             self.ipm_builder.initialize_compartments(ctx)
         )
-        cm_travelers = np.zeros(ctx.compartments, dtype=int)
         out = Output(ctx)
         for tick in ctx.clock.ticks:
             t = tick.index
-            self.logger.debug(
-                f'Starting simulation tick {tick.index} (length {(tick.tau):.3f})')
 
             # First do movement
             mvm.clause.apply(world, tick)
-
-            travelers = np.array(
-                object=[p.compartments
-                        for l in world.locations
-                        for p in l.pops if p.return_tick != HOME_TICK],
-                dtype=int
-            ).sum(axis=0)
-            cm_travelers += travelers
-            self.logger.debug(f'travelers by compartment: {travelers}')
 
             # Then for each location:
             for p, loc in enumerate(world.locations):
@@ -182,9 +167,6 @@ class Simulation:
                 # Store prevalence
                 out.prevalence[t, p] = loc.compartment_totals
             self.on_tick.publish((t, t / ctx.clock.num_ticks))
-
-        self.logger.debug(
-            f'cumulative travelers by compartment: {cm_travelers}')
 
         return out
 
@@ -227,37 +209,3 @@ class Simulation:
         trial_iterator = map(self._run_internal, args_iterator)
         return reduce(lambda acc, curr: acc + curr, trial_iterator,
                       OutputAggregate(ctx))
-
-
-def seed_crawl_until_error(sim: Simulation, start: int = 0, iterations: int = 100, **kwargs) -> None:
-    """
-    Simulation debugging utility. Run a simulation with many different random seeds until one produces an error.
-    Very handy when you're trying to debug an issue that only happens sometimes.
-    """
-    for seed in range(start, start + iterations):
-        try:
-            sim.run(**kwargs, rng=np.random.default_rng(seed))
-        except Exception as e:
-            print(e)
-            print(f"Failed successfully! Error above. Seed was {seed}.")
-            break
-    else:
-        print(
-            f"Seed crawl produced no errors from {start} until {start + iterations}.")
-
-
-def seed_crawl_until_success(sim: Simulation, start: int = 0, iterations: int = 100, **kwargs) -> None:
-    """
-    Simulation debugging utility. Run a simulation with many different random seeds until one succeeds.
-    Very handy when you're trying to debug an issue that very rarely does succeed and you want to know why.
-    """
-    for seed in range(start, start + iterations):
-        try:
-            sim.run(**kwargs, rng=np.random.default_rng(seed))
-            print(f"Succeeded successfully! Seed was {seed}.")
-            break
-        except Exception as e:
-            pass
-    else:
-        print(
-            f"Seed crawl produced no successes from {start} until {start + iterations}.")

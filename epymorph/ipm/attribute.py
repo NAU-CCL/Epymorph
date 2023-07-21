@@ -11,7 +11,7 @@ from epymorph.context import SimContext
 from epymorph.ipm.sympy_shim import Symbol, to_symbol
 from epymorph.world import Location
 
-AttributeType = Literal['int'] | Literal['float'] | Literal['str']
+AttributeType = Literal['int', 'float', 'str']
 AttributeShape = str
 
 # IPMs can use parameters of any of these shapes, where:

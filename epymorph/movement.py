@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from typing import Any, Callable, NamedTuple
 
 import numpy as np
@@ -12,7 +11,7 @@ from epymorph.movement_clause import (Clause, GeneralClause, Predicates,
 from epymorph.parser.move_clause import Daily
 from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
-from epymorph.util import compile_function, constant, parse_function
+from epymorph.util import compile_function, parse_function
 
 
 class MovementBuilder:
