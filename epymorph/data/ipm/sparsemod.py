@@ -1,3 +1,5 @@
+from sympy import Max
+
 from epymorph.ipm.attribute import param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
 from epymorph.ipm.compartment_model import (compartment, create_model,
@@ -43,9 +45,11 @@ def load() -> IpmBuilder:
     [beta_1, omega_1, omega_2, delta_1, delta_2, delta_3, delta_4, delta_5,
         gamma_a, gamma_b, gamma_c, rho_1, rho_2, rho_3, rho_4, rho_5] = symbols.attribute_symbols
 
-    N = S + E + Ia + Ip + Is + Ib + Ih + Ic1 + Ic2 + D + R
-    lambda_1 = (omega_1 * Ia + Ip + Is + Ib +
-                omega_2 * (Ih + Ic1 + Ic2)) / (N - D)
+    # formulate the divisor so as to avoid dividing by zero;
+    # this is safe in this instance becase if the denominator is zero,
+    # the numerator must also be zero
+    N = Max(1, S + E + Ia + Ip + Is + Ib + Ih + Ic1 + Ic2 + R)
+    lambda_1 = (omega_1 * Ia + Ip + Is + Ib + omega_2 * (Ih + Ic1 + Ic2)) / N
 
     sparsemod = create_model(
         symbols=symbols,

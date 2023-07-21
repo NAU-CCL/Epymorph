@@ -3,10 +3,8 @@ from typing import Callable
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
-from epymorph.data.ipm.pei2 import load as ipm_pei2_load
-from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
-from epymorph.data.ipm.sirh2 import load as ipm_sirh2_load
+from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
 from epymorph.geo import Geo, load_compressed_geo
 from epymorph.movement import MovementBuilder, load_movement_spec
@@ -30,10 +28,8 @@ def geo_npz_loader(id: str) -> Callable[[], Geo]:
 ipm_library = {
     "no": ipm_no_load,
     "pei": ipm_pei_load,
-    "simple_sirs": ipm_simple_sirs_load,
+    "sirs": ipm_sirs_load,
     "sirh": ipm_sirh_load,
-    "pei2": ipm_pei2_load,
-    "sirh2": ipm_sirh2_load,
     "sparsemod": ipm_sparsemod_load
 }
 
