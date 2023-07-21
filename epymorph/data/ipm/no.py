@@ -4,7 +4,7 @@ import numpy as np
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
-from epymorph.epi import Ipm, IpmBuilder
+from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.util import Compartments, Events
 from epymorph.world import Location
 

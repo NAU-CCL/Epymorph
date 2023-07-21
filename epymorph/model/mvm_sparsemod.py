@@ -7,7 +7,6 @@ import epymorph.movement as M
 import epymorph.movement_clause as C
 from epymorph.clock import Tick, TickDelta
 from epymorph.context import SimContext
-from epymorph.util import is_square
 
 
 def sparse_movement(ctx: SimContext) -> C.RowEquation:
@@ -29,6 +28,9 @@ def sparse_movement(ctx: SimContext) -> C.RowEquation:
 
 
 def load_mvm():
+    def if_not_immobile(tags: list[str]) -> bool:
+        return 'immobile' not in tags
+
     return M.MovementBuilder(
         taus=[np.double(2/3), np.double(1/3)],
         clause_compiler=lambda ctx: C.Sequence([
@@ -37,7 +39,8 @@ def load_mvm():
                 name="Commuters",
                 predicate=C.Predicates.everyday(step=0),
                 returns=TickDelta(0, 1),
-                equation=sparse_movement(ctx)
+                equation=sparse_movement(ctx),
+                compartment_tag_predicate=if_not_immobile
             ),
             C.Return(ctx)
         ])

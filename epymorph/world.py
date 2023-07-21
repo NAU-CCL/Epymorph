@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from operator import attrgetter
 
 import numpy as np
+from numpy.typing import NDArray
 
 from epymorph.context import SimContext
 from epymorph.util import Compartments
@@ -64,7 +65,8 @@ class Population:
               src_idx: int,
               dst_idx: int,
               return_tick: int,
-              requested: np.int_) -> tuple[np.int_, Population]:
+              requested: int,
+              movement_mask: NDArray[np.bool_]) -> tuple[int, Population]:
         """
         Divide a population by splitting off (up to) the `requested` number of individuals.
         These individuals will be randomly drawn from the available compartments.
@@ -72,12 +74,15 @@ class Population:
         be returned as the second element of a tuple; the first element being the actual number
         of individuals (in case you requested more than the number available).
         """
-        actual = np.minimum(self.total, requested)
-        cs = sim.rng.multivariate_hypergeometric(self.compartments, actual)
-
-        self.compartments -= cs
+        # How many people are available to move?
+        available = self.compartments * movement_mask
+        # How many will actually move?
+        actual = min(sum(available), requested)
+        # Select movers.
+        movers = sim.rng.multivariate_hypergeometric(available, actual)
+        self.compartments -= movers
         return_location = dst_idx if return_tick == HOME_TICK else src_idx
-        pop = Population(cs, return_location, return_tick)
+        pop = Population(movers, return_location, return_tick)
         return (actual, pop)
 
 

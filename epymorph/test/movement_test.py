@@ -8,6 +8,7 @@ import epymorph.movement_clause as C
 from epymorph.clock import Clock, TickDelta
 from epymorph.context import SimContext
 from epymorph.test.world_test import p, w
+from epymorph.util import constant
 from epymorph.world import HOME_TICK, Location, World
 
 
@@ -16,7 +17,8 @@ def test_sim_context(num_nodes: int) -> SimContext:
         nodes=num_nodes,
         labels=[f'node{n}' for n in range(num_nodes)],
         geo={},
-        compartments=3,
+        compartments=1,
+        compartment_tags=[[]],
         events=3,
         param={},
         clock=Clock.init(date(2023, 1, 1), 50, [np.double(1)]),
@@ -102,7 +104,8 @@ class TestCrosswalkMovement(unittest.TestCase):
             name="Crosswalk",
             predicate=C.Predicates.everyday(),
             returns=TickDelta(2, 0),
-            equation=lambda *_: np.array([100, 100, 100, 100])
+            equation=lambda *_: np.array([100, 100, 100, 100]),
+            compartment_tag_predicate=constant(True)
         )
 
         # The last node doesn't have enough locals, so it will receive movers but not send any.
@@ -166,7 +169,8 @@ class TestSequenceMovement(unittest.TestCase):
                 name="Crosswalk",
                 predicate=C.Predicates.everyday(),
                 returns=TickDelta(2, 0),
-                equation=lambda *_: np.array([100, 100, 100])
+                equation=lambda *_: np.array([100, 100, 100]),
+                compartment_tag_predicate=constant(True)
             ),
             return_clause
         ])

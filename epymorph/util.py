@@ -31,6 +31,54 @@ def constant(x: T) -> Callable[..., T]:
     return lambda *_: x
 
 
+# collection utilities
+
+
+def index_where(it: Iterable[T], predicate: Callable[[T], bool]) -> int:
+    for i, x in enumerate(it):
+        if predicate(x):
+            return i
+    return -1
+
+
+def iterator_length(it: Iterable[Any]) -> int:
+    """
+    Count the number of items in the given iterator.
+    Warning: this consumes the iterator! It also never terminates if the iterator is infinite.
+    """
+    length = 0
+    for _ in it:
+        length += 1
+    return length
+
+
+def list_not_none(it: Iterable[T]) -> list[T]:
+    return [x for x in it if x is not None]
+
+
+class NotUniqueException(Exception):
+    def __init__(self):
+        super().__init__("Collection contains non-unique values.")
+
+
+def filter_unique(xs: Iterable[T]) -> list[T]:
+    xset = set[T]()
+    ys = list[T]()
+    for x in xs:
+        if x not in xset:
+            ys.append(x)
+            xset.add(x)
+    return ys
+
+
+def as_unique_set(xs: list[T]) -> set[T]:
+    """Transform list to set, raising a NotUniqueException if the list contains non-unique values."""
+    xs_set = set(xs)
+    if len(xs_set) != len(xs):
+        raise NotUniqueException()
+    return xs_set
+
+
 # numpy utilities
 
 

@@ -5,6 +5,7 @@ import epymorph.movement_clause as C
 from epymorph.clock import TickDelta
 from epymorph.model.mvm_commuter import commuter_movement
 from epymorph.model.mvm_disperser import disperser_movement
+from epymorph.util import constant
 
 
 # Movement Model
@@ -13,6 +14,9 @@ from epymorph.model.mvm_disperser import disperser_movement
 # [mtype: daily; days=[m,t,w,th,f,st,sn]; leave-step=1; return=0d.step2; <equation for commuters>]
 # [mtype: daily; days=[m,t,w,th,f,st,sn]; leave-step=1; return=0d.step2; <equation for dispersers>]
 def load_mvm():
+    def if_not_immobile(tags: list[str]) -> bool:
+        return 'immobile' not in tags
+
     return M.MovementBuilder(
         # First step is day: 2/3 tau
         # Second step is night: 1/3 tau
@@ -24,7 +28,8 @@ def load_mvm():
                 name="Commuters",
                 predicate=C.Predicates.everyday(step=0),
                 returns=TickDelta(0, 1),  # returns today on step 1
-                equation=commuter_movement(ctx)
+                equation=commuter_movement(ctx),
+                compartment_tag_predicate=if_not_immobile
             ),
             # Random dispersers: also on step 0, cumulative effect.
             C.GeneralClause.by_row(
@@ -32,7 +37,8 @@ def load_mvm():
                 name="Dispersers",
                 predicate=C.Predicates.everyday(step=0),
                 returns=TickDelta(0, 1),  # returns today on step 1
-                equation=disperser_movement(ctx)
+                equation=disperser_movement(ctx),
+                compartment_tag_predicate=if_not_immobile
             ),
             # Return: always triggers, but only moves pops whose return time is now.
             C.Return(ctx)

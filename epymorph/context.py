@@ -1,6 +1,7 @@
 from typing import NamedTuple
 
 import numpy as np
+from numpy.typing import NDArray
 
 from epymorph.clock import Clock
 from epymorph.util import DataDict
@@ -16,6 +17,7 @@ class SimContext(NamedTuple):
     geo: DataDict
     # ipm info
     compartments: int
+    compartment_tags: list[list[str]]
     events: int
     # run info
     param: DataDict

@@ -10,8 +10,8 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Clock
 from epymorph.context import SimContext
-from epymorph.epi import Ipm, IpmBuilder
 from epymorph.geo import Geo
+from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.movement import Movement, MovementBuilder
 from epymorph.util import DataDict, Event
 from epymorph.world import World
@@ -137,6 +137,7 @@ class Simulation:
             labels=self.geo.labels,
             geo=self.geo.data,
             compartments=self.ipm_builder.compartments,
+            compartment_tags=self.ipm_builder.compartment_tags(),
             events=self.ipm_builder.events,
             param=param,
             clock=Clock.init(start_date, duration_days, self.mvm_builder.taus),
@@ -151,8 +152,10 @@ class Simulation:
         out = Output(ctx)
         for tick in ctx.clock.ticks:
             t = tick.index
+
             # First do movement
             mvm.clause.apply(world, tick)
+
             # Then for each location:
             for p, loc in enumerate(world.locations):
                 # Calc events by compartment
@@ -164,6 +167,7 @@ class Simulation:
                 # Store prevalence
                 out.prevalence[t, p] = loc.compartment_totals
             self.on_tick.publish((t, t / ctx.clock.num_ticks))
+
         return out
 
     def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None, progress=False) -> Output:

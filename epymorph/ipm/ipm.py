@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import numpy as np
+from numpy.typing import NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
@@ -25,6 +26,9 @@ class IpmBuilder(ABC):
     def event_array(self) -> Events:
         """Build an empty events array of an appropriate size."""
         return np.zeros(self.events, dtype=np.int_)
+
+    def compartment_tags(self) -> list[list[str]]:
+        return [list() for _ in range(self.compartments)]
 
     @abstractmethod
     def verify(self, ctx: SimContext) -> None:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from typing import Any, Callable, NamedTuple
 
 import numpy as np
@@ -58,6 +57,9 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     ret = TickDelta(days=clause_spec.duration.to_days(),
                     step=clause_spec.return_step - 1)
 
+    def ctp(tags: list[str]) -> bool:
+        return 'immobile' not in tags
+
     num_args = len(f_def.args.args)
     if num_args == 2:
         f_shape = GeneralClause.by_row
@@ -69,7 +71,7 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
 
     def compile_clause(ctx: SimContext, global_namespace: dict) -> Clause:
         f = compile_function(f_def, global_namespace)
-        return f_shape(ctx, f_def.name, prd, ret, f)
+        return f_shape(ctx, f_def.name, prd, ret, f, ctp)
 
     return compile_clause
 
