@@ -36,6 +36,7 @@ def prepare_run_toml(out_path: str,
         geo=geo_name,
         start_date=date.today(),
         duration=Duration(count=14, unit="d"),
+        rng_seed=None,
         params={
             # TODO: would like to inspect IPM/MM to figure
             # out which params are needed and list them here
@@ -46,7 +47,7 @@ def prepare_run_toml(out_path: str,
 
     try:
         with open(out_path, mode="wb") as file:
-            tomli_w.dump(document.model_dump(), file)
+            tomli_w.dump(document.model_dump(exclude_none=True), file)
         print(f"Wrote file at {out_path}")
         return 0  # success
     except Exception as e:
