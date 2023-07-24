@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 from epymorph.clock import Clock
 from epymorph.context import SimContext
 from epymorph.geo import Geo
+from epymorph.ipm.attribute import process_params
 from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.movement import Movement, MovementBuilder
 from epymorph.util import DataDict, Event
@@ -180,7 +181,10 @@ class Simulation:
         - rng: (optional) a psuedo-random number generator used in all stochastic calculations
         """
 
-        ctx = self._make_context(param, start_date, duration_days, rng)
+        ctx = self._make_context(process_params(param),
+                                 start_date,
+                                 duration_days,
+                                 rng)
 
         # Verification checks:
         self.ipm_builder.verify(ctx)
@@ -194,10 +198,13 @@ class Simulation:
         return out
 
     def run_trials(self, trials: int, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> OutputAggregate:
-
         # Note: the rng is used for all trials sequentially so each trial will produce random variation,
         # but (if seeded) will produce the same aggregated output at the end.
-        ctx = self._make_context(param, start_date, duration_days, rng)
+
+        ctx = self._make_context(process_params(param),
+                                 start_date,
+                                 duration_days,
+                                 rng)
 
         # Verification checks:
         self.ipm_builder.verify(ctx)

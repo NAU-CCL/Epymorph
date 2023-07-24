@@ -23,22 +23,22 @@ def load() -> IpmBuilder:
             compartment('R', 'recovered')
         ],
         attributes=[
-            param('beta_1'),
-            param('omega_1'),
-            param('omega_2'),
-            param('delta_1'),
-            param('delta_2'),
-            param('delta_3'),
-            param('delta_4'),
-            param('delta_5'),
-            param('gamma_a'),
-            param('gamma_b'),
-            param('gamma_c'),
-            param('rho_1'),
-            param('rho_2'),
-            param('rho_3'),
-            param('rho_4'),
-            param('rho_5')
+            param('beta_1', 'beta'),
+            param('omega_1', 'omega', '0'),
+            param('omega_2', 'omega', '1'),
+            param('delta_1', 'delta', '0'),
+            param('delta_2', 'delta', '1'),
+            param('delta_3', 'delta', '2'),
+            param('delta_4', 'delta', '3'),
+            param('delta_5', 'delta', '4'),
+            param('gamma_a', 'gamma', '0'),
+            param('gamma_b', 'gamma', '1'),
+            param('gamma_c', 'gamma', '2'),
+            param('rho_1', 'rho', '0'),
+            param('rho_2', 'rho', '1'),
+            param('rho_3', 'rho', '2'),
+            param('rho_4', 'rho', '3'),
+            param('rho_5', 'rho', '4')
         ])
 
     [S, E, Ia, Ip, Is, Ib, Ih, Ic1, Ic2, D, R] = symbols.compartment_symbols

@@ -201,3 +201,14 @@ def verify_attribute(ctx: SimContext, attr: AttributeDef) -> str | None:
             return f"Attribute {attr.attribute_name} was expected to be an array of shape {attr.shape}."
 
     return None  # no errors!
+
+
+def process_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Pre-process parameter dictionaries."""
+    # This simplifies attribute verification: checking lists is more tedious/error-prone than checking ndarrays.
+    ps = params.copy()
+    # Replace parameter lists with numpy arrays.
+    for key, value in ps.items():
+        if isinstance(value, list):
+            ps[key] = np.array(value)
+    return ps
