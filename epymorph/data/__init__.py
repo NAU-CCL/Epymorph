@@ -6,8 +6,8 @@ from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
-from epymorph.epi import IpmBuilder
 from epymorph.geo import Geo, GEOBuilder, load_compressed_geo
+from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement import MovementBuilder, load_movement_spec
 
 
