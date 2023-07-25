@@ -45,9 +45,12 @@ mm_library: dict[str, Callable[..., MovementBuilder]] = {
     for id in ['no', 'icecube', 'pei', 'sparsemod']
 }
 
+geo_library_cachable: dict[str, Callable[..., Geo]] = {
+    'us_sw_counties_2015': geo_loader('epymorph/data/geo/us_sw_counties_2015.geo'),
+}
+
 geo_library: dict[str, Callable[..., Geo]] = {
     'single_pop': geo_single_pop_load,
-    'us_sw_counties_2015': geo_loader('epymorph/data/geo/us_sw_counties_2015.geo'),
     **{id: geo_npz_loader(id)
        for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']}
 }
