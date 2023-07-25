@@ -20,9 +20,6 @@ def load() -> IpmBuilder:
 
 
 class sirhBuilder(IpmBuilder):
-    # An initializer instance which can be overridden.
-    initializer: Initializer
-
     def __init__(self):
         # Creats compartments for SIRH events
         super().__init__(4, 5)
@@ -45,7 +42,6 @@ class sirhBuilder(IpmBuilder):
         # Now delegate to our initializer function, writing the result into `out`.
         self.initializer.apply(ctx, out)
         return out
-        
 
     def build(self, ctx: SimContext) -> Ipm:
         return sdh(ctx)
