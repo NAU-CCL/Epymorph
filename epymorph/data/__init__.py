@@ -35,7 +35,7 @@ ipm_library = {
 
 mm_library = {
     id: mm_loader(id)
-    for id in ['no', 'icecube', 'pei', 'sparsemod']
+    for id in ['no', 'icecube', 'pei', 'sparsemod', 'centroids']
 }
 
 geo_library = {
