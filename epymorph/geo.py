@@ -3,6 +3,8 @@ from typing import NamedTuple, TypeVar
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
+from epymorph.adrio import uscounties_library
+from epymorph.adrio.adrio import deserialize
 from epymorph.util import NumpyIndices
 
 
@@ -100,3 +102,45 @@ def load_compressed_geo(id: str) -> Geo:
         raise Exception(msg)
     nodes = len(labels)
     return Geo(nodes, labels, data)
+
+
+class GEOBuilder:
+    def __init__(self, path: str):
+        # create GEOSpec object from file
+        self.spec = deserialize(path)
+
+    def build(self, force=False) -> Geo:
+        data = dict[str, NDArray]()
+        print('Fetching GEO data from ADRIOs...')
+
+        # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
+        # - a literal key to use, or
+        # - None to use the ADRIO's attribute
+        all_adrios = \
+            [('label', self.spec.label)] + \
+            [(None, x) for x in self.spec.adrios]
+
+        # loop for all ADRIOSpecs
+        for key, spec in all_adrios:
+            # get adrio class from library dictionary (library hardcoded for now)
+            adrio_class = uscounties_library.get(spec.class_name)
+            # fetch data from adrio
+            if adrio_class is None:
+                raise Exception(f"Unable to load ADRIO for {spec.class_name}; "
+                                "please check that your GEOSpec is valid.")
+            else:
+                adrio = adrio_class()
+                print(f'Fetching {adrio.attribute}')
+                if key is None:
+                    key = adrio.attribute
+                data[key] = adrio.fetch(force, nodes=self.spec.nodes)
+
+        print('...done')
+
+        # build and return Geo
+        labels = data['label']
+        return Geo(
+            nodes=len(labels),
+            labels=labels.tolist(),
+            data=data
+        )

@@ -6,11 +6,12 @@ from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
-from epymorph.geo import Geo, load_compressed_geo
+from epymorph.geo import Geo, GEOBuilder, load_compressed_geo
+from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement import MovementBuilder, load_movement_spec
 
 
-def mm_loader(id: str) -> Callable[[], MovementBuilder]:
+def mm_loader(id: str) -> Callable[..., MovementBuilder]:
     def load() -> MovementBuilder:
         with open(f"epymorph/data/mm/{id}.movement", "r") as file:
             spec_string = file.read()
@@ -18,14 +19,20 @@ def mm_loader(id: str) -> Callable[[], MovementBuilder]:
     return load
 
 
-def geo_npz_loader(id: str) -> Callable[[], Geo]:
+def geo_loader(path) -> Callable[..., Geo]:
+    def load(force=False) -> Geo:
+        return GEOBuilder(path).build(force)
+    return load
+
+
+def geo_npz_loader(id: str) -> Callable[..., Geo]:
     return lambda: load_compressed_geo(id)
 
 
 # THIS IS A PLACEHOLDER IMPLEMENTATION
 # Ultimately we want to index the data directory at runtime.
 
-ipm_library = {
+ipm_library: dict[str, Callable[..., IpmBuilder]] = {
     "no": ipm_no_load,
     "pei": ipm_pei_load,
     "sirs": ipm_sirs_load,
@@ -33,14 +40,17 @@ ipm_library = {
     "sparsemod": ipm_sparsemod_load
 }
 
-mm_library = {
+mm_library: dict[str, Callable[..., MovementBuilder]] = {
     id: mm_loader(id)
     for id in ['no', 'icecube', 'pei', 'sparsemod', 'centroids']
 }
 
-geo_library = {
-    'single_pop': geo_single_pop_load
-} | {
-    id: geo_npz_loader(id)
-    for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']
+geo_library_cachable: dict[str, Callable[..., Geo]] = {
+    'us_sw_counties_2015': geo_loader('epymorph/data/geo/us_sw_counties_2015.geo'),
+}
+
+geo_library: dict[str, Callable[..., Geo]] = {
+    'single_pop': geo_single_pop_load,
+    **{id: geo_npz_loader(id)
+       for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']}
 }

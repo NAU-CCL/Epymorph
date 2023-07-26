@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 
+from epymorph.cache import cache_geo as handle_cache
 from epymorph.prepare import prepare_run_toml as handle_prepare
 from epymorph.run import run as handle_run
 from epymorph.validate import validate_spec_file as handle_validate
@@ -70,6 +71,26 @@ def build_cli() -> ArgumentParser:
             return handle_prepare(args.file, args.ipm, args.mm, args.geo)
         p.set_defaults(handler=handler)
     define_prepare()
+
+    # define "cache" subcommand
+    # ex: python3 -m epymorph cache ./data/geo/us_sw_counties_2015.geo
+    def define_cache():
+        p = command_parser.add_parser(
+            'cache',
+            help='fetch and cache data for a Geo')
+        p.add_argument(
+            'geo',
+            type=str,
+            help="the name of a geo from the library")
+        p.add_argument(
+            '-f', '--force',
+            action='store_true',
+            help='(optional) include this flag to force an override of previously cached data')
+
+        def handler(args):
+            return handle_cache(args.geo, args.force)
+        p.set_defaults(handler=handler)
+    define_cache()
 
     # define "check" subcommand
     # ex: python3 -m epymorph check ./epymorph/data/mm/pei.movement

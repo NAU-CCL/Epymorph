@@ -3,3 +3,9 @@ numpy
 pydantic
 sympy
 tomli-w
+pandas
+geopandas
+census
+jsonpickle
+pygris
+shapely
