@@ -38,7 +38,8 @@ class sirhBuilder(IpmBuilder):
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
         # The populations of all locations start off in the first compartment.
         # Note: four compartments is hard-coded here.
-        out = [np.array([p, 0, 0, 0], dtype=int) for p in ctx.geo["population"]]
+        out = [np.array([p, 0, 0, 0], dtype=int)
+               for p in ctx.geo["population"]]
         # Now delegate to our initializer function, writing the result into `out`.
         self.initializer.apply(ctx, out)
         return out
@@ -59,7 +60,7 @@ class sdh(Ipm):
     event_apply_matrix = np.array(
         [
             # S   I   R   H
-            [-1, +1, +0, +0],  # S -> 1
+            [-1, +1, +0, +0],  # S -> I
             [+0, -1, +1, +0],  # I -> R
             [+0, -1, +0, +1],  # I -> H
             [+0, +0, +1, -1],  # H -> R
@@ -124,88 +125,71 @@ class sdh(Ipm):
         # I don't think that's much of a conceßrn with *this* model, but it will be in the general case, especially
         # as population sizes shrink when we consider more granular spatial scales.
 
-        cs = np.abs(loc.compartment_totals)
+        cs = loc.compartment_totals
         total = np.sum(cs)
         if total == 0:
             return np.zeros(self.ctx.events, dtype=int)
+
         rates = np.array(
             [
-                tick.tau * self.exp_beta(loc.index) * cs[0] * cs[1] / total,  # S -> I
+                tick.tau * self.exp_beta(loc.index) *
+                cs[0] * cs[1] / total,  # S -> I
                 tick.tau * cs[1] / self.D,  # leaving I compartment (I -> R)
                 0,  # I -> H
                 tick.tau * cs[3] / self.hosp,  # H -> R
                 tick.tau * cs[2] / self.L,  # R -> S
             ]
         )
-        # print(self.ctx.geo["labels"][loc.index])
-        # print(rates)
 
-        evs = self.ctx.rng.poisson(np.abs(rates))
+        evs = self.ctx.rng.poisson(rates)
 
         # spilt from I to either H or R
         I_to_H = np.random.binomial(evs[1], self._gamma(loc.index))
         I_to_R = evs[1] - I_to_H
-
         # reassigning to compartments
         evs[1] = I_to_R
         evs[2] = I_to_H
 
         # checks for overdraws in compartments
-        if evs[0] > cs[0]:
-            evs[0] = cs[0]
-        if evs[1] > cs[1]:
-            evs[1] = cs[1]
-        if evs[1] < 0:
-            evs[1] = 0
-        if evs[2] > cs[2]:
-            evs[2] = 0
-        if evs[2] < 0:
-            evs[2] = 0
-        if evs[3] > cs[3]:
-            evs[3] = cs[3]
-        if evs[4] > cs[2]:
-            evs[4] = cs[2]
+        evs[0] = min(evs[0], cs[0])
         if (evs[1] + evs[2]) > cs[1]:
+            evs[1] = self.ctx.rng.hypergeometric(evs[1], evs[2], cs[1])
             evs[2] = cs[1] - evs[1]
+        evs[3] = min(evs[3], cs[3])
+        evs[4] = min(evs[4], cs[2])
 
         return evs
 
-    def _draw(self, loc: Location, events: Events) -> list[NDArray[np.int_]]:
-        # creats a 1D array of compartments (SIRH) from local population
-        cs0 = np.abs([pop.compartments[0] for pop in loc.pops])  # S
-        cs1 = np.abs([pop.compartments[1] for pop in loc.pops])  # I
-        cs2 = np.abs([pop.compartments[2] for pop in loc.pops])  # R
-        cs3 = np.abs([pop.compartments[3] for pop in loc.pops])  # H
+    # Compartments Reference:
+    # S I R H
+    # 0 1 2 3
 
-        evs = events
-        # distribute events to local compartments (SIRH)
+    # Events Reference:
+    # e0: (S->I) c0 -> c1
+    # e1: (I->R) c1 -> c2
+    # e2: (I->H) c1 -> c3
+    # e3: (H->R) c3 -> c2
+    # e4: (R->S) c2 -> c0
 
-        hypergeo_s_i = self.ctx.rng.multivariate_hypergeometric(cs0, evs[0])
-        hypergeo_i_r = self.ctx.rng.multivariate_hypergeometric(cs1, evs[1])
-        hypergeo_i_h = self.ctx.rng.multivariate_hypergeometric(cs1, evs[2])
-        hypergeo_h_r = self.ctx.rng.multivariate_hypergeometric(cs3, evs[3])
-        hypergeo_r_s = self.ctx.rng.multivariate_hypergeometric(cs2, evs[4])
-        # creates an array for to store the hypergeo distribution
-        hypergeo_sirh = [
-            hypergeo_s_i,
-            hypergeo_i_r,
-            hypergeo_i_h,
-            hypergeo_h_r,
-            hypergeo_r_s,
-        ]
+    # Tuples of (event_idx, compartment_index) describing
+    # which compartment each event draws from.
+    _events: list[tuple[int, int]] = [(0, 0), (1, 1), (2, 1), (3, 3), (4, 2)]
 
-        return hypergeo_sirh
+    def apply_events(self, loc: Location, evs: Events) -> None:
+        mvhg = self.ctx.rng.multivariate_hypergeometric  # alias
 
-    def apply_events(self, loc: Location, es: Events) -> None:
-        # Distribute events to subpopulations present.
-        events = self._draw(loc, es)
-        for i, pop in enumerate(loc.pops):
-            es_pop = [
-                [events[0][i]],  # S -> I
-                [events[1][i]],  # I -> R
-                [events[2][i]],  # I -> H
-                [events[3][i]],  # H -> R
-                [events[4][i]],  # R -> S
-            ]
-            deltas = np.sum(np.multiply(es_pop, self.event_apply_matrix), axis=0)
+        # PxC array (compartments per population) decremented as we select individuals
+        available = np.array([pop.compartments for pop in loc.pops], dtype=int)
+        # PxE array (events per population) assignment of events to each population
+        occurrences = np.zeros((len(loc.pops), 5), dtype=int)
+
+        # Select individuals for each event (all populations simultaneously).
+        for eidx, cidx in self._events:
+            selected = mvhg(available[:, cidx], evs[eidx])
+            occurrences[:, eidx] = selected
+            available[:, cidx] -= selected
+
+        # Update populations.
+        for pidx, pop in enumerate(loc.pops):
+            deltas = np.matmul(occurrences[pidx], self.event_apply_matrix)
             pop.compartments += deltas

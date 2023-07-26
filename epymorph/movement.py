@@ -52,8 +52,10 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     except:
         raise Exception(f"Movement clause: not a valid function")
 
-    prd = Predicates.daylist(days=clause_spec.days, step=clause_spec.leave_step)
-    ret = TickDelta(days=clause_spec.duration.to_days(), step=clause_spec.return_step)
+    prd = Predicates.daylist(days=clause_spec.days,
+                             step=clause_spec.leave_step)
+    ret = TickDelta(days=clause_spec.duration.to_days(),
+                    step=clause_spec.return_step)
 
     num_args = len(f_def.args.args)
     if num_args == 2:
@@ -61,7 +63,8 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     elif num_args == 3:
         f_shape = GeneralClause.by_cross
     else:
-        raise Exception(f"Movement clause: invalid number of arguments ({num_args})")
+        raise Exception(
+            f"Movement clause: invalid number of arguments ({num_args})")
 
     def compile_clause(ctx: SimContext, global_namespace: dict) -> Clause:
         f = compile_function(f_def, global_namespace)
@@ -122,7 +125,7 @@ def load_movement_spec(spec_string: str) -> MovementBuilder:
     results = movement_spec.parse_string(spec_string, parse_all=True)
     spec: MovementSpec = results[0]  # type: ignore
 
-    clause_compilers = map(parse_clause, spec.clauses)
+    clause_compilers = [parse_clause(c) for c in spec.clauses]
 
     def compile_clause(ctx: SimContext) -> Clause:
         global_namespace = _make_global_namespace(ctx)
