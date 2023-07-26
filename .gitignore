@@ -14,4 +14,4 @@ __pycache__/
 # Testing
 .pytest_cache/
 debug.log
-scratch/
+scratch
