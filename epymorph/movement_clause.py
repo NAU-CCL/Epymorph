@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Sequence as abcSequence
-from typing import Callable
+from inspect import signature
+from typing import Callable, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -13,11 +14,6 @@ from epymorph.context import SimContext
 from epymorph.parser.move_clause import ALL_DAYS, DayOfWeek
 from epymorph.world import HOME_TICK, Population, World
 
-ClausePred = Callable[[Tick], bool]
-CompartmentPred = Callable[[list[str]], bool]
-RowEquation = Callable[[Tick, int], NDArray[np.int_]]
-CrossEquation = Callable[[Tick, int, int], np.int_]
-
 
 class Clause(ABC):
     """Movement clause base class. Transforms World at a given time step."""
@@ -26,109 +22,146 @@ class Clause(ABC):
         pass
 
 
-class ConditionalClause(Clause):
-    """Movement clause triggered only when `predicate` is true."""
-
-    def __init__(self, predicate: ClausePred):
-        self.predicate = predicate
-
-    @abstractmethod
-    def _execute(self, world: World, tick: Tick) -> None:
-        pass
-
-    def apply(self, world: World, tick: Tick) -> None:
-        if self.predicate(tick):
-            self._execute(world, tick)
+CompartmentPredicate = Callable[[list[str]], bool]
+ClausePredicate = Callable[[Tick], bool]
+ClauseFunction = Callable[[Tick], NDArray[np.int_]]
+ExtendedClauseFunction = ClauseFunction |\
+    Callable[[Tick, int], NDArray[np.int_]] |\
+    Callable[[Tick, int, int], NDArray[np.int_]]
 
 
-class GeneralClause(ConditionalClause):
+def normalize_clause_function(ctx: SimContext, cf: ExtendedClauseFunction) -> ClauseFunction:
+    NxN = (ctx.nodes, ctx.nodes)
+    cf_sig = signature(cf)
+    match len(cf_sig.parameters):
+        case 3:
+            return cast(ClauseFunction, cf)
+
+        case 2:
+            cf = cast(Callable[[Tick, int], NDArray[np.int_]], cf)
+
+            def norm_cf(tick: Tick) -> NDArray[np.int_]:
+                arr = np.zeros(NxN, dtype=int)
+                for src in range(ctx.nodes):
+                    arr[src, :] = cf(tick, src)
+                return arr
+            return norm_cf
+
+        case 1:
+            cf = cast(Callable[[Tick, int, int], NDArray[np.int_]], cf)
+
+            def norm_cf(tick: Tick) -> NDArray[np.int_]:
+                arr = np.zeros(NxN, dtype=np.int_)
+                for src, dst in np.ndindex(NxN):
+                    arr[src, dst] = cf(tick, src, dst)
+                return arr
+            return norm_cf
+
+        case _:
+            raise Exception(
+                f"Unable to normalize movement function with signature: {cf_sig}")
+
+
+class FunctionalClause(Clause):
     """
     A general-purpose movement clause triggered by `predicate`, calculating requested node emigrants using `equation`,
     which return according to `returns`. If there are not enough locals to cover the requested number of movers,
     movement will be canceled for the source node this tick.
     """
 
-    @classmethod
-    def by_row(cls,
-               ctx: SimContext,
-               name: str,
-               predicate: ClausePred,
-               returns: TickDelta,
-               equation: RowEquation,
-               compartment_tag_predicate: CompartmentPred) -> GeneralClause:
-        return cls(ctx, name, predicate, returns, equation, compartment_tag_predicate)
-
-    @classmethod
-    def by_cross(cls,
-                 ctx: SimContext,
-                 name: str,
-                 predicate: ClausePred,
-                 returns: TickDelta,
-                 equation: CrossEquation,
-                 compartment_tag_predicate: CompartmentPred) -> GeneralClause:
-        def e(tick: Tick, src_idx: int) -> NDArray[np.int_]:
-            row = np.zeros(ctx.nodes, dtype=np.int_)
-            for dst_idx in range(ctx.nodes):
-                row[dst_idx] = 0 if src_idx == dst_idx else \
-                    equation(tick, src_idx, dst_idx)
-            return row
-        return cls(ctx, name, predicate, returns, e, compartment_tag_predicate)
-
     ctx: SimContext
     name: str
-    returns: TickDelta
-    equation: RowEquation
-    compartment_tag_predicate: CompartmentPred
+    predicate: ClausePredicate
+    compartment_tag_predicate: CompartmentPredicate
     movement_mask: NDArray[np.bool_]
+    clause_function: ClauseFunction
+    returns: TickDelta
     logger: logging.Logger
 
     def __init__(self,
                  ctx: SimContext,
                  name: str,
-                 predicate: ClausePred,
-                 returns: TickDelta,
-                 equation: RowEquation,
-                 compartment_tag_predicate: CompartmentPred):
-        super().__init__(predicate)
+                 predicate: ClausePredicate,
+                 compartment_tag_predicate: CompartmentPredicate,
+                 clause_function: ExtendedClauseFunction,
+                 returns: TickDelta):
         self.ctx = ctx
         self.name = name
-        self.returns = returns
-        self.equation = equation
+        self.predicate = predicate
+        self.compartment_tag_predicate = compartment_tag_predicate
         self.movement_mask = np.array([compartment_tag_predicate(ts)
                                        for ts in ctx.compartment_tags], dtype=bool)
+        self.clause_function = normalize_clause_function(ctx, clause_function)
+        self.returns = returns
         self.logger = logging.getLogger(f'movement.{name}')
 
-    def _execute(self, world: World, tick: Tick) -> None:
-        total_movers = 0
+    def apply(self, world: World, tick: Tick) -> None:
+        if not self.predicate(tick):
+            return
+
         return_tick = self.ctx.clock.tick_plus(tick, self.returns)
-        for src_idx, src in enumerate(world.locations):
-            locals = src.locals
-            available_movers = locals.compartments * self.movement_mask
-            # movers from src to all destinations:
-            requested_arr = self.equation(tick, src_idx)
-            requested_arr[src_idx] = 0
-            self.logger.debug("requested[%d]: %s", src_idx, requested_arr)
-            requested_tot = np.sum(requested_arr)
-            if requested_tot > sum(available_movers):
-                self.logger.debug("   actual[%d]: <WARNING> skipped for insufficient population",
-                                  src_idx)
-            elif requested_tot > 0:
-                actual_arr = np.zeros_like(requested_arr)
-                for dst_idx, n in enumerate(requested_arr):
-                    if src_idx == dst_idx or n == 0:
-                        continue
-                    actual, movers = locals.split(
-                        self.ctx, src_idx, dst_idx, return_tick, n, self.movement_mask)
-                    world.locations[dst_idx].pops.append(movers)
-                    actual_arr[dst_idx] = actual
-                    total_movers += actual
-                if self.logger.isEnabledFor(logging.DEBUG):
-                    if not np.array_equal(actual_arr, requested_arr):
-                        self.logger.debug("   actual[%d]: %s",
-                                          src_idx, actual_arr)
+
+        # TODO: test affect of keeping world as an array
+        all_locals = world.all_locals()
+        available_movers = all_locals * self.movement_mask
+
+        # TODO: test affect of writing to the same array every tick rather than allocating a new array
+        requested_movers = self.clause_function(tick)
+        np.fill_diagonal(requested_movers, 0)
+
+        available_sum = available_movers.sum(axis=1)
+        requested_sum = requested_movers.sum(axis=1)
+
+        for src in range(self.ctx.nodes):
+            # If requested total is greater than the total available,
+            # use mvhg to select as many as possible.
+            if requested_sum[src] > available_sum[src]:
+                self.logger.debug(
+                    "<WARNING> movement throttled for insufficient population at %d", src)
+                requested_movers[src, :] = self.ctx.rng.multivariate_hypergeometric(
+                    colors=requested_movers[src, :],
+                    nsample=available_sum[src]
+                )
+
+        self.logger.debug("requested_movers: %s", requested_movers)
+
+        # Update sum in case it changed in the previous step.
+        requested_sum = requested_movers.sum(axis=1)
+        # The probability a mover from a src will go to a dst.
+        requested_prb = requested_movers / requested_sum[:, np.newaxis]
+
+        for src in range(self.ctx.nodes):
+            if requested_sum[src] == 0:
+                continue
+
+            # Select which individuals will be leaving this node.
+            mover_cs = self.ctx.rng.multivariate_hypergeometric(
+                available_movers[src, :],
+                requested_sum[src]
+            )
+
+            # Select which location they are each going to.
+            # (Each row contains the compartments for a destination.)
+            split_cs = self.ctx.rng.multinomial(
+                mover_cs,
+                requested_prb[src, :]
+            ).T
+
+            split_sum = split_cs.sum(axis=1)
+
+            # Create new pops.
+            for dst in range(self.ctx.nodes):
+                if src == dst:
+                    world.locations[src].locals.compartments -= mover_cs
+                else:
+                    if split_sum[dst] > 0:
+                        p = Population(split_cs[dst, :], src, return_tick)
+                        world.locations[dst].pops.append(p)
+
         world.normalize()
-        self.logger.debug("moved %d (t:%d,%d)",
-                          total_movers, tick.day, tick.step)
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("moved %d", requested_sum.sum())
 
 
 class Noop(Clause):
@@ -182,14 +215,14 @@ class Sequence(Clause):
 
 
 class Predicates:
-    @staticmethod
-    def daylist(days: list[DayOfWeek], step: int | None = None) -> ClausePred:
+    @ staticmethod
+    def daylist(days: list[DayOfWeek], step: int | None = None) -> ClausePredicate:
         day_indices = [i for i in range(len(ALL_DAYS)) if ALL_DAYS[i] in days]
         return lambda tick: tick.date.weekday() in day_indices and \
             (step is None or step == tick.step)
 
-    @staticmethod
-    def everyday(step: int | None = None) -> ClausePred:
+    @ staticmethod
+    def everyday(step: int | None = None) -> ClausePredicate:
         if step == None:
             return lambda _: True
         else:
@@ -199,15 +232,15 @@ class Predicates:
     # but many more are possible.
     # TODO: These could be cleaned up a bit.
 
-    @staticmethod
-    def weekdays(step: int | None = None) -> ClausePred:
+    @ staticmethod
+    def weekdays(step: int | None = None) -> ClausePredicate:
         if step == None:
             return lambda tick: 0 <= tick.date.weekday() < 5
         else:
             return lambda tick: 0 <= tick.date.weekday() < 5 and tick.step == step
 
-    @staticmethod
-    def weekends(step: int | None = None) -> ClausePred:
+    @ staticmethod
+    def weekends(step: int | None = None) -> ClausePredicate:
         if step == None:
             return lambda tick: 4 < tick.date.weekday() <= 6
         else:

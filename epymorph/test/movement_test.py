@@ -4,9 +4,10 @@ from datetime import date
 
 import numpy as np
 
-import epymorph.movement_clause as C
 from epymorph.clock import Clock, TickDelta
 from epymorph.context import SimContext
+from epymorph.movement_clause import (FunctionalClause, Noop, Predicates,
+                                      Return, Sequence)
 from epymorph.test.world_test import p, w
 from epymorph.util import constant
 from epymorph.world import HOME_TICK, Location, World
@@ -19,7 +20,7 @@ def test_sim_context(num_nodes: int) -> SimContext:
         geo={},
         compartments=1,
         compartment_tags=[[]],
-        events=3,
+        events=0,
         param={},
         clock=Clock.init(date(2023, 1, 1), 50, [np.double(1)]),
         rng=np.random.default_rng(1)
@@ -28,7 +29,7 @@ def test_sim_context(num_nodes: int) -> SimContext:
 
 class TestNoopMovement(unittest.TestCase):
     def test_noop(self):
-        clause = C.Noop()
+        clause = Noop()
         ctx = test_sim_context(3)
         exp = w([30000, 20000, 10000])
         act = deepcopy(exp)
@@ -39,7 +40,7 @@ class TestNoopMovement(unittest.TestCase):
 class TestReturnMovement(unittest.TestCase):
     def test_return(self):
         ctx = test_sim_context(3)
-        clause = C.Return(ctx)
+        clause = Return(ctx)
         ini1 = World([
             Location(0, [
                 p(25000, 0, HOME_TICK),
@@ -98,58 +99,67 @@ class TestCrosswalkMovement(unittest.TestCase):
         ctx = test_sim_context(4)
 
         # Every tick, send 100 people to each other node.
+        # There is a random factor involved in who winds up where,
+        # but exactly 300 people should leave each location if possible.
         # Self-movement is ignored, so no need to zero it out.
-        clause = C.GeneralClause(
+        clause = FunctionalClause(
             ctx=ctx,
             name="Crosswalk",
-            predicate=C.Predicates.everyday(),
+            predicate=Predicates.everyday(),
+            compartment_tag_predicate=constant(True),
+            clause_function=lambda tick, src: np.array([100, 100, 100, 100]),
             returns=TickDelta(2, 0),
-            equation=lambda *_: np.array([100, 100, 100, 100]),
-            compartment_tag_predicate=constant(True)
         )
 
-        # The last node doesn't have enough locals, so it will receive movers but not send any.
-        act = World([
-            Location(0, [
-                p(25000, 0, HOME_TICK),
-            ]),
-            Location(1, [
-                p(15000, 1, HOME_TICK),
-            ]),
-            Location(2, [
-                p(10000, 2, HOME_TICK),
-            ]),
-            Location(3, [
-                p(50, 3, HOME_TICK),
-            ]),
+        people = np.array([25000, 15000, 10000, 50], dtype=int)
+        expected_nontravelers = np.maximum(0, people - 300)
+        expected_travelers = np.minimum(300, people)
+
+        world = World([
+            Location(i, [p(people[i], i, HOME_TICK)])
+            for i in range(4)
         ])
 
-        exp = World([
-            Location(0, [
-                p(24700, 0, HOME_TICK),
-                p(100, 1, 2),
-                p(100, 2, 2),
-            ]),
-            Location(1, [
-                p(14700, 1, HOME_TICK),
-                p(100, 0, 2),
-                p(100, 2, 2),
-            ]),
-            Location(2, [
-                p(9700, 2, HOME_TICK),
-                p(100, 0, 2),
-                p(100, 1, 2),
-            ]),
-            Location(3, [
-                p(50, 3, HOME_TICK),
-                p(100, 0, 2),
-                p(100, 1, 2),
-                p(100, 2, 2),
-            ]),
-        ])
+        clause.apply(world, ctx.clock.ticks[0])
 
-        clause.apply(act, ctx.clock.ticks[0])
-        self.assertEqual(act, exp)
+        # Check that we have the expected number of locals remaining.
+        self.assertTrue(
+            np.array_equal(
+                world.all_locals(),  # returns in column form
+                expected_nontravelers.reshape((4, 1))
+            ),
+            f"Locals array does not match expected. Received: {world.all_locals()}"
+        )
+
+        # For each location:
+        for i in range(4):
+            # Check that we have the expected number of pops.
+            n = len(world.locations[i].pops)
+            self.assertEqual(
+                4, n, f"Expected to find 4 pops at {i} but found {n}")
+
+            # Check that the sum of all travelers from this node matches.
+            # We don't want to create or delete people.
+            e = expected_travelers[i]
+            t = sum(
+                p.compartments.sum()
+                for l in world.locations
+                for p in l.pops
+                if p.return_location == i and p.return_tick != HOME_TICK
+            )
+            self.assertEqual(
+                e, t, f"Expected to find {e} travelers from {i} but found {t}")
+
+            # Also check the sum of all people from each location.
+            e = people[i]
+            t = sum(
+                p.compartments.sum()
+                for l in world.locations
+                for p in l.pops
+                if p.return_location == i
+            )
+            self.assertEqual(
+                e, t, f"Expected to find {e} total people from {i} but found {t}")
 
 
 class TestSequenceMovement(unittest.TestCase):
@@ -162,15 +172,15 @@ class TestSequenceMovement(unittest.TestCase):
         def count_pops(world: World) -> int:
             return sum([len(loc.pops) for loc in world.locations])
 
-        return_clause = C.Return(ctx)
-        clause = C.Sequence([
-            C.GeneralClause(
+        return_clause = Return(ctx)
+        clause = Sequence([
+            FunctionalClause(
                 ctx=ctx,
                 name="Crosswalk",
-                predicate=C.Predicates.everyday(),
-                returns=TickDelta(2, 0),
-                equation=lambda *_: np.array([100, 100, 100]),
-                compartment_tag_predicate=constant(True)
+                predicate=Predicates.everyday(),
+                compartment_tag_predicate=constant(True),
+                clause_function=lambda tick, src: np.array([100, 100, 100]),
+                returns=TickDelta(2, 0)
             ),
             return_clause
         ])

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from operator import attrgetter
+from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -131,6 +132,10 @@ class World:
         return cls(locations)
 
     locations: list[Location]
+
+    def all_locals(self) -> NDArray[np.int_]:
+        return np.array([loc.locals.compartments
+                        for loc in self.locations], dtype=int)
 
     def normalize(self) -> None:
         for loc in self.locations:

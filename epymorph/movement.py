@@ -6,7 +6,7 @@ import numpy as np
 
 from epymorph.clock import TickDelta
 from epymorph.context import SimContext
-from epymorph.movement_clause import (Clause, GeneralClause, Predicates,
+from epymorph.movement_clause import (Clause, FunctionalClause, Predicates,
                                       Return, Sequence)
 from epymorph.parser.move_clause import Daily
 from epymorph.parser.move_predef import Predef
@@ -50,7 +50,7 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
     try:
         f_def = parse_function(clause_spec.f)
     except:
-        raise Exception(f"Movement clause: not a valid function")
+        raise Exception("Movement clause: not a valid function")
 
     prd = Predicates.daylist(days=clause_spec.days,
                              step=clause_spec.leave_step - 1)
@@ -61,17 +61,13 @@ def parse_clause(clause_spec: Daily) -> Callable[[SimContext, dict], Clause]:
         return 'immobile' not in tags
 
     num_args = len(f_def.args.args)
-    if num_args == 2:
-        f_shape = GeneralClause.by_row
-    elif num_args == 3:
-        f_shape = GeneralClause.by_cross
-    else:
+    if num_args not in [1, 2, 3]:
         raise Exception(
             f"Movement clause: invalid number of arguments ({num_args})")
 
     def compile_clause(ctx: SimContext, global_namespace: dict) -> Clause:
         f = compile_function(f_def, global_namespace)
-        return f_shape(ctx, f_def.name, prd, ret, f, ctp)
+        return FunctionalClause(ctx, f_def.name, prd, ctp, f, ret)
 
     return compile_clause
 
