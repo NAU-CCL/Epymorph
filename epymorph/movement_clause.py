@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 from epymorph.clock import Tick, TickDelta
 from epymorph.context import SimContext
 from epymorph.parser.move_clause import ALL_DAYS, DayOfWeek
+from epymorph.util import row_normalize
 from epymorph.world import HOME_TICK, Population, World
 
 
@@ -32,6 +33,10 @@ ExtendedClauseFunction = ClauseFunction |\
 
 def normalize_clause_function(ctx: SimContext, cf: ExtendedClauseFunction) -> ClauseFunction:
     NxN = (ctx.nodes, ctx.nodes)
+
+    # keep writing to this array rather than allocating a new one each tick
+    arr = np.zeros(NxN, dtype=int)
+
     cf_sig = signature(cf)
     match len(cf_sig.parameters):
         case 3:
@@ -41,7 +46,7 @@ def normalize_clause_function(ctx: SimContext, cf: ExtendedClauseFunction) -> Cl
             cf = cast(Callable[[Tick, int], NDArray[np.int_]], cf)
 
             def norm_cf(tick: Tick) -> NDArray[np.int_]:
-                arr = np.zeros(NxN, dtype=int)
+                # arr = np.zeros(NxN, dtype=int)
                 for src in range(ctx.nodes):
                     arr[src, :] = cf(tick, src)
                 return arr
@@ -51,7 +56,7 @@ def normalize_clause_function(ctx: SimContext, cf: ExtendedClauseFunction) -> Cl
             cf = cast(Callable[[Tick, int, int], NDArray[np.int_]], cf)
 
             def norm_cf(tick: Tick) -> NDArray[np.int_]:
-                arr = np.zeros(NxN, dtype=np.int_)
+                # arr = np.zeros(NxN, dtype=np.int_)
                 for src, dst in np.ndindex(NxN):
                     arr[src, dst] = cf(tick, src, dst)
                 return arr
@@ -109,6 +114,7 @@ class FunctionalClause(Clause):
         requested_movers = self.clause_function(tick)
         np.fill_diagonal(requested_movers, 0)
 
+        # TODO: can we get away from having to do so many sums if we denormalize this info in the pop?
         available_sum = available_movers.sum(axis=1)
         requested_sum = requested_movers.sum(axis=1)
 
@@ -128,7 +134,7 @@ class FunctionalClause(Clause):
         # Update sum in case it changed in the previous step.
         requested_sum = requested_movers.sum(axis=1)
         # The probability a mover from a src will go to a dst.
-        requested_prb = requested_movers / requested_sum[:, np.newaxis]
+        requested_prb = row_normalize(requested_movers, requested_sum)
 
         for src in range(self.ctx.nodes):
             if requested_sum[src] == 0:

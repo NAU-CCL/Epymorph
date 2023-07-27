@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Any, Callable, Generic, Iterable, Literal, TypeVar
+from typing import Any, Callable, Generic, Iterable, Literal, TypeVar, cast
 
 import numpy as np
 from dateutil.relativedelta import relativedelta
@@ -111,6 +111,20 @@ def normalize(arr: NDArray[N]) -> NDArray[N]:
     min = arr.min()
     max = arr.max()
     return (arr - min) / (max - min)
+
+
+def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None) -> NDArray[N]:
+    """
+    Assuming `arr` is a 2D array, normalize values across each row by dividing by the row sum.
+    If you've already calculated row sums, you can pass those in, otherwise they will be computed.
+    """
+    # numpy's types are garbage
+    if row_sums is None:
+        row_sums = arr.sum(axis=1)
+    # We do a maximum(1, ...) here to protect against div-by-zero:
+    # if we assume `arr` is strictly non-negative and if a row-sum is zero,
+    # then every entry in the row is zero therefore dividing by 1 is fine.
+    return arr / np.maximum(1, row_sums[:, np.newaxis])  # type: ignore
 
 
 def top(size: int, arr: NDArray) -> NumpyIndices:
