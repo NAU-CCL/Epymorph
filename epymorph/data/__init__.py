@@ -52,5 +52,6 @@ geo_library_cachable: dict[str, Callable[..., Geo]] = {
 geo_library: dict[str, Callable[..., Geo]] = {
     'single_pop': geo_single_pop_load,
     **{id: geo_npz_loader(id)
-       for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']}
+       for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']},
+    **geo_library_cachable
 }
