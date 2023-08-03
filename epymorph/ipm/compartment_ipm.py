@@ -7,7 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.clock import Tick
-from epymorph.context import SimContext
+from epymorph.context import Compartments, Events, SimContext, SimDType
 from epymorph.ipm.attribute import (AttributeGetter, compile_getter,
                                     verify_attribute)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
@@ -16,7 +16,7 @@ from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.ipm.sympy_shim import (Symbol, SympyLambda, lambdify,
                                      lambdify_list)
 from epymorph.movement.world import Location
-from epymorph.util import Compartments, Events, list_not_none
+from epymorph.util import list_not_none
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,7 @@ class CompartmentModelIpm(Ipm):
         attribs = (f(loc, tick) for f in self.attr_getters)
         return [*effective, *attribs]
 
-    def _eval_rates(self, rate_args: list[Any], tau: np.double) -> NDArray[np.int_]:
+    def _eval_rates(self, rate_args: list[Any], tau: float) -> NDArray[SimDType]:
         """Evaluate the event rates and do random draws for all transition events."""
         occurrences = np.zeros(self.ctx.events, dtype=int)
         index = 0

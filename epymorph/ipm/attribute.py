@@ -122,6 +122,8 @@ def compile_getter(ctx: SimContext, attribute: AttributeDef) -> AttributeGetter:
             data = ctx.geo[name]
         case ParamDef(_, name, _, _):
             data = ctx.param[name]
+        case _:
+            raise Exception(f"Unsupported attribute type {type(attribute)}")
 
     # if we match (this should match all valid shapes):
     # the first group, prefix, will contain everything except the arbitrary index (if present)
