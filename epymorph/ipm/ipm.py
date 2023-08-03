@@ -7,8 +7,8 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
+from epymorph.movement.world import Location
 from epymorph.util import Compartments, Events
-from epymorph.world import Location
 
 
 class IpmBuilder(ABC):
@@ -53,7 +53,7 @@ class Ipm(ABC):
         self.ctx = ctx
 
     @abstractmethod
-    def events(self, loc: Location,  tick: Tick) -> Events:
+    def events(self, loc: Location, tick: Tick) -> Events:
         """Calculate the events which took place in this tau step at the given location."""
         pass
 

@@ -6,6 +6,10 @@ from numpy.typing import NDArray
 from epymorph.clock import Clock
 from epymorph.util import DataDict
 
+SimDType = np.int_
+Compartments = NDArray[SimDType]
+Events = NDArray[SimDType]
+
 
 # Because the need for this info cuts across modules (ipm, movement, geo),
 # this structure is extracted here to avoid creating circular dependencies.

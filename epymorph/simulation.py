@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from functools import reduce
-from itertools import repeat
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,11 +9,10 @@ from numpy.typing import NDArray
 from epymorph.clock import Clock
 from epymorph.context import SimContext
 from epymorph.geo import Geo
-from epymorph.ipm.attribute import process_params
-from epymorph.ipm.ipm import Ipm, IpmBuilder
-from epymorph.movement import Movement, MovementBuilder
+from epymorph.ipm.ipm import IpmBuilder
+from epymorph.movement.basic import BasicEngine
+from epymorph.movement.engine import MovementBuilder, MovementEngine
 from epymorph.util import DataDict, Event
-from epymorph.world import World
 
 
 def configure_sim_logging(enabled: bool) -> None:
@@ -118,16 +115,18 @@ class Simulation:
     geo: Geo
     ipm_builder: IpmBuilder
     mvm_builder: MovementBuilder
+    mvm_engine: type[MovementEngine]
 
     # Progress events
     on_start: Event[None]
     on_tick: Event[tuple[int, float]]
     on_end: Event[None]
 
-    def __init__(self, geo: Geo, ipm_builder: IpmBuilder, mvm_builder: MovementBuilder):
+    def __init__(self, geo: Geo, ipm_builder: IpmBuilder, mvm_builder: MovementBuilder, mvm_engine: type[MovementEngine] | None = None):
         self.geo = geo
         self.ipm_builder = ipm_builder
         self.mvm_builder = mvm_builder
+        self.mvm_engine = BasicEngine if mvm_engine is None else mvm_engine
         self.on_start = Event()
         self.on_tick = Event()
         self.on_end = Event()
@@ -141,37 +140,11 @@ class Simulation:
             compartment_tags=self.ipm_builder.compartment_tags(),
             events=self.ipm_builder.events,
             param=param,
-            clock=Clock.init(start_date, duration_days, self.mvm_builder.taus),
+            clock=Clock(start_date, duration_days, self.mvm_builder.taus),
             rng=np.random.default_rng() if rng is None else rng
         )
 
-    def _run_internal(self, args: tuple[SimContext, Ipm, Movement]) -> Output:
-        ctx, ipm, mvm = args
-        world = World.initialize(
-            self.ipm_builder.initialize_compartments(ctx)
-        )
-        out = Output(ctx)
-        for tick in ctx.clock.ticks:
-            t = tick.index
-
-            # First do movement
-            mvm.clause.apply(world, tick)
-
-            # Then for each location:
-            for p, loc in enumerate(world.locations):
-                # Calc events by compartment
-                es = ipm.events(loc, tick)
-                # Store incidence
-                out.incidence[t, p] = es
-                # Distribute events
-                ipm.apply_events(loc, es)
-                # Store prevalence
-                out.prevalence[t, p] = loc.compartment_totals
-            self.on_tick.publish((t, t / ctx.clock.num_ticks))
-
-        return out
-
-    def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None, progress=False) -> Output:
+    def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> Output:
         """
         Execute the simulation with the given parameters:
 
@@ -181,38 +154,36 @@ class Simulation:
         - rng: (optional) a psuedo-random number generator used in all stochastic calculations
         """
 
-        ctx = self._make_context(process_params(param),
-                                 start_date,
-                                 duration_days,
-                                 rng)
+        ctx = self._make_context(param, start_date, duration_days, rng)
 
         # Verification checks:
         self.ipm_builder.verify(ctx)
         self.mvm_builder.verify(ctx)
+        self.mvm_builder.verify(ctx)
+
+        inits = self.ipm_builder.initialize_compartments(ctx)
+
+        mvm = self.mvm_engine(ctx, self.mvm_builder.build(ctx), inits)
+
         ipm = self.ipm_builder.build(ctx)
-        mvm = self.mvm_builder.build(ctx)
 
         self.on_start.publish(None)
-        out = self._run_internal((ctx, ipm, mvm))
+
+        out = Output(ctx)
+        for tick in ctx.clock.ticks:
+            t = tick.index
+            # First do movement
+            mvm.apply(tick)
+            # Then for each location:
+            for p, loc in enumerate(mvm.get_locations()):
+                # Calc events by compartment
+                es = ipm.events(loc, tick)
+                # Store incidence
+                out.incidence[t, p] = es
+                # Distribute events
+                ipm.apply_events(loc, es)
+                # Store prevalence
+                out.prevalence[t, p] = loc.get_compartments()
+            self.on_tick.publish((t, t / ctx.clock.num_ticks))
         self.on_end.publish(None)
         return out
-
-    def run_trials(self, trials: int, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> OutputAggregate:
-        # Note: the rng is used for all trials sequentially so each trial will produce random variation,
-        # but (if seeded) will produce the same aggregated output at the end.
-
-        ctx = self._make_context(process_params(param),
-                                 start_date,
-                                 duration_days,
-                                 rng)
-
-        # Verification checks:
-        self.ipm_builder.verify(ctx)
-        self.mvm_builder.verify(ctx)
-        ipm = self.ipm_builder.build(ctx)
-        mvm = self.mvm_builder.build(ctx)
-
-        args_iterator = repeat((ctx, ipm, mvm), trials)
-        trial_iterator = map(self._run_internal, args_iterator)
-        return reduce(lambda acc, curr: acc + curr, trial_iterator,
-                      OutputAggregate(ctx))

@@ -5,8 +5,8 @@ import numpy as np
 from epymorph.clock import Tick
 from epymorph.context import SimContext
 from epymorph.ipm.ipm import Ipm, IpmBuilder
+from epymorph.movement.world import Location
 from epymorph.util import Compartments, Events
-from epymorph.world import Location
 
 
 def load() -> IpmBuilder:

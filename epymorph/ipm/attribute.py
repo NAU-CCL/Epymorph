@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from epymorph.clock import Tick
 from epymorph.context import SimContext
 from epymorph.ipm.sympy_shim import Symbol, to_symbol
-from epymorph.world import Location
+from epymorph.movement.world import Location
 
 AttributeType = Literal['int', 'float', 'str']
 AttributeShape = str
@@ -139,9 +139,9 @@ def compile_getter(ctx: SimContext, attribute: AttributeDef) -> AttributeGetter:
         case "T":
             return lambda loc, tick: data[tick.day]
         case "N":
-            return lambda loc, tick: data[loc.index]
+            return lambda loc, tick: data[loc.get_index()]
         case "TxN":
-            return lambda loc, tick: data[tick.day, loc.index]
+            return lambda loc, tick: data[tick.day, loc.get_index()]
         case "":
             a = int(arbitrary_index)
             return lambda loc, tick: data[a]
@@ -150,10 +150,10 @@ def compile_getter(ctx: SimContext, attribute: AttributeDef) -> AttributeGetter:
             return lambda loc, tick: data[tick.day, a]
         case "Nx":
             a = int(arbitrary_index)
-            return lambda loc, tick: data[loc.index, a]
+            return lambda loc, tick: data[loc.get_index(), a]
         case "TxNx":
             a = int(arbitrary_index)
-            return lambda loc, tick: data[tick.day, loc.index, a]
+            return lambda loc, tick: data[tick.day, loc.get_index(), a]
         case _:
             raise Exception(f"Unsupported shape: {attribute.shape}")
 

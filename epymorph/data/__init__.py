@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, cast
 
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
 from epymorph.data.ipm.no import load as ipm_no_load
@@ -8,14 +8,18 @@ from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
 from epymorph.geo import Geo, GEOBuilder, load_compressed_geo
 from epymorph.ipm.ipm import IpmBuilder
-from epymorph.movement import MovementBuilder, load_movement_spec
+from epymorph.movement.dynamic import DynamicMovementBuilder
+from epymorph.movement.engine import MovementBuilder
+from epymorph.parser.movement import MovementSpec, movement_spec
 
 
 def mm_loader(id: str) -> Callable[..., MovementBuilder]:
     def load() -> MovementBuilder:
         with open(f"epymorph/data/mm/{id}.movement", "r") as file:
             spec_string = file.read()
-            return load_movement_spec(spec_string)
+            results = movement_spec.parse_string(spec_string, parse_all=True)
+            spec = cast(MovementSpec, results[0])
+            return DynamicMovementBuilder(spec)
     return load
 
 

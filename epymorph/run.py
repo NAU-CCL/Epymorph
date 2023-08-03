@@ -66,7 +66,7 @@ def plot_event(out: Output, event_idx: int) -> None:
     x_axis = list(range(out.ctx.clock.num_days))
     for pop_idx in range(out.ctx.nodes):
         values = stridesum(
-            out.incidence[:, pop_idx, event_idx], out.ctx.clock.num_steps)
+            out.incidence[:, pop_idx, event_idx], len(out.ctx.clock.taus))
         y_axis = values
         ax.plot(x_axis, y_axis, label=out.ctx.labels[pop_idx])
     if out.ctx.nodes <= 12:
@@ -218,7 +218,7 @@ def run(input_path: str,
         else np.random.default_rng(input.rng_seed)
 
     t0 = time.perf_counter()
-    out = sim.run(input.params, start_date, duration_days, rng, progress=True)
+    out = sim.run(input.params, start_date, duration_days, rng)
     t1 = time.perf_counter()
 
     print(f"Runtime: {(t1 - t0):.3f}s")

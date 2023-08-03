@@ -15,8 +15,8 @@ from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
 from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.ipm.sympy_shim import (Symbol, SympyLambda, lambdify,
                                      lambdify_list)
+from epymorph.movement.world import Location
 from epymorph.util import Compartments, Events, list_not_none
-from epymorph.world import Location
 
 
 @dataclass(frozen=True)
@@ -141,8 +141,7 @@ class CompartmentModelIpm(Ipm):
 
     def events(self, loc: Location, tick: Tick) -> Events:
         # Get effective population for each compartment.
-        all_pops = np.array([p.compartments for p in loc.pops], dtype=int)
-        effective = np.sum(all_pops, axis=0)
+        effective = loc.get_compartments()
 
         # Calculate how many events we expect to happen this tick.
         rate_args = self._rate_args(loc, effective, tick)
@@ -190,8 +189,9 @@ class CompartmentModelIpm(Ipm):
         # draw a random individual (without replacement) to assign to that event. Repeat until all
         # events are distributed. However that sounds like a major performance hit if we're not careful
         # how to do it, so we're going with this for now.
-        available = np.array([pop.compartments for pop in loc.pops])
-        occurrences = np.zeros((len(loc.pops), self.ctx.events), dtype=int)
+        available = loc.get_cohorts()
+        occurrences = np.zeros(
+            (available.shape[0], self.ctx.events), dtype=int)
         for eidx in self._random_event_order():
             occur: int = es[eidx]  # type: ignore
             cidx = self.model.source_compartment_for_event[eidx]
@@ -201,7 +201,5 @@ class CompartmentModelIpm(Ipm):
             available[:, cidx] -= selected
 
         # Now that events are assigned to pops, update pop compartments using apply matrix.
-        for pidx, pop in enumerate(loc.pops):
-            deltas = np.matmul(
-                occurrences[pidx], self.model.apply_matrix)
-            pop.compartments += deltas
+        deltas = np.matmul(occurrences, self.model.apply_matrix)
+        loc.update_cohorts(deltas)
