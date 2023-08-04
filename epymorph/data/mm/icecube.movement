@@ -7,7 +7,7 @@
 def icecube(t, src):
     # using `zeros_like` here is just a convenient way
     # to make an empty integer array of the correct length
-    commuters = zeros_like(geo['population'])
+    commuters = np.zeros_like(geo['population'])
     if (src + 1) < commuters.size:
         commuters[src + 1] = 5000
     return commuters

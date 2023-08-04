@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, ClassVar, Literal
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
@@ -205,12 +205,15 @@ def verify_attribute(ctx: SimContext, attr: AttributeDef) -> str | None:
     return None  # no errors!
 
 
-def process_params(params: dict[str, Any]) -> dict[str, Any]:
+def process_params(params: dict[str, Any], dtype: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
     """Pre-process parameter dictionaries."""
     # This simplifies attribute verification: checking lists is more tedious/error-prone than checking ndarrays.
+    if dtype is None:
+        dtype = {}
     ps = params.copy()
     # Replace parameter lists with numpy arrays.
     for key, value in ps.items():
         if isinstance(value, list):
-            ps[key] = np.array(value)
+            dt = dtype.get(key, None)
+            ps[key] = np.array(value, dtype=dt)
     return ps

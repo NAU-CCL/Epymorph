@@ -4,11 +4,11 @@ from datetime import date
 import numpy as np
 
 from epymorph.clock import NEVER, Clock, Tick, TickDelta
-from epymorph.context import SimContext, SimDType
+from epymorph.context import Compartments, SimContext, SimDType
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.clause import RETURN, ArrayClause
 from epymorph.movement.engine import Movement, MovementEngine
-from epymorph.util import Compartments
+from epymorph.movement.hypercube import HypercubeEngine
 
 
 def test_sim_context(num_nodes: int) -> SimContext:
@@ -49,6 +49,25 @@ class NoClause(ArrayClause):
         return np.zeros((self.ctx.nodes, self.ctx.nodes), dtype=SimDType)
 
 
+class TinyClause(ArrayClause):
+    name = 'Tiny'
+    returns = TickDelta(2, 0)
+    ctx: SimContext
+
+    def __init__(self, ctx: SimContext):
+        self.ctx = ctx
+        self.movement_mask = np.full(ctx.compartments, True, dtype=bool)
+
+    def predicate(self, tick: Tick) -> bool:
+        return True
+
+    def apply(self, tick: Tick) -> Compartments:
+        # The first pop sends 100 people to the second pop and that's it.
+        req = np.zeros((self.ctx.nodes, self.ctx.nodes), dtype=SimDType)
+        req[0, 1] = 100
+        return req
+
+
 class CrosswalkClause(ArrayClause):
     name = 'Crosswalk'
     returns = TickDelta(2, 0)
@@ -81,7 +100,7 @@ class TestNoMovement(unittest.TestCase):
 
         engine.apply(ctx.clock.ticks[0])
 
-        cs1 = [np.sum(loc.get_compartments())
+        cs1 = [loc.get_compartments().sum()
                for loc in engine.get_locations()]
 
         self.assertEqual(cs0, cs1)
@@ -89,6 +108,64 @@ class TestNoMovement(unittest.TestCase):
     # Test case for BasicEngine
     def test_no_basic(self):
         self._test(BasicEngine)
+
+    # Test case for HypercubeEngine
+    def test_no_hypercube(self):
+        self._test(HypercubeEngine)
+
+
+class TestTinyMovement(unittest.TestCase):
+    def _test(self, engine_cls: type[MovementEngine]):
+        cs0 = [10000, 20000]
+        ctx = test_sim_context(num_nodes=len(cs0))
+
+        movement = Movement(ctx.clock.taus, [TinyClause(ctx), RETURN])
+
+        engine = engine_cls(ctx, movement, to_cs(cs0))
+
+        engine.apply(ctx.clock.ticks[0])
+
+        self.assertEqual(
+            engine.get_locals().squeeze().tolist(),
+            [9900, 20000]
+        )
+
+        self.assertEqual(
+            engine.get_travelers().squeeze().tolist(),
+            [0, 100]
+        )
+
+        engine.apply(ctx.clock.ticks[1])
+
+        self.assertEqual(
+            engine.get_locals().squeeze().tolist(),
+            [9800, 20000]
+        )
+
+        self.assertEqual(
+            engine.get_travelers().squeeze().tolist(),
+            [0, 200]
+        )
+
+        engine.apply(ctx.clock.ticks[2])
+
+        self.assertEqual(
+            engine.get_locals().squeeze().tolist(),
+            [9800, 20000]
+        )
+
+        self.assertEqual(
+            engine.get_travelers().squeeze().tolist(),
+            [0, 200]
+        )
+
+    # Test case for BasicEngine
+    def test_tiny_basic(self):
+        self._test(BasicEngine)
+
+    # Test case for HypercubeEngine
+    def test_tiny_hypercube(self):
+        self._test(HypercubeEngine)
 
 
 class TestCrosswalkMovement(unittest.TestCase):
@@ -126,14 +203,25 @@ class TestCrosswalkMovement(unittest.TestCase):
 
         # Check that we have the expected number of pops at each location.
         for loc in engine.get_locations():
-            here = loc.get_cohorts()
-            n = here.shape[0]
+            here_counts = loc.get_cohorts().sum(axis=1)
+            # There is some difference between the engines to account for here:
+            # "Basic" doesn't track cohorts without people in them (except for the home cohort!), but
+            # "Hypercube" tracks all cohorts for all time.
+            # So: the "effective number of cohorts" is the sum of the non-zero cohorts returned,
+            # plus 1 if the first cohort ("home") is 0.
+            n = np.count_nonzero(here_counts)
+            if here_counts[0] == 0:
+                n += 1
             self.assertEqual(
                 4, n, f"Expected to find 4 pops at {loc.get_index()} but found {n}")
 
     # Test case for BasicEngine
     def test_crosswalk_basic(self):
         self._test(BasicEngine)
+
+    # Test case for HypercubeEngine
+    def test_crosswalk_hypercube(self):
+        self._test(HypercubeEngine)
 
 
 class TestSequenceMovement(unittest.TestCase):
@@ -185,3 +273,7 @@ class TestSequenceMovement(unittest.TestCase):
     # Test case for BasicEngine
     def test_sequence_basic(self):
         self._test(BasicEngine)
+
+    # Test case for HypercubeEngine
+    def test_sequence_hypercube(self):
+        self._test(HypercubeEngine)

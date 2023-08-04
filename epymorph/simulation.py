@@ -7,11 +7,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.clock import Clock
-from epymorph.context import SimContext
+from epymorph.context import SimContext, SimDType
 from epymorph.geo import Geo
+from epymorph.ipm.attribute import process_params
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementBuilder, MovementEngine
+from epymorph.movement.hypercube import HypercubeEngine
 from epymorph.util import DataDict, Event
 
 
@@ -39,22 +41,23 @@ class Output:
     ctx: SimContext
     """The context under which this output was generated."""
 
-    prevalence: NDArray[np.int_]
+    prevalence: NDArray[SimDType]
     """
     Prevalence data by timestep, population, and compartment.
-    Array of shape (T,P,C) where T is the number of ticks in the simulation, P is the number of populations, and C is the number of compartments.
+    Array of shape (T,N,C) where T is the number of ticks in the simulation, N is the number of populations, and C is the number of compartments.
     """
 
-    incidence: NDArray[np.int_]
+    incidence: NDArray[SimDType]
     """
     Incidence data by timestep, population, and event.
-    Array of shape (T,P,E) where T is the number of ticks in the simulation, P is the number of populations, and E is the number of events.
+    Array of shape (T,N,E) where T is the number of ticks in the simulation, N is the number of populations, and E is the number of events.
     """
 
     def __init__(self, ctx: SimContext):
         self.ctx = ctx
-        self.prevalence = np.zeros(ctx.prv_shape, dtype=np.int_)
-        self.incidence = np.zeros(ctx.inc_shape, dtype=np.int_)
+        T, N, C, E = ctx.TNCE
+        self.prevalence = np.zeros((T, N, C), dtype=SimDType)
+        self.incidence = np.zeros((T, N, E), dtype=SimDType)
 
 
 class OutputAggregate:
@@ -65,21 +68,20 @@ class OutputAggregate:
     """
 
     ctx: SimContext
-    min_prevalence: NDArray[np.int_]
-    max_prevalence: NDArray[np.int_]
-    min_incidence: NDArray[np.int_]
-    max_incidence: NDArray[np.int_]
+    min_prevalence: NDArray[SimDType]
+    max_prevalence: NDArray[SimDType]
+    min_incidence: NDArray[SimDType]
+    max_incidence: NDArray[SimDType]
 
     def __init__(self, ctx: SimContext):
         self.ctx = ctx
-        prv_shape = ctx.prv_shape
-        inc_shape = ctx.inc_shape
-        min_int = np.iinfo(np.int_).min
-        max_int = np.iinfo(np.int_).max
-        self.min_prevalence = np.full(prv_shape, max_int, dtype=np.int_)
-        self.max_prevalence = np.full(prv_shape, min_int, dtype=np.int_)
-        self.min_incidence = np.full(inc_shape, max_int, dtype=np.int_)
-        self.max_incidence = np.full(inc_shape, min_int, dtype=np.int_)
+        T, N, C, E = ctx.TNCE
+        min_int = np.iinfo(SimDType).min
+        max_int = np.iinfo(SimDType).max
+        self.min_prevalence = np.full((T, N, C), max_int, dtype=SimDType)
+        self.max_prevalence = np.full((T, N, C), min_int, dtype=SimDType)
+        self.min_incidence = np.full((T, N, E), max_int, dtype=SimDType)
+        self.max_incidence = np.full((T, N, E), min_int, dtype=SimDType)
 
     def __add__(self, that: Output) -> OutputAggregate:
         """Update this aggregate by including the results from the given Output object."""
@@ -126,7 +128,8 @@ class Simulation:
         self.geo = geo
         self.ipm_builder = ipm_builder
         self.mvm_builder = mvm_builder
-        self.mvm_engine = BasicEngine if mvm_engine is None else mvm_engine
+        # TODO: add a setting to select the movement engine
+        self.mvm_engine = HypercubeEngine if mvm_engine is None else mvm_engine
         self.on_start = Event()
         self.on_tick = Event()
         self.on_end = Event()
@@ -154,7 +157,10 @@ class Simulation:
         - rng: (optional) a psuedo-random number generator used in all stochastic calculations
         """
 
-        ctx = self._make_context(param, start_date, duration_days, rng)
+        ctx = self._make_context(process_params(param),
+                                 start_date,
+                                 duration_days,
+                                 rng)
 
         # Verification checks:
         self.ipm_builder.verify(ctx)

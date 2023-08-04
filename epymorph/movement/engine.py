@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Iterable
 
 from attr import dataclass
 
 from epymorph.clock import Tick
-from epymorph.context import SimContext
+from epymorph.context import Compartments, SimContext
 from epymorph.movement.clause import (ArrayClause, CellClause, Clause,
                                       ReturnClause, RowClause)
-from epymorph.movement.world import Location, World
-from epymorph.util import Compartments
+from epymorph.movement.world import World
 
 
 @dataclass
@@ -46,6 +44,7 @@ class MovementEngine(World, ABC):
     def __init__(self, ctx: SimContext, movement: Movement, initial_compartments: list[Compartments]):
         self.ctx = ctx
         self.movement = movement
+        # initial_compartments should be utilized by subclasses
 
     def apply(self, tick: Tick) -> None:
         for clause in self.movement.clauses:

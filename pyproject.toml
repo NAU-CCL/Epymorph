@@ -25,6 +25,7 @@ dependencies = [
   "pydantic",
   "sympy",
   "tomli-w",
+  "psutil",
   "pandas",
   "geopandas",
   "census",

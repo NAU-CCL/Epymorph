@@ -6,9 +6,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.clock import Tick
-from epymorph.context import SimContext
+from epymorph.context import Compartments, Events, SimContext, SimDType
 from epymorph.movement.world import Location
-from epymorph.util import Compartments, Events
 
 
 class IpmBuilder(ABC):
@@ -21,11 +20,11 @@ class IpmBuilder(ABC):
 
     def compartment_array(self) -> Compartments:
         """Build an empty compartment array of an appropriate size."""
-        return np.zeros(self.compartments, dtype=np.int_)
+        return np.zeros(self.compartments, dtype=SimDType)
 
     def event_array(self) -> Events:
         """Build an empty events array of an appropriate size."""
-        return np.zeros(self.events, dtype=np.int_)
+        return np.zeros(self.events, dtype=SimDType)
 
     def compartment_tags(self) -> list[list[str]]:
         return [list() for _ in range(self.compartments)]

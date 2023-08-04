@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from functools import partial, wraps
 from typing import Any, Callable
 
 import numpy as np
 from attr import dataclass
-from numpy.typing import NDArray
 
 from epymorph.clock import Tick, TickDelta
-from epymorph.context import Compartments, SimContext
+from epymorph.context import Compartments, SimContext, SimDType
 from epymorph.movement.clause import (RETURN, ArrayClause, Clause,
                                       CompartmentPredicate, RowClause,
                                       TravelClause)
@@ -15,7 +15,8 @@ from epymorph.movement.engine import Movement, MovementBuilder
 from epymorph.parser.move_clause import ALL_DAYS, Daily, DayOfWeek
 from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
-from epymorph.util import compile_function, parse_function
+from epymorph.util import (compile_function, ns, pairwise_haversine,
+                           parse_function, row_normalize)
 
 
 @dataclass
@@ -140,33 +141,63 @@ def execute_predef(predef: Predef, global_namespace: Namespace) -> Namespace:
     return result
 
 
-def make_global_namespace(ctx: SimContext) -> Namespace:
+def make_global_namespace(ctx: SimContext) -> dict[str, Any]:
     """Make a safe namespace for user-defined functions."""
+
+    def as_simdtype(func):
+        @wraps(func)
+        def wrapped_func(*args, **kwargs):
+            result = func(*args, **kwargs)
+            if np.isscalar(result):
+                return SimDType(result)  # type: ignore
+            else:
+                return result.astype(SimDType)
+        return wrapped_func
+
     return {
         # simulation data
         'geo': ctx.geo,
         'nodes': ctx.nodes,
         'param': ctx.param,
-        # rng functions
-        'poisson': ctx.rng.poisson,
-        'binomial': ctx.rng.binomial,
-        'multinomial': ctx.rng.multinomial,
-        # numpy utility functions
-        'array': np.array,
-        'zeros': np.zeros,
-        'zeros_like': np.zeros_like,
-        'newaxis': np.newaxis,
-        'exp': np.exp,
-        'radians': np.radians,
-        'sin': np.sin,
-        'cos': np.cos,
-        'arcsin': np.arcsin,
-        'arctan2': np.arctan2,
-        'sqrt': np.sqrt,
-        'subtract': np.subtract,
-        'multiply': np.multiply,
-        'divide': np.divide,
-        # restricted functions
+        'SimDType': SimDType,
+        # our utility functions
+        'pairwise_haversine': pairwise_haversine,
+        'row_normalize': row_normalize,
+        # numpy namespace
+        'np': ns({
+            # rng functions
+            'poisson': as_simdtype(ctx.rng.poisson),
+            'binomial': as_simdtype(ctx.rng.binomial),
+            'multinomial': as_simdtype(ctx.rng.multinomial),
+            # numpy utility functions
+            'array': partial(np.array, dtype=SimDType),
+            'zeros': partial(np.zeros, dtype=SimDType),
+            'zeros_like': partial(np.zeros_like, dtype=SimDType),
+            'full': partial(np.full, dtype=SimDType),
+            'sum': partial(np.sum, dtype=SimDType),
+            'newaxis': np.newaxis,
+            # numpy math functions
+            'radians': np.radians,
+            'degrees': np.degrees,
+            'exp': np.exp,
+            'log': np.log,
+            'sin': np.sin,
+            'cos': np.cos,
+            'tan': np.tan,
+            'arcsin': np.arcsin,
+            'arccos': np.arccos,
+            'arctan': np.arctan,
+            'arctan2': np.arctan2,
+            'sqrt': np.sqrt,
+            'add': np.add,
+            'subtract': np.subtract,
+            'multiply': np.multiply,
+            'divide': np.divide,
+            'maximum': np.maximum,
+            'minimum': np.minimum,
+            'absolute': np.absolute,
+        }),
+        # restricted names
         # TODO: there are probably more restrictions to add
         # TODO: in fact, this is probably not sufficient as a security model,
         # though it'll do for now
@@ -174,8 +205,9 @@ def make_global_namespace(ctx: SimContext) -> Namespace:
         'compile': None,
         'eval': None,
         'exec': None,
+        'object': None,
         'globals': None,
-        'print': None
+        'print': None,
     }
 
 
@@ -204,16 +236,16 @@ class DynamicMovementBuilder(MovementBuilder):
         # spec: MovementSpec = results[0]  # type: ignore
 
         if self.namespace is None:
-            ns = make_global_namespace(ctx)
+            namespace = make_global_namespace(ctx)
 
             # t0 = time.perf_counter()
             predef = {} if self.spec.predef is None else \
-                execute_predef(self.spec.predef, ns)
+                execute_predef(self.spec.predef, namespace)
             # t1 = time.perf_counter()
             # print(f"Executed predef in {(1000 * (t1 - t0)):.3f} ms")
 
-            ns = ns | {'predef': predef}
-            self.namespace = ns
+            namespace = namespace | {'predef': predef}
+            self.namespace = namespace
 
         if self.compilers is None:
             self.compilers = [to_clause_compiler(c) for c in self.spec.clauses]

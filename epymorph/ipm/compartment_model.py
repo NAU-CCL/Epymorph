@@ -7,6 +7,7 @@ from typing import Generator, Iterable
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.context import SimDType
 from epymorph.ipm.attribute import AttributeDef
 from epymorph.ipm.sympy_shim import (Expr, Symbol, simplify, simplify_sum,
                                      to_symbol)
@@ -109,7 +110,7 @@ def fork(*edges: EdgeDef) -> ForkDef:
     rate = simplify_sum(edge_rates)
     # the probability of following a particular edge is then the edge's rate divided by the base rate
     # (this defines the probability split in the eventual multinomial draw)
-    probs = [simplify(r / rate) for r in edge_rates]
+    probs = [simplify(r / rate) for r in edge_rates]  # type: ignore
     return ForkDef(rate, list(edges), probs)
 
 
@@ -170,7 +171,7 @@ class CompartmentModel:
     compartments: list[CompartmentDef]
     attributes: list[AttributeDef]
     # a matrix defining how each event impacts each compartment (subtracting or adding individuals)
-    apply_matrix: NDArray[np.int_]
+    apply_matrix: NDArray[SimDType]
     # mapping from compartment index to the list of event indices which source from that compartment
     events_leaving_compartment: list[list[int]]
     # mapping from event index to the compartment index it sources from
@@ -208,9 +209,9 @@ Missing attributes: {", ".join(map(str, missing_attrs))}""")
     def compartment_index(s: Symbol) -> int:
         return index_where(used_comps, lambda c: c.symbol == s)
 
-    # Calc apply matrix
+    # Calc apply matrix -- values are {+1, 0, -1}
     num_events = Transition.event_count(transitions)
-    apply_matrix = np.zeros((num_events, len(used_comps)), dtype=int)
+    apply_matrix = np.zeros((num_events, len(used_comps)), dtype=SimDType)
     for eidx, e in Transition.as_events(transitions):
         apply_matrix[eidx, compartment_index(e.compartment_from)] = -1
         apply_matrix[eidx, compartment_index(e.compartment_to)] = +1

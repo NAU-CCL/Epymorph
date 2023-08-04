@@ -6,14 +6,12 @@ from typing import Any, Callable, Generic, Iterable, Literal, TypeVar, cast
 
 import numpy as np
 from dateutil.relativedelta import relativedelta
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 from pydantic import BaseModel, model_serializer, model_validator
 
-# epymorph common types
+# common types
 
 
-Compartments = NDArray[np.int_]
-Events = NDArray[np.int_]
 DataDict = dict[str, Any]
 
 
@@ -84,7 +82,8 @@ def as_unique_set(xs: list[T]) -> set[T]:
 
 N = TypeVar('N', bound=np.number)
 
-NumpyIndices = NDArray[np.int_]
+# TODO: better naming scheme for NDArray aliases? NIndices? NDAIndices?
+NumpyIndices = NDArray[np.intp]
 
 
 def stutter(it: Iterable[T], times: int) -> Iterable[T]:
@@ -93,7 +92,7 @@ def stutter(it: Iterable[T], times: int) -> Iterable[T]:
     return (xs for x in it for xs in (x,) * times)
 
 
-def stridesum(arr: NDArray[N], n: int) -> NDArray[N]:
+def stridesum(arr: NDArray[N], n: int, dtype: DTypeLike = None) -> NDArray[N]:
     """Compute a new array by grouping every `n` rows and summing them together."""
     if len(arr) % n != 0:
         pad = n - (len(arr) % n)
@@ -101,7 +100,7 @@ def stridesum(arr: NDArray[N], n: int) -> NDArray[N]:
                      pad_width=(0, pad),
                      mode='constant',
                      constant_values=0)
-    return arr.reshape((-1, n)).sum(axis=1)
+    return arr.reshape((-1, n)).sum(axis=1, dtype=dtype)
 
 
 def normalize(arr: NDArray[N]) -> NDArray[N]:
@@ -113,18 +112,35 @@ def normalize(arr: NDArray[N]) -> NDArray[N]:
     return (arr - min) / (max - min)
 
 
-def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None) -> NDArray[N]:
+def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DTypeLike = None) -> NDArray[N]:
     """
     Assuming `arr` is a 2D array, normalize values across each row by dividing by the row sum.
     If you've already calculated row sums, you can pass those in, otherwise they will be computed.
     """
-    # numpy's types are garbage
     if row_sums is None:
-        row_sums = arr.sum(axis=1)
+        row_sums = arr.sum(axis=1, dtype=dtype)
     # We do a maximum(1, ...) here to protect against div-by-zero:
     # if we assume `arr` is strictly non-negative and if a row-sum is zero,
     # then every entry in the row is zero therefore dividing by 1 is fine.
     return arr / np.maximum(1, row_sums[:, np.newaxis])  # type: ignore
+    # numpy's types are garbage
+
+
+RADIUS_MI = 3959.87433  # radius of earth in mi
+
+
+def pairwise_haversine(longitudes: NDArray[np.float_], latitudes: NDArray[np.float_]) -> NDArray[np.float_]:
+    """Compute the distances in miles between all pairs of coordinates."""
+    lng = np.radians(longitudes)
+    lat = np.radians(latitudes)
+    dlng = lng[:, np.newaxis] - lng[np.newaxis, :]
+    dlat = lat[:, np.newaxis] - lat[np.newaxis, :]
+    cos_lat = np.cos(lat)
+
+    a = np.sin(dlat / 2.0) ** 2 \
+        + (cos_lat[:, np.newaxis] * cos_lat[np.newaxis, :]) \
+        * np.sin(dlng / 2.0) ** 2
+    return 2 * RADIUS_MI * np.arcsin(np.sqrt(a))
 
 
 def top(size: int, arr: NDArray) -> NumpyIndices:
@@ -148,7 +164,7 @@ def is_square(arr: NDArray) -> bool:
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
 
 
-def expand_data(data: float | int | list | NDArray, rows: int, cols: int) -> NDArray:
+def expand_data(data: float | int | list | NDArray, rows: int, cols: int, dtype: DTypeLike = None) -> NDArray:
     """
     Take the given data and try to expand it to fit a (rows, cols) numpy array.
     If the data is already in the right shape, it is returned as-is.
@@ -157,25 +173,26 @@ def expand_data(data: float | int | list | NDArray, rows: int, cols: int) -> NDA
     If given a 1-dimensional array of size (rows): all columns will contain the same values.
     (If rows and cols are equal, you'll get repeated rows.)
     """
+    # TODO: can we replace this with standard numpy broadcasting?
     if isinstance(data, list):
-        data = np.array(data)
+        data = np.array(data, dtype=dtype)
     desired_shape = (rows, cols)
     if isinstance(data, np.ndarray):
         if data.shape == desired_shape:
             return data
         elif data.shape == (cols,):
-            return np.full(desired_shape, data)
+            return np.full(desired_shape, data, dtype=dtype)
         elif data.shape == (rows,):
-            return np.full((cols, rows), data).T
+            return np.full((cols, rows), data, dtype=dtype).T
         else:
             print(data.shape)
-            raise Exception("Invalid beta parameter.A")
+            raise Exception("Invalid beta parameter.")
     elif isinstance(data, int):
-        return np.full(desired_shape, data)
+        return np.full(desired_shape, data, dtype=dtype)
     elif isinstance(data, float):
-        return np.full(desired_shape, data)
+        return np.full(desired_shape, data, dtype=dtype)
     else:
-        raise Exception("Invalid beta parameter.B")
+        raise Exception("Invalid beta parameter.")
 
 
 _duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
@@ -286,3 +303,47 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
     # Now our function is defined in the local namespace, retrieve it
     # TODO: it would be nice if this was typesafe in the signature of the returned function...
     return local_namespace[function_def.name]
+
+
+# ImmutableNamespace
+
+
+class ImmutableNamespace:
+    """A simple dot-accessible dictionary."""
+    __slots__ = ['_data']
+
+    _data: dict[str, Any]
+
+    def __init__(self, data: dict[str, Any] | None = None):
+        if data is None:
+            data = {}
+        object.__setattr__(self, '_data', data)
+
+    def __getattribute__(self, __name: str) -> Any:
+        if __name == '_data':
+            __cls = self.__class__.__name__
+            raise AttributeError(f"{__cls} object has no attribute '{__name}'")
+        return object.__getattribute__(self, __name)
+
+    def __getattr__(self, __name: str) -> Any:
+        data = object.__getattribute__(self, '_data')
+        if __name not in data:
+            __cls = self.__class__.__name__
+            raise AttributeError(f"{__cls} object has no attribute '{__name}'")
+        return data[__name]
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        raise Exception(f"{self.__class__.__name__} is immutable.")
+
+    def __delattr__(self, __name: str) -> None:
+        raise Exception(f"{self.__class__.__name__} is immutable.")
+
+    def to_dict_shallow(self) -> dict[str, Any]:
+        """Make a shallow copy of this Namespace as a dict."""
+        # This is necessary in order to pass it to exec or eval.
+        # The shallow copy allows child-namespaces to remain dot-accessible.
+        return object.__getattribute__(self, '_data').copy()
+
+
+def ns(data: dict[str, Any]) -> ImmutableNamespace:
+    return ImmutableNamespace(data)

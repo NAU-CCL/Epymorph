@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.clock import Tick, TickDelta
-from epymorph.context import SimContext
-from epymorph.util import Compartments
+from epymorph.context import Compartments
 
 
 class ReturnClause:

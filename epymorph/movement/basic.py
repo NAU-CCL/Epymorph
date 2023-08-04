@@ -14,7 +14,7 @@ from epymorph.movement.clause import (ArrayClause, CellClause, ReturnClause,
                                       RowClause, TravelClause)
 from epymorph.movement.engine import Movement, MovementEngine
 from epymorph.movement.world import Location
-from epymorph.util import Compartments, row_normalize
+from epymorph.util import row_normalize
 
 # WORLD MODEL
 
@@ -37,6 +37,10 @@ class Cohort:
     def can_merge(a: Cohort, b: Cohort) -> bool:
         return a.return_tick == b.return_tick and a.return_location == b.return_location
 
+    @staticmethod
+    def merge(intoc: Cohort, fromc: Cohort) -> None:
+        intoc.compartments += fromc.compartments
+
     compartments: Compartments
     return_location: int
     return_tick: int
@@ -44,34 +48,6 @@ class Cohort:
     # Note: when a population is "home",
     # its `return_location` is the same as their current location,
     # and its `return_tick` is set to -1 (the "Never" placeholder value).
-
-    def merge(self, other: Cohort) -> None:
-        self.compartments += other.compartments
-
-    def split(self,
-              sim: SimContext,
-              src_idx: int,
-              dst_idx: int,
-              return_tick: int,
-              requested: int,
-              movement_mask: NDArray[np.bool_]) -> tuple[int, Cohort]:
-        """
-        Divide a population by splitting off (up to) the `requested` number of individuals.
-        These individuals will be randomly drawn from the available compartments.
-        The source population (self) will be modified in place. A new Population object will
-        be returned as the second element of a tuple; the first element being the actual number
-        of individuals (in case you requested more than the number available).
-        """
-        # How many people are available to move?
-        available = self.compartments * movement_mask
-        # How many will actually move?
-        actual = min(sum(available), requested)
-        # Select movers.
-        movers = sim.rng.multivariate_hypergeometric(available, actual)
-        self.compartments -= movers
-        return_location = dst_idx if return_tick == HOME_TICK else src_idx
-        pop = Cohort(movers, return_location, return_tick)
-        return (actual, pop)
 
 
 @dataclass
@@ -108,7 +84,7 @@ class BasicLocation(Location):
             curr = self.cohorts[j - 1]
             next = self.cohorts[j]
             if Cohort.can_merge(curr, next):
-                curr.merge(next)
+                Cohort.merge(curr, next)
                 del self.cohorts[j]
             else:
                 j += 1
@@ -147,14 +123,20 @@ class BasicEngine(MovementEngine):
 
     def get_travelers(self) -> Compartments:
         # NOTE: this only works if `cohorts` is normalized after modification
-        loc_travelers = [[c.compartments for c in loc.cohorts[1:]]
-                         for loc in self.locations]
-        return np.array(loc_travelers, dtype=SimDType).sum(axis=1)
+        _, N, C, _ = self.ctx.TNCE
+        loc_travelers = np.zeros((N, C), dtype=SimDType)
+        for loc in self.locations:
+            if len(loc.cohorts) > 1:
+                cohorts = [c.compartments for c in loc.cohorts[1:]]
+                total = np.array(cohorts, dtype=SimDType)\
+                    .sum(axis=0, dtype=SimDType)
+                loc_travelers[loc.get_index(), :] = total
+        return loc_travelers
 
     def get_travelers_by_home(self) -> Compartments:
         # NOTE: this only works if `cohorts` is normalized after modification
-        NxC = (self.ctx.nodes, self.ctx.compartments)
-        home_travelers = np.zeros(NxC, dtype=SimDType)
+        _, N, C, _ = self.ctx.TNCE
+        home_travelers = np.zeros((N, C), dtype=SimDType)
         for c in self._all_cohorts():
             if c.return_tick != HOME_TICK:
                 home_travelers[c.return_location, :] += c.compartments
@@ -195,8 +177,8 @@ class BasicEngine(MovementEngine):
         all_locals = self.get_locals()
         available_movers = all_locals * clause.movement_mask
 
-        available_sum = available_movers.sum(axis=1)
-        requested_sum = requested_movers.sum(axis=1)
+        available_sum = available_movers.sum(axis=1, dtype=SimDType)
+        requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
 
         for src in range(self.ctx.nodes):
             # If requested total is greater than the total available,
@@ -212,9 +194,10 @@ class BasicEngine(MovementEngine):
         logger.debug("requested_movers: %s", requested_movers)
 
         # Update sum in case it changed in the previous step.
-        requested_sum = requested_movers.sum(axis=1)
+        requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
         # The probability a mover from a src will go to a dst.
-        requested_prb = row_normalize(requested_movers, requested_sum)
+        requested_prb = row_normalize(
+            requested_movers, requested_sum, dtype=SimDType)
 
         for src in range(self.ctx.nodes):
             if requested_sum[src] == 0:
@@ -224,16 +207,16 @@ class BasicEngine(MovementEngine):
             mover_cs = self.ctx.rng.multivariate_hypergeometric(
                 available_movers[src, :],
                 requested_sum[src]
-            )
+            ).astype(SimDType)
 
             # Select which location they are each going to.
             # (Each row contains the compartments for a destination.)
             split_cs = self.ctx.rng.multinomial(
                 mover_cs,
                 requested_prb[src, :]
-            ).T
+            ).T.astype(SimDType)
 
-            split_sum = split_cs.sum(axis=1)
+            split_sum = split_cs.sum(axis=1, dtype=SimDType)
 
             # Create new cohorts.
             for dst in range(self.ctx.nodes):
@@ -257,7 +240,8 @@ class BasicEngine(MovementEngine):
         self._apply_travel(clause, tick, requested)
 
     def _apply_row(self, clause: RowClause, tick: Tick) -> None:
-        requested = np.zeros((self.ctx.nodes, self.ctx.nodes), dtype=SimDType)
+        N = self.ctx.nodes
+        requested = np.zeros((N, N), dtype=SimDType)
         for i in range(self.ctx.nodes):
             requested[:, i] = clause.apply(tick, i)
         np.fill_diagonal(requested, 0)

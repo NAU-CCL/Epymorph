@@ -9,13 +9,11 @@ def pei_movement():
     commuters_average = (commuters + commuters.T) // 2
     
     # Total commuters living in each state.
-    commuters_by_node = commuters.sum(axis=1)
+    commuters_by_node = np.sum(commuters, axis=1)
     
     # Commuters as a ratio to the total commuters living in that state.
     # For cases where there are no commuters, avoid div-by-0 errors
-    divisor = commuters_by_node.copy()[:, newaxis]
-    divisor[divisor == 0] = 1
-    commuting_probability = commuters / divisor
+    commuting_probability = row_normalize(commuters)
 
     return {
         'commuters_average': commuters_average, 
@@ -28,8 +26,8 @@ def pei_movement():
 [mtype: days=all; leave=1; duration=0d; return=2; function=
 def commuters(t, src):
     typical = predef['commuters_by_node'][src]
-    actual = binomial(typical, param['move_control'])
-    return multinomial(actual, predef['commuting_probability'][src, :])
+    actual = np.binomial(typical, param['move_control'])
+    return np.multinomial(actual, predef['commuting_probability'][src, :])
 ]
 
 # Disperser movement
@@ -43,5 +41,5 @@ def commuters(t, src):
 [mtype: days=all; leave=1; duration=0d; return=2; function=
 def dispersers(t, src):
     avg = predef['commuters_average'][src, :]
-    return poisson(avg * param['theta'])
+    return np.poisson(avg * param['theta'])
 ]

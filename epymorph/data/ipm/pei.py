@@ -1,3 +1,4 @@
+# type: ignore
 from sympy import Max, exp, log, parse_expr
 
 from epymorph.ipm.attribute import geo, param
