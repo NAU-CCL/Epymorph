@@ -178,8 +178,8 @@ class TestCrosswalkMovement(unittest.TestCase):
         # There is a random factor involved in who winds up where,
         # but exactly 300 people should leave each location if possible.
         people = np.array(cs0, dtype=SimDType)
-        expected_nontravelers = np.maximum(0, people - 300)
-        expected_travelers = np.minimum(300, people)
+        expected_travelers = np.minimum(300, people, dtype=SimDType)
+        expected_nontravelers = people - expected_travelers
 
         movement = Movement(ctx.clock.taus, [CrosswalkClause(ctx)])
 
