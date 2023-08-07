@@ -26,13 +26,12 @@ def _mem_check(ctx: SimContext) -> None:
     available = psutil.virtual_memory().available
 
     if available < required:
-        print(f"""\
-ERROR: the simulation is too large to fit in available memory using the HypercubeEngine.
-- T:{T}, N:{N}, C:{C} requires {to_gib(required):.1f} GiB
-- available memory is {to_gib(available):.1f} GiB""")
+        msg = f"""\
+Insufficient memory: the simulation is too large (using HypercubeEngine).
+  T:{T}, N:{N}, C:{C} requires {to_gib(required):.1f} GiB;
+  available memory is {to_gib(available):.1f} GiB"""
 
-        raise Exception(
-            f"Insufficient memory for HypercubeEngine; dim ({T},{N},{C})")
+        raise Exception(msg)
 
 
 class HypercubeEngine(MovementEngine):
@@ -104,11 +103,6 @@ class HypercubeEngine(MovementEngine):
         # The probability a mover from a src will go to a dst. (N,N)
         requested_prb = row_normalize(
             requested_movers, requested_sum, dtype=SimDType)
-
-        # !!!!!!!!!!!!!!!!!
-        # TODO: can we gain performance by doing this as a big array rather than by `src`?
-        # TODO: profile with real IPM
-        # !!!!!!!!!!!!!!!!!
 
         for src in range(self.ctx.nodes):
             if requested_sum[src] == 0:

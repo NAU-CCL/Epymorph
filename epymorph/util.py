@@ -131,6 +131,7 @@ RADIUS_MI = 3959.87433  # radius of earth in mi
 
 def pairwise_haversine(longitudes: NDArray[np.float_], latitudes: NDArray[np.float_]) -> NDArray[np.float_]:
     """Compute the distances in miles between all pairs of coordinates."""
+    # https://www.themathdoctors.org/distances-on-earth-2-the-haversine-formula
     lng = np.radians(longitudes)
     lat = np.radians(latitudes)
     dlng = lng[:, np.newaxis] - lng[np.newaxis, :]
