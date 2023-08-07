@@ -189,7 +189,10 @@ class Simulation:
                 # Distribute events
                 ipm.apply_events(loc, es)
                 # Store prevalence
+                # TODO: maybe better to do this all at once rather than per loc
                 out.prevalence[t, p] = loc.get_compartments()
             self.on_tick.publish((t, t / ctx.clock.num_ticks))
+
+        mvm.shutdown()
         self.on_end.publish(None)
         return out

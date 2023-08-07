@@ -60,6 +60,9 @@ class MovementEngine(World, ABC):
                 case CellClause():
                     self._apply_cell(clause, tick)
 
+    def shutdown(self) -> None:
+        pass
+
     @abstractmethod
     def _apply_return(self, clause: ReturnClause, tick: Tick) -> None:
         pass

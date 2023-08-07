@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, wait
+from math import ceil
 from typing import Iterable
 
 import numpy as np
@@ -34,6 +36,12 @@ Insufficient memory: the simulation is too large (using HypercubeEngine).
         raise Exception(msg)
 
 
+def batches(items, workers) -> list[range]:
+    size = int(ceil(items / workers))
+    return [range(i * size, min(items, (i+1) * size))
+            for i in range(workers)]
+
+
 class HypercubeEngine(MovementEngine):
     # TODO: document how time offset/frontier work
     time_offset: int
@@ -55,6 +63,17 @@ class HypercubeEngine(MovementEngine):
         # each location has a set of views to the main arrays
         self.locations = [self.HLocation(self, index)
                           for index in range(ctx.nodes)]
+        
+        self.workers = min(N, 4)
+        self.executor = ThreadPoolExecutor(self.workers)
+        # TODO: seed_seq should probably be in context, rather than this approach
+        seed_seq = np.random.SeedSequence(self.ctx.rng.integers(10_000_000))
+        self.rngs = [np.random.default_rng(s) for s in seed_seq.spawn(self.workers)]
+
+        
+    def close(self) -> None:
+        self.executor.shutdown(wait=True)
+
 
     # Implement World
 
@@ -74,73 +93,76 @@ class HypercubeEngine(MovementEngine):
 
     def apply(self, tick: Tick) -> None:
         super().apply(tick)
-        self.time_offset = tick.index + 1
+        self.time_offset=tick.index + 1
 
     def _apply_return(self, clause: ReturnClause, tick: Tick) -> None:
         self.home += self.ldgr[tick.index, :, :, :].sum(axis=1, dtype=SimDType)
         self.vstr -= self.ldgr[tick.index, :, :, :].sum(axis=0, dtype=SimDType)
 
     def _apply_travel(self, clause: TravelClause, tick: Tick, requested_movers: NDArray[SimDType]) -> None:
-        return_tick = self.ctx.clock.tick_plus(tick, clause.returns)
-        self.time_frontier = max(self.time_frontier, return_tick + 1)
-
+        T, N, C, E = self.ctx.TNCE
+        mover_cs = np.empty((N, C), dtype=SimDType)
+        split_cs = np.empty((N, N, C), dtype=SimDType)
+        
+        # requested_movers (N,N)
         available_movers = self.home * clause.movement_mask  # (N,C)
 
-        available_sum = available_movers.sum(axis=1, dtype=SimDType)  # (N,)
-        requested_sum = requested_movers.sum(axis=1, dtype=SimDType)  # (N,)
+        def process(rng: np.random.Generator, work_range: range) -> None:
+            for src in work_range:
+                available_sum = available_movers[src, :].sum(dtype=SimDType) # S
+                requested_src = requested_movers[src, :] # (N,)
+                requested_sum = requested_src.sum(dtype=SimDType) # S
 
-        for src in range(self.ctx.nodes):
-            # If requested total is greater than the total available,
-            # use mvhg to select as many as possible.
-            if requested_sum[src] > available_sum[src]:
-                requested_movers[src, :] = self.ctx.rng.multivariate_hypergeometric(
-                    colors=requested_movers[src, :],
-                    nsample=available_sum[src]
+                # If requested total is greater than the total available,
+                # use mvhg to select as many as possible.
+                if requested_sum > available_sum:
+                    requested_src = self.ctx.rng.multivariate_hypergeometric(
+                        colors=requested_src,
+                        nsample=available_sum
+                    ).astype(SimDType)
+                    requested_sum = available_sum
+
+                # Select which individuals will be leaving this node. (C,)
+                mover_cs[src, :] = rng.multivariate_hypergeometric(
+                    colors=available_movers[src, :],
+                    nsample=requested_sum
                 ).astype(SimDType)
 
-        # Update sum in case it changed in the previous step. Still (N,)
-        requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
-        # The probability a mover from a src will go to a dst. (N,N)
-        requested_prb = row_normalize(
-            requested_movers, requested_sum, dtype=SimDType)
+                # Select which location they are each going to. (N,C)
+                # (Each row contains the compartments for a destination.)
+                split_cs[src, :, :] = rng.multinomial(
+                    n=mover_cs[src, :],
+                    # The probability a mover from a src will go to a dst. (N,)
+                    pvals=requested_src / max(1, requested_sum)
+                ).T.astype(SimDType)
 
-        for src in range(self.ctx.nodes):
-            if requested_sum[src] == 0:
-                continue
+        futures = [self.executor.submit(process, self.rngs[i], work_range)
+                   for i, work_range in enumerate(batches(N, self.workers))]
+        wait(futures)
 
-            # Select which individuals will be leaving this node. (C,)
-            mover_cs = self.ctx.rng.multivariate_hypergeometric(
-                available_movers[src, :],
-                requested_sum[src]
-            ).astype(SimDType)
-
-            # Select which location they are each going to. (N,C)
-            # (Each row contains the compartments for a destination.)
-            split_cs = self.ctx.rng.multinomial(
-                mover_cs,
-                requested_prb[src, :]
-            ).T.astype(SimDType)
-
-            # Subtract from home.
-            self.home[src, :] -= mover_cs
-            # Add to vstr and ldgr.
-            self.vstr += split_cs
-            self.ldgr[return_tick, src, :, :] += split_cs
+        return_tick = self.ctx.clock.tick_plus(tick, clause.returns)
+        # Subtract from home.
+        self.home -= mover_cs
+        # Add to vstr and ldgr.
+        self.vstr += split_cs.sum(axis=0)
+        self.ldgr[return_tick, :, :, :] += split_cs
+        # Update frontier.
+        self.time_frontier = max(self.time_frontier, return_tick + 1)
 
     def _apply_array(self, clause: ArrayClause, tick: Tick) -> None:
-        requested = clause.apply(tick)
+        requested=clause.apply(tick)
         np.fill_diagonal(requested, 0)
         self._apply_travel(clause, tick, requested)
 
     def _apply_row(self, clause: RowClause, tick: Tick) -> None:
-        requested = np.zeros((self.ctx.nodes, self.ctx.nodes), dtype=SimDType)
+        requested=np.zeros((self.ctx.nodes, self.ctx.nodes), dtype=SimDType)
         for i in range(self.ctx.nodes):
-            requested[:, i] = clause.apply(tick, i)
+            requested[:, i]=clause.apply(tick, i)
         np.fill_diagonal(requested, 0)
         self._apply_travel(clause, tick, requested)
 
     def _apply_cell(self, clause: CellClause, tick: Tick) -> None:
-        requested: NDArray[SimDType] = np.fromfunction(
+        requested: NDArray[SimDType]=np.fromfunction(
             lambda i, j: clause.apply(tick, i, j),  # type: ignore
             shape=(self.ctx.nodes, self.ctx.nodes),
             dtype=SimDType)
@@ -163,11 +185,11 @@ class HypercubeEngine(MovementEngine):
         """(T,N,C) the ledger for all visitors to this location"""
 
         def __init__(self, engine: HypercubeEngine, index: int):
-            self.engine = engine
-            self.index = index
-            self.home = engine.home[index, :]
-            self.vstr = engine.vstr[index, :]
-            self.ldgr = engine.ldgr[:, :, index, :]
+            self.engine=engine
+            self.index=index
+            self.home=engine.home[index, :]
+            self.vstr=engine.vstr[index, :]
+            self.ldgr=engine.ldgr[:, :, index, :]
 
         def get_index(self) -> int:
             return self.index
@@ -176,25 +198,25 @@ class HypercubeEngine(MovementEngine):
             return self.home + self.vstr
 
         def _ldgr_slice(self) -> tuple[slice, int]:
-            t_start = self.engine.time_offset
-            t_end = self.engine.time_frontier
+            t_start=self.engine.time_offset
+            t_end=self.engine.time_frontier
             return slice(t_start, t_end, 1), t_end - t_start
 
         # TODO: maybe there's a smarter API design here, that doesn't force us to make array copies
         def get_cohorts(self) -> Compartments:
-            T, N, C, _ = self.engine.ctx.TNCE
-            ts, dt = self._ldgr_slice()
-            cohorts = self.ldgr[ts, :, :]
-            cohorts = cohorts.reshape((dt * N, C))
-            cohorts = np.insert(cohorts, 0, self.home, axis=0)
+            T, N, C, _=self.engine.ctx.TNCE
+            ts, dt=self._ldgr_slice()
+            cohorts=self.ldgr[ts, :, :]
+            cohorts=cohorts.reshape((dt * N, C))
+            cohorts=np.insert(cohorts, 0, self.home, axis=0)
             return cohorts
 
         def update_cohorts(self, deltas: Compartments) -> None:
-            T, N, C, _ = self.engine.ctx.TNCE
-            ts, dt = self._ldgr_slice()
-            home_deltas = deltas[0, :]
-            ldgr_deltas = deltas[1:, :].reshape((dt, N, C))
-            vstr_deltas = ldgr_deltas.sum(axis=(0, 1), dtype=SimDType)
+            T, N, C, _=self.engine.ctx.TNCE
+            ts, dt=self._ldgr_slice()
+            home_deltas=deltas[0, :]
+            ldgr_deltas=deltas[1:, :].reshape((dt, N, C))
+            vstr_deltas=ldgr_deltas.sum(axis=(0, 1), dtype=SimDType)
             self.home += home_deltas
             self.vstr += vstr_deltas
             self.ldgr[ts, :, :] += ldgr_deltas
