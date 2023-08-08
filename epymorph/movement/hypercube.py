@@ -64,9 +64,7 @@ class HypercubeEngine(MovementEngine):
         
         self.workers = min(N, 4)
         self.executor = ThreadPoolExecutor(self.workers)
-        # TODO: seed_seq should probably be in context, rather than this approach
-        seed_seq = np.random.SeedSequence(self.ctx.rng.integers(10_000_000))
-        self.rngs = [np.random.default_rng(s) for s in seed_seq.spawn(self.workers)]
+        self.rngs = ctx.rng.spawn(self.workers)
 
         
     def close(self) -> None:
@@ -204,17 +202,17 @@ class HypercubeEngine(MovementEngine):
         def get_cohorts(self) -> Compartments:
             T, N, C, _ = self.engine.ctx.TNCE
             ts, dt = self._ldgr_slice()
-            cohorts = self.ldgr[ts, :, :]
-            cohorts = cohorts.reshape((dt * N, C))
-            cohorts = np.insert(cohorts, 0, self.home, axis=0)
+            cohorts = np.empty((dt * N + 1, C), dtype=SimDType)
+            cohorts[0] = self.home
+            cohorts[1:] = self.ldgr[ts, :, :].reshape((dt * N, C))
             return cohorts
 
         def update_cohorts(self, deltas: Compartments) -> None:
             T, N, C, _ = self.engine.ctx.TNCE
             ts, dt = self._ldgr_slice()
-            home_deltas = deltas[0, :]
-            ldgr_deltas = deltas[1:, :].reshape((dt, N, C))
-            vstr_deltas = ldgr_deltas.sum(axis=(0, 1), dtype=SimDType)
+            home_deltas = deltas[0]
+            vstr_deltas = deltas.sum(axis=0) - home_deltas
+            ldgr_deltas = deltas[1:].reshape((dt, N, C))
             self.home += home_deltas
             self.vstr += vstr_deltas
             self.ldgr[ts, :, :] += ldgr_deltas
