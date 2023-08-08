@@ -14,7 +14,6 @@ from epymorph.context import Compartments, SimContext, SimDType
 from epymorph.movement.clause import (ArrayClause, CellClause, ReturnClause,
                                       RowClause, TravelClause)
 from epymorph.movement.engine import Movement, MovementEngine
-from epymorph.util import row_normalize
 
 
 def to_gib(bytes: int) -> float:
@@ -32,7 +31,6 @@ def _mem_check(ctx: SimContext) -> None:
 Insufficient memory: the simulation is too large (using HypercubeEngine).
   T:{T}, N:{N}, C:{C} requires {to_gib(required):.1f} GiB;
   available memory is {to_gib(available):.1f} GiB"""
-
         raise Exception(msg)
 
 
@@ -150,19 +148,19 @@ class HypercubeEngine(MovementEngine):
         self.time_frontier = max(self.time_frontier, return_tick + 1)
 
     def _apply_array(self, clause: ArrayClause, tick: Tick) -> None:
-        requested=clause.apply(tick)
+        requested = clause.apply(tick)
         np.fill_diagonal(requested, 0)
         self._apply_travel(clause, tick, requested)
 
     def _apply_row(self, clause: RowClause, tick: Tick) -> None:
-        requested=np.zeros((self.ctx.nodes, self.ctx.nodes), dtype=SimDType)
+        requested = np.zeros((self.ctx.nodes, self.ctx.nodes), dtype=SimDType)
         for i in range(self.ctx.nodes):
-            requested[:, i]=clause.apply(tick, i)
+            requested[:, i] = clause.apply(tick, i)
         np.fill_diagonal(requested, 0)
         self._apply_travel(clause, tick, requested)
 
     def _apply_cell(self, clause: CellClause, tick: Tick) -> None:
-        requested: NDArray[SimDType]=np.fromfunction(
+        requested: NDArray[SimDType] = np.fromfunction(
             lambda i, j: clause.apply(tick, i, j),  # type: ignore
             shape=(self.ctx.nodes, self.ctx.nodes),
             dtype=SimDType)
@@ -185,11 +183,11 @@ class HypercubeEngine(MovementEngine):
         """(T,N,C) the ledger for all visitors to this location"""
 
         def __init__(self, engine: HypercubeEngine, index: int):
-            self.engine=engine
-            self.index=index
-            self.home=engine.home[index, :]
-            self.vstr=engine.vstr[index, :]
-            self.ldgr=engine.ldgr[:, :, index, :]
+            self.engine = engine
+            self.index = index
+            self.home = engine.home[index, :]
+            self.vstr = engine.vstr[index, :]
+            self.ldgr = engine.ldgr[:, :, index, :]
 
         def get_index(self) -> int:
             return self.index
@@ -198,25 +196,25 @@ class HypercubeEngine(MovementEngine):
             return self.home + self.vstr
 
         def _ldgr_slice(self) -> tuple[slice, int]:
-            t_start=self.engine.time_offset
-            t_end=self.engine.time_frontier
+            t_start = self.engine.time_offset
+            t_end = self.engine.time_frontier
             return slice(t_start, t_end, 1), t_end - t_start
 
         # TODO: maybe there's a smarter API design here, that doesn't force us to make array copies
         def get_cohorts(self) -> Compartments:
-            T, N, C, _=self.engine.ctx.TNCE
-            ts, dt=self._ldgr_slice()
-            cohorts=self.ldgr[ts, :, :]
-            cohorts=cohorts.reshape((dt * N, C))
-            cohorts=np.insert(cohorts, 0, self.home, axis=0)
+            T, N, C, _ = self.engine.ctx.TNCE
+            ts, dt = self._ldgr_slice()
+            cohorts = self.ldgr[ts, :, :]
+            cohorts = cohorts.reshape((dt * N, C))
+            cohorts = np.insert(cohorts, 0, self.home, axis=0)
             return cohorts
 
         def update_cohorts(self, deltas: Compartments) -> None:
-            T, N, C, _=self.engine.ctx.TNCE
-            ts, dt=self._ldgr_slice()
-            home_deltas=deltas[0, :]
-            ldgr_deltas=deltas[1:, :].reshape((dt, N, C))
-            vstr_deltas=ldgr_deltas.sum(axis=(0, 1), dtype=SimDType)
+            T, N, C, _ = self.engine.ctx.TNCE
+            ts, dt = self._ldgr_slice()
+            home_deltas = deltas[0, :]
+            ldgr_deltas = deltas[1:, :].reshape((dt, N, C))
+            vstr_deltas = ldgr_deltas.sum(axis=(0, 1), dtype=SimDType)
             self.home += home_deltas
             self.vstr += vstr_deltas
             self.ldgr[ts, :, :] += ldgr_deltas
