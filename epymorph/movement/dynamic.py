@@ -8,7 +8,7 @@ from attr import dataclass
 
 from epymorph.clock import Tick, TickDelta
 from epymorph.context import Compartments, SimContext, SimDType
-from epymorph.movement.clause import (RETURN, ArrayClause, Clause,
+from epymorph.movement.clause import (RETURN, ArrayClause, CellClause, Clause,
                                       CompartmentPredicate, RowClause,
                                       TravelClause)
 from epymorph.movement.engine import Movement, MovementBuilder
@@ -74,7 +74,7 @@ class DynamicRowClause(RowClause, DynamicTravelClause):
         return self.f(tick, src_index)
 
 
-class DynamicCellClause(RowClause, DynamicTravelClause):
+class DynamicCellClause(CellClause, DynamicTravelClause):
     f: Callable[[Tick, int, int], Compartments]
 
     def __init__(self, info: DynamicClauseInfo, f: Callable[[Tick, int, int], Compartments]):
@@ -196,18 +196,27 @@ def make_global_namespace(ctx: SimContext) -> dict[str, Any]:
             'maximum': np.maximum,
             'minimum': np.minimum,
             'absolute': np.absolute,
+            'floor': np.floor,
+            'ceil': np.ceil,
         }),
-        # restricted names
-        # TODO: there are probably more restrictions to add
-        # TODO: in fact, this is probably not sufficient as a security model,
-        # though it'll do for now
-        'breakpoint': None,
+        # Restricted names: this is a security bandaid.
+        # TODO: I think the only sensible security measure is to analyze the functions' ASTs to detect bad behavior.
+        'globals': None,
+        'locals': None,
+        'import': None,
         'compile': None,
         'eval': None,
         'exec': None,
         'object': None,
-        'globals': None,
         'print': None,
+        'open': None,
+        'quit': None,
+        'exit': None,
+        'copyright': None,
+        'credits': None,
+        'license': None,
+        'help': None,
+        'breakpoint': None,
     }
 
 

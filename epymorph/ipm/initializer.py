@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 
 from epymorph.context import Compartments, SimContext
-from epymorph.util import NumpyIndices
+from epymorph.util import NDIndices
 
 
 def _get_param(ctx: SimContext, name: str, override_value: Any | None = None) -> Any:
@@ -68,7 +68,7 @@ class SelectionInitializer(Initializer, ABC):
         # print([(i, c[1]) for i, c in enumerate(out) if c[1] > 0])
 
     @abstractmethod
-    def select(self, ctx: SimContext) -> NumpyIndices:
+    def select(self, ctx: SimContext) -> NDIndices:
         """Given the context, return the indices of which nodes to infect."""
         pass
 
@@ -81,7 +81,7 @@ class SingleLocInitializer(SelectionInitializer):
         super().__init__(infection_seed_size)
         self.infection_seed_loc = infection_seed_loc
 
-    def select(self, ctx: SimContext) -> NumpyIndices:
+    def select(self, ctx: SimContext) -> NDIndices:
         # Seed an infection in one location.
         loc = _get_param(ctx, "infection_seed_loc", self.infection_seed_loc)
         return np.array(loc, dtype=np.intp)
@@ -95,7 +95,7 @@ class IndexedLocsInitializer(SelectionInitializer):
         super().__init__(infection_seed_size)
         self.infection_locations = infection_locations
 
-    def select(self, ctx: SimContext) -> NumpyIndices:
+    def select(self, ctx: SimContext) -> NDIndices:
         indices = _get_param(ctx, "infection_locations",
                              self.infection_locations)
         if isinstance(indices, np.ndarray):
@@ -112,7 +112,7 @@ class LabeledLocsInitializer(SelectionInitializer):
         super().__init__(infection_seed_size)
         self.infection_locations = infection_locations
 
-    def select(self, ctx: SimContext) -> NumpyIndices:
+    def select(self, ctx: SimContext) -> NDIndices:
         labels = _get_param(ctx, "infection_locations",
                             self.infection_locations)
         return np.where(np.isin(ctx.geo['labels'], labels))[0]
@@ -126,7 +126,7 @@ class RandomLocsInitializer(SelectionInitializer):
         super().__init__(infection_seed_size)
         self.infection_locations = infection_locations
 
-    def select(self, ctx: SimContext) -> NumpyIndices:
+    def select(self, ctx: SimContext) -> NDIndices:
         num_locs = _get_param(ctx, "infection_locations",
                               self.infection_locations)
         return ctx.rng.integers(0, ctx.nodes, num_locs, dtype=np.intp)
@@ -145,7 +145,7 @@ class TopLocsInitializer(SelectionInitializer):
         self.infection_locations = infection_locations
         self.infection_attribute = infection_attribute
 
-    def select(self, ctx: SimContext) -> NumpyIndices:
+    def select(self, ctx: SimContext) -> NDIndices:
         num_locs = _get_param(ctx, "infection_locations",
                               self.infection_locations)
         attribute = _get_param(ctx, "infection_attribute",
@@ -182,7 +182,7 @@ class BottomLocsInitializer(SelectionInitializer):
         self.infection_locations = infection_locations
         self.infection_attribute = infection_attribute
 
-    def select(self, ctx: SimContext) -> NumpyIndices:
+    def select(self, ctx: SimContext) -> NDIndices:
         num_locs = _get_param(ctx, "infection_locations",
                               self.infection_locations)
         attribute = _get_param(ctx, "infection_attribute",

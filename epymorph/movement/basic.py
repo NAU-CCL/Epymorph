@@ -167,9 +167,11 @@ class BasicEngine(MovementEngine):
                 else:
                     # cohort staying
                     new_cohorts[loc.get_index()].append(cohort)
+
         for loc, cohorts in zip(self.locations, new_cohorts):
             loc.cohorts = cohorts
-            self._normalize()
+
+        self._normalize()
 
         logger.debug("moved %d", total_movers)
 
@@ -246,14 +248,14 @@ class BasicEngine(MovementEngine):
         N = self.ctx.nodes
         requested = np.zeros((N, N), dtype=SimDType)
         for i in range(self.ctx.nodes):
-            requested[:, i] = clause.apply(tick, i)
+            requested[i, :] = clause.apply(tick, i)
         np.fill_diagonal(requested, 0)
         self._apply_travel(clause, tick, requested)
 
     def _apply_cell(self, clause: CellClause, tick: Tick) -> None:
-        requested: NDArray[SimDType] = np.fromfunction(
-            lambda i, j: clause.apply(tick, i, j),  # type: ignore
-            shape=(self.ctx.nodes, self.ctx.nodes),
-            dtype=SimDType)
+        N = self.ctx.nodes
+        requested = np.empty((N, N), dtype=SimDType)
+        for i, j in np.ndindex(self.ctx.nodes, self.ctx.nodes):
+            requested[i, j] = clause.apply(tick, i, j)
         np.fill_diagonal(requested, 0)
         self._apply_travel(clause, tick, requested)

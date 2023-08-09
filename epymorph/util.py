@@ -82,8 +82,7 @@ def as_unique_set(xs: list[T]) -> set[T]:
 
 N = TypeVar('N', bound=np.number)
 
-# TODO: better naming scheme for NDArray aliases? NIndices? NDAIndices?
-NumpyIndices = NDArray[np.intp]
+NDIndices = NDArray[np.intp]
 
 
 def stutter(it: Iterable[T], times: int) -> Iterable[T]:
@@ -144,7 +143,7 @@ def pairwise_haversine(longitudes: NDArray[np.float_], latitudes: NDArray[np.flo
     return 2 * RADIUS_MI * np.arcsin(np.sqrt(a))
 
 
-def top(size: int, arr: NDArray) -> NumpyIndices:
+def top(size: int, arr: NDArray) -> NDIndices:
     """
     Find the top `size` elements in `arr` and return their indices.
     Assumes the array is flat and the kind of thing that can be order-compared.
@@ -152,7 +151,7 @@ def top(size: int, arr: NDArray) -> NumpyIndices:
     return np.argpartition(arr, -size)[-size:]
 
 
-def bottom(size: int, arr: NDArray) -> NumpyIndices:
+def bottom(size: int, arr: NDArray) -> NDIndices:
     """
     Find the bottom `size` elements in `arr` and return their indices.
     Assumes the array is flat and the kind of thing that can be order-compared.

@@ -13,14 +13,7 @@ def sparsemod_predef():
 
 # Commuter movement
 [mtype: days=all; leave=1; duration=0d; return=2; function=
-def sparse_commuters(t, src):
-    actual = predef['commuters_by_node'][src]
-    return np.multinomial(actual, predef['dispersal_kernel'][src, :])
+def sparsemod_commuters(t):
+    n_commuters = predef['commuters_by_node']
+    return np.multinomial(n_commuters, predef['dispersal_kernel'])
 ]
-
-# TODO: this should be written in array form for performance reasons
-#[mtype: days=all; leave=1; duration=0d; return=2; function=
-#def sparse_commuters(t):
-#    actual = predef['commuters_by_node']
-#    return multinomial(actual, predef['dispersal_kernel'])
-#]
