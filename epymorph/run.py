@@ -12,6 +12,9 @@ import numpy as np
 from pydantic import BaseModel, ValidationError
 
 from epymorph.data import geo_library, ipm_library, mm_library
+from epymorph.movement.basic import BasicEngine
+from epymorph.movement.engine import MovementEngine
+from epymorph.movement.hypercube import HypercubeEngine
 from epymorph.simulation import Output, Simulation, configure_sim_logging
 from epymorph.util import Duration, progress, stridesum
 
@@ -151,6 +154,7 @@ class RunInput(BaseModel):
 
 
 def run(input_path: str,
+        engine_id: str | None,
         out_path: str | None,
         chart: str | None,
         profiling: bool) -> int:
@@ -201,11 +205,16 @@ def run(input_path: str,
 
     configure_sim_logging(enabled=not profiling)
 
+    engine = dict[str | None, type[MovementEngine]]({
+        'basic': BasicEngine,
+        'hypercube': HypercubeEngine,
+    }).get(engine_id, None)
+
     geo = geo_builder()
-    sim = Simulation(geo, ipm_builder(), mm_builder())
+    sim = Simulation(geo, ipm_builder(), mm_builder(), engine)
 
     print()
-    print(f"Running simulation:")
+    print(f"Running simulation ({sim.mvm_engine.__name__}):")
     print(f"• {start_date} to {end_date} ({duration_days} days)")
     print(f"• {geo.nodes} geo nodes")
 

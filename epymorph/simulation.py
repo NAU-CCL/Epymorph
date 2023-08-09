@@ -128,8 +128,7 @@ class Simulation:
         self.geo = geo
         self.ipm_builder = ipm_builder
         self.mvm_builder = mvm_builder
-        # TODO: add a setting to select the movement engine
-        self.mvm_engine = HypercubeEngine if mvm_engine is None else mvm_engine
+        self.mvm_engine = BasicEngine if mvm_engine is None else mvm_engine
         self.on_start = Event()
         self.on_tick = Event()
         self.on_end = Event()
