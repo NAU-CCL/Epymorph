@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from logging import DEBUG, Logger, getLogger
 from operator import attrgetter
-from typing import Generator, Iterable
+from typing import Generator, Iterable, Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -55,9 +55,12 @@ class BasicLocation(Location):
     index: int
     cohorts: list[Cohort]
 
-    def __init__(self, index: int, initial_compartments: Compartments):
-        self.index = index
-        self.cohorts = [Cohort(initial_compartments, index, HOME_TICK)]
+    @classmethod
+    def create(cls, index: int, initial_compartments: Compartments) -> Self:
+        return cls(
+            index=index,
+            cohorts=[Cohort(initial_compartments, index, HOME_TICK)],
+        )
 
     def get_index(self) -> int:
         return self.index
@@ -98,7 +101,7 @@ class BasicEngine(MovementEngine):
         super().__init__(ctx, movement, initial_compartments)
         self.clause_loggers = {c.name: getLogger(f'movement.{c.name}')
                                for c in movement.clauses}
-        self.locations = [BasicLocation(i, cs)
+        self.locations = [BasicLocation.create(i, cs)
                           for (i, cs) in enumerate(initial_compartments)]
 
     # Implement World

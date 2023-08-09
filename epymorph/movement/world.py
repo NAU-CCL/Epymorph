@@ -1,20 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Generic, Iterable, TypeVar
+from typing import Iterable
 
 from epymorph.context import Compartments
 
-"""
-TODO: this text needs to be adapted...
-ObjWorld tracks the state of a simulation's populations and subpopulations at a particular timeslice.
-Each node in the Geo Model is represented as a Location; each Location has a list of Cohorts
-that are considered to be well-mixed at that location; and each Cohort is divided into
-Compartments as defined by the Intra-Population Model.
-"""
-
 
 class Location(ABC):
+    """An interface to the world data held by a MovementEngine; this class accesses data by location."""
 
     @abstractmethod
     def get_index(self) -> int:
@@ -49,6 +42,7 @@ class Location(ABC):
 
 
 class World(ABC):
+    """An interface to the world data held by a MovementEngine; this class accesses global data."""
 
     @abstractmethod
     def get_locations(self) -> Iterable[Location]:
