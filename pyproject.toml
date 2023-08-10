@@ -1,0 +1,66 @@
+[project]
+name = "epymorph"
+
+version = "1.0.0"
+
+# authors = []
+
+description = "EpiMoRPH disease modeling"
+
+readme = "README.md"
+
+requires-python = ">=3.11"
+
+# license = ""
+
+keywords = ["epidemiology", "disease modeling", "metapopulation"]
+
+classifiers = [
+  "Programming Language :: Python :: 3"
+]
+
+dependencies = [
+  "matplotlib",
+  "numpy",
+  "pydantic",
+  "sympy",
+  "tomli-w",
+  "pandas",
+  "geopandas",
+  "census",
+  "jsonpickle",
+  "pygris",
+  "shapely",
+]
+
+[project.optional-dependencies]
+dev = [
+  # pin pycodestyle version (https://github.com/hhatto/autopep8/issues/689)
+  "pycodestyle == 2.10.0",
+  "autopep8",
+  "isort",
+  "notebook",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.autopep8]
+max_line_length = 88
+
+[tool.pyright]
+exclude = [
+  "**/__pycache__",
+  "**/.*",
+  "build",
+]
+
+[tool.pylint.basic]
+good-names-rgxs = ["[a-z_][a-Z0-9_]*"]
+
+[tool.setuptools.packages.find]
+include = ["epymorph*"]
+
+[tool.setuptools.package-data]
+"epymorph.data" = ["*.csv", "*.movement", "*.geo", "*.ipm"]

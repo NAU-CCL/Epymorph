@@ -18,7 +18,7 @@ You may need to install additional system packages for virtual environments and 
 sudo apt install python3.11-venv python3.11-tk
 ```
 
-Using VS Code, install the project's recommended IDE extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install the modules from `requirements.txt` and `requirements-dev.txt`.
+Using VS Code, install the project's recommended IDE extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install all dependencies (including `dev`).
 
 Or you can set up from the command line:
 
@@ -28,12 +28,11 @@ cd $PROJECT_DIRECTORY
 # create the virtual environment
 python3.11 -m venv .venv
 
-# activate it
+# activate it (after which `python` should be bound to the venv python)
 source .venv/bin/activate
 
 # then install the requirements
-python3.11 -m pip install -r requirements.txt
-python3.11 -m pip install -r requirements-dev.txt
+python -m pip install .[dev]
 ```
 
 ## Running from the command line
