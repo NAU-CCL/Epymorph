@@ -13,7 +13,6 @@ from epymorph.ipm.attribute import process_params
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementBuilder, MovementEngine
-from epymorph.movement.hypercube import HypercubeEngine
 from epymorph.util import DataDict, Event
 
 

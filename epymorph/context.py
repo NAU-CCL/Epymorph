@@ -1,4 +1,9 @@
-from typing import NamedTuple
+"""
+The need for certain info about a simulation cuts across modules (ipm, movement, geo), so
+the SimContext structure is here to contain that info and avoid circular dependencies.
+"""
+
+from dataclasses import dataclass, field
 
 import numpy as np
 from numpy.typing import NDArray
@@ -12,21 +17,21 @@ This is the numpy datatype that should be used to represent internal simulation 
 Where segments of the application maintain compartment and/or event counts,
 they should take pains to use this type at all times (if possible).
 """
-# Having a centrally-located value for this means we can change it reliably.
+
+# SimDType being centrally-located means we can change it reliably.
 
 Compartments = NDArray[SimDType]
 """Alias for ndarrays representing compartment counts."""
 
 Events = NDArray[SimDType]
 """Alias for ndarrays representing event counts."""
+
 # Aliases (hopefully) make it a bit easier to keep all these NDArrays sorted out.
 
 
-class SimContext(NamedTuple):
+@dataclass(frozen=True)
+class SimContext:
     """Metadata about the simulation being run."""
-
-    # Because the need for this info cuts across modules (ipm, movement, geo),
-    # this structure is extracted here to avoid creating circular dependencies.
 
     # geo info
     nodes: int
@@ -41,10 +46,16 @@ class SimContext(NamedTuple):
     clock: Clock
     rng: np.random.Generator
 
-    @property
-    def TNCE(self) -> tuple[int, int, int, int]:
-        """
-        The critical dimensionalities of the simulation, for ease of unpacking.
-        T: number of ticks; N: number of geo nodes; C: number of IPM compartments; E: number of IPM events (transitions)
-        """
-        return (self.clock.num_ticks, self.nodes, self.compartments, self.events)
+    TNCE: tuple[int, int, int, int] = field(init=False)
+    """
+    The critical dimensionalities of the simulation, for ease of unpacking.
+    T: number of ticks;
+    N: number of geo nodes;
+    C: number of IPM compartments;
+    E: number of IPM events (transitions)
+    """
+
+    def __post_init__(self):
+        tnce = (self.clock.num_ticks, self.nodes,
+                self.compartments, self.events)
+        object.__setattr__(self, 'TNCE', tnce)

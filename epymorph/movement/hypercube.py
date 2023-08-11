@@ -1,3 +1,7 @@
+"""
+Implements the hypercube movement engine.
+"""
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -8,16 +12,17 @@ import numpy as np
 import psutil
 from numpy.typing import NDArray
 
-import epymorph.movement.world as world
 from epymorph.clock import Tick
 from epymorph.context import Compartments, SimContext, SimDType
 from epymorph.movement.clause import (ArrayClause, CellClause, ReturnClause,
                                       RowClause, TravelClause)
 from epymorph.movement.engine import Movement, MovementEngine
+from epymorph.movement.world import Location
 
 
-def to_gib(bytes: int) -> float:
-    return bytes / (1024 * 1024 * 1024)
+def to_gib(n_bytes: int) -> float:
+    """Convert bytes to GiB."""
+    return n_bytes / (1024 * 1024 * 1024)
 
 
 def _mem_check(ctx: SimContext) -> None:
@@ -34,22 +39,41 @@ Insufficient memory: the simulation is too large (using HypercubeEngine).
         raise Exception(msg)
 
 
-def batches(items, workers) -> list[range]:
+def batches(items: int, workers: int) -> list[range]:
+    """Calculate which items should be handled by parallel workers."""
     size = int(ceil(items / workers))
     return [range(i * size, min(items, (i+1) * size))
             for i in range(workers)]
 
 
 class HypercubeEngine(MovementEngine):
-    # TODO: document how time offset/frontier work
-    time_offset: int
-    time_frontier: int
-    home: NDArray[SimDType]  # NxC
-    vstr: NDArray[SimDType]  # NxC
-    ldgr: NDArray[SimDType]  # TxNxNxC
-    locations: list[HLocation]
+    """A movement engine which tracks the world state as a big TxNxNxC array."""
 
-    def __init__(self, ctx: SimContext, movement: Movement, initial_compartments: list[Compartments]):
+    home: NDArray[SimDType]  # at home (N,C)
+    """The number of individuals currently at their home location by compartment."""
+
+    vstr: NDArray[SimDType]  # visitors (N,C)
+    """The sum of all visitors currently at each location by compartment."""
+
+    ldgr: NDArray[SimDType]  # ledger (T,N,N,C)
+    """
+    All travelers:
+    - axis 0: when they return home,
+    - axis 1: where they came from,
+    - axis 2: where they're visiting,
+    - axis 3: number of individuals by compartment.
+    """
+
+    time_offset: int
+    """The start of the ledger's active chunk: based on what timestep we're on."""
+    time_frontier: int
+    """The end of the ledger's active chunk: what's the furthest-out group of travelers?"""
+
+    locations: list[HLocation]
+    """Data accessors for each location."""
+
+    def __init__(self, ctx: SimContext, movement: Movement,
+                 initial_compartments: list[Compartments]):
         _mem_check(ctx)
         super().__init__(ctx, movement, initial_compartments)
         T, N, C, _ = ctx.TNCE
@@ -61,15 +85,13 @@ class HypercubeEngine(MovementEngine):
         # each location has a set of views to the main arrays
         self.locations = [self.HLocation(self, index)
                           for index in range(ctx.nodes)]
-        
-        self.workers = min(N, 4)
+
+        self.workers = min(N, ceil(psutil.cpu_count() / 2))
         self.executor = ThreadPoolExecutor(self.workers)
         self.rngs = ctx.rng.spawn(self.workers)
 
-        
-    def close(self) -> None:
+    def shutdown(self) -> None:
         self.executor.shutdown(wait=True)
-
 
     # Implement World
 
@@ -89,7 +111,7 @@ class HypercubeEngine(MovementEngine):
 
     def apply(self, tick: Tick) -> None:
         super().apply(tick)
-        self.time_offset=tick.index + 1
+        self.time_offset = tick.index + 1
 
     def _apply_return(self, clause: ReturnClause, tick: Tick) -> None:
         self.home += self.ldgr[tick.index, :, :, :].sum(axis=1, dtype=SimDType)
@@ -99,15 +121,16 @@ class HypercubeEngine(MovementEngine):
         T, N, C, E = self.ctx.TNCE
         mover_cs = np.empty((N, C), dtype=SimDType)
         split_cs = np.empty((N, N, C), dtype=SimDType)
-        
+
         # requested_movers (N,N)
         available_movers = self.home * clause.movement_mask  # (N,C)
 
         def process(rng: np.random.Generator, work_range: range) -> None:
             for src in work_range:
-                available_sum = available_movers[src, :].sum(dtype=SimDType) # S
-                requested_src = requested_movers[src, :] # (N,)
-                requested_sum = requested_src.sum(dtype=SimDType) # S
+                available_sum = available_movers[src, :].sum(
+                    dtype=SimDType)  # S
+                requested_src = requested_movers[src, :]  # (N,)
+                requested_sum = requested_src.sum(dtype=SimDType)  # S
 
                 # If requested total is greater than the total available,
                 # use mvhg to select as many as possible.
@@ -165,19 +188,19 @@ class HypercubeEngine(MovementEngine):
         np.fill_diagonal(requested, 0)
         self._apply_travel(clause, tick, requested)
 
-    class HLocation(world.Location):
+    class HLocation(Location):
         """HLocation is essentially a fancy accessor for the engine's data; it doesn't keep any data itself."""
 
         engine: HypercubeEngine
         index: int
 
-        home: NDArray[SimDType]
+        home: NDArray[SimDType]  # at home
         """(C,) the people whose home is here who are currently here"""
 
-        vstr: NDArray[SimDType]
+        vstr: NDArray[SimDType]  # visitors
         """(C,) the people whose home is elsewhere who are currently here"""
 
-        ldgr: NDArray[SimDType]
+        ldgr: NDArray[SimDType]  # ledger
         """(T,N,C) the ledger for all visitors to this location"""
 
         def __init__(self, engine: HypercubeEngine, index: int):
@@ -194,6 +217,7 @@ class HypercubeEngine(MovementEngine):
             return self.home + self.vstr
 
         def _ldgr_slice(self) -> tuple[slice, int]:
+            """Get a slice and the length of that slice for the active part of the ledger."""
             t_start = self.engine.time_offset
             t_end = self.engine.time_frontier
             return slice(t_start, t_end, 1), t_end - t_start
