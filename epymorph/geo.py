@@ -5,7 +5,7 @@ from numpy.typing import DTypeLike, NDArray
 
 from epymorph.adrio import uscounties_library
 from epymorph.adrio.adrio import deserialize
-from epymorph.util import NumpyIndices
+from epymorph.util import NDIndices
 
 
 class Geo(NamedTuple):
@@ -17,7 +17,7 @@ class Geo(NamedTuple):
 # GEO processing utilities
 
 
-def filter_geo(geo: Geo, selection: NumpyIndices) -> Geo:
+def filter_geo(geo: Geo, selection: NDIndices) -> Geo:
     nodes = len(selection)
     labels = (np.array(geo.labels, dtype=str)[selection]).tolist()
 

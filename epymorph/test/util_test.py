@@ -19,7 +19,7 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(act, exp)
 
     def test_stridesum(self):
-        arr = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], dtype=np.int_)
+        arr = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], dtype=int)
 
         act1 = util.stridesum(arr, 2)
         exp1 = np.array([3, 7, 11, 15, 19])

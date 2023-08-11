@@ -1,3 +1,4 @@
+# type: ignore
 from sympy import Max
 
 from epymorph.ipm.attribute import param

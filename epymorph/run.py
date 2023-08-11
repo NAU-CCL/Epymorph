@@ -12,6 +12,9 @@ import numpy as np
 from pydantic import BaseModel, ValidationError
 
 from epymorph.data import geo_library, ipm_library, mm_library
+from epymorph.movement.basic import BasicEngine
+from epymorph.movement.engine import MovementEngine
+from epymorph.movement.hypercube import HypercubeEngine
 from epymorph.simulation import Output, Simulation, configure_sim_logging
 from epymorph.util import Duration, progress, stridesum
 
@@ -66,7 +69,7 @@ def plot_event(out: Output, event_idx: int) -> None:
     x_axis = list(range(out.ctx.clock.num_days))
     for pop_idx in range(out.ctx.nodes):
         values = stridesum(
-            out.incidence[:, pop_idx, event_idx], out.ctx.clock.num_steps)
+            out.incidence[:, pop_idx, event_idx], len(out.ctx.clock.taus))
         y_axis = values
         ax.plot(x_axis, y_axis, label=out.ctx.labels[pop_idx])
     if out.ctx.nodes <= 12:
@@ -113,18 +116,15 @@ def save_csv(path: str, out: Output) -> None:
     Columns are: tick index, population index, then each compartment and then each event in IPM-specific order; ex:
     `t, p, c0, c1, c2, e0, e1, e2`
     """
-    T = out.ctx.clock.num_ticks
-    P = out.ctx.nodes
-    C = out.ctx.compartments
-    E = out.ctx.events
+    T, N, C, E = out.ctx.TNCE
 
     # reshape to 2d: (T,P,C) -> (T*P,C) and (T,P,E) -> (T*P,E)
-    prv = np.reshape(out.prevalence, (T * P, C))
-    inc = np.reshape(out.incidence, (T * P, E))
+    prv = np.reshape(out.prevalence, (T * N, C))
+    inc = np.reshape(out.incidence, (T * N, E))
 
     # tick and pop index columns
-    t_indices = np.reshape(np.repeat(np.arange(T), P), (T * P, 1))
-    p_indices = np.reshape(np.tile(np.arange(P), T), (T * P, 1))
+    t_indices = np.reshape(np.repeat(np.arange(T), N), (T * N, 1))
+    p_indices = np.reshape(np.tile(np.arange(N), T), (T * N, 1))
 
     data = np.concatenate((t_indices, p_indices, prv, inc), axis=1)
     c_labels = [f"c{i}" for i in range(C)]  # compartment headers
@@ -151,6 +151,7 @@ class RunInput(BaseModel):
 
 
 def run(input_path: str,
+        engine_id: str | None,
         out_path: str | None,
         chart: str | None,
         profiling: bool) -> int:
@@ -160,7 +161,7 @@ def run(input_path: str,
 
     try:
         with open(input_path, "rb") as file:
-            input = RunInput(**tomllib.load(file))
+            run_input = RunInput(**tomllib.load(file))
     except ValidationError as e:
         print(e)
         print(f"ERROR: missing required data in input file ({input_path})")
@@ -170,16 +171,30 @@ def run(input_path: str,
         print(f"ERROR: unable to open input file ({input_path})")
         return 1  # invalid input
 
+    # Select engine.
+
+    if engine_id is None:
+        engine = None
+    else:
+        try:
+            engine = dict[str, type[MovementEngine]]({
+                'basic': BasicEngine,
+                'hypercube': HypercubeEngine,
+            })[engine_id]
+        except KeyError:
+            print(f"ERROR: Unknown engine: {engine_id}")
+            return 2  # invalid input
+
     # Load models.
 
     try:
-        ipm_name = input.ipm if input.ipm is not None \
+        ipm_name = run_input.ipm if run_input.ipm is not None \
             else interactive_select("IPM", ipm_library)
 
-        mm_name = input.mm if input.mm is not None \
+        mm_name = run_input.mm if run_input.mm is not None \
             else interactive_select("MM", mm_library)
 
-        geo_name = input.geo if input.geo is not None \
+        geo_name = run_input.geo if run_input.geo is not None \
             else interactive_select("GEO", geo_library)
 
         print("Loading requirements:")
@@ -195,17 +210,17 @@ def run(input_path: str,
 
     # Create and run simulation.
 
-    start_date = input.start_date
-    end_date = start_date + input.duration.to_relativedelta()
+    start_date = run_input.start_date
+    end_date = start_date + run_input.duration.to_relativedelta()
     duration_days = (end_date - start_date).days
 
     configure_sim_logging(enabled=not profiling)
 
     geo = geo_builder()
-    sim = Simulation(geo, ipm_builder(), mm_builder())
+    sim = Simulation(geo, ipm_builder(), mm_builder(), engine)
 
     print()
-    print(f"Running simulation:")
+    print(f"Running simulation ({sim.mvm_engine.__name__}):")
     print(f"• {start_date} to {end_date} ({duration_days} days)")
     print(f"• {geo.nodes} geo nodes")
 
@@ -214,11 +229,11 @@ def run(input_path: str,
     sim.on_tick.subscribe(lambda x: print(progress(x[1]), end='\r'))
     sim.on_end.subscribe(lambda _: print(progress(1.0)))
 
-    rng = None if input.rng_seed is None \
-        else np.random.default_rng(input.rng_seed)
+    rng = None if run_input.rng_seed is None \
+        else np.random.default_rng(run_input.rng_seed)
 
     t0 = time.perf_counter()
-    out = sim.run(input.params, start_date, duration_days, rng, progress=True)
+    out = sim.run(run_input.params, start_date, duration_days, rng)
     t1 = time.perf_counter()
 
     print(f"Runtime: {(t1 - t0):.3f}s")

@@ -3,10 +3,9 @@ from __future__ import annotations
 import numpy as np
 
 from epymorph.clock import Tick
-from epymorph.context import SimContext
+from epymorph.context import Compartments, Events, SimContext, SimDType
 from epymorph.ipm.ipm import Ipm, IpmBuilder
-from epymorph.util import Compartments, Events
-from epymorph.world import Location
+from epymorph.movement.world import Location
 
 
 def load() -> IpmBuilder:
@@ -40,7 +39,7 @@ class NoModel(Ipm):
         super().__init__(ctx)
 
     def events(self, loc: Location, tick: Tick) -> Events:
-        return np.zeros(0, dtype=np.int_)
+        return np.zeros(0, dtype=SimDType)
 
     def apply_events(self, loc: Location, es: Events) -> None:
         pass

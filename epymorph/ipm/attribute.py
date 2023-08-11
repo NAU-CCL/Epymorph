@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from typing import Any, Callable, ClassVar, Literal
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
 from epymorph.ipm.sympy_shim import Symbol, to_symbol
-from epymorph.world import Location
+from epymorph.movement.world import Location
 
 AttributeType = Literal['int', 'float', 'str']
 AttributeShape = str
@@ -122,6 +122,8 @@ def compile_getter(ctx: SimContext, attribute: AttributeDef) -> AttributeGetter:
             data = ctx.geo[name]
         case ParamDef(_, name, _, _):
             data = ctx.param[name]
+        case _:
+            raise Exception(f"Unsupported attribute type {type(attribute)}")
 
     # if we match (this should match all valid shapes):
     # the first group, prefix, will contain everything except the arbitrary index (if present)
@@ -139,9 +141,9 @@ def compile_getter(ctx: SimContext, attribute: AttributeDef) -> AttributeGetter:
         case "T":
             return lambda loc, tick: data[tick.day]
         case "N":
-            return lambda loc, tick: data[loc.index]
+            return lambda loc, tick: data[loc.get_index()]
         case "TxN":
-            return lambda loc, tick: data[tick.day, loc.index]
+            return lambda loc, tick: data[tick.day, loc.get_index()]
         case "":
             a = int(arbitrary_index)
             return lambda loc, tick: data[a]
@@ -150,10 +152,10 @@ def compile_getter(ctx: SimContext, attribute: AttributeDef) -> AttributeGetter:
             return lambda loc, tick: data[tick.day, a]
         case "Nx":
             a = int(arbitrary_index)
-            return lambda loc, tick: data[loc.index, a]
+            return lambda loc, tick: data[loc.get_index(), a]
         case "TxNx":
             a = int(arbitrary_index)
-            return lambda loc, tick: data[tick.day, loc.index, a]
+            return lambda loc, tick: data[tick.day, loc.get_index(), a]
         case _:
             raise Exception(f"Unsupported shape: {attribute.shape}")
 
@@ -203,12 +205,15 @@ def verify_attribute(ctx: SimContext, attr: AttributeDef) -> str | None:
     return None  # no errors!
 
 
-def process_params(params: dict[str, Any]) -> dict[str, Any]:
+def process_params(params: dict[str, Any], dtype: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
     """Pre-process parameter dictionaries."""
     # This simplifies attribute verification: checking lists is more tedious/error-prone than checking ndarrays.
+    if dtype is None:
+        dtype = {}
     ps = params.copy()
     # Replace parameter lists with numpy arrays.
     for key, value in ps.items():
         if isinstance(value, list):
-            ps[key] = np.array(value)
+            dt = dtype.get(key, None)
+            ps[key] = np.array(value, dtype=dt)
     return ps

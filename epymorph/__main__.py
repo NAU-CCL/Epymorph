@@ -31,10 +31,13 @@ def build_cli() -> ArgumentParser:
             'input',
             help="the path to an input toml file")
         p.add_argument(
-            '--out',
+            '-e', '--engine',
+            help="(optional) the id of a runtime engine to use")
+        p.add_argument(
+            '-o', '--out',
             help="(optional) path to an output file to save the simulated prevalence data; specify either a .csv or .npz file")
         p.add_argument(
-            '--chart',
+            '-c', '--chart',
             help="(optional) ID for chart to draw; \"e0\" for event incidence 0; \"p2\" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)")
         p.add_argument(
             '-p', '--profile',
@@ -42,7 +45,7 @@ def build_cli() -> ArgumentParser:
             help="(optional) include this flag to run in profiling mode")
 
         def handler(args):
-            return handle_run(args.input, args.out, args.chart, args.profile)
+            return handle_run(args.input, args.engine, args.out, args.chart, args.profile)
         p.set_defaults(handler=handler)
     define_run()
 

@@ -2,43 +2,18 @@
 
 [predef: function = 
 def sparsemod_predef():
-    radius = 3959.87433 # radius of earth in mi
-
-    def pairwise(arr, func):
-        row = arr[:, newaxis]
-        col = arr[newaxis, :]
-        return func(row, col)
-
-    def normalized_row(arr):
-        divisor = arr.sum(axis=1, keepdims=True)
-        divisor[divisor == 0] = 1 # avoid div-by-0 errors
-        return arr / divisor
-
-    def pairwise_haversine(arr):
-        lng = radians(arr['longitude'])
-        dlng = pairwise(lng, subtract)
-        lat = radians(arr['latitude'])
-        dlat = pairwise(lat, subtract)
-
-        return 2 * radius * arcsin(sqrt(
-            sin(dlat / 2.0) ** 2 +
-            pairwise(cos(lat), multiply) *
-            sin(dlng / 2.0) ** 2
-        ))
-
-    distance = pairwise_haversine(geo['centroid'])
-
-    dispersal_kernel = normalized_row(1 / exp(distance / param['phi']))
-
+    centroid = geo['centroid']
+    distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+    dispersal_kernel = row_normalize(1 / np.exp(distance / param['phi']))
     return {
-        'commuters_by_node': geo['commuters'].sum(axis=1),
+        'commuters_by_node': np.sum(geo['commuters'], axis=1),
         'dispersal_kernel': dispersal_kernel
     }
 ]
 
 # Commuter movement
 [mtype: days=all; leave=1; duration=0d; return=2; function=
-def sparse_commuters(t, src):
-    actual = predef['commuters_by_node'][src]
-    return multinomial(actual, predef['dispersal_kernel'][src, :])
+def sparsemod_commuters(t):
+    n_commuters = predef['commuters_by_node']
+    return np.multinomial(n_commuters, predef['dispersal_kernel'])
 ]

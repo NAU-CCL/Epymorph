@@ -1,6 +1,6 @@
 from typing import Callable
 
-from epymorph.movement import check_movement_spec
+from epymorph.movement.dynamic import check_movement_spec
 
 
 def validate_spec_file(file_path: str) -> int:

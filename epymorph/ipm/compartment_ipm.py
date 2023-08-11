@@ -7,7 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.clock import Tick
-from epymorph.context import SimContext
+from epymorph.context import Compartments, Events, SimContext, SimDType
 from epymorph.ipm.attribute import (AttributeGetter, compile_getter,
                                     verify_attribute)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
@@ -15,8 +15,8 @@ from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
 from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.ipm.sympy_shim import (Symbol, SympyLambda, lambdify,
                                      lambdify_list)
-from epymorph.util import Compartments, Events, list_not_none
-from epymorph.world import Location
+from epymorph.movement.world import Location
+from epymorph.util import list_not_none
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ class CompartmentModelIpmBuilder(IpmBuilder):
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
         # TODO: we need a better system for initializing the compartments.
         # Initial compartments based on population (C0)
-        cs = np.zeros((ctx.nodes, ctx.compartments), dtype=np.int_)
+        cs = np.zeros((ctx.nodes, ctx.compartments), dtype=SimDType)
         cs[:, 0] = ctx.geo['population']
         # With a seeded infection (C1) in one location
         seed_index = ctx.param['infection_seed_loc']
@@ -117,11 +117,13 @@ class CompartmentModelIpm(Ipm):
     def _rate_args(self, loc: Location, effective: Compartments, tick: Tick) -> list[Any]:
         """Assemble rate function arguments for this location/tick."""
         attribs = (f(loc, tick) for f in self.attr_getters)
-        return [*effective, *attribs]
+        # The math should be done on full ints or else overflows are likely,
+        # but the results will be stored back to SimDType.
+        return [*(effective.astype(int)), *attribs]
 
-    def _eval_rates(self, rate_args: list[Any], tau: np.double) -> NDArray[np.int_]:
+    def _eval_rates(self, rate_args: list[Any], tau: float) -> NDArray[SimDType]:
         """Evaluate the event rates and do random draws for all transition events."""
-        occurrences = np.zeros(self.ctx.events, dtype=int)
+        occurrences = np.zeros(self.ctx.events, dtype=SimDType)
         index = 0
         for t in self.transitions:
             match t:
@@ -141,8 +143,7 @@ class CompartmentModelIpm(Ipm):
 
     def events(self, loc: Location, tick: Tick) -> Events:
         # Get effective population for each compartment.
-        all_pops = np.array([p.compartments for p in loc.pops], dtype=int)
-        effective = np.sum(all_pops, axis=0)
+        effective = loc.get_compartments()
 
         # Calculate how many events we expect to happen this tick.
         rate_args = self._rate_args(loc, effective, tick)
@@ -190,18 +191,18 @@ class CompartmentModelIpm(Ipm):
         # draw a random individual (without replacement) to assign to that event. Repeat until all
         # events are distributed. However that sounds like a major performance hit if we're not careful
         # how to do it, so we're going with this for now.
-        available = np.array([pop.compartments for pop in loc.pops])
-        occurrences = np.zeros((len(loc.pops), self.ctx.events), dtype=int)
+        available = loc.get_cohorts()
+        occurrences = np.zeros(
+            (available.shape[0], self.ctx.events), dtype=SimDType)
         for eidx in self._random_event_order():
             occur: int = es[eidx]  # type: ignore
             cidx = self.model.source_compartment_for_event[eidx]
             selected = self.ctx.rng.multivariate_hypergeometric(
-                available[:, cidx], occur)
+                available[:, cidx], occur).astype(SimDType)
             occurrences[:, eidx] = selected
             available[:, cidx] -= selected
 
         # Now that events are assigned to pops, update pop compartments using apply matrix.
-        for pidx, pop in enumerate(loc.pops):
-            deltas = np.matmul(
-                occurrences[pidx], self.model.apply_matrix)
-            pop.compartments += deltas
+        deltas = np.matmul(
+            occurrences, self.model.apply_matrix, dtype=SimDType)
+        loc.update_cohorts(deltas)
