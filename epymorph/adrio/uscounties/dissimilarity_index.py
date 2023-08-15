@@ -50,6 +50,7 @@ class DissimilarityIndex(ADRIO):
                 tract_data_df = concat([tract_data_df, cache_df_tract])
 
         else:
+            cache_df_tract.reset_index(inplace=True)
             tract_data_df = cache_df_tract
 
         if len(uncached_county) > 0:
@@ -73,6 +74,7 @@ class DissimilarityIndex(ADRIO):
                 county_data_df = concat([county_data_df, cache_df_county])
 
         else:
+            cache_df_county.reset_index(inplace=True)
             county_data_df = cache_df_county
 
         output = np.zeros(len(county_data_df.index), dtype=np.float_)

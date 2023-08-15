@@ -99,6 +99,7 @@ class PopulationByAge(ADRIO):
                 data_df = concat([data_df, cache_df])
 
         else:
+            cache_df.reset_index(inplace=True)
             data_df = cache_df
 
         # calculate population of each age bracket and enter into a numpy array to return

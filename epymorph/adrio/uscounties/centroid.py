@@ -7,13 +7,15 @@ from shapely.wkt import loads
 
 from epymorph.adrio.adrio import ADRIO
 
+CentroidDType = np.dtype([('longitude', float), ('latitude', float)])
+
 
 class Centroid(ADRIO):
     """ADRIO to fetch the geographic centroid of all counties in a provided set of states"""
     attribute = 'centroid'
     year = 2015
 
-    def fetch(self, force=False, **kwargs) -> NDArray[np.float_]:
+    def fetch(self, force=False, **kwargs) -> NDArray:
         """
         Returns a numpy array of tuples that are each an ordered pair of coordinates for each
         county's geographic centroid
@@ -40,10 +42,11 @@ class Centroid(ADRIO):
                 county_df = concat([county_df, cache_df])
 
         else:
+            cache_df.reset_index(inplace=True)
             county_df = cache_df
 
         # map county's name to its centroid in a numpy array and return
-        output = np.zeros(len(county_df.index), dtype=tuple)
+        output = np.zeros(len(county_df.index), dtype=CentroidDType)
         for i, row in county_df.iterrows():
             if type(row['geometry']) is str:
                 output[i] = loads(row['geometry']).centroid.coords[0]
