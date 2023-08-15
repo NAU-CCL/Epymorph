@@ -20,7 +20,7 @@ class TestBasicLocation(unittest.TestCase):
                 Cohort(np.array([300]), 0, HOME_TICK),
             ])
 
-        act._normalize()
+        act.normalize()
         self.assertEqual(act, exp)
 
     def test_normalize_02(self):
@@ -41,7 +41,7 @@ class TestBasicLocation(unittest.TestCase):
                 Cohort(np.array([75]), 2, 2),
             ])
 
-        act._normalize()
+        act.normalize()
         self.assertEqual(act, exp)
 
     def test_normalize_03(self):
@@ -62,5 +62,5 @@ class TestBasicLocation(unittest.TestCase):
                 Cohort(np.array([500]), 0, HOME_TICK),
             ])
 
-        act._normalize()
+        act.normalize()
         self.assertEqual(exp, act)

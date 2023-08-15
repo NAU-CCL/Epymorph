@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Any, Callable, Generic, Iterable, Literal, TypeVar, cast
+from typing import (Any, Callable, Generic, Iterable, Literal, TypeGuard,
+                    TypeVar)
 
 import numpy as np
 from dateutil.relativedelta import relativedelta
@@ -75,6 +76,10 @@ def as_unique_set(xs: list[T]) -> set[T]:
     if len(xs_set) != len(xs):
         raise NotUniqueException()
     return xs_set
+
+
+def as_list(x: T | list[T]) -> list[T]:
+    return x if isinstance(x, list) else [x]
 
 
 # numpy utilities
@@ -196,6 +201,49 @@ def expand_data(data: float | int | list | NDArray, rows: int, cols: int, dtype:
 
 
 _duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
+
+
+class NumpyTypeError(Exception):
+    """Describes an error checking the type or shape of a numpy array."""
+
+
+DT = TypeVar('DT', bound=np.generic)
+"""A numpy dtype."""
+
+DTLike = type[DT]
+"""(Some) of the things that can be coerced as a numpy dtype."""
+
+
+def check_ndarray(
+    value: Any,
+    dtype: DTLike[DT] | list[DTLike[DT]] | None = None,
+    shape: tuple[int, ...] | list[tuple[int, ...]] | None = None,
+    dimensions: int | list[int] | None = None,
+) -> TypeGuard[NDArray[DT]]:
+    """
+    Checks that a value is a numpy array of the given dtype and shape.
+    (If you pass a list of dtypes or shapes, they will be matched as though combined with an "or".)
+    Type-guards if true, raises a NumpyTypeError is false.
+    """
+    if not isinstance(value, np.ndarray):
+        raise NumpyTypeError("Not a numpy array.")
+    if shape is not None:
+        shape = as_list(shape)
+        if not value.shape in shape:
+            msg = f"Not a numpy shape match: got {value.shape}, expected {shape}"
+            raise NumpyTypeError(msg)
+    if dtype is not None:
+        npdtypes = [np.dtype(x) for x in as_list(dtype)]
+        is_subtype = map(lambda x: np.issubdtype(value.dtype, x), npdtypes)
+        if not any(is_subtype):
+            msg = f"Not a numpy dtype match; got {value.dtype}, required {npdtypes}"
+            raise NumpyTypeError(msg)
+    if dimensions is not None:
+        dimensions = as_list(dimensions)
+        if not len(value.shape) in dimensions:
+            msg = f"Not a numpy dimensional match: got {len(value.shape)} dimensions, expected {dimensions}"
+            raise NumpyTypeError(msg)
+    return True
 
 
 # custom pydantic types

@@ -37,11 +37,16 @@ def prepare_run_toml(out_path: str,
         start_date=date.today(),
         duration=Duration(count=14, unit="d"),
         rng_seed=None,
+        init={
+            'initializer': 'single_location',
+            'location': 0,
+            'seed_size': 10_000,
+        },
         params={
             # TODO: would like to inspect IPM/MM to figure
             # out which params are needed and list them here
             # But for now, just a placeholder...
-            "example_parameter": 0.5
+            "example_parameter": 0.5,
         }
     )
 

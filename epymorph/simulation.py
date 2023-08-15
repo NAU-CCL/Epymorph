@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from epymorph.clock import Clock
 from epymorph.context import SimContext, SimDType
 from epymorph.geo import Geo
+from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
 from epymorph.ipm.attribute import process_params
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.basic import BasicEngine
@@ -145,7 +146,12 @@ class Simulation:
             rng=np.random.default_rng() if rng is None else rng
         )
 
-    def run(self, param: DataDict, start_date: date, duration_days: int, rng: np.random.Generator | None = None) -> Output:
+    def run(self,
+            param: DataDict,
+            start_date: date,
+            duration_days: int,
+            initializer: Initializer | None = None,
+            rng: np.random.Generator | None = None) -> Output:
         """
         Execute the simulation with the given parameters:
 
@@ -155,17 +161,21 @@ class Simulation:
         - rng: (optional) a psuedo-random number generator used in all stochastic calculations
         """
 
-        ctx = self._make_context(process_params(param),
-                                 start_date,
-                                 duration_days,
-                                 rng)
+        ctx = self._make_context(
+            process_params(param),
+            start_date,
+            duration_days,
+            rng
+        )
 
         # Verification checks:
         self.ipm_builder.verify(ctx)
         self.mvm_builder.verify(ctx)
         self.mvm_builder.verify(ctx)
 
-        inits = self.ipm_builder.initialize_compartments(ctx)
+        if initializer is None:
+            initializer = DEFAULT_INITIALIZER
+        inits = initialize(initializer, ctx)
 
         mvm = self.mvm_engine(ctx, self.mvm_builder.build(ctx), inits)
 

@@ -25,8 +25,8 @@ def test_sim_context(num_nodes: int) -> SimContext:
     )
 
 
-def to_cs(pops: list[int]) -> list[Compartments]:
-    return [np.array([p], dtype=SimDType) for p in pops]
+def to_cs(pops: list[int]) -> Compartments:
+    return np.array(pops, dtype=SimDType)[:, np.newaxis]
 
 
 # Some clauses for testing
