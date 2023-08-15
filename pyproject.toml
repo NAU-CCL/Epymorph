@@ -58,7 +58,9 @@ exclude = [
 ]
 
 [tool.pylint.basic]
-good-names-rgxs = ["[a-z_][a-Z0-9_]*"]
+max-line-length = 120
+good-names = ["T", "N", "C", "E"]
+good-names-rgxs = ["[a-z_][a-zA-Z0-9_]*"]
 
 [tool.setuptools.packages.find]
 include = ["epymorph*"]
