@@ -70,20 +70,6 @@ class CompartmentModelIpmBuilder(IpmBuilder):
             raise Exception("IPM attribute requirements were not met. "
                             + "See errors:" + "".join(f"\n- {e}" for e in errors))
 
-    def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
-        # TODO: we need a better system for initializing the compartments.
-        # Initial compartments based on population (C0)
-        cs = np.zeros((ctx.nodes, ctx.compartments), dtype=SimDType)
-        cs[:, 0] = ctx.geo['population']
-        # With a seeded infection (C1) in one location
-        seed_index = ctx.param['infection_seed_loc']
-        # But don't infect more people than exist!
-        seed_size = min(cs[seed_index, 0], ctx.param['infection_seed_size'])
-        cs[seed_index, 0] -= seed_size
-        cs[seed_index, 1] += seed_size
-        # list(cs) gives us a list of numpy arrays, whereas cs.tolist() would give us a list of lists
-        return list(cs)
-
     def compartment_tags(self) -> list[list[str]]:
         return [c.tags for c in self.model.compartments]
 

@@ -56,7 +56,7 @@ class MovementEngine(World, ABC):
     movement: Movement
 
     def __init__(self, ctx: SimContext, movement: Movement,
-                 initial_compartments: list[Compartments]):
+                 initial_compartments: Compartments):
         self.ctx = ctx
         self.movement = movement
         # initial_compartments should be utilized by subclasses

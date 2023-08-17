@@ -5,6 +5,7 @@ import re
 import time
 import tomllib
 from datetime import date
+from functools import partial
 from typing import Any, TypeVar
 
 import matplotlib.pyplot as plt
@@ -12,13 +13,13 @@ import numpy as np
 from pydantic import BaseModel, ValidationError
 
 from epymorph.data import geo_library, ipm_library, mm_library
+from epymorph.initializer import initializer_library
+from epymorph.ipm.attribute import process_params
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementEngine
 from epymorph.movement.hypercube import HypercubeEngine
 from epymorph.simulation import Output, Simulation, configure_sim_logging
 from epymorph.util import Duration, progress, stridesum
-
-T = TypeVar('T')
 
 
 def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
@@ -27,15 +28,18 @@ def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
     print(f"Select the {lib_name} you would like to use: ")
     for i, name in enumerate(keys):
         print(f'{i+1}. {name}')
-    entry = input(f"Enter the number: ")
+    entry = input("Enter the number: ")
     print()
     index = int(entry) - 1
     return keys[index]
 
 
-def load_model(type: str, name: str, lib: dict[str, T]) -> T:
+ModelT = TypeVar('ModelT')
+
+
+def load_model(model_type: str, name: str, lib: dict[str, ModelT]) -> ModelT:
     """Load a model from the given library dictionary and print status checkbox."""
-    text = f"{type} ({name})"
+    text = f"{model_type} ({name})"
     print(f"[-] {text}", end="\r")
     result = lib.get(name)
     if result is not None:
@@ -43,7 +47,7 @@ def load_model(type: str, name: str, lib: dict[str, T]) -> T:
         return result
     else:
         print(f"[X] {text}")
-        raise Exception(f"ERROR: Unknown {type}: {name}")
+        raise Exception(f"ERROR: Unknown {model_type}: {name}")
 
 
 def load_params(path: str) -> dict[str, Any]:
@@ -146,8 +150,9 @@ class RunInput(BaseModel):
     geo: str | None = None
     start_date: date
     duration: Duration
-    params: dict[str, Any]
     rng_seed: int | None = None
+    init: dict[str, Any]
+    params: dict[str, Any]
 
 
 def run(input_path: str,
@@ -184,6 +189,21 @@ def run(input_path: str,
         except KeyError:
             print(f"ERROR: Unknown engine: {engine_id}")
             return 2  # invalid input
+
+    # Configure initializer.
+
+    init_args = process_params(run_input.init)
+    try:
+        init_fn = init_args.pop('initializer')
+    except KeyError:
+        print("ERROR: Required configuration `init.initializer` not found.")
+        return 2  # invalid input
+    try:
+        init = initializer_library[init_fn]
+    except KeyError:
+        print(f"ERROR: Unknown initializer: {init_fn}")
+        return 2  # invalid input
+    initializer = partial(init, **init_args)
 
     # Load models.
 
@@ -233,7 +253,7 @@ def run(input_path: str,
         else np.random.default_rng(run_input.rng_seed)
 
     t0 = time.perf_counter()
-    out = sim.run(run_input.params, start_date, duration_days, rng)
+    out = sim.run(run_input.params, start_date, duration_days, initializer, rng)
     t1 = time.perf_counter()
 
     print(f"Runtime: {(t1 - t0):.3f}s")
@@ -255,12 +275,12 @@ def run(input_path: str,
                 if chart_idx < out.ctx.events:
                     plot_event(out, chart_idx)
                 else:
-                    print(f"Unable to display chart: there are not enough events!")
+                    print("Unable to display chart: there are not enough events!")
             elif chart_type == 'p':
                 if chart_idx < out.ctx.nodes:
                     plot_pop(out, chart_idx)
                 else:
-                    print(f"Unable to display chart: there are not enough nodes!")
+                    print("Unable to display chart: there are not enough nodes!")
 
     if out_path is not None:
         if out_path.endswith(".npz"):

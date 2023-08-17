@@ -59,8 +59,6 @@ theta = 0.1
 move_control = 0.9
 infection_duration = 4.0
 immunity_duration = 90.0
-infection_seed_loc = 0
-infection_seed_size = 10_000
 EOF
 
 # Now we can run the simulation:

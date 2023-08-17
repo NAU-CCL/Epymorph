@@ -20,14 +20,6 @@ class NoModelBuilder(IpmBuilder):
         if 'population' not in ctx.geo:
             raise Exception("geo missing population")
 
-    def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
-        population = ctx.geo['population']
-        num_nodes = len(population)
-        cs = [self.compartment_array() for _ in range(num_nodes)]
-        for i in range(num_nodes):
-            cs[i][0] = population[i]
-        return cs
-
     def build(self, ctx: SimContext) -> Ipm:
         return NoModel(ctx)
 

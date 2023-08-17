@@ -59,3 +59,10 @@ class SimContext:
         tnce = (self.clock.num_ticks, self.nodes,
                 self.compartments, self.events)
         object.__setattr__(self, 'TNCE', tnce)
+
+    @property
+    def population(self) -> NDArray[np.integer]:
+        """Get the population of each node."""
+        # This is for convenient type-safety.
+        # TODO: when we construct the geo we should be verifying this fact.
+        return self.geo['population']

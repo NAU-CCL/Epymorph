@@ -75,7 +75,7 @@ class BasicLocation(Location):
         for i, c in enumerate(self.cohorts):
             c.compartments += deltas[i]
 
-    def _normalize(self) -> None:
+    def normalize(self) -> None:
         """
         Sorts a list of populations and combines mergeable populations (in place).
         Lists of populations should be normalized after creation and any modification.
@@ -84,10 +84,10 @@ class BasicLocation(Location):
         # Iterate over all sequential pairs, starting from (0,1)
         j = 1
         while j < len(self.cohorts):
-            curr = self.cohorts[j - 1]
-            next = self.cohorts[j]
-            if Cohort.can_merge(curr, next):
-                Cohort.merge(curr, next)
+            prev = self.cohorts[j - 1]
+            curr = self.cohorts[j]
+            if Cohort.can_merge(prev, curr):
+                Cohort.merge(prev, curr)
                 del self.cohorts[j]
             else:
                 j += 1
@@ -97,7 +97,7 @@ class BasicEngine(MovementEngine):
     clause_loggers: dict[str, Logger]
     locations: list[BasicLocation]
 
-    def __init__(self, ctx: SimContext, movement: Movement, initial_compartments: list[Compartments]) -> None:
+    def __init__(self, ctx: SimContext, movement: Movement, initial_compartments: Compartments) -> None:
         super().__init__(ctx, movement, initial_compartments)
         self.clause_loggers = {c.name: getLogger(f'movement.{c.name}')
                                for c in movement.clauses}
@@ -108,7 +108,7 @@ class BasicEngine(MovementEngine):
 
     def _normalize(self) -> None:
         for loc in self.locations:
-            loc._normalize()
+            loc.normalize()
 
     def _all_cohorts(self) -> Generator[Cohort, None, None]:
         for loc in self.locations:

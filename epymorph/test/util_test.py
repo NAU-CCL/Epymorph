@@ -60,3 +60,43 @@ class TestUtil(unittest.TestCase):
         act = util.list_not_none(['a', None, 'b', None, None, 'c', None])
         exp = ['a', 'b', 'c']
         self.assertListEqual(act, exp)
+
+    def test_check_ndarray_01(self):
+        arr = np.array([1, 2, 3], dtype=int)
+        self.assertTrue(util.check_ndarray(arr))
+        self.assertTrue(util.check_ndarray(arr, dtype=np.int_))
+        self.assertTrue(util.check_ndarray(arr, shape=(3,)))
+        self.assertTrue(util.check_ndarray(arr, np.int_, (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.int_], (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.int_, np.float_], (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.float_, np.int_], (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.int_, np.float_], [(3,)]))
+        self.assertTrue(util.check_ndarray(
+            arr, [np.int_, np.float_], [(3, 1), (1, 3), (3,)]))
+        self.assertTrue(util.check_ndarray(arr, dimensions=1))
+        self.assertTrue(util.check_ndarray(arr, dimensions=[1, 2, 3]))
+
+    def test_check_ndarray_02(self):
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(None)
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(1)
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray([1, 2, 3])
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray("foofaraw")
+
+    def test_check_ndarray_03(self):
+        arr = np.arange(12).reshape((3, 4))
+        self.assertTrue(util.check_ndarray(arr, shape=(3, 4)))
+        self.assertTrue(util.check_ndarray(arr, shape=(3, 4), dimensions=2))
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(arr, shape=(4, 3))
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(arr, shape=(12,))
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(arr, shape=(3, 4, 1))
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(arr, dtype=np.str_)
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(arr, dimensions=3)

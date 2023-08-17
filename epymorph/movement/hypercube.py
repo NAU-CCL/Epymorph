@@ -73,13 +73,13 @@ class HypercubeEngine(MovementEngine):
     """Data accessors for each location."""
 
     def __init__(self, ctx: SimContext, movement: Movement,
-                 initial_compartments: list[Compartments]):
+                 initial_compartments: Compartments):
         _mem_check(ctx)
         super().__init__(ctx, movement, initial_compartments)
         T, N, C, _ = ctx.TNCE
         self.time_offset = 0
         self.time_frontier = 0
-        self.home = np.array(initial_compartments, dtype=SimDType)
+        self.home = initial_compartments
         self.vstr = np.zeros((N, C), dtype=SimDType)
         self.ldgr = np.zeros((T, N, N, C), dtype=SimDType)
         # each location has a set of views to the main arrays
@@ -118,7 +118,7 @@ class HypercubeEngine(MovementEngine):
         self.vstr -= self.ldgr[tick.index, :, :, :].sum(axis=0, dtype=SimDType)
 
     def _apply_travel(self, clause: TravelClause, tick: Tick, requested_movers: NDArray[SimDType]) -> None:
-        T, N, C, E = self.ctx.TNCE
+        _, N, C, _ = self.ctx.TNCE
         mover_cs = np.empty((N, C), dtype=SimDType)
         split_cs = np.empty((N, N, C), dtype=SimDType)
 
@@ -224,7 +224,7 @@ class HypercubeEngine(MovementEngine):
 
         # TODO: maybe there's a smarter API design here, that doesn't force us to make array copies
         def get_cohorts(self) -> Compartments:
-            T, N, C, _ = self.engine.ctx.TNCE
+            _, N, C, _ = self.engine.ctx.TNCE
             ts, dt = self._ldgr_slice()
             cohorts = np.empty((dt * N + 1, C), dtype=SimDType)
             cohorts[0] = self.home
@@ -232,7 +232,7 @@ class HypercubeEngine(MovementEngine):
             return cohorts
 
         def update_cohorts(self, deltas: Compartments) -> None:
-            T, N, C, _ = self.engine.ctx.TNCE
+            _, N, C, _ = self.engine.ctx.TNCE
             ts, dt = self._ldgr_slice()
             home_deltas = deltas[0]
             vstr_deltas = deltas.sum(axis=0) - home_deltas
