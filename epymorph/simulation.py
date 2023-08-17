@@ -158,6 +158,7 @@ class Simulation:
         - param: a dictionary of named simulation parameters available for use by the IPM and MM
         - start_date: the calendar date on which to start the simulation
         - duration: the number of days to run the simulation
+        - initializer: a function that initializes the compartments for each geo node; if None is provided, a default initializer will be used
         - rng: (optional) a psuedo-random number generator used in all stochastic calculations
         """
 
