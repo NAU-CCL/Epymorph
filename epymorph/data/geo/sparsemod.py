@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from importlib.resources import as_file, files
+
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
@@ -18,18 +20,19 @@ def load() -> Geo:
     # because numpy doesn't expose the type definitions we need to do so.
     # And the types are quickly lost when you do subsequent ops anyway.
     # See numpy.zeros for an example of how they do it internally.
-    def load(name: str, dtype: DTypeLike, shape: tuple[int, ...]) -> NDArray:
-        data = np.loadtxt(
-            f"./epymorph/data/geo/pei-{name}.csv", delimiter=',', dtype=dtype)
-        return validate_shape(name, data, shape)
+    def read_file(name: str, dtype: DTypeLike, shape: tuple[int, ...]) -> NDArray:
+        file = files('epymorph.data.geo').joinpath(f"pei-{name}.csv")
+        with as_file(file) as f:
+            data = np.loadtxt(f, delimiter=',', dtype=dtype)
+            return validate_shape(name, data, shape)
 
     # Load base data:
     labels = ["FL", "GA", "MD", "NC", "SC", "VA"]
     n = len(labels)
-    population = load('population', np.int_, (n,))
-    humidity = load('humidity', np.double, (365, n))
-    coords = load("coords", np.double, (n, 2))
-    commuters = load("commuters", np.int_, (n, n))
+    population = read_file('population', np.int_, (n,))
+    humidity = read_file('humidity', np.double, (365, n))
+    coords = read_file("coords", np.double, (n, 2))
+    commuters = read_file("commuters", np.int_, (n, n))
 
     # Take row sum of commuters to get total movers by state
     summed_commuters = np.array([sum(commuters[i, ])

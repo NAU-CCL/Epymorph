@@ -1,10 +1,13 @@
+from importlib.abc import Traversable
+from importlib.resources import files
 from typing import Callable
 
 from epymorph.data.geo.maricopa_cbg_2019 import load as maricopa_cbg_2019_load
 from epymorph.data.geo.pei import load as geo_pei_load
 from epymorph.data.geo.single_pop_geo import load as single_pop_geo_load
 from epymorph.data.geo.sparsemod import load as geo_sparsemod_load
-from epymorph.data.geo.us_counties_2015 import load as geo_us_counties_2015_load
+from epymorph.data.geo.us_counties_2015 import \
+    load as geo_us_counties_2015_load
 from epymorph.data.geo.us_states_2015 import load as geo_us_states_2015_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
@@ -13,13 +16,16 @@ from epymorph.data.ipm.simple_sirs import load as ipm_simple_sirs_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.movement import MovementBuilder, load_movement_spec
 
+DATA_PATH = files('epymorph.data')
+MM_PATH = DATA_PATH.joinpath('mm')
+IPM_PATH = DATA_PATH.joinpath('ipm')
+GEO_PATH = DATA_PATH.joinpath('geo')
 
-def mm_loader(path) -> Callable[[], MovementBuilder]:
+
+def mm_loader(mm_file: Traversable) -> Callable[[], MovementBuilder]:
     def load() -> MovementBuilder:
-        with open(path, "r") as file:
-            spec_string = file.read()
-            return load_movement_spec(spec_string)
-
+        spec_string = mm_file.read_text(encoding='utf-8')
+        return load_movement_spec(spec_string)
     return load
 
 
@@ -34,13 +40,13 @@ ipm_library = {
     "sdh": ipm_sdh_load,
 }
 
+
 mm_library = {
-    "no": mm_loader("epymorph/data/mm/no.movement"),
-    "icecube": mm_loader("epymorph/data/mm/icecube.movement"),
-    "pei": mm_loader("epymorph/data/mm/pei.movement"),
-    "sparsemod": mm_loader("epymorph/data/mm/sparsemod.movement"),
-    "centroids": mm_loader("epymorph/data/mm/centroids.movement"),
+    f.name.removesuffix('.movement'): mm_loader(f)
+    for f in MM_PATH.iterdir()
+    if f.name.endswith('.movement')
 }
+
 
 geo_library = {
     "pei": geo_pei_load,
