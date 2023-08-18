@@ -1,6 +1,7 @@
 """The main entrypoint for epymorph: a CLI with a number of subcommands."""
 import sys
 from argparse import ArgumentParser
+from importlib.metadata import version
 
 from epymorph.cache import cache_geo as handle_cache
 from epymorph.prepare import prepare_run_toml as handle_prepare
@@ -15,6 +16,8 @@ def build_cli() -> ArgumentParser:
     cli_parser = ArgumentParser(
         prog="epymorph",
         description="EpiMoRPH spatial meta-population modeling.")
+
+    cli_parser.add_argument('-V', '--version', action='version', version=version('epymorph'))
 
     # Define a set of subcommands for the main program.
     # Each is defined in an immediately-executed function below,
