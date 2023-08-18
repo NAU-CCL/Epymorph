@@ -31,8 +31,8 @@ python3.11 -m venv .venv
 # activate it (after which `python` should be bound to the venv python)
 source .venv/bin/activate
 
-# then install the requirements
-python -m pip install .[dev]
+# then install the project in "editable" mode
+python -m pip install --editable .[dev]
 ```
 
 ## Running from the command line
