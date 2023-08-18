@@ -1,4 +1,9 @@
-from typing import Callable, cast
+"""
+The library for epymorph's built-in IPMs, MMs, and GEOs.
+"""
+from importlib.abc import Traversable
+from importlib.resources import as_file, files
+from typing import Callable, TypeVar, cast
 
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
 from epymorph.data.ipm.no import load as ipm_no_load
@@ -11,51 +16,83 @@ from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.dynamic import DynamicMovementBuilder
 from epymorph.movement.engine import MovementBuilder
 from epymorph.parser.movement import MovementSpec, movement_spec
+from epymorph.util import as_sorted_dict
+
+DATA_PATH = files('epymorph.data')
+MM_PATH = DATA_PATH.joinpath('mm')
+IPM_PATH = DATA_PATH.joinpath('ipm')
+GEO_PATH = DATA_PATH.joinpath('geo')
 
 
-def mm_loader(id: str) -> Callable[..., MovementBuilder]:
+def mm_loader(mm_file: Traversable) -> Callable[..., MovementBuilder]:
+    """Returns a function to load the identified movement model."""
     def load() -> MovementBuilder:
-        with open(f"epymorph/data/mm/{id}.movement", "r") as file:
-            spec_string = file.read()
-            results = movement_spec.parse_string(spec_string, parse_all=True)
-            spec = cast(MovementSpec, results[0])
-            return DynamicMovementBuilder(spec)
+        spec_string = mm_file.read_text(encoding="utf-8")
+        results = movement_spec.parse_string(spec_string, parse_all=True)
+        spec = cast(MovementSpec, results[0])
+        return DynamicMovementBuilder(spec)
     return load
 
 
-def geo_loader(path) -> Callable[..., Geo]:
+def geo_spec_loader(geo_spec_file: Traversable) -> Callable[..., Geo]:
+    """Returns a function to load the identified GEO (from spec)."""
     def load(force=False) -> Geo:
-        return GEOBuilder(path).build(force)
+        spec_string = geo_spec_file.read_text(encoding="utf-8")
+        return GEOBuilder(spec_string).build(force)
     return load
 
 
-def geo_npz_loader(id: str) -> Callable[..., Geo]:
-    return lambda: load_compressed_geo(id)
+def geo_npz_loader(geo_npz_file: Traversable) -> Callable[..., Geo]:
+    """Returns a function to load the identified GEO (from npz)."""
+    def load() -> Geo:
+        with as_file(geo_npz_file) as file:
+            return load_compressed_geo(file)
+    return load
 
 
 # THIS IS A PLACEHOLDER IMPLEMENTATION
 # Ultimately we want to index the data directory at runtime.
 
-ipm_library: dict[str, Callable[..., IpmBuilder]] = {
+ModelT = TypeVar('ModelT')
+
+Library = dict[str, Callable[..., ModelT]]
+
+
+ipm_library: Library[IpmBuilder] = as_sorted_dict({
     "no": ipm_no_load,
     "pei": ipm_pei_load,
     "sirs": ipm_sirs_load,
     "sirh": ipm_sirh_load,
     "sparsemod": ipm_sparsemod_load
-}
+})
+"""All epymorph intra-population models (by id)."""
 
-mm_library: dict[str, Callable[..., MovementBuilder]] = {
-    id: mm_loader(id)
-    for id in ['no', 'icecube', 'pei', 'sparsemod', 'centroids']
-}
 
-geo_library_cachable: dict[str, Callable[..., Geo]] = {
-    'us_sw_counties_2015': geo_loader('epymorph/data/geo/us_sw_counties_2015.geo'),
-}
+mm_library: Library[MovementBuilder] = as_sorted_dict({
+    f.name.removesuffix('.movement'): mm_loader(f)
+    for f in MM_PATH.iterdir()
+    if f.name.endswith('.movement')
+})
+"""All epymorph movement models (by id)."""
 
-geo_library: dict[str, Callable[..., Geo]] = {
+
+geo_library_compressed: Library[Geo] = as_sorted_dict({
+    f.name.removesuffix('_geo.npz'): geo_npz_loader(f)
+    for f in GEO_PATH.iterdir()
+    if f.name.endswith('_geo.npz')
+})
+"""The subset of GEOs that are saved as npz files."""
+
+geo_library_cachable: Library[Geo] = as_sorted_dict({
+    f.name.removesuffix('.geo'): geo_spec_loader(f)
+    for f in GEO_PATH.iterdir()
+    if f.name.endswith('.geo')
+})
+"""The subset of GEOs that use the GEOBuilder interface."""
+
+geo_library: Library[Geo] = as_sorted_dict({
     'single_pop': geo_single_pop_load,
-    **{id: geo_npz_loader(id)
-       for id in ['pei', 'us_counties_2015', 'us_states_2015', 'maricopa_cbg_2019']},
+    **geo_library_compressed,
     **geo_library_cachable
-}
+})
+"""All epymorph geo models (by id)."""

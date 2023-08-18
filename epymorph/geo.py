@@ -1,3 +1,4 @@
+from os import PathLike
 from typing import NamedTuple, TypeVar
 
 import numpy as np
@@ -82,19 +83,9 @@ def validate_shape(name: str, data: T | None, shape: tuple[int, ...], dtype: DTy
 # Save and Load
 
 
-def geo_path(id: str) -> str:
-    return f"./epymorph/data/geo/{id}_geo.npz"
-
-
-def save_compressed_geo(id: str, data: dict[str, NDArray]) -> None:
-    if not 'label' in data:
-        msg = f"Geo {id} must have a 'label' attribute in order to be saved and loaded."
-        raise Exception(msg)
-    np.savez_compressed(geo_path(id), **data)
-
-
-def load_compressed_geo(id: str) -> Geo:
-    with np.load(geo_path(id)) as npz_data:
+def load_compressed_geo(npz_file: str | PathLike) -> Geo:
+    """Read a GEO from its .npz format."""
+    with np.load(npz_file) as npz_data:
         data = dict(npz_data)
     labels = data.get('label')
     if labels is None:
@@ -105,9 +96,9 @@ def load_compressed_geo(id: str) -> Geo:
 
 
 class GEOBuilder:
-    def __init__(self, path: str):
+    def __init__(self, geo_spec: str):
         # create GEOSpec object from file
-        self.spec = deserialize(path)
+        self.spec = deserialize(geo_spec)
 
     def build(self, force=False) -> Geo:
         data = dict[str, NDArray]()

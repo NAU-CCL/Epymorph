@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import (Any, Callable, Generic, Iterable, Literal, TypeGuard,
-                    TypeVar)
+from typing import (Any, Callable, Generic, Iterable, Literal, OrderedDict,
+                    TypeGuard, TypeVar)
 
 import numpy as np
 from dateutil.relativedelta import relativedelta
@@ -79,7 +79,16 @@ def as_unique_set(xs: list[T]) -> set[T]:
 
 
 def as_list(x: T | list[T]) -> list[T]:
+    """If `x` is a list, return it unchanged. If it's a single value, wrap it in a list."""
     return x if isinstance(x, list) else [x]
+
+
+K, V = TypeVar('K'), TypeVar('V')
+
+
+def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
+    """Returns a sorted OrderedDict of the given dict."""
+    return OrderedDict(sorted(x.items()))
 
 
 # numpy utilities

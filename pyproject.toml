@@ -1,9 +1,14 @@
 [project]
 name = "epymorph"
 
-version = "1.0.0"
+version = "0.0.0"
 
-# authors = []
+authors = [
+  { name = "Tyler Coles", email = "tyler.coles@nau.edu" },
+  { name = "Frank Burkhart", email = "jfb84@nau.edu" },
+  { name = "Alex Nez", email = "an974@nau.edu" },
+  { name = "Trevor Johnson", email = "tkj44@nau.edu" },
+]
 
 description = "EpiMoRPH disease modeling"
 
@@ -16,7 +21,11 @@ requires-python = ">=3.11"
 keywords = ["epidemiology", "disease modeling", "metapopulation"]
 
 classifiers = [
-  "Programming Language :: Python :: 3"
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Typing :: Typed",
 ]
 
 dependencies = [
@@ -43,9 +52,8 @@ dev = [
   "notebook",
 ]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+[project.scripts]
+epymorph = "epymorph.__main__:main"
 
 [tool.autopep8]
 max_line_length = 88
@@ -62,8 +70,15 @@ max-line-length = 120
 good-names = ["T", "N", "C", "E"]
 good-names-rgxs = ["[a-z_][a-zA-Z0-9_]*"]
 
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [tool.setuptools.packages.find]
 include = ["epymorph*"]
 
 [tool.setuptools.package-data]
-"epymorph.data" = ["*.csv", "*.movement", "*.geo", "*.ipm"]
+"epymorph" = ["py.typed"]
+"epymorph.data.geo" = ["*.npz", "*.geo"]
+"epymorph.data.mm" = ["*.movement"]
+"epymorph.data.ipm" = ["*.ipm"]

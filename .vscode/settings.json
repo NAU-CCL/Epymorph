@@ -9,6 +9,8 @@
     "**/__pycache__": true,
     ".pytest_cache": true
   },
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
 
   "editor.codeActionsOnSave": {
     "source.organizeImports": true
@@ -39,5 +41,5 @@
     "editor.defaultFormatter": "ms-python.autopep8",
   },
 
-  "jupyter.notebookFileRoot": "${workspaceFolder}"
+  "jupyter.notebookFileRoot": "${workspaceFolder}",
 }

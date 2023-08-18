@@ -108,15 +108,13 @@ def serialize(spec: GEOSpec, file_path: str) -> None:
         stream.write(json_spec)
 
 
-def deserialize(file_path: str) -> GEOSpec:
-    """deserializes a GEOSpec object from a file at the given path"""
-    with open(file_path, 'r') as stream:
-        spec = stream.readline()
-    spec_dec = jsonpickle.decode(spec)
+def deserialize(spec_enc: str) -> GEOSpec:
+    """deserializes a GEOSpec object from a pickled text"""
+    spec_dec = jsonpickle.decode(spec_enc)
 
     # ensure decoded object is of type GEOSpec
     if type(spec_dec) is GEOSpec:
         return spec_dec
     else:
-        msg = f'{file_path} does not decode to GEOSpec object; ensure file path is correct and file is correctly formatted'
+        msg = 'GEO spec does not decode to GEOSpec object; ensure file path is correct and file is correctly formatted'
         raise Exception(msg)

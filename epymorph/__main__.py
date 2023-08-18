@@ -1,3 +1,5 @@
+"""The main entrypoint for epymorph: a CLI with a number of subcommands."""
+import sys
 from argparse import ArgumentParser
 
 from epymorph.cache import cache_geo as handle_cache
@@ -8,6 +10,7 @@ from epymorph.verify import verify as handle_verify
 
 
 def build_cli() -> ArgumentParser:
+    """Builds a parser for all supported CLI commands."""
     # Using argparse to configure available commands and arguments.
     cli_parser = ArgumentParser(
         prog="epymorph",
@@ -130,7 +133,12 @@ def build_cli() -> ArgumentParser:
     return cli_parser
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """The main entrypoint for epymorph."""
     args = build_cli().parse_args()
     exit_code = args.handler(args)
-    exit(exit_code)
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
