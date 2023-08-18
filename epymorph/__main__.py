@@ -17,7 +17,8 @@ def build_cli() -> ArgumentParser:
         prog="epymorph",
         description="EpiMoRPH spatial meta-population modeling.")
 
-    cli_parser.add_argument('-V', '--version', action='version', version=version('epymorph'))
+    cli_parser.add_argument('-V', '--version', action='version',
+                            version=version('epymorph'))
 
     # Define a set of subcommands for the main program.
     # Each is defined in an immediately-executed function below,
