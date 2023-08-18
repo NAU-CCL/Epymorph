@@ -1,0 +1,56 @@
+# Builds and releases to Github whenever a "v" tag is added.
+
+# Useful docs:
+# https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases
+# https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28
+# https://cli.github.com/manual/gh_release_create
+
+name: Build and release to Github
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version-file: '.python-version'
+
+      - name: Install dependencies
+        run: |
+          pip install .[dev]
+          pip install build
+
+      - name: Run unit tests
+        run: python -m unittest discover -v -s "./epymorph" -p "*_test.py"
+
+      - name: Update pyproject.toml version
+        run: |
+          version="${GITHUB_REF#refs/tags/v}"
+
+          sed -i "s/version = .*/version = \"${version}\"/" pyproject.toml
+
+      - name: Build project
+        run: python -m build
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF#refs/tags/v}"
+          
+          # release assets
+          wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
+          source_file="./dist/epymorph-${version}.tar.gz"
+
+          gh release create "v${version}" --generate-notes $wheel_file $source_file
