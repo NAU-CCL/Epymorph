@@ -1,0 +1,74 @@
+[project]
+name = "epymorph"
+
+version = "0.0.0"
+
+authors = [
+  { name = "Tyler Coles", email = "tyler.coles@nau.edu" },
+  { name = "Frank Burkhart", email = "jfb84@nau.edu" },
+  { name = "Alex Nez", email = "an974@nau.edu" },
+  { name = "Trevor Johnson", email = "tkj44@nau.edu" },
+]
+
+description = "EpiMoRPH disease modeling"
+
+readme = "README.md"
+
+requires-python = ">=3.11"
+
+# license = ""
+
+keywords = ["epidemiology", "disease modeling", "metapopulation"]
+
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Typing :: Typed",
+]
+
+dependencies = [
+  "matplotlib",
+  "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+  # pin pycodestyle version (https://github.com/hhatto/autopep8/issues/689)
+  "pycodestyle == 2.10.0",
+  "autopep8",
+  "isort",
+  "notebook",
+]
+
+[project.scripts]
+epymorph = "epymorph.__main__:main"
+
+[tool.autopep8]
+max_line_length = 88
+
+[tool.pyright]
+exclude = [
+  "**/__pycache__",
+  "**/.*",
+  "build",
+]
+
+[tool.pylint.basic]
+max-line-length = 120
+good-names = ["T", "N", "C", "E"]
+good-names-rgxs = ["[a-z_][a-zA-Z0-9_]*"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["epymorph*"]
+
+[tool.setuptools.package-data]
+"epymorph" = ["py.typed"]
+"epymorph.data.geo" = ["*.csv", "*.npz", "*.geo"]
+"epymorph.data.mm" = ["*.movement"]
+"epymorph.data.ipm" = ["*.ipm"]

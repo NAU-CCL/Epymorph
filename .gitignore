@@ -1,13 +1,24 @@
 # OS files
 .DS_Store
 
-# Environments
-/.venv
+# Secrets
+.env
+
+# Virtual environments
+/.venv*
+
+# Cached data
+/.cache
 
 # Compilation
 __pycache__/
 
-# Testing
+# Build
+dist/
+build/
+*.egg-info
+
+# Testing & dev
 .pytest_cache/
 debug.log
 scratch

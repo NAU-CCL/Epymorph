@@ -1,3 +1,5 @@
+from importlib.resources import as_file, files
+
 import numpy as np
 
 from epymorph.geo import Geo, validate_shape
@@ -13,8 +15,11 @@ def load() -> Geo:
     - distance
     """
 
-    with np.load(f"./epymorph/data/geo/us_states_2015_geo.npz") as npz_data:
+    file = files('epymorph.data.geo').joinpath('us_states_2015_geo.npz')
+    with as_file(file) as f:
+        npz_data = np.load(f)
         data = dict(npz_data)
+        npz_data.close()
 
     n = len(data['labels'])
     validate_shape('labels', data['labels'], (n,))

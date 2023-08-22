@@ -78,6 +78,8 @@ class SimpleSIRS(Ipm):
         # as population sizes shrink when we consider more granular spatial scales.
         cs = loc.compartment_totals
         total = np.sum(cs)
+        if total == 0:
+            return np.zeros(self.ctx.events, dtype=int)
         rates = np.array([
             tick.tau * self.beta[tick.day, loc.index] *
             cs[0] * cs[1] / total,

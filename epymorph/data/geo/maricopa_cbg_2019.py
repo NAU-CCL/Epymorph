@@ -1,3 +1,5 @@
+from importlib.resources import as_file, files
+
 import numpy as np
 
 from epymorph.geo import Geo, validate_shape
@@ -21,8 +23,11 @@ def load() -> Geo:
     - tract_gini_index: Gini index of the CBG's tract (float)
     """
 
-    with np.load(f"./epymorph/data/geo/maricopa_cbg_2019_geo.npz") as npz_data:
+    file = files('epymorph.data.geo').joinpath('maricopa_cbg_2019_geo.npz')
+    with as_file(file) as f:
+        npz_data = np.load(f)
         data = dict(npz_data)
+        npz_data.close()
 
     n = len(data["labels"])
     validate_shape("labels", data["labels"], (n,), str)
@@ -36,7 +41,7 @@ def load() -> Geo:
         "average_household_size", data["average_household_size"], (n,), float
     )
     validate_shape("pop_density_km2", data["pop_density_km2"], (n,), float)
-    validate_shape("tract_median_income", data["tract_median_income"], (n,), int) 
+    validate_shape("tract_median_income", data["tract_median_income"], (n,), int)
     validate_shape("tract_gini_index", data["tract_gini_index"], (n,), float)
 
     return Geo(nodes=n, labels=data["labels"], data=data)
