@@ -94,8 +94,12 @@ class CompartmentModelIpm(Ipm):
     attr_getters: list[AttributeGetter]
     transitions: list[IpmTransition]
 
-    def __init__(self, ctx: SimContext, model: CompartmentModel, attr_getters: list[AttributeGetter], transitions: list[IpmTransition]):
-        self.ctx = ctx
+    def __init__(self,
+                 ctx: SimContext,
+                 model: CompartmentModel,
+                 attr_getters: list[AttributeGetter],
+                 transitions: list[IpmTransition]):
+        super().__init__(ctx)
         self.model = model
         self.attr_getters = attr_getters
         self.transitions = transitions
