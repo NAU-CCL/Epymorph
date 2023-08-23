@@ -55,12 +55,11 @@ class CompartmentModelIpmBuilder(IpmBuilder):
     model: CompartmentModel
 
     def __init__(self, model: CompartmentModel):
-        self.model = model
         super().__init__(
-            num_compartments=len(model.compartments),
-            # TODO: maybe there's a better way to get num_events
-            num_events=len(model.source_compartment_for_event)
+            num_compartments=model.num_compartments,
+            num_events=model.num_events
         )
+        self.model = model
 
     def verify(self, ctx: SimContext) -> None:
         errors = []
