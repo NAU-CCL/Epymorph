@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable
@@ -157,3 +158,18 @@ def compile_getter(ctx: SimContext, attr: AttributeDef) -> AttributeGetter:
             return lambda loc, tick: data[tick.day, loc.get_index(), a]
         case _:
             raise ValueError(f"Unsupported shape: {attr.shape}")
+
+
+def adapt_context(ctx: SimContext, attributes: list[AttributeDef]) -> SimContext:
+    """
+    Adapt the given SimContext's geo and params data so all are compatible 
+    with the expected list of attributes.
+    """
+    ps = dict[str, NDArray]()
+    gs = dict[str, NDArray]()
+    for attr in attributes:
+        if isinstance(attr, GeoDef):
+            gs[attr.attribute_name] = attr.get_adapted(ctx)
+        elif isinstance(attr, ParamDef):
+            ps[attr.attribute_name] = attr.get_adapted(ctx)
+    return dataclasses.replace(ctx, param=ps, geo=gs)

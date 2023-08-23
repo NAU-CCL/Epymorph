@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -10,7 +9,7 @@ from numpy.typing import NDArray
 from epymorph.clock import Tick
 from epymorph.context import Compartments, Events, SimContext, SimDType
 from epymorph.ipm.attribute import (AttributeException, AttributeGetter,
-                                    compile_getter)
+                                    adapt_context, compile_getter)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                             TransitionDef)
 from epymorph.ipm.ipm import Ipm, IpmBuilder
@@ -83,11 +82,7 @@ class CompartmentModelIpmBuilder(IpmBuilder):
             *(a.symbol for a in self.model.attributes)
         ]
 
-        # Perform shape-adaptations on the sim parameters.
-        adapted_param = dict[str, NDArray]()
-        for attr in self.model.attributes:
-            adapted_param[attr.attribute_name] = attr.get_adapted(ctx)
-        adapted_ctx = dataclasses.replace(ctx, param=adapted_param)
+        adapted_ctx = adapt_context(ctx, self.model.attributes)
 
         return CompartmentModelIpm(
             adapted_ctx,
