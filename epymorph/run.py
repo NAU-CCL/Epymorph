@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pydantic import BaseModel, ValidationError
 
+from epymorph.context import normalize_lists
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.initializer import initializer_library
-from epymorph.ipm.attribute import process_params
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementEngine
 from epymorph.movement.hypercube import HypercubeEngine
@@ -192,7 +192,7 @@ def run(input_path: str,
 
     # Configure initializer.
 
-    init_args = process_params(run_input.init)
+    init_args = run_input.init
     try:
         init_fn = init_args.pop('initializer')
     except KeyError:
@@ -203,7 +203,7 @@ def run(input_path: str,
     except KeyError:
         print(f"ERROR: Unknown initializer: {init_fn}")
         return 2  # invalid input
-    initializer = partial(init, **init_args)
+    initializer = partial(init, **normalize_lists(init_args))
 
     # Load models.
 

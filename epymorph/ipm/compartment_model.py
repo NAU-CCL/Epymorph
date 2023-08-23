@@ -167,15 +167,35 @@ def create_symbols(compartments: list[CompartmentDef], attributes: list[Attribut
 
 @dataclass(frozen=True)
 class CompartmentModel:
+    """
+    A compartment model definition and its corresponding metadata.
+    Effectively, a collection of compartments, transitions between compartments,
+    and the data parameters which are required to compute the transitions.
+    """
+
     transitions: list[TransitionDef]
+    """transition definitions"""
     compartments: list[CompartmentDef]
+    """compartment definitions"""
     attributes: list[AttributeDef]
-    # a matrix defining how each event impacts each compartment (subtracting or adding individuals)
+    """attribute definitions"""
+
     apply_matrix: NDArray[SimDType]
-    # mapping from compartment index to the list of event indices which source from that compartment
+    """a matrix defining how each event impacts each compartment (subtracting or adding individuals)"""
     events_leaving_compartment: list[list[int]]
-    # mapping from event index to the compartment index it sources from
+    """mapping from compartment index to the list of event indices which source from that compartment"""
     source_compartment_for_event: list[int]
+    """mapping from event index to the compartment index it sources from"""
+
+    @property
+    def num_compartments(self) -> int:
+        """The number of compartments in this model."""
+        return len(self.compartments)
+
+    @property
+    def num_events(self) -> int:
+        """The number of distinct events (transitions) in this model."""
+        return len(self.source_compartment_for_event)
 
 
 def create_model(symbols: CompartmentSymbols, transitions: list[TransitionDef]) -> CompartmentModel:

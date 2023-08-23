@@ -1,219 +1,175 @@
-import re
-from abc import ABC
+from __future__ import annotations
+
+import dataclasses
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, Literal
+from typing import Callable
 
 import numpy as np
-from numpy.typing import DTypeLike, NDArray
+from numpy.typing import NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import SimContext
+from epymorph.data_shape import (Arbitrary, DataShape, Node, NodeAndArbitrary,
+                                 Scalar, Shapes, Time, TimeAndArbitrary,
+                                 TimeAndNode, TimeAndNodeAndArbitrary)
 from epymorph.ipm.sympy_shim import Symbol, to_symbol
 from epymorph.movement.world import Location
 
-AttributeType = Literal['int', 'float', 'str']
-AttributeShape = str
-
-# IPMs can use parameters of any of these shapes, where:
-# - A is an "arbitrary" integer index, 0 or more
-# - S is a single scalar value
-# - T is the number of ticks
-# - N is the number of nodes
-# ---
-# S
-# A
-# T
-# N
-# TxA
-# NxA
-# TxN
-shape_regex = re.compile(r"A|[STN]|[TN]xA|TxN(xA)?"
-                         .replace("A", "(0|[1-9][0-9]*)"))
-parts_regex = re.compile(r"(.*?)([0-9]*)")
+AttributeType = type[int] | type[float] | type[str]
 
 
-def validate_shape(shape: AttributeShape) -> None:
-    """Is this string a valid shape? If not, throw `ValueError`."""
-    if not shape_regex.fullmatch(shape):
-        raise ValueError(f"{shape} is not a valid shape specification.")
-
-
-def shape_matches(ctx: SimContext, expected_shape: AttributeShape, value: NDArray) -> bool:
-    match = parts_regex.fullmatch(expected_shape)
-    if not match:
-        # This method should only be called if we know expected_shape to be valid.
-        # But if not...
-        raise Exception(f"Unsupported shape {expected_shape}.")
-
-    # note: time axis is permitted to have extra data, but node axes must be exact
-    shape = value.shape
-    prefix, arbitrary_index = match.groups()
-    match prefix:
-        case 'S':
-            # array is not a scalar
-            return False
-        case "T":
-            return len(shape) == 1 and shape[0] >= ctx.clock.num_days
-        case "N":
-            return len(shape) == 1 and shape[0] == ctx.nodes
-        case "TxN":
-            return len(shape) == 2 and shape[0] >= ctx.clock.num_days and shape[1] == ctx.nodes
-        case "":
-            return len(shape) == 1 and shape[0] > int(arbitrary_index)
-        case "Tx":
-            return len(shape) == 2 and shape[0] >= ctx.clock.num_days and shape[1] > int(arbitrary_index)
-        case "Nx":
-            return len(shape) == 2 and shape[0] == ctx.nodes and shape[1] > int(arbitrary_index)
-        case "TxNx":
-            return len(shape) == 3 and shape[0] >= ctx.clock.num_days and shape[1] == ctx.nodes and shape[2] > int(arbitrary_index)
-        case _:
-            raise Exception(f"Unsupported shape {expected_shape}.")
+class AttributeException(Exception):
+    """An error matching an attribute to those provided in a context."""
 
 
 @dataclass(frozen=True)
 class AttributeDef(ABC):
+    """Definition of a simulation attribute."""
     symbol: Symbol
     attribute_name: str
-    shape: AttributeShape
+    shape: DataShape
     dtype: AttributeType
+    allow_broadcast: bool
 
-    data_source: ClassVar[str]
-    """Which data source does this attribute draw from?"""
+    @abstractmethod
+    def get_value(self, ctx: SimContext) -> NDArray:
+        """
+        Returns the value drawn from the correct data dict.
+        Raises AttributeException if the attribute is not found.
+        """
+
+    def verify(self, ctx: SimContext) -> None:
+        """
+        Check the presence, shape, and datatype of this attribute in the given context.
+        Raises AttributeException on mismatch.
+        """
+        value = self.get_value(ctx)
+
+        if not self.shape.matches(ctx, value, self.allow_broadcast):
+            msg = f"Attribute '{self.attribute_name}' was expected to be an array of shape {self.shape} " + \
+                f"-- got {value.shape}."
+            raise AttributeException(msg)
+
+        if not value.dtype.type == np.dtype(self.dtype).type:
+            msg = f"Attribute '{self.attribute_name}' was expected to be an array of type {self.dtype} " +\
+                f"-- got {value.dtype}."
+            raise AttributeException(msg)
+
+    def get_adapted(self, ctx: SimContext) -> NDArray:
+        """
+        Adapt the given value to the shape and type expected for this attribute.
+        Raises AttributeException if the value cannot be adapted.
+        """
+        adapted = self.shape.adapt(ctx, self.get_value(ctx), self.allow_broadcast)
+        if adapted is None:
+            msg = f"Attribute '{self.attribute_name}' could not be adpated to the required shape."
+            raise AttributeException(msg)
+        return adapted
 
 
 @dataclass(frozen=True)
 class GeoDef(AttributeDef):
-    data_source = 'geo'
+    """An attribute drawn from the Geo Model."""
+
+    def get_value(self, ctx: SimContext) -> NDArray:
+        if not self.attribute_name in ctx.geo:
+            msg = f"Missing geo attribute '{self.attribute_name}'"
+            raise AttributeException(msg)
+        return ctx.geo[self.attribute_name]
 
 
-def geo(symbol_name: str, attribute_name: str | None = None, shape: str = 'S', dtype: AttributeType = 'float') -> GeoDef:
-    validate_shape(shape)
+def geo(symbol_name: str,
+        attribute_name: str | None = None,
+        shape: DataShape = Shapes.S,
+        dtype: AttributeType = float,
+        allow_broadcast: bool = True) -> GeoDef:
+    """Convenience constructor for GeoDef."""
     if attribute_name is None:
         attribute_name = symbol_name
-    return GeoDef(to_symbol(symbol_name), attribute_name, shape, dtype)
+    return GeoDef(to_symbol(symbol_name), attribute_name, shape, dtype, allow_broadcast)
 
 
 def quick_geos(symbol_names: str) -> list[AttributeDef]:
+    """Convenience constructor: create several geo attributes from a whitespace-delimited string."""
     return [geo(name) for name in symbol_names.split()]
 
 
 @dataclass(frozen=True)
 class ParamDef(AttributeDef):
-    data_source = 'param'
+    """An attribute drawn from the simulation parameters."""
+
+    def get_value(self, ctx: SimContext) -> NDArray:
+        if not self.attribute_name in ctx.param:
+            msg = f"Missing params attribute '{self.attribute_name}'"
+            raise AttributeException(msg)
+        return ctx.param[self.attribute_name]
 
 
-def param(symbol_name: str, attribute_name: str | None = None, shape: str = 'S', dtype: AttributeType = 'float') -> ParamDef:
-    validate_shape(shape)
+def param(symbol_name: str,
+          attribute_name: str | None = None,
+          shape: DataShape = Shapes.S,
+          dtype: AttributeType = float,
+          allow_broadcast: bool = True) -> ParamDef:
+    """Convenience constructor for ParamDef."""
     if attribute_name is None:
         attribute_name = symbol_name
-    return ParamDef(to_symbol(symbol_name), attribute_name, shape, dtype)
+    return ParamDef(to_symbol(symbol_name), attribute_name, shape, dtype, allow_broadcast)
 
 
 def quick_params(symbol_names: str) -> list[AttributeDef]:
+    """Convenience constructor: create several param attributes from a whitespace-delimited string."""
     return [param(name) for name in symbol_names.split()]
 
 
 AttributeGetter = Callable[[Location, Tick], int | float | str]
 
 
-def compile_getter(ctx: SimContext, attribute: AttributeDef) -> AttributeGetter:
-    match attribute:
-        case GeoDef(_, name, _, _):
-            data = ctx.geo[name]
-        case ParamDef(_, name, _, _):
-            data = ctx.param[name]
-        case _:
-            raise Exception(f"Unsupported attribute type {type(attribute)}")
+def compile_getter(ctx: SimContext, attr: AttributeDef) -> AttributeGetter:
+    """Create an accessor lambda for the given attribute and context."""
 
-    # if we match (this should match all valid shapes):
-    # the first group, prefix, will contain everything except the arbitrary index (if present)
-    # and the second group will have the index
-    # prefix will either be empty or have a trailing 'x' if an arbitrary index is present
-    match = parts_regex.fullmatch(attribute.shape)
-    if match is None:
-        raise Exception(f"Unsupported shape: {attribute.shape}")
-    prefix, arbitrary_index = match.groups()
+    data = attr.shape.adapt(
+        ctx,
+        attr.get_value(ctx),
+        attr.allow_broadcast
+    )
 
-    # with this knowledge we can now handle every possible case:
-    match prefix:
-        case "S":
-            return lambda loc, tick: data
-        case "T":
+    if data is None:
+        # This should be caught during the verification step, but just in case.
+        msg = f"Attribute '{attr.attribute_name}' cannot broadcast to the required shape."
+        raise AttributeException(msg)
+
+    match attr.shape:
+        case Scalar():
+            return lambda loc, tick: data  # type: ignore
+        case Time():
             return lambda loc, tick: data[tick.day]
-        case "N":
+        case Node():
             return lambda loc, tick: data[loc.get_index()]
-        case "TxN":
+        case TimeAndNode():
             return lambda loc, tick: data[tick.day, loc.get_index()]
-        case "":
-            a = int(arbitrary_index)
+        case Arbitrary(a):
             return lambda loc, tick: data[a]
-        case "Tx":
-            a = int(arbitrary_index)
+        case TimeAndArbitrary(a):
             return lambda loc, tick: data[tick.day, a]
-        case "Nx":
-            a = int(arbitrary_index)
+        case NodeAndArbitrary(a):
             return lambda loc, tick: data[loc.get_index(), a]
-        case "TxNx":
-            a = int(arbitrary_index)
+        case TimeAndNodeAndArbitrary(a):
             return lambda loc, tick: data[tick.day, loc.get_index(), a]
         case _:
-            raise Exception(f"Unsupported shape: {attribute.shape}")
-
-    # unfortunately Python's structural pattern matching doesn't allow regex
-    # or this would be a lot cleaner
+            raise ValueError(f"Unsupported shape: {attr.shape}")
 
 
-def _check_type_scalar(attr: AttributeDef, value: Any) -> bool:
-    match attr.dtype:
-        case 'str':
-            return isinstance(value, str)
-        case 'int':
-            return isinstance(value, int)
-        case 'float':
-            return isinstance(value, float)
-
-
-def _check_type_numpy(attr: AttributeDef, value: NDArray) -> bool:
-    match attr.dtype:
-        case 'str':
-            return value.dtype.type == np.dtype(np.str_)
-        case 'int':
-            return value.dtype.type == np.dtype(np.int_)
-        case 'float':
-            return value.dtype.type == np.dtype(np.float_)
-
-
-def verify_attribute(ctx: SimContext, attr: AttributeDef) -> str | None:
-    data = getattr(ctx, attr.data_source)
-    if not attr.attribute_name in data:
-        return f"Attribute {attr.attribute_name} missing from {attr.data_source}."
-
-    value = data[attr.attribute_name]
-    if attr.shape == 'S':
-        # check scalar values
-        if not _check_type_scalar(attr, value):
-            return f"Attribute {attr.attribute_name} was expected to be a scalar {attr.dtype}."
-    else:
-        # check numpy array values
-        if not isinstance(value, np.ndarray):
-            return f"Attribute {attr.attribute_name} was expected to be an array."
-        elif not _check_type_numpy(attr, value):
-            return f"Attribute {attr.attribute_name} was expected to be an array of type {attr.dtype}."
-        elif not shape_matches(ctx, attr.shape, value):
-            return f"Attribute {attr.attribute_name} was expected to be an array of shape {attr.shape}."
-
-    return None  # no errors!
-
-
-def process_params(params: dict[str, Any], dtype: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
-    """Pre-process parameter dictionaries."""
-    # This simplifies attribute verification: checking lists is more tedious/error-prone than checking ndarrays.
-    if dtype is None:
-        dtype = {}
-    ps = params.copy()
-    # Replace parameter lists with numpy arrays.
-    for key, value in ps.items():
-        if isinstance(value, list):
-            dt = dtype.get(key, None)
-            ps[key] = np.array(value, dtype=dt)
-    return ps
+def adapt_context(ctx: SimContext, attributes: list[AttributeDef]) -> SimContext:
+    """
+    Adapt the given SimContext's geo and params data so all are compatible 
+    with the expected list of attributes.
+    """
+    ps = dict[str, NDArray]()
+    gs = dict[str, NDArray]()
+    for attr in attributes:
+        if isinstance(attr, GeoDef):
+            gs[attr.attribute_name] = attr.get_adapted(ctx)
+        elif isinstance(attr, ParamDef):
+            ps[attr.attribute_name] = attr.get_adapted(ctx)
+    return dataclasses.replace(ctx, param=ps, geo=gs)

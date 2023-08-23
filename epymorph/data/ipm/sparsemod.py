@@ -1,6 +1,7 @@
 # type: ignore
 from sympy import Max
 
+from epymorph.data_shape import Shapes
 from epymorph.ipm.attribute import param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
 from epymorph.ipm.compartment_model import (compartment, create_model,
@@ -24,22 +25,22 @@ def load() -> IpmBuilder:
             compartment('R', 'recovered')
         ],
         attributes=[
-            param('beta_1', 'beta'),
-            param('omega_1', 'omega', '0'),
-            param('omega_2', 'omega', '1'),
-            param('delta_1', 'delta', '0'),
-            param('delta_2', 'delta', '1'),
-            param('delta_3', 'delta', '2'),
-            param('delta_4', 'delta', '3'),
-            param('delta_5', 'delta', '4'),
-            param('gamma_a', 'gamma', '0'),
-            param('gamma_b', 'gamma', '1'),
-            param('gamma_c', 'gamma', '2'),
-            param('rho_1', 'rho', '0'),
-            param('rho_2', 'rho', '1'),
-            param('rho_3', 'rho', '2'),
-            param('rho_4', 'rho', '3'),
-            param('rho_5', 'rho', '4')
+            param('beta_1', 'beta', Shapes.S),
+            param('omega_1', 'omega', Shapes.TxNxA(0)),
+            param('omega_2', 'omega', Shapes.TxNxA(1)),
+            param('delta_1', 'delta', Shapes.TxNxA(0)),
+            param('delta_2', 'delta', Shapes.TxNxA(1)),
+            param('delta_3', 'delta', Shapes.TxNxA(2)),
+            param('delta_4', 'delta', Shapes.TxNxA(3)),
+            param('delta_5', 'delta', Shapes.TxNxA(4)),
+            param('gamma_a', 'gamma', Shapes.TxNxA(0)),
+            param('gamma_b', 'gamma', Shapes.TxNxA(1)),
+            param('gamma_c', 'gamma', Shapes.TxNxA(2)),
+            param('rho_1', 'rho', Shapes.TxNxA(0)),
+            param('rho_2', 'rho', Shapes.TxNxA(1)),
+            param('rho_3', 'rho', Shapes.TxNxA(2)),
+            param('rho_4', 'rho', Shapes.TxNxA(3)),
+            param('rho_5', 'rho', Shapes.TxNxA(4))
         ])
 
     [S, E, Ia, Ip, Is, Ib, Ih, Ic1, Ic2, D, R] = symbols.compartment_symbols

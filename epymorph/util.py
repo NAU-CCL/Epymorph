@@ -10,12 +10,6 @@ from dateutil.relativedelta import relativedelta
 from numpy.typing import DTypeLike, NDArray
 from pydantic import BaseModel, model_serializer, model_validator
 
-# common types
-
-
-DataDict = dict[str, Any]
-
-
 # function utilities
 
 
@@ -120,9 +114,9 @@ def normalize(arr: NDArray[N]) -> NDArray[N]:
     """
     Normalize the values in an array by subtracting the min and dividing by the range.
     """
-    min = arr.min()
-    max = arr.max()
-    return (arr - min) / (max - min)
+    min_val = arr.min()
+    max_val = arr.max()
+    return (arr - min_val) / (max_val - min_val)
 
 
 def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DTypeLike = None) -> NDArray[N]:
@@ -176,37 +170,6 @@ def bottom(size: int, arr: NDArray) -> NDIndices:
 def is_square(arr: NDArray) -> bool:
     """Is this numpy array 2 dimensions and square in shape?"""
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
-
-
-def expand_data(data: float | int | list | NDArray, rows: int, cols: int, dtype: DTypeLike = None) -> NDArray:
-    """
-    Take the given data and try to expand it to fit a (rows, cols) numpy array.
-    If the data is already in the right shape, it is returned as-is.
-    If given a scalar: all cells will contain the same value.
-    If given a 1-dimensional array of size (cols): each row will contain the same values.
-    If given a 1-dimensional array of size (rows): all columns will contain the same values.
-    (If rows and cols are equal, you'll get repeated rows.)
-    """
-    # TODO: can we replace this with standard numpy broadcasting?
-    if isinstance(data, list):
-        data = np.array(data, dtype=dtype)
-    desired_shape = (rows, cols)
-    if isinstance(data, np.ndarray):
-        if data.shape == desired_shape:
-            return data
-        elif data.shape == (cols,):
-            return np.full(desired_shape, data, dtype=dtype)
-        elif data.shape == (rows,):
-            return np.full((cols, rows), data, dtype=dtype).T
-        else:
-            print(data.shape)
-            raise Exception("Invalid beta parameter.")
-    elif isinstance(data, int):
-        return np.full(desired_shape, data, dtype=dtype)
-    elif isinstance(data, float):
-        return np.full(desired_shape, data, dtype=dtype)
-    else:
-        raise Exception("Invalid beta parameter.")
 
 
 _duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
@@ -340,7 +303,7 @@ def parse_function(code_string: str) -> ast.FunctionDef:
     # Assuming the code string contains only a single function definition
     f_def = tree.body[0]
     if not isinstance(f_def, ast.FunctionDef):
-        raise Exception(f"Code does not define a valid function")
+        raise Exception("Code does not define a valid function")
     return f_def
 
 

@@ -1,6 +1,7 @@
 # type: ignore
 from sympy import Max
 
+from epymorph.data_shape import Shapes
 from epymorph.ipm.attribute import param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
 from epymorph.ipm.compartment_model import (compartment, create_model,
@@ -16,9 +17,9 @@ def load() -> IpmBuilder:
             compartment('R'),
         ],
         attributes=[
-            param('beta'),  # infectivity
-            param('gamma'),  # progression from infected to recovered
-            param('xi')  # progression from recovered to susceptible
+            param('beta', shape=Shapes.TxN),  # infectivity
+            param('gamma', shape=Shapes.TxN),  # progression from infected to recovered
+            param('xi', shape=Shapes.TxN)  # progression from recovered to susceptible
         ])
 
     [S, I, R] = symbols.compartment_symbols

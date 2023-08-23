@@ -1,6 +1,7 @@
 # type: ignore
 from sympy import Max
 
+from epymorph.data_shape import Shapes
 from epymorph.ipm.attribute import param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
 from epymorph.ipm.compartment_model import (compartment, create_model,
@@ -17,10 +18,10 @@ def load() -> IpmBuilder:
             compartment('H', tags=['immobile'])
         ],
         attributes=[
-            param('beta'),
-            param('gamma'),
-            param('hospitalization_rate'),
-            param('hospitalization_duration')
+            param('beta', shape=Shapes.TxN),
+            param('gamma', shape=Shapes.TxN),
+            param('hospitalization_rate', shape=Shapes.TxN),
+            param('hospitalization_duration', shape=Shapes.TxN)
         ])
 
     [S, I, R, H] = symbols.compartment_symbols
