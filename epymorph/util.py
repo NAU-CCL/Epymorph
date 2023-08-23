@@ -10,12 +10,6 @@ from dateutil.relativedelta import relativedelta
 from numpy.typing import DTypeLike, NDArray
 from pydantic import BaseModel, model_serializer, model_validator
 
-# common types
-
-
-DataDict = dict[str, Any]
-
-
 # function utilities
 
 
@@ -120,9 +114,9 @@ def normalize(arr: NDArray[N]) -> NDArray[N]:
     """
     Normalize the values in an array by subtracting the min and dividing by the range.
     """
-    min = arr.min()
-    max = arr.max()
-    return (arr - min) / (max - min)
+    min_val = arr.min()
+    max_val = arr.max()
+    return (arr - min_val) / (max_val - min_val)
 
 
 def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DTypeLike = None) -> NDArray[N]:
@@ -340,7 +334,7 @@ def parse_function(code_string: str) -> ast.FunctionDef:
     # Assuming the code string contains only a single function definition
     f_def = tree.body[0]
     if not isinstance(f_def, ast.FunctionDef):
-        raise Exception(f"Code does not define a valid function")
+        raise Exception("Code does not define a valid function")
     return f_def
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -8,15 +9,14 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import Compartments, Events, SimContext, SimDType
-from epymorph.ipm.attribute import (AttributeGetter, compile_getter,
-                                    verify_attribute)
+from epymorph.ipm.attribute import (AttributeException, AttributeGetter,
+                                    compile_getter)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                             TransitionDef)
 from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.ipm.sympy_shim import (Symbol, SympyLambda, lambdify,
                                      lambdify_list)
 from epymorph.movement.world import Location
-from epymorph.util import list_not_none
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ IpmTransition = IndependentTransition | ForkedTransition
 def compile_transition(transition: TransitionDef, rate_params: list[Symbol]) -> IpmTransition:
     """Compile a model transition for efficient evaluation within the IPM."""
     match transition:
-        case EdgeDef(rate, state_from, state_to):
+        case EdgeDef(rate, _, _):
             rate_lambda = lambdify(rate_params, rate)
             return IndependentTransition(rate_lambda)
         case ForkDef(rate, edges, prob):
@@ -63,8 +63,13 @@ class CompartmentModelIpmBuilder(IpmBuilder):
         )
 
     def verify(self, ctx: SimContext) -> None:
-        errors = list_not_none(verify_attribute(ctx, a)
-                               for a in self.model.attributes)
+        errors = []
+        for attr in self.model.attributes:
+            try:
+                attr.verify(ctx)
+            except AttributeException as e:
+                errors.append(e)
+
         if len(errors) > 0:
             # TODO: better exception type for this
             raise Exception("IPM attribute requirements were not met. "
@@ -78,10 +83,17 @@ class CompartmentModelIpmBuilder(IpmBuilder):
             *(c.symbol for c in self.model.compartments),
             *(a.symbol for a in self.model.attributes)
         ]
+
+        # Perform shape-adaptations on the sim parameters.
+        adapted_param = dict[str, NDArray]()
+        for attr in self.model.attributes:
+            adapted_param[attr.attribute_name] = attr.get_adapted(ctx)
+        adapted_ctx = dataclasses.replace(ctx, param=adapted_param)
+
         return CompartmentModelIpm(
-            ctx,
+            adapted_ctx,
             self.model,
-            attr_getters=[compile_getter(ctx, a)
+            attr_getters=[compile_getter(adapted_ctx, a)
                           for a in self.model.attributes],
             transitions=[compile_transition(t, rate_params)
                          for t in self.model.transitions])

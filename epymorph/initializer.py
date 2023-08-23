@@ -210,6 +210,22 @@ def single_location(ctx: SimContext, location: int, seed_size: int) -> Compartme
     return indexed_locations(ctx, selection, seed_size)
 
 
+def random_locations(ctx: SimContext, num_locations: int, seed_size: int) -> Compartments:
+    """
+    Infect a total of `seed_size` individuals spread randomly across a random selection of locations.
+    """
+    if not isinstance(num_locations, int) or not 0 < num_locations <= ctx.nodes:
+        raise _as_arg_exception('num_locations',
+                                f"Must be an integer value between 1 and the number of locations ({ctx.nodes}).")
+    if not isinstance(seed_size, int) or not 0 < seed_size:
+        raise _as_arg_exception('seed_size',
+                                "Must be greater than 0.")
+
+    indices = np.arange(ctx.nodes, dtype=np.intp)
+    selection = ctx.rng.choice(indices, num_locations)
+    return indexed_locations(ctx, selection, seed_size)
+
+
 def top_locations(ctx: SimContext, attribute: str, num_locations: int, seed_size: int) -> Compartments:
     """
     Infect a fixed number of people across a fixed number of locations,
@@ -266,6 +282,7 @@ initializer_library: dict[str, Initializer] = {
     'indexed_locations': indexed_locations,
     'labeled_locations': labeled_locations,
     'single_location': single_location,
+    'random_locations': random_locations,
     'top_locations': top_locations,
     'bottom_locations': bottom_locations,
 }

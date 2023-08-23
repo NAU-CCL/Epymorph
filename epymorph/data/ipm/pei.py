@@ -1,7 +1,7 @@
 # type: ignore
 from sympy import Max, exp, log, parse_expr
 
-from epymorph.context import Shapes
+from epymorph.data_shape import Shapes
 from epymorph.ipm.attribute import geo, param
 from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
 from epymorph.ipm.compartment_model import (create_model, create_symbols, edge,
@@ -13,8 +13,8 @@ def load() -> IpmBuilder:
     symbols = create_symbols(
         compartments=quick_compartments('S I R'),
         attributes=[
-            param('D', 'infection_duration'),
-            param('L', 'immunity_duration'),
+            param('D', 'infection_duration', Shapes.TxN),
+            param('L', 'immunity_duration', Shapes.TxN),
             geo('H', 'humidity', Shapes.TxN),
         ])
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from epymorph.clock import Tick
-from epymorph.context import Compartments, Events, SimContext, SimDType
+from epymorph.context import Events, SimContext, SimDType
 from epymorph.ipm.ipm import Ipm, IpmBuilder
 from epymorph.movement.world import Location
 

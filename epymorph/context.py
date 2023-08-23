@@ -4,16 +4,13 @@ the SimContext structure is here to contain that info and avoid circular depende
 """
 from __future__ import annotations
 
-import re
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Clock
-from epymorph.util import DataDict
 
 SimDType = np.int64
 """
@@ -31,6 +28,51 @@ Events = NDArray[SimDType]
 """Alias for ndarrays representing event counts."""
 
 # Aliases (hopefully) make it a bit easier to keep all these NDArrays sorted out.
+
+
+# DataDict
+
+
+DataDict = dict[str, NDArray]
+
+
+def normalize_params(params: dict[str, Any], dtypes: dict[str, DTypeLike] | None = None) -> DataDict:
+    """
+    Normalize a parameter dictionary so that all of its attributes are numpy arrays (even scalars).
+    If you would like to force certain values to take certain dtypes, provide the `dtypes` argument 
+    with a mapping from key to dtype.
+    """
+    # This simplifies attribute verification: checking lists is more tedious/error-prone than checking ndarrays.
+    if dtypes is None:
+        dtypes = {}
+    ps = dict[str, NDArray[Any]]()
+    # Replace all values with numpy arrays.
+    for key, value in params.items():
+        dt = dtypes.get(key, None)
+        ps[key] = np.asarray(value, dtype=dt)
+    return ps
+
+
+def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
+    """
+    Normalize a dictionary of values so that all lists are replaced with numpy arrays.
+    If you would like to force certain values to take certain dtypes, provide the `dtypes` argument 
+    with a mapping from key to dtype (types will not affect non-list values).
+    """
+    if dtypes is None:
+        dtypes = {}
+    ps = dict[str, Any]()
+    # Replace list values with numpy arrays.
+    for key, value in data.items():
+        if isinstance(value, list):
+            dt = dtypes.get(key, None)
+            ps[key] = np.asarray(value, dtype=dt)
+        else:
+            ps[key] = value
+    return ps
+
+
+# SimContext
 
 
 class SimDimension:
@@ -86,193 +128,3 @@ class SimContext(SimDimension):
         # This is for convenient type-safety.
         # TODO: when we construct the geo we should be verifying this fact.
         return self.geo['population']
-
-
-# Data shapes
-
-
-class DataShape(ABC):
-    """Description of a data attribute's shape relative to a simulation context."""
-
-    @abstractmethod
-    def matches(self, dim: SimDimension, value: Any) -> bool:
-        """Does the given value match this shape expression?"""
-
-
-@dataclass(frozen=True)
-class Scalar(DataShape):
-    """A scalar value."""
-
-    def matches(self, dim: SimDimension, value: Any) -> bool:
-        return np.isscalar(value)
-
-    def __str__(self):
-        return "S"
-
-
-class BaseShape(Protocol):
-    """A shape which can be extended with an arbitrary index."""
-    base_dimensions: int
-
-    @abstractmethod
-    def matches_base(self, dim: SimDimension, value: NDArray) -> bool:
-        """Check the base characteristics only."""
-        # Arbitrary needs to defer to this method.
-
-
-@dataclass(frozen=True)
-class Time(BaseShape, DataShape):
-    """An array of at least size T (the number of simulation days)."""
-    base_dimensions = 1
-
-    def matches_base(self, dim: SimDimension, value: NDArray) -> bool:
-        return value.shape[0] >= dim.days
-
-    def matches(self, dim: SimDimension, value: Any) -> bool:
-        return isinstance(value, np.ndarray) \
-            and len(value.shape) == self.base_dimensions \
-            and self.matches_base(dim, value)
-
-    def __getitem__(self, index: int) -> Arbitrary:
-        return Arbitrary(index, self)
-
-    def __str__(self):
-        return "T"
-
-
-@dataclass(frozen=True)
-class Node(BaseShape, DataShape):
-    """An array of size N (the number of simulation nodes)."""
-    base_dimensions = 1
-
-    def matches_base(self, dim: SimDimension, value: NDArray) -> bool:
-        return value.shape[0] == dim.nodes
-
-    def matches(self, dim: SimDimension, value: Any) -> bool:
-        return isinstance(value, np.ndarray) \
-            and len(value.shape) == self.base_dimensions \
-            and self.matches_base(dim, value)
-
-    def __getitem__(self, index: int) -> Arbitrary:
-        return Arbitrary(index, self)
-
-    def __str__(self):
-        return "N"
-
-
-@dataclass(frozen=True)
-class TimeAndNode(BaseShape, DataShape):
-    """An array of size at-least-T by exactly-N."""
-    base_dimensions = 2
-
-    def matches_base(self, dim: SimDimension, value: NDArray) -> bool:
-        return value.shape[0] >= dim.days and value.shape[1] == dim.nodes
-
-    def matches(self, dim: SimDimension, value: Any) -> bool:
-        return isinstance(value, np.ndarray) \
-            and len(value.shape) == self.base_dimensions \
-            and self.matches_base(dim, value)
-
-    def __getitem__(self, index: int) -> Arbitrary:
-        return Arbitrary(index, self)
-
-    def __str__(self):
-        return "TxN"
-
-    # = Time | Node | TimeAndNode
-
-
-@dataclass(frozen=True)
-class Arbitrary(DataShape):
-    """
-    A shape whose final dimension is an arbitrary index and may have
-    a base shape which is relative to the simulation context.
-
-    For example: "TxNx3" would describe a three-dimensional array
-    whose first dimension is time, second dimension is the number of
-    nodes, and third dimension contains at least four values so that
-    we can select the fourth (zero-indexed).
-    """
-
-    index: int
-    base: BaseShape | None = field(default=None)
-
-    def __post_init__(self):
-        if self.index < 0:
-            raise ValueError("Arbitrary shape cannot specify negative indices.")
-
-    def matches(self, dim: SimDimension, value: Any) -> bool:
-        if self.base is not None:
-            return isinstance(value, np.ndarray) \
-                and len(value.shape) == self.base.base_dimensions + 1 \
-                and self.base.matches_base(dim, value) \
-                and value.shape[-1] > self.index
-        else:
-            return isinstance(value, np.ndarray) \
-                and len(value.shape) == 1 \
-                and value.shape[-1] > self.index
-
-    def __str__(self):
-        if self.base is not None:
-            return f"{self.base}x{self.index}"
-        return str(self.index)
-
-
-class ArbitraryFactory:
-    """Syntactic sugar to create an Arbitrary instance with base=None using index syntax (square brackets)."""
-
-    def __getitem__(self, index: int) -> Arbitrary:
-        return Arbitrary(index)
-
-
-@dataclass(frozen=True)
-class Shapes:
-    """Static instances for all available shapes."""
-
-    S = Scalar()
-    T = Time()
-    N = Node()
-    TxN = TimeAndNode()
-    A = ArbitraryFactory()
-
-# IPMs can use parameters of any of these shapes, where:
-# - A is an "arbitrary" integer index, 0 or more
-# - S is a single scalar value
-# - T is the number of ticks
-# - N is the number of nodes
-# ---
-# S; A; T; N; TxA; NxA; TxN; TxNxA
-
-
-_shape_regex = re.compile(r"A|[STN]|[TN]xA|TxN(xA)?"
-                          .replace("A", "(0|[1-9][0-9]*)"))
-_parts_regex = re.compile(r"(.*?)([0-9]*)")
-
-
-def parse_shape(shape: str) -> DataShape:
-    """Attempt to parse an AttributeShape from a string."""
-
-    parts_match = _parts_regex.fullmatch(shape)
-    if not _shape_regex.fullmatch(shape) or not parts_match:
-        raise ValueError(f"'{shape}' is not a valid shape specification.")
-    prefix, index = parts_match.groups()
-    match prefix:
-        case "S":
-            return Shapes.S
-        case "T":
-            return Shapes.T
-        case "N":
-            return Shapes.N
-        case "TxN":
-            return Shapes.TxN
-        # blank or trailing 'x' means there's an index at the end -> Arbitrary
-        case "":
-            return Arbitrary(int(index))
-        case "Tx":
-            return Arbitrary(int(index), Shapes.T)
-        case "Nx":
-            return Arbitrary(int(index), Shapes.N)
-        case "TxNx":
-            return Arbitrary(int(index), Shapes.TxN)
-        case _:
-            raise ValueError(f"'{shape}' is not a valid shape specification.")
