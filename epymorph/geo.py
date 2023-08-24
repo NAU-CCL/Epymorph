@@ -1,4 +1,4 @@
-from os import PathLike
+from os import PathLike, path
 from typing import NamedTuple, TypeVar
 
 import numpy as np
@@ -95,43 +95,59 @@ def load_compressed_geo(npz_file: str | PathLike) -> Geo:
     return Geo(nodes, labels, data)
 
 
+def geo_path(id: str) -> str:
+    return f"./epymorph/data/geo/{id}_geo.npz"
+
+
+def save_compressed_geo(id: str, data: dict[str, NDArray]) -> None:
+    if not 'label' in data:
+        msg = f"Geo {id} must have a 'label' attribute in order to be saved and loaded."
+        raise Exception(msg)
+    np.savez_compressed(geo_path(id), **data)
+
+
 class GEOBuilder:
-    def __init__(self, geo_spec: str):
+    def __init__(self, id: str):
         # create GEOSpec object from file
-        self.spec = deserialize(geo_spec)
+        self.id = id
 
     def build(self, force=False) -> Geo:
-        data = dict[str, NDArray]()
-        print('Fetching GEO data from ADRIOs...')
+        if path.exists(geo_path(self.id)) and not force:
+            return load_compressed_geo(geo_path(self.id))
+        else:
+            self.spec = deserialize(f'./epymorph/data/geo/{self.id}.geo')
+            data = dict[str, NDArray]()
+            print('Fetching GEO data from ADRIOs...')
 
-        # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
-        # - a literal key to use, or
-        # - None to use the ADRIO's attribute
-        all_adrios = \
-            [('label', self.spec.label)] + \
-            [(None, x) for x in self.spec.adrios]
+            # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
+            # - a literal key to use, or
+            # - None to use the ADRIO's attribute
+            all_adrios = \
+                [('label', self.spec.label)] + \
+                [(None, x) for x in self.spec.adrios]
 
-        # loop for all ADRIOSpecs
-        for key, spec in all_adrios:
-            # get adrio class from library dictionary (library hardcoded for now)
-            adrio_class = uscounties_library.get(spec.class_name)
-            # fetch data from adrio
-            if adrio_class is None:
-                raise Exception(f"Unable to load ADRIO for {spec.class_name}; "
-                                "please check that your GEOSpec is valid.")
-            else:
-                adrio = adrio_class()
-                print(f'Fetching {adrio.attribute}')
-                if key is None:
-                    key = adrio.attribute
-                data[key] = adrio.fetch(force, nodes=self.spec.nodes)
+            # loop for all ADRIOSpecs
+            for key, spec in all_adrios:
+                # get adrio class from library dictionary (library hardcoded for now)
+                adrio_class = uscounties_library.get(spec.class_name)
+                # fetch data from adrio
+                if adrio_class is None:
+                    raise Exception(f"Unable to load ADRIO for {spec.class_name}; "
+                                    "please check that your GEOSpec is valid.")
+                else:
+                    adrio = adrio_class(spec=self.spec)
+                    print(f'Fetching {adrio.attribute}')
+                    if key is None:
+                        key = adrio.attribute
+                    data[key] = adrio.fetch()
 
-        print('...done')
+            print('...done')
 
-        # build and return Geo
-        labels = data['label']
-        return Geo(
-            nodes=len(labels),
-            labels=labels.tolist(),
-            data=data
-        )
+            # build and return Geo
+            labels = data['label']
+            save_compressed_geo(self.id, data)
+            return Geo(
+                nodes=len(labels),
+                labels=labels.tolist(),
+                data=data
+            )

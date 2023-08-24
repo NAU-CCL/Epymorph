@@ -1,10 +1,10 @@
 import numpy as np
 from numpy.typing import NDArray
-from pandas import DataFrame, Series, concat
+from pandas import Series
 
-from epymorph.adrio.adrio import ADRIO
+from epymorph.adrio.adrio_census import ADRIO_census
 
-query_list = ('B01001_003E',  # population 0-19
+query_list = ['B01001_003E',  # population 0-19
               'B01001_004E',
               'B01001_005E',
               'B01001_006E',
@@ -49,19 +49,15 @@ query_list = ('B01001_003E',  # population 0-19
               'B01001_046E',
               'B01001_047E',
               'B01001_048E',
-              'B01001_049E')
+              'B01001_049E']
 
 
-class PopulationByAge(ADRIO):
+class PopulationByAge(ADRIO_census):
     """
     ADRIO to fetch  population in all counties in a provided set of states
     broken down into age brackets 0-19, 20-64, and 64-85+
     """
-    year = 2015
     attribute = 'population_by_age'
-
-    def __init__(self) -> None:
-        super().__init__()
 
     def calculate_pop(self, start: int, end: int, location: Series) -> int:
         """Adds up a specified group of integer values from a row of a population dataframe (used to calculate different age bracket totals)"""
@@ -70,37 +66,14 @@ class PopulationByAge(ADRIO):
             population += int(location[i])
         return population
 
-    def fetch(self, force=False, **kwargs) -> NDArray[np.int_]:
+    def fetch(self) -> NDArray[np.int_]:
         """
         Returns a numpy array of 3 element lists containing the population of each age group 
         from youngest to oldest in each county
         """
-        if force:
-            uncached = self.type_check(kwargs)
-            cache_df = DataFrame()
-        else:
-            uncached, cache_df = self.cache_fetch(kwargs)
 
-        code_string = ','.join(uncached)
-
-        if len(uncached) > 0:
-            # get data from census
-            data = self.census.acs5.get(query_list, {
-                                        'for': 'county: *', 'in': f'state: {code_string}'}, year=self.year)
-
-            data_df = DataFrame.from_records(data)
-
-            # sort data by state and county fips
-            data_df = data_df.sort_values(by=['state', 'county'])
-            data_df.reset_index(inplace=True)
-
-            self.cache_store(data_df, uncached)
-            if len(cache_df.index) > 0:
-                data_df = concat([data_df, cache_df])
-
-        else:
-            cache_df.reset_index(inplace=True)
-            data_df = cache_df
+        # get data from census
+        data_df = super().fetch(query_list)
 
         # calculate population of each age bracket and enter into a numpy array to return
         output = np.zeros((len(data_df.index), 3), dtype=np.int_)
