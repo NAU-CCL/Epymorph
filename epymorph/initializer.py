@@ -171,6 +171,13 @@ def indexed_locations(ctx: SimContext, selection: NDArray[np.intp], seed_size: i
     infected = ctx.rng.multivariate_hypergeometric(selected, seed_size)
 
     result = _default_compartments(ctx)
+
+    # Special case: the "no" IPM has only one compartment!
+    # Technically it would be more "correct" to choose a different initializer,
+    # but it's convenient to allow this special case for ease of testing.
+    if ctx.compartments == 1:
+        return result
+
     for i, n in zip(selection, infected):
         result[i][0] -= n
         result[i][1] += n
