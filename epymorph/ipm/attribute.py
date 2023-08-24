@@ -103,7 +103,7 @@ class ParamDef(AttributeDef):
         if not self.attribute_name in ctx.param:
             msg = f"Missing params attribute '{self.attribute_name}'"
             raise AttributeException(msg)
-        return ctx.param[self.attribute_name]
+        return np.asarray(ctx.param[self.attribute_name])
 
 
 def param(symbol_name: str,

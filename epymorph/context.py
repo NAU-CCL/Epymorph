@@ -33,26 +33,6 @@ Events = NDArray[SimDType]
 # DataDict
 
 
-DataDict = dict[str, NDArray]
-
-
-def normalize_params(params: dict[str, Any], dtypes: dict[str, DTypeLike] | None = None) -> DataDict:
-    """
-    Normalize a parameter dictionary so that all of its attributes are numpy arrays (even scalars).
-    If you would like to force certain values to take certain dtypes, provide the `dtypes` argument 
-    with a mapping from key to dtype.
-    """
-    # This simplifies attribute verification: checking lists is more tedious/error-prone than checking ndarrays.
-    if dtypes is None:
-        dtypes = {}
-    ps = dict[str, NDArray[Any]]()
-    # Replace all values with numpy arrays.
-    for key, value in params.items():
-        dt = dtypes.get(key, None)
-        ps[key] = np.asarray(value, dtype=dt)
-    return ps
-
-
 def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
     """
     Normalize a dictionary of values so that all lists are replaced with numpy arrays.
@@ -101,13 +81,13 @@ class SimContext(SimDimension):
     # geo info
     nodes: int
     labels: list[str]
-    geo: DataDict
+    geo: dict[str, NDArray]
     # ipm info
     compartments: int
     compartment_tags: list[list[str]]
     events: int
     # run info
-    param: DataDict
+    param: dict[str, Any]
     clock: Clock
     rng: np.random.Generator
     # denormalized info
