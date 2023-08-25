@@ -18,7 +18,9 @@ class Granularity(Enum):
 
 
 class ADRIO_census(ADRIO):
-    """abstract class to serve as an outline for individual ADRIO implementations"""
+    """
+    Census ADRIO template to serve as parent class and provide utility functions for Census-based ADRIOS
+    """
     census: Census
     year: int
     granularity: int
@@ -26,7 +28,7 @@ class ADRIO_census(ADRIO):
 
     def __init__(self, **kwargs):
         """
-        initializer to create Census object
+        Initializer to create Census object and set query properties
         """
         spec = kwargs.get('spec')
         if type(spec) is GEOSpec:
@@ -40,6 +42,9 @@ class ADRIO_census(ADRIO):
         self.census = Census(os.environ['CENSUS_API_KEY'])
 
     def fetch(self, variables: list[str]) -> DataFrame:
+        """
+        Utility function to fetch Census data by building queries from ADRIO data
+        """
         # verify node types and convert to strings usable by census api
         states = self.nodes.get('state')
         counties = self.nodes.get('county')
@@ -72,9 +77,10 @@ class ADRIO_census(ADRIO):
             data_df = data_df.sort_values(by=['state', 'county', 'tract'])
         else:
             data = self.census.acs5.get(variables, {
-                                        'for': f'block group: {cbg}', 'in': f'state: {states} county: {counties}'}, year=self.year)
+                                        'for': f'block group: {cbg}', 'in': f'state: {states} county: {counties} tract: {tracts}'}, year=self.year)
             data_df = DataFrame.from_records(data)
-            data_df = data_df.sort_values(by=['state', 'county', 'block group'])
+            data_df = data_df.sort_values(
+                by=['state', 'county', 'tract', 'block group'])
 
         data_df.reset_index(inplace=True)
 
@@ -82,37 +88,68 @@ class ADRIO_census(ADRIO):
         return data_df
 
     def fetch_sf(self) -> GeoDataFrame:
+        """
+        Utility function to fetch shape files from Census for specified regions
+        """
+        # call appropriate pygris function based on granularity and sort result
         if self.granularity == Granularity.STATE.value:
             data_df = states(year=self.year)
             data_df = data_df.rename(columns={'STATEFP': 'state'})
+
         elif self.granularity == Granularity.COUNTY.value:
             data_df = counties(state=self.nodes.get('state'), year=self.year)
-
-            data_df = data_df.rename(
-                columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
-
-            # retreive counties from states of interest and sort by fips
+            data_df = data_df.rename(columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
             data_df = data_df.sort_values(by=['state', 'county'])
             data_df.reset_index(drop=True, inplace=True)
+
         elif self.granularity == Granularity.TRACT.value:
-            data_df = tracts(state=self.nodes.get('state'),
-                             county=self.nodes.get('county'), year=self.year)
+            state_fips = self.nodes.get('state')
+            county_fips = self.nodes.get('county')
+            if state_fips is not None and county_fips is not None:
+                data_df = GeoDataFrame()
+                # tract and block group level files cannot be fetched using lists
+                # several queries must be made and merged instead
+                for i in range(len(state_fips)):
+                    for j in range(len(county_fips)):
+                        current_data = tracts(
+                            state=state_fips[i], county=county_fips[j], year=self.year)
+
+                        if len(data_df.index) > 0:
+                            data_df = data_df.merge(
+                                current_data, on=['STATEFP', 'COUNTYFP', 'TRACTCE'])
+                        else:
+                            data_df = current_data
+            else:
+                msg = "Data could not be retrieved due to missing state, county fips codes"
+                raise Exception(msg)
 
             data_df = data_df.rename(
-                columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'TRACTFP': 'tract'})
-
-            # retreive counties from states of interest and sort by fips
-            data_df = data_df.sort_values(by=['state', 'county', 'tract'])
+                columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'TRACTCE': 'tract'})
+            data_df = GeoDataFrame(data_df.sort_values(by=['state', 'county', 'tract']))
             data_df.reset_index(drop=True, inplace=True)
+
         else:
-            data_df = block_groups(state=self.nodes.get(
-                'state'), county=self.nodes.get('county'), year=self.year)
+            state_fips = self.nodes.get('state')
+            county_fips = self.nodes.get('county')
+            if state_fips is not None and county_fips is not None:
+                data_df = GeoDataFrame()
+                for i in range(len(state_fips)):
+                    for j in range(len(county_fips)):
+                        current_data = block_groups(
+                            state=state_fips[i], county=county_fips[j], year=self.year)
+                        if len(data_df.index) > 0:
+                            data_df = data_df.merge(
+                                current_data, on=['STATEFP', 'COUNTYFP', 'TRACTCE', 'BLKGRPCE'])
+                        else:
+                            data_df = current_data
+            else:
+                msg = "Data could not be retrieved due to missing state or county fips codes"
+                raise Exception(msg)
 
             data_df = data_df.rename(
-                columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'BLOCKGROUPFP': 'block group'})
-
-            # retreive counties from states of interest and sort by fips
-            data_df = data_df.sort_values(by=['state', 'county', 'block group'])
+                columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'TRACTCE': 'tract', 'BLKGRPCE': 'block group'})
+            data_df = GeoDataFrame(data_df.sort_values(
+                by=['state', 'county', 'block group']))
             data_df.reset_index(drop=True, inplace=True)
 
         return data_df

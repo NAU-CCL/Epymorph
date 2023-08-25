@@ -6,6 +6,7 @@ from numpy.typing import DTypeLike, NDArray
 
 from epymorph.adrio import uscounties_library
 from epymorph.adrio.adrio import deserialize
+from epymorph.initializer import _default_compartments
 from epymorph.util import NDIndices
 
 
@@ -85,7 +86,7 @@ def validate_shape(name: str, data: T | None, shape: tuple[int, ...], dtype: DTy
 
 def load_compressed_geo(npz_file: str | PathLike) -> Geo:
     """Read a GEO from its .npz format."""
-    with np.load(npz_file) as npz_data:
+    with np.load(npz_file, allow_pickle=True) as npz_data:
         data = dict(npz_data)
     labels = data.get('label')
     if labels is None:
@@ -107,15 +108,17 @@ def save_compressed_geo(id: str, data: dict[str, NDArray]) -> None:
 
 
 class GEOBuilder:
-    def __init__(self, id: str):
+    def __init__(self, geo_spec: str):
         # create GEOSpec object from file
-        self.id = id
+        self.spec = deserialize(geo_spec)
 
     def build(self, force=False) -> Geo:
-        if path.exists(geo_path(self.id)) and not force:
-            return load_compressed_geo(geo_path(self.id))
+        """Builds Geo from cached file or geospec object using ADRIOs"""
+        # load Geo from compressed file if one exists
+        if path.exists(geo_path(self.spec.id)) and not force:
+            return load_compressed_geo(geo_path(self.spec.id))
+        # build Geo using ADRIOs
         else:
-            self.spec = deserialize(f'./epymorph/data/geo/{self.id}.geo')
             data = dict[str, NDArray]()
             print('Fetching GEO data from ADRIOs...')
 
@@ -128,7 +131,7 @@ class GEOBuilder:
 
             # loop for all ADRIOSpecs
             for key, spec in all_adrios:
-                # get adrio class from library dictionary (library hardcoded for now)
+                # get adrio class from library dictionary
                 adrio_class = uscounties_library.get(spec.class_name)
                 # fetch data from adrio
                 if adrio_class is None:
@@ -143,9 +146,9 @@ class GEOBuilder:
 
             print('...done')
 
-            # build and return Geo
+            # build, cache, and return Geo
             labels = data['label']
-            save_compressed_geo(self.id, data)
+            save_compressed_geo(self.spec.id, data)
             return Geo(
                 nodes=len(labels),
                 labels=labels.tolist(),

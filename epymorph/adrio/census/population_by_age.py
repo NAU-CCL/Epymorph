@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pandas import Series
 
-from epymorph.adrio.adrio_census import ADRIO_census
+from epymorph.adrio.census.adrio_census import ADRIO_census
 
 query_list = ['B01001_003E',  # population 0-19
               'B01001_004E',
@@ -54,13 +54,16 @@ query_list = ['B01001_003E',  # population 0-19
 
 class PopulationByAge(ADRIO_census):
     """
-    ADRIO to fetch  population in all counties in a provided set of states
+    ADRIO to fetch population in a provided set of geographies
     broken down into age brackets 0-19, 20-64, and 64-85+
     """
     attribute = 'population_by_age'
 
     def calculate_pop(self, start: int, end: int, location: Series) -> int:
-        """Adds up a specified group of integer values from a row of a population dataframe (used to calculate different age bracket totals)"""
+        """
+        Adds up a specified group of integer values from a row of a population dataframe 
+        (Used to calculate different age bracket totals)
+        """
         population = 0
         for i in range(start, end):
             population += int(location[i])
@@ -69,9 +72,8 @@ class PopulationByAge(ADRIO_census):
     def fetch(self) -> NDArray[np.int_]:
         """
         Returns a numpy array of 3 element lists containing the population of each age group 
-        from youngest to oldest in each county
+        from youngest to oldest in each node
         """
-
         # get data from census
         data_df = super().fetch(query_list)
 

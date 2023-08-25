@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pandas import Series
 
-from epymorph.adrio.adrio_census import ADRIO_census
+from epymorph.adrio.census.adrio_census import ADRIO_census
 
 query_list = ['B01001_003E',  # population 0-19
               'B01001_004E',
@@ -14,7 +14,7 @@ query_list = ['B01001_003E',  # population 0-19
               'B01001_029E',
               'B01001_030E',
               'B01001_031E',
-              'B01001_008E',  # population 20-64
+              'B01001_008E',  # population 20-34
               'B01001_009E',
               'B01001_010E',
               'B01001_011E',
@@ -38,7 +38,7 @@ query_list = ['B01001_003E',  # population 0-19
               'B01001_041E',  # women
               'B01001_042E',
               'B01001_043E',
-              'B01001_020E',  # population 65-85+
+              'B01001_020E',  # population 65-74
               'B01001_021E',
               'B01001_022E',
               'B01001_044E',  # women
@@ -53,17 +53,27 @@ query_list = ['B01001_003E',  # population 0-19
 
 
 class PopulationByAgex6(ADRIO_census):
+    """
+    ADRIO to fetch population in a provided set of geographies
+    broken down into age brackets 0-19, 20-34, 35-54, 55-64, 65-74, and 75+
+    """
     attribute = 'population_by_age_x6'
 
     def calculate_pop(self, start: int, end: int, location: Series) -> int:
-        """Adds up a specified group of integer values from a row of a population dataframe (used to calculate different age bracket totals)"""
+        """
+        Adds up a specified group of integer values from a row of a population dataframe
+        (Used to calculate different age bracket totals)
+        """
         population = 0
         for i in range(start, end):
             population += int(location[i])
         return population
 
     def fetch(self) -> NDArray[np.int_]:
-
+        """
+        Returns a numpy array of 6 element lists containing the population of each age group 
+        from youngest to oldest in each node
+        """
         # get data from census
         data_df = super().fetch(query_list)
 

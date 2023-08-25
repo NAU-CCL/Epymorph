@@ -1,15 +1,16 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.adrio.adrio_census import ADRIO_census
+from epymorph.adrio.census.adrio_census import ADRIO_census
 
 
 class MedianAge(ADRIO_census):
+    """ADRIO to fetch the median age for a provided set of geographies"""
     attribute = 'median_age'
 
     def fetch(self) -> NDArray[np.int_]:
-
+        """Returns a numpy array of integers representing the median age in each node"""
         # get data from census
         data_df = super().fetch(['B01002_001E'])
 
-        return data_df['B01002_001E'].to_numpy()
+        return data_df['B01002_001E'].to_numpy(np.int_)
