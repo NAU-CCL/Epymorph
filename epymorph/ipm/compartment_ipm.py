@@ -113,9 +113,11 @@ class CompartmentModelIpm(Ipm):
     def _rate_args(self, loc: Location, effective: Compartments, tick: Tick) -> list[Any]:
         """Assemble rate function arguments for this location/tick."""
         attribs = (f(loc, tick) for f in self.attr_getters)
-        # The math should be done on full ints or else overflows are likely,
-        # but the results will be stored back to SimDType.
-        return [*(effective.astype(int)), *attribs]
+        # NOTE: if SimDType is ever adjusted smaller than int64, you may want to do something like
+        # return [*(effective.astype(np.int64)), *attribs]
+        # We must be careful that whatever math is happening in the IPM won't overflow the numerical
+        # representation being used.
+        return [*effective, *attribs]
 
     def _eval_rates(self, rate_args: list[Any], tau: float) -> NDArray[SimDType]:
         """Evaluate the event rates and do random draws for all transition events."""
