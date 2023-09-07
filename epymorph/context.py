@@ -17,6 +17,8 @@ SimDType = np.int64
 This is the numpy datatype that should be used to represent internal simulation data.
 Where segments of the application maintain compartment and/or event counts,
 they should take pains to use this type at all times (if possible).
+
+WARNING: before adjusting this see the note in `CompartmentModelIpm._rate_args(...)`.
 """
 
 # SimDType being centrally-located means we can change it reliably.
