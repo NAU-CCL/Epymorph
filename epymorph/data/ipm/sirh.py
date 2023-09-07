@@ -20,17 +20,18 @@ def load() -> IpmBuilder:
         attributes=[
             param('beta', shape=Shapes.TxN),
             param('gamma', shape=Shapes.TxN),
+            param('xi', shape=Shapes.TxN),
             param('hospitalization_rate', shape=Shapes.TxN),
             param('hospitalization_duration', shape=Shapes.TxN)
         ])
 
     [S, I, R, H] = symbols.compartment_symbols
-    [β, γ, h_rate, h_dur] = symbols.attribute_symbols
+    [β, γ, ξ, h_rate, h_dur] = symbols.attribute_symbols
 
     # formulate N so as to avoid dividing by zero;
     # this is safe in this instance because if the denominator is zero,
     # the numerator must also be zero
-    N = Max(1, S + I + R)
+    N = Max(1, S + I + R + H)
 
     sirh = create_model(
         symbols=symbols,
@@ -38,9 +39,10 @@ def load() -> IpmBuilder:
             edge(S, I, rate=β * S * I / N),
             fork(
                 edge(I, H, rate=γ * I * h_rate),
-                edge(I, R, rate=γ * I * (1 - h_rate))
+                edge(I, R, rate=γ * I * (1 - h_rate)),
             ),
-            edge(H, R, rate=H / h_dur)
+            edge(H, R, rate=H / h_dur),
+            edge(R, S, rate=ξ * R),
         ])
 
     return CompartmentModelIpmBuilder(sirh)
