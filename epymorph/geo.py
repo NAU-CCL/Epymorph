@@ -46,7 +46,7 @@ class Attribute(NamedTuple):
 
 Schema = dict[str, Attribute]
 
-CentroidDType = np.dtype([('longitude', float), ('latitude', float)])
+CentroidDType = np.dtype([('longitude', np.float64), ('latitude', np.float64)])
 
 
 def validate_schema(schema: Schema, data: dict[str, NDArray]) -> None:

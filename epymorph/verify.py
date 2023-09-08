@@ -11,7 +11,7 @@ def verify(output_file: str) -> int:
     try:
         with open(output_file, 'r') as out_file:
             next(out_file)
-            data = np.loadtxt(out_file, dtype=int, delimiter=',')
+            data = np.loadtxt(out_file, dtype=np.int64, delimiter=',')
     except Exception as e:
         print(f"Unable to read output file: {e}")
         return 2
