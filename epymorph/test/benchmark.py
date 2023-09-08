@@ -32,7 +32,7 @@ def main():
     test()  # warmup
 
     n = 4
-    times = np.zeros(n * 4, dtype=float)
+    times = np.zeros(n * 4, dtype=np.float64)
 
     print("Running benchmark", end="", flush=True)
     for i in range(n):

@@ -134,7 +134,7 @@ def proportional(ctx: SimContext, ratios: NDArray[np.integer | np.floating]) -> 
         raise _as_arg_exception('ratios', e) from None
 
     ratios = np.broadcast_to(ratios, (N, C))
-    row_sums = cast(NDArray[np.float_], np.sum(ratios, axis=1, dtype=float))
+    row_sums = cast(NDArray[np.float64], np.sum(ratios, axis=1, dtype=np.float64))
     if np.any(row_sums <= 0):
         raise _as_arg_exception('ratios', "One or more rows sum to zero or less.")
 

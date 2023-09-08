@@ -19,7 +19,7 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(act, exp)
 
     def test_stridesum(self):
-        arr = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], dtype=int)
+        arr = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], dtype=np.int64)
 
         act1 = util.stridesum(arr, 2)
         exp1 = np.array([3, 7, 11, 15, 19])
@@ -62,17 +62,17 @@ class TestUtil(unittest.TestCase):
         self.assertListEqual(act, exp)
 
     def test_check_ndarray_01(self):
-        arr = np.array([1, 2, 3], dtype=int)
+        arr = np.array([1, 2, 3], dtype=np.int64)
         self.assertTrue(util.check_ndarray(arr))
-        self.assertTrue(util.check_ndarray(arr, dtype=np.int_))
+        self.assertTrue(util.check_ndarray(arr, dtype=np.int64))
         self.assertTrue(util.check_ndarray(arr, shape=(3,)))
-        self.assertTrue(util.check_ndarray(arr, np.int_, (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.int_], (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.int_, np.float_], (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.float_, np.int_], (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.int_, np.float_], [(3,)]))
+        self.assertTrue(util.check_ndarray(arr, np.int64, (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.int64], (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.int64, np.float64], (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.float64, np.int64], (3,)))
+        self.assertTrue(util.check_ndarray(arr, [np.int64, np.float64], [(3,)]))
         self.assertTrue(util.check_ndarray(
-            arr, [np.int_, np.float_], [(3, 1), (1, 3), (3,)]))
+            arr, [np.int64, np.float64], [(3, 1), (1, 3), (3,)]))
         self.assertTrue(util.check_ndarray(arr, dimensions=1))
         self.assertTrue(util.check_ndarray(arr, dimensions=[1, 2, 3]))
 

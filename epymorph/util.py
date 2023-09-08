@@ -136,7 +136,7 @@ def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DT
 RADIUS_MI = 3959.87433  # radius of earth in mi
 
 
-def pairwise_haversine(longitudes: NDArray[np.float_], latitudes: NDArray[np.float_]) -> NDArray[np.float_]:
+def pairwise_haversine(longitudes: NDArray[np.float64], latitudes: NDArray[np.float64]) -> NDArray[np.float64]:
     """Compute the distances in miles between all pairs of coordinates."""
     # https://www.themathdoctors.org/distances-on-earth-2-the-haversine-formula
     lng = np.radians(longitudes)
@@ -195,7 +195,7 @@ def check_ndarray(
     """
     Checks that a value is a numpy array of the given dtype and shape.
     (If you pass a list of dtypes or shapes, they will be matched as though combined with an "or".)
-    Type-guards if true, raises a NumpyTypeError is false.
+    Type-guards if true, raises a NumpyTypeError if false.
     """
     if not isinstance(value, np.ndarray):
         raise NumpyTypeError("Not a numpy array.")
