@@ -1,6 +1,7 @@
 from epymorph.adrio.adrio import ADRIO
 from epymorph.adrio.census.average_household_size import AverageHouseholdSize
 from epymorph.adrio.census.centroid import Centroid
+from epymorph.adrio.census.commuters import Commuters
 from epymorph.adrio.census.dissimilarity_index import DissimilarityIndex
 from epymorph.adrio.census.geoid import GEOID
 from epymorph.adrio.census.gini_index import GiniIndex
@@ -26,5 +27,6 @@ uscounties_library: dict[str, type[ADRIO]] = {
     'MedianAge': MedianAge,
     'AverageHouseholdSize': AverageHouseholdSize,
     'PopulationByAgex6': PopulationByAgex6,
-    'GiniIndex': GiniIndex
+    'GiniIndex': GiniIndex,
+    'Commuters': Commuters
 }

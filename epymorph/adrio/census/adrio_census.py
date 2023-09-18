@@ -3,7 +3,7 @@ from enum import Enum
 
 from census import Census
 from geopandas import GeoDataFrame
-from pandas import DataFrame
+from pandas import DataFrame, read_excel
 from pygris import block_groups, counties, states, tracts
 
 from epymorph.adrio import ADRIO
@@ -26,7 +26,7 @@ class ADRIO_census(ADRIO):
     granularity: int
     nodes: dict[str, list[str]]
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         """
         Initializer to create Census object and set query properties
         """
@@ -153,3 +153,88 @@ class ADRIO_census(ADRIO):
             data_df.reset_index(drop=True, inplace=True)
 
         return data_df
+
+    def fetch_commuters(self) -> DataFrame:
+        """
+        Utility function to fetch commuting data from .xslx format filtered down to requested regions
+        """
+        # check for valid year
+        if self.year not in [2010, 2015, 2020]:
+            # if invalid year is close to a valid year, fetch valid data and notify user
+            passed_year = self.year
+            if self.year in range(2008, 2012):
+                self.year = 2010
+            elif self.year in range(2013, 2017):
+                self.year = 2015
+            elif self.year in range(2018, 2022):
+                self.year = 2020
+            else:
+                msg = "Invalid year. Communting data is only available for 2008-2022"
+                raise Exception(msg)
+
+            print(
+                f"Commuting data cannot be retrieved for {passed_year}, fetching {self.year} data instead.")
+
+        # check for invalid granularity
+        if self.granularity == Granularity.CBG.value or self.granularity == Granularity.TRACT.value:
+            print(
+                'Commuting data cannot be retrieved for tract or block group granularities,', end='')
+            print('fetching county level data instead.')
+            self.granularity = Granularity.COUNTY.value
+
+        states = self.nodes.get('state')
+        counties = self.nodes.get('county')
+
+        if self.year != 2010:
+            url = f'https://www2.census.gov/programs-surveys/demo/tables/metro-micro/{self.year}/commuting-flows-{self.year}/table1.xlsx'
+
+            # organize dataframe column names
+            group_fields = ['state_code',
+                            'county_code',
+                            'state',
+                            'county']
+
+            all_fields = ['res_' + field for field in group_fields] + \
+                         ['wrk_' + field for field in group_fields] + \
+                         ['workers', 'moe']
+
+            header_num = 6
+
+        else:
+            url = 'https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2010/commuting-employment-2010/table1.xlsx'
+
+            all_fields = ['res_state_code', 'res_county_code', 'wrk_state_code', 'wrk_county_code',
+                          'workers', 'moe', 'res_state', 'res_county', 'wrk_state', 'wrk_county']
+
+            header_num = 3
+
+        # download communter data spreadsheet as a pandas dataframe
+        data = read_excel(url, header=header_num, names=all_fields, dtype={
+                          'res_state_code': str, 'wrk_state_code': str, 'res_county_code': str, 'wrk_county_code': str})
+
+        if states is not None:
+            # states specified
+            if states[0] != '*':
+                data = data.loc[data['res_state_code'].isin(states)]
+
+                for i in range(len(states)):
+                    states[i] = states[i].zfill(3)
+                data = data.loc[data['wrk_state_code'].isin(states)]
+
+            # wildcard case
+            else:
+                data = data.loc[data['res_state_code'] < '57']
+                data = data.loc[data['res_state_code'] != '11']
+                data = data.loc[data['wrk_state_code'] < '057']
+                data = data.loc[data['wrk_state_code'] != '011']
+
+            # filter out non-county locations
+            data = data.loc[data['res_county_code'] < '508']
+            data = data.loc[data['wrk_county_code'] < '508']
+
+        if self.granularity == Granularity.COUNTY.value:
+            if counties is not None and counties[0] != '*':
+                data = data.loc[data['res_county_code'].isin(counties)]
+                data = data.loc[data['wrk_county_code'].isin(counties)]
+
+        return data
