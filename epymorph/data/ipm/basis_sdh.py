@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 import numpy as np
 from numpy.typing import NDArray
 
@@ -11,8 +9,6 @@ from epymorph.data.ipm.initializer import DefaultInitializer, Initializer
 from epymorph.epi import Ipm, IpmBuilder
 from epymorph.util import Compartments, Events
 from epymorph.world import Location
-
-dir = os.path.expanduser("~/Desktop/Github/Epymorph/scratch/output_files")
 
 
 def load() -> IpmBuilder:
@@ -35,8 +31,6 @@ class sirhBuilder(IpmBuilder):
             raise Exception("params missing immunity_duration")
         if "hospitalization_duration" not in ctx.param:
             raise Exception("params missing hospitalization_duration")
-        if "coefficients" not in ctx.param:
-            raise Exception("params missing coefficients")
 
     def initialize_compartments(self, ctx: SimContext) -> list[Compartments]:
         # The populations of all locations start off in the first compartment.
@@ -84,61 +78,6 @@ class sdh(Ipm):
         self.alpha = ctx.param["alpha"]
         # gamma
         self.gamma = ctx.param["gamma"]
-        # coefficients
-        self.coefficients = ctx.param["coefficients"]
-
-    def cox_de_boor(self, u, i, k, t):
-        if k == 0:
-            return 1.0 if t[i] <= u < t[i+1] else 0.0
-        else:
-            term1 = 0.0
-            term2 = 0.0
-
-            if (t[i + k] - t[i]) != 0:
-                term1 = ((u - t[i]) / (t[i + k] - t[i])) * \
-                    self.cox_de_boor(u, i, k-1, t)
-            if (t[i + k + 1] - t[i+1]) != 0:
-                term2 = ((t[i + k + 1] - u) / (t[i + k + 1] -
-                         t[i + 1])) * self.cox_de_boor(u, i+1, k-1, t)
-
-            return term1 + term2
-
-    def exp_beta(self, loc_idx: int, tau: int) -> np.double:
-        a0 = self.alpha[0]
-
-        a1 = self.alpha[1]
-        x1 = self.ctx.geo["average_household_size"][loc_idx]
-        scale_x1 = (x1 - self.ctx.geo["average_household_size"].mean()) / self.ctx.geo[
-            "average_household_size"
-        ].std()
-
-        a2 = self.alpha[2]
-        x2 = self.ctx.geo["pop_density_km2"][loc_idx]
-        scale_x2 = (x2 - self.ctx.geo["pop_density_km2"].mean()) / self.ctx.geo[
-            "pop_density_km2"
-        ].std()
-        if tau % 7 == 0:
-            knot_vector = np.arange(0, 280, 7)
-            degree = 3
-            knot_length = len(knot_vector)
-            u_vals = np.linspace(knot_vector[0], knot_vector[-1], 1000)
-            N = np.zeros((len(u_vals), knot_length - degree - 1))
-
-            for i in range(knot_length - degree - 1):
-                for j, u in enumerate(u_vals):
-                    N[j, i] = self.cox_de_boor(u, i, degree, knot_vector)
-
-            N_alpha = np.zeros_like(N)
-
-            for i in range(N.shape[1]):
-                N_alpha[:, i] = self.coefficients[i] * N[:, i]
-
-            N_rowsum = np.sum(N_alpha, axis=1)
-
-            beta = a0 * np.exp(((a1 * scale_x1) + (a2 * scale_x2) + N_rowsum))
-        else:
-            beta = a0 * np.exp(((a1 * scale_x1) + (a2 * scale_x2) + N_rowsum))
-        return beta
 
     def _gamma(self, loc_idx) -> float:
         h1 = self.ctx.geo["median_income"][loc_idx]
@@ -157,20 +96,21 @@ class sdh(Ipm):
         )
         return gamma
 
-    def events(self, loc: Location, tick: Tick, tau: Tick) -> Events:
+    def events(self, loc: Location, tick: Tick) -> Events:
         # TODO: we need a mechanism to make sure we don't exce3ed the bounds of reality.
         # For instance, in this model, we should never have more infections than there are susceptible people to infect.
-        # I don't think that's much of a conceßrn with *this* model, but it will be in the general case, especially
+        # I don't think that's much of a concern with *this* model, but it will be in the general case, especially
         # as population sizes shrink when we consider more granular spatial scales.
 
         cs = loc.compartment_totals
+        beta = self.ctx.geo["beta"]
         total = np.sum(cs)
         if total == 0:
             return np.zeros(self.ctx.events, dtype=int)
 
         rates = np.array(
             [
-                tick.tau * self.exp_beta(loc.index, tau.index) *
+                tick.tau * beta[(tick.day), loc.index] *
                 cs[0] * cs[1] / total,  # S -> I
                 tick.tau * cs[1] / self.D,  # leaving I compartment (I -> R)
                 0,  # I -> H
