@@ -15,11 +15,13 @@
   "editor.codeActionsOnSave": {
     "source.organizeImports": true
   },
+  "editor.defaultFormatter": null,
   "editor.formatOnSave": true,
   
   "autopep8.importStrategy": "fromEnvironment",
   "isort.importStrategy": "fromEnvironment",
-
+  
+  "python.formatting.provider": "none",
   "python.analysis.autoImportCompletions": true,
   "python.analysis.typeCheckingMode": "basic",
   "python.analysis.diagnosticMode": "workspace",
