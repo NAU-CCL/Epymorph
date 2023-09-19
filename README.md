@@ -39,7 +39,10 @@ python -m pip install --editable .[dev]
 
 The most basic task epymorph can perform is to run a spatial, compartmental disease simulation and output the time-series data of compartment populations (prevalence) as well as new events (incidence).
 
-A commonly-cited model was proposed by [Sen Pei, et al. in 2018](https://www.pnas.org/doi/10.1073/pnas.1708856115), modeling influenza in six southern US states. epymorph has an intra-population model (IPM), movement model (MM), and geographic model (GEO) that closely mimics Pei's experiment.
+A commonly-cited model was proposed by [Sen Pei, et al. in 2018](https://www.pnas.org/doi/10.1073/pnas.1708856115), modeling influenza in six 
+southern US states. epymorph has an intra-population model (IPM), movement model (MM), and geographic model (GEO) that closely mimics Pei's experiment.
+
+To run a simulation, first we need an input file that describes the simulation and all its parameters. Thankfully epymorph has a subcommand to help us create such a file. This example will store files in a `scratch` folder within the project (this is just for convenience, you can opt to put the input files anywhere you like).
 
 ```bash
 cd $PROJECT_DIRECTORY
@@ -47,10 +50,11 @@ cd $PROJECT_DIRECTORY
 # Activate the venv (if it's not already):
 source .venv/bin/activate
 
+# scratch is a convenient place to put all sorts of temp files because our .gitignore excludes it
+mkdir scratch
+
 # Prepare the simulation input file:
 python -m epymorph prepare --ipm pei --mm pei --geo pei ./scratch/my-experiment.toml
-
-# (./scratch is a convenient place to put temp files because our .gitignore excludes it)
 
 # Now we need to edit the input file to specify the parameters needed by our combo of IPM and MM:
 # (I'll use `cat` for this but you can use any text editor of course.)
