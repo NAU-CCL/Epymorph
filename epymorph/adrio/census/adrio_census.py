@@ -63,25 +63,22 @@ class ADRIO_census(ADRIO):
         if self.granularity == Granularity.STATE.value:
             data = self.census.acs5.get(
                 variables, {'for': f'state: {states}'}, year=self.year)
-            data_df = DataFrame.from_records(data)
-            data_df = data_df.sort_values(by=['state'])
+            sort_param = ['state']
         elif self.granularity == Granularity.COUNTY.value:
             data = self.census.acs5.get(
                 variables, {'for': f'county: {counties}', 'in': f'state: {states}'}, year=self.year)
-            data_df = DataFrame.from_records(data)
-            data_df = data_df.sort_values(by=['state', 'county'])
+            sort_param = ['state', 'county']
         elif self.granularity == Granularity.TRACT.value:
             data = self.census.acs5.get(variables, {
                                         'for': f'tract: {tracts}', 'in': f'state: {states} county: {counties}'}, year=self.year)
-            data_df = DataFrame.from_records(data)
-            data_df = data_df.sort_values(by=['state', 'county', 'tract'])
+            sort_param = ['state', 'county', 'tract']
         else:
             data = self.census.acs5.get(variables, {
                                         'for': f'block group: {cbg}', 'in': f'state: {states} county: {counties} tract: {tracts}'}, year=self.year)
-            data_df = DataFrame.from_records(data)
-            data_df = data_df.sort_values(
-                by=['state', 'county', 'tract', 'block group'])
+            sort_param = ['state', 'county', 'tract', 'block group']
 
+        data_df = DataFrame.from_records(data)
+        data_df = data_df.sort_values(by=sort_param)
         data_df.reset_index(inplace=True)
 
         # return data to adrio for processing
@@ -158,6 +155,11 @@ class ADRIO_census(ADRIO):
         """
         Utility function to fetch commuting data from .xslx format filtered down to requested regions
         """
+        # check for invalid granularity
+        if self.granularity == Granularity.CBG.value or self.granularity == Granularity.TRACT.value:
+            msg = "Error: Commuting data cannot be retrieved for tract or block group granularities"
+            raise Exception(msg)
+
         # check for valid year
         if self.year not in [2010, 2015, 2020]:
             # if invalid year is close to a valid year, fetch valid data and notify user
@@ -174,13 +176,6 @@ class ADRIO_census(ADRIO):
 
             print(
                 f"Commuting data cannot be retrieved for {passed_year}, fetching {self.year} data instead.")
-
-        # check for invalid granularity
-        if self.granularity == Granularity.CBG.value or self.granularity == Granularity.TRACT.value:
-            print(
-                'Commuting data cannot be retrieved for tract or block group granularities,', end='')
-            print('fetching county level data instead.')
-            self.granularity = Granularity.COUNTY.value
 
         states = self.nodes.get('state')
         counties = self.nodes.get('county')

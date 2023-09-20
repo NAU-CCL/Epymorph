@@ -7,7 +7,6 @@ from numpy.typing import DTypeLike, NDArray
 
 from epymorph.adrio import uscounties_library
 from epymorph.adrio.adrio import ADRIOSpec, deserialize
-from epymorph.initializer import _default_compartments
 from epymorph.util import NDIndices
 
 
@@ -87,7 +86,7 @@ def validate_shape(name: str, data: T | None, shape: tuple[int, ...], dtype: DTy
 
 def load_compressed_geo(npz_file: str | PathLike) -> Geo:
     """Read a GEO from its .npz format."""
-    with np.load(npz_file, allow_pickle=True) as npz_data:
+    with np.load(npz_file) as npz_data:
         data = dict(npz_data)
     labels = data.get('label')
     if labels is None:
@@ -172,7 +171,7 @@ class GEOBuilder:
 
             # build, cache, and return Geo
             labels = data['label']
-            save_compressed_geo(self.spec.id, data)
+            # save_compressed_geo(self.spec.id, data)
             return Geo(
                 nodes=len(labels),
                 labels=labels.tolist(),
