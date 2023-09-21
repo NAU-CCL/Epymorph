@@ -69,7 +69,7 @@ class PopulationByAge(ADRIO_census):
             population += int(location[i])
         return population
 
-    def fetch(self) -> NDArray[np.int_]:
+    def fetch(self) -> NDArray[np.int64]:
         """
         Returns a numpy array of 3 element lists containing the population of each age group 
         from youngest to oldest in each node
@@ -78,7 +78,7 @@ class PopulationByAge(ADRIO_census):
         data_df = super().fetch(query_list)
 
         # calculate population of each age bracket and enter into a numpy array to return
-        output = np.zeros((len(data_df.index), 3), dtype=np.int_)
+        output = np.zeros((len(data_df.index), 3), dtype=np.int64)
         for i, row in data_df.iterrows():
             minor_pop = self.calculate_pop(0, 10, row)
             adult_pop = self.calculate_pop(10, 34, row)

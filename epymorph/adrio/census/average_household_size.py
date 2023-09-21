@@ -8,9 +8,9 @@ class AverageHouseholdSize(ADRIO_census):
     """ADRIO to fetch the average household size for a provided set of geographies"""
     attribute = 'average_household_size'
 
-    def fetch(self) -> NDArray[np.int_]:
+    def fetch(self) -> NDArray[np.int64]:
         """Returns a numpy array of integers representing the average household size in each node"""
         # get data from census
         data_df = super().fetch(['B25010_001E'])
 
-        return data_df['B25010_001E'].to_numpy(dtype=np.int_)
+        return data_df['B25010_001E'].to_numpy(dtype=np.int64)

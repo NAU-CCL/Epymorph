@@ -9,7 +9,7 @@ class Commuters(ADRIO_census):
     """ADRIO to fetch county or state level commuting flow data from each node to each other node"""
     attribute = 'commuters'
 
-    def fetch(self) -> NDArray[np.int_]:
+    def fetch(self) -> NDArray[np.int64]:
         """
         Returns an n length numpy array containing the number of commuters from one node to each other node
         """
@@ -30,7 +30,7 @@ class Commuters(ADRIO_census):
             data_df = data_df.agg({'workers': 'sum'})
 
             # create and return array for each state
-            output = np.zeros((state_len, state_len), dtype=np.int_)
+            output = np.zeros((state_len, state_len), dtype=np.int64)
 
             # fill array with commuting data
             for i, row in data_df.iterrows():
@@ -52,7 +52,7 @@ class Commuters(ADRIO_census):
 
             # create empty output array
             county_len = np.count_nonzero(unique_counties)
-            output = np.zeros((county_len, county_len), dtype=np.int_)
+            output = np.zeros((county_len, county_len), dtype=np.int64)
 
             # create dictionary to be used as array indices
             counties_enum = enumerate(unique_counties)

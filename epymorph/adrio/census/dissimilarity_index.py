@@ -8,7 +8,7 @@ class DissimilarityIndex(ADRIO_census):
     """ADRIO to fetch the dissimilarity index of racial segregation"""
     attribute = 'dissimilarity_index'
 
-    def fetch(self) -> NDArray[np.float_]:
+    def fetch(self) -> NDArray[np.float64]:
         """"Returns a numpy array of floats representing the disimilarity index for each node"""
         # check for block group granularity and prepare to handle case
         cbg_granularity = False
@@ -31,7 +31,7 @@ class DissimilarityIndex(ADRIO_census):
                                        'B03002_014E'])
         self.granularity -= 1
 
-        output = np.zeros(len(upper_data_df.index), dtype=np.float_)
+        output = np.zeros(len(upper_data_df.index), dtype=np.float64)
 
         # loop for counties
         j = 0
@@ -69,7 +69,7 @@ class DissimilarityIndex(ADRIO_census):
         if cbg_granularity:
             self.granularity = Granularity.CBG.value
             tract_output = output
-            output = np.zeros(len(lower_data_df), dtype=np.float_)
+            output = np.zeros(len(lower_data_df), dtype=np.float64)
             j = 0
             for i in range(len(upper_data_df.index)):
                 tract_fip = upper_data_df.loc[i, 'tract']

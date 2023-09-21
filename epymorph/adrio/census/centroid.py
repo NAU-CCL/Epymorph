@@ -3,7 +3,7 @@ from numpy.typing import NDArray
 
 from epymorph.adrio.census.adrio_census import ADRIO_census
 
-CentroidDType = np.dtype([('longitude', float), ('latitude', float)])
+CentroidDType = np.dtype([('longitude', np.float64), ('latitude', np.float64)])
 
 
 class Centroid(ADRIO_census):

@@ -8,7 +8,7 @@ class GiniIndex(ADRIO_census):
     """ADRIO to fetch the gini index of income inequality in a provided set of geographies"""
     attribute = 'gini_index'
 
-    def fetch(self) -> NDArray[np.float_]:
+    def fetch(self) -> NDArray[np.float64]:
         """Returns a numpy array of integers representing the gini index for each node"""
         # fetch tract level data if granularity = cbg
         cbg_df = None
@@ -23,7 +23,7 @@ class GiniIndex(ADRIO_census):
         data_df = super().fetch(['B19083_001E'])
 
         data_df['B19083_001E'] = data_df['B19083_001E'].astype(
-            float).fillna(0.5).replace(-666666666, 0.5)
+            np.float64).fillna(0.5).replace(-666666666, 0.5)
 
         # set cbg data to that of the parent tract if geo granularity = cbg
         if self.granularity == Granularity.TRACT.value and cbg_df is not None:
@@ -35,4 +35,4 @@ class GiniIndex(ADRIO_census):
                     j += 1
             data_df = cbg_df
 
-        return data_df['B19083_001E'].to_numpy(dtype=np.float_)
+        return data_df['B19083_001E'].to_numpy(dtype=np.float64)

@@ -8,7 +8,7 @@ class TractMedianIncome(ADRIO_census):
     """Case specific ADRIO used to retreive tract level median income data for geos with block group granularity"""
     attribute = 'tract_median_income'
 
-    def fetch(self) -> NDArray[np.int_]:
+    def fetch(self) -> NDArray[np.int64]:
         """
         Returns a numpy array of integers representing the tract level median annual 
         household income for each census block group's parent tract
@@ -34,4 +34,4 @@ class TractMedianIncome(ADRIO_census):
         tract_df = cbg_df
 
         # convert to numpy array and return
-        return tract_df['B19013_001E'].to_numpy(dtype=np.int_)
+        return tract_df['B19013_001E'].to_numpy(dtype=np.int64)

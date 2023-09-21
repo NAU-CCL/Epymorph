@@ -8,7 +8,7 @@ class PopDensityKm2(ADRIO_census):
     """ADRIO to fetch population density for a provided set of geographies"""
     attribute = 'pop_density_km2'
 
-    def fetch(self) -> NDArray[np.float_]:
+    def fetch(self) -> NDArray[np.float64]:
         """Returns a numpy array of floats representing the population density for each node"""
 
         # get shapefiles
@@ -29,7 +29,7 @@ class PopDensityKm2(ADRIO_census):
                 census_df, on=['state', 'county', 'tract', 'block group'])
 
         # calculate population density, storing it in a numpy array to return
-        output = np.zeros(len(geo_df.index), dtype=np.float_)
+        output = np.zeros(len(geo_df.index), dtype=np.float64)
         for i, row in geo_df.iterrows():
             output[i] = round(int(row['B01003_001E']) / (row['ALAND'] / 1e6))
         return output
