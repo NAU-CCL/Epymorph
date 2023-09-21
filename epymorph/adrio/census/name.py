@@ -13,4 +13,4 @@ class Name(ADRIO_census):
         data_df = super().fetch(['NAME'])
 
         # store county and state names in numpy array to return
-        return data_df['NAME'].to_numpy()
+        return data_df['NAME'].to_numpy(dtype=np.str_)

@@ -78,6 +78,7 @@ class ADRIO_census(ADRIO):
             sort_param = ['state', 'county', 'tract', 'block group']
 
         data_df = DataFrame.from_records(data)
+
         data_df = data_df.sort_values(by=sort_param)
         data_df.reset_index(inplace=True)
 
@@ -88,21 +89,32 @@ class ADRIO_census(ADRIO):
         """
         Utility function to fetch shape files from Census for specified regions
         """
+        state_fips = self.nodes.get('state')
+        county_fips = self.nodes.get('county')
+        tract_fips = self.nodes.get('tract')
+        cbg_fips = self.nodes.get('block group')
+
         # call appropriate pygris function based on granularity and sort result
         if self.granularity == Granularity.STATE.value:
             data_df = states(year=self.year)
             data_df = data_df.rename(columns={'STATEFP': 'state'})
 
+            if state_fips is not None and state_fips[0] != '*':
+                data_df = data_df.loc[data_df['state'].isin(state_fips)]
+
+            sort_param = ['state']
+
         elif self.granularity == Granularity.COUNTY.value:
-            data_df = counties(state=self.nodes.get('state'), year=self.year)
+            data_df = counties(state=state_fips, year=self.year)
             data_df = data_df.rename(columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
-            data_df = data_df.sort_values(by=['state', 'county'])
-            data_df.reset_index(drop=True, inplace=True)
+
+            if county_fips is not None and county_fips[0] != '*':
+                data_df = data_df.loc[data_df['county'].isin(county_fips)]
+
+            sort_param = ['state', 'county']
 
         elif self.granularity == Granularity.TRACT.value:
-            state_fips = self.nodes.get('state')
-            county_fips = self.nodes.get('county')
-            if state_fips is not None and county_fips is not None:
+            if state_fips is not None and state_fips[0] != '*' and county_fips is not None and county_fips[0] != '*':
                 data_df = GeoDataFrame()
                 # tract and block group level files cannot be fetched using lists
                 # several queries must be made and merged instead
@@ -117,18 +129,22 @@ class ADRIO_census(ADRIO):
                         else:
                             data_df = current_data
             else:
-                msg = "Data could not be retrieved due to missing state, county fips codes"
+                msg = "Data could not be retrieved due to missing state or county fips codes. \
+                Wildcard specifier(*) cannot be used for tract level data."
                 raise Exception(msg)
 
             data_df = data_df.rename(
                 columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'TRACTCE': 'tract'})
-            data_df = GeoDataFrame(data_df.sort_values(by=['state', 'county', 'tract']))
-            data_df.reset_index(drop=True, inplace=True)
+
+            if tract_fips is not None and tract_fips[0] != '*':
+                data_df = data_df.loc[data_df['tract'].isin(tract_fips)]
+
+            sort_param = ['state', 'county', 'tract']
 
         else:
             state_fips = self.nodes.get('state')
             county_fips = self.nodes.get('county')
-            if state_fips is not None and county_fips is not None:
+            if state_fips is not None and state_fips[0] != '*' and county_fips is not None and county_fips[0] != '*':
                 data_df = GeoDataFrame()
                 for i in range(len(state_fips)):
                     for j in range(len(county_fips)):
@@ -140,14 +156,19 @@ class ADRIO_census(ADRIO):
                         else:
                             data_df = current_data
             else:
-                msg = "Data could not be retrieved due to missing state or county fips codes"
+                msg = "Data could not be retrieved due to missing state or county fips codes. \
+                    Wildcard specifier(*) cannot be used for block group level data."
                 raise Exception(msg)
 
             data_df = data_df.rename(
                 columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'TRACTCE': 'tract', 'BLKGRPCE': 'block group'})
-            data_df = GeoDataFrame(data_df.sort_values(
-                by=['state', 'county', 'block group']))
-            data_df.reset_index(drop=True, inplace=True)
+            if cbg_fips is not None and cbg_fips[0] != '*':
+                data_df = data_df.iloc[data_df['block group'].isin(cbg_fips)]
+
+            sort_param = ['state', 'county', 'block group']
+
+        data_df = GeoDataFrame(data_df.sort_values(by=sort_param))
+        data_df.reset_index(drop=True, inplace=True)
 
         return data_df
 

@@ -8,9 +8,11 @@ class MedianAge(ADRIO_census):
     """ADRIO to fetch the median age for a provided set of geographies"""
     attribute = 'median_age'
 
-    def fetch(self) -> NDArray[np.int_]:
+    def fetch(self) -> NDArray[np.float_]:
         """Returns a numpy array of integers representing the median age in each node"""
         # get data from census
         data_df = super().fetch(['B01002_001E'])
 
-        return data_df['B01002_001E'].to_numpy(np.int_)
+        data_df.fillna(0).replace(-666666666, 0.0)
+
+        return data_df['B01002_001E'].to_numpy(np.float_)

@@ -22,8 +22,7 @@ class TractMedianIncome(ADRIO_census):
         # fetch tract data from census
         tract_df = super().fetch(['B19013_001E'])
 
-        tract_df['B19013_001E'] = tract_df['B19013_001E'].astype(
-            float).fillna(0.5).replace(-666666666, 0.5)
+        tract_df = tract_df.fillna(0).replace(-666666666, 0)
 
         # set cbg data to that of the parent tract
         j = 0

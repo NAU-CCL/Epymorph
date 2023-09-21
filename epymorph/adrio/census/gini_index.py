@@ -35,4 +35,4 @@ class GiniIndex(ADRIO_census):
                     j += 1
             data_df = cbg_df
 
-        return data_df['B19083_001E'].to_numpy()
+        return data_df['B19083_001E'].to_numpy(dtype=np.float_)

@@ -25,7 +25,8 @@ class PopDensityKm2(ADRIO_census):
         elif self.granularity == Granularity.TRACT.value:
             geo_df = geo_df.merge(census_df, on=['state', 'county', 'tract'])
         else:
-            geo_df = geo_df.merge(census_df, on=['state', 'county', 'tract', 'county'])
+            geo_df = geo_df.merge(
+                census_df, on=['state', 'county', 'tract', 'block group'])
 
         # calculate population density, storing it in a numpy array to return
         output = np.zeros(len(geo_df.index), dtype=np.float_)

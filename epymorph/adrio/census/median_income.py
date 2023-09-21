@@ -13,8 +13,7 @@ class MedianIncome(ADRIO_census):
         # fetch data from census
         data_df = super().fetch(['B19013_001E'])
 
-        data_df['B19013_001E'] = data_df['B19013_001E'].astype(
-            float).fillna(0.5).replace(-666666666, 0.5)
+        data_df = data_df.fillna(0).replace(-666666666, 0)
 
         # convert to numpy array and return
         return data_df['B19013_001E'].to_numpy(dtype=np.int_)
