@@ -66,7 +66,7 @@ class PopulationByAgex6(ADRIO_census):
         """
         population = 0
         for i in range(start, end):
-            population += int(location[i])
+            population += int(location.iloc[i])
         return population
 
     def fetch(self) -> NDArray[np.int64]:
