@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from time import perf_counter
 from typing import Any
 
 import numpy as np
+from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
 from epymorph.clock import Clock
@@ -14,7 +16,7 @@ from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementBuilder, MovementEngine
-from epymorph.util import Event
+from epymorph.util import Event, progress
 
 
 def configure_sim_logging(enabled: bool) -> None:
@@ -120,9 +122,22 @@ class Simulation:
     mvm_engine: type[MovementEngine]
 
     # Progress events
-    on_start: Event[None]
+    on_start: Event[SimContext]
+    """
+    Event fires at the start of every simulation run. Payload is the SimContext for this run.
+    """
+
     on_tick: Event[tuple[int, float]]
+    """
+    Event fires after each tick has been processed.
+    Event payload is a tuple containing the tick index just completed (an integer),
+    and the percentage complete (a float).
+    """
+
     on_end: Event[None]
+    """
+    Event fires after a simulation run is complete.
+    """
 
     def __init__(self, geo: Geo, ipm_builder: IpmBuilder, mvm_builder: MovementBuilder, mvm_engine: type[MovementEngine] | None = None):
         self.geo = geo
@@ -177,7 +192,7 @@ class Simulation:
 
         ipm = self.ipm_builder.build(ctx)
 
-        self.on_start.publish(None)
+        self.on_start.publish(ctx)
 
         out = Output(ctx)
         for tick in ctx.clock.ticks:
@@ -195,8 +210,46 @@ class Simulation:
                 # Store prevalence
                 # TODO: maybe better to do this all at once rather than per loc
                 out.prevalence[t, p] = loc.get_compartments()
-            self.on_tick.publish((t, t / ctx.clock.num_ticks))
+            self.on_tick.publish((t, (t + 1) / ctx.clock.num_ticks))
 
         mvm.shutdown()
         self.on_end.publish(None)
         return out
+
+
+def with_fancy_messaging(sim: Simulation) -> Simulation:
+    """
+    Attach fancy console messaging to a Simulation, e.g., a progress bar.
+    This creates subscriptions on `sim`'s events, so you only need to do it once
+    per sim. Returns `sim` as a convenience.
+    """
+
+    # Keep track of simulation runtime.
+    start_time = 0.0
+
+    def on_start(ctx: SimContext) -> None:
+        duration_days = ctx.clock.num_days
+        start_date = ctx.clock.start_date
+        end_date = start_date + relativedelta(days=duration_days)
+
+        print(f"Running simulation ({sim.mvm_engine.__name__}):")
+        print(f"• {start_date} to {end_date} ({duration_days} days)")
+        print(f"• {ctx.nodes} geo nodes")
+        print(progress(0.0), end='\r')
+
+        nonlocal start_time
+        start_time = perf_counter()
+
+    def on_tick(tick: tuple[int, float]) -> None:
+        print(progress(tick[1]), end='\r')
+
+    def on_end(_: None) -> None:
+        print(progress(1.0))
+        end_time = perf_counter()
+        print(f"Runtime: {(end_time - start_time):.3f}s")
+
+    sim.on_start.subscribe(on_start)
+    sim.on_tick.subscribe(on_tick)
+    sim.on_end.subscribe(on_end)
+
+    return sim

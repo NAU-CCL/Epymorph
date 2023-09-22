@@ -2,7 +2,6 @@
 Implements the `run` subcommand executed from __main__.
 """
 import re
-import time
 import tomllib
 from datetime import date
 from functools import partial
@@ -18,8 +17,9 @@ from epymorph.initializer import initializer_library
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementEngine
 from epymorph.movement.hypercube import HypercubeEngine
-from epymorph.simulation import Output, Simulation, configure_sim_logging
-from epymorph.util import Duration, progress, stridesum
+from epymorph.simulation import (Output, Simulation, configure_sim_logging,
+                                 with_fancy_messaging)
+from epymorph.util import Duration, stridesum
 
 
 def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
@@ -237,26 +237,12 @@ def run(input_path: str,
     configure_sim_logging(enabled=not profiling)
 
     geo = geo_builder()
-    sim = Simulation(geo, ipm_builder(), mm_builder(), engine)
-
-    print()
-    print(f"Running simulation ({sim.mvm_engine.__name__}):")
-    print(f"• {start_date} to {end_date} ({duration_days} days)")
-    print(f"• {geo.nodes} geo nodes")
-
-    # Draw a progress bar
-    sim.on_start.subscribe(lambda _: print(progress(0.0), end='\r'))
-    sim.on_tick.subscribe(lambda x: print(progress(x[1]), end='\r'))
-    sim.on_end.subscribe(lambda _: print(progress(1.0)))
+    sim = with_fancy_messaging(Simulation(geo, ipm_builder(), mm_builder(), engine))
 
     rng = None if run_input.rng_seed is None \
         else np.random.default_rng(run_input.rng_seed)
 
-    t0 = time.perf_counter()
     out = sim.run(run_input.params, start_date, duration_days, initializer, rng)
-    t1 = time.perf_counter()
-
-    print(f"Runtime: {(t1 - t0):.3f}s")
 
     # Handle output.
 
