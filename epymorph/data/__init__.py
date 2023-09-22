@@ -38,7 +38,7 @@ def geo_spec_loader(geo_spec_file: Traversable) -> Callable[..., Geo]:
     """Returns a function to load the identified GEO (from spec)."""
     def load(force=False) -> Geo:
         spec_string = geo_spec_file.read_text(encoding="utf-8")
-        return GEOBuilder(spec_string).build(force)
+        return GEOBuilder.from_spec(spec_string).build(force)
     return load
 
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import PathLike, path
 from typing import NamedTuple, TypeVar
@@ -6,7 +8,7 @@ import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from epymorph.adrio import uscounties_library
-from epymorph.adrio.adrio import ADRIOSpec, deserialize
+from epymorph.adrio.adrio import ADRIOSpec, GEOSpec, deserialize
 from epymorph.util import NDIndices
 
 
@@ -108,9 +110,15 @@ def save_compressed_geo(id: str, data: dict[str, NDArray]) -> None:
 
 
 class GEOBuilder:
-    def __init__(self, geo_spec: str):
-        # create GEOSpec object from file
-        self.spec = deserialize(geo_spec)
+
+    @classmethod
+    def from_spec(cls, geo_spec: str) -> GEOBuilder:
+        """Create a GEOBuilder from a geo spec text."""
+        spec = deserialize(geo_spec)
+        return cls(spec)
+
+    def __init__(self, geo_spec: GEOSpec):
+        self.spec = geo_spec
 
     def get_attribute(self, key: str | None, spec: ADRIOSpec) -> tuple[str, NDArray]:
         """Gets a single Geo attribute from an ADRIO asynchronously using threads"""
