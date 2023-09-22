@@ -41,6 +41,7 @@ dependencies = [
   "jsonpickle",
   "pygris",
   "shapely",
+  "openpyxl",
 ]
 
 [project.optional-dependencies]

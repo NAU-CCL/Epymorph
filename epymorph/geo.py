@@ -1,11 +1,14 @@
-from os import PathLike
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from os import PathLike, path
 from typing import NamedTuple, TypeVar
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from epymorph.adrio import uscounties_library
-from epymorph.adrio.adrio import deserialize
+from epymorph.adrio.adrio import ADRIOSpec, GEOSpec, deserialize
 from epymorph.util import NDIndices
 
 
@@ -95,43 +98,90 @@ def load_compressed_geo(npz_file: str | PathLike) -> Geo:
     return Geo(nodes, labels, data)
 
 
+def geo_path(id: str) -> str:
+    return f"./epymorph/data/geo/{id}_geo.npz"
+
+
+def save_compressed_geo(id: str, data: dict[str, NDArray]) -> None:
+    if not 'label' in data:
+        msg = f"Geo {id} must have a 'label' attribute in order to be saved and loaded."
+        raise Exception(msg)
+    np.savez_compressed(geo_path(id), **data)
+
+
 class GEOBuilder:
-    def __init__(self, geo_spec: str):
-        # create GEOSpec object from file
-        self.spec = deserialize(geo_spec)
+
+    @classmethod
+    def from_spec(cls, geo_spec: str) -> GEOBuilder:
+        """Create a GEOBuilder from a geo spec text."""
+        spec = deserialize(geo_spec)
+        return cls(spec)
+
+    def __init__(self, geo_spec: GEOSpec):
+        self.spec = geo_spec
+
+    def get_attribute(self, key: str | None, spec: ADRIOSpec) -> tuple[str, NDArray]:
+        """Gets a single Geo attribute from an ADRIO asynchronously using threads"""
+        # get adrio class from library dictionary
+        adrio_class = uscounties_library.get(spec.class_name)
+
+        # fetch data from adrio
+        if adrio_class is None:
+            raise Exception(f"Unable to load ADRIO for {spec.class_name}; "
+                            "please check that your GEOSpec is valid.")
+        else:
+            adrio = adrio_class(spec=self.spec)
+
+            print(f'Fetching {adrio.attribute}')
+            # call adrio fetch method
+            data = adrio.fetch()
+
+            # check for no key
+            if key is None:
+                # assign key to attribute
+                key = adrio.attribute
+
+            # return tuple of key, resulting array
+            return (key, data)
 
     def build(self, force=False) -> Geo:
-        data = dict[str, NDArray]()
-        print('Fetching GEO data from ADRIOs...')
+        """Builds Geo from cached file or geospec object using ADRIOs"""
+        # load Geo from compressed file if one exists
+        if path.exists(geo_path(self.spec.id)) and not force:
+            return load_compressed_geo(geo_path(self.spec.id))
+        # build Geo using ADRIOs
+        else:
+            data = dict[str, NDArray]()
+            print('Fetching GEO data from ADRIOs...')
 
-        # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
-        # - a literal key to use, or
-        # - None to use the ADRIO's attribute
-        all_adrios = \
-            [('label', self.spec.label)] + \
-            [(None, x) for x in self.spec.adrios]
+            # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
+            # - a literal key to use, or
+            # - None to use the ADRIO's attribute
+            all_adrios = \
+                [('label', self.spec.label)] + \
+                [(None, x) for x in self.spec.adrios]
 
-        # loop for all ADRIOSpecs
-        for key, spec in all_adrios:
-            # get adrio class from library dictionary (library hardcoded for now)
-            adrio_class = uscounties_library.get(spec.class_name)
-            # fetch data from adrio
-            if adrio_class is None:
-                raise Exception(f"Unable to load ADRIO for {spec.class_name}; "
-                                "please check that your GEOSpec is valid.")
-            else:
-                adrio = adrio_class()
-                print(f'Fetching {adrio.attribute}')
-                if key is None:
-                    key = adrio.attribute
-                data[key] = adrio.fetch(force, nodes=self.spec.nodes)
+            # initialize threads
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # call thread on get_attribute
+                thread_data = (executor.submit(self.get_attribute, key, spec)
+                               for key, spec in all_adrios)
 
-        print('...done')
+                # loop for threads as completed
+                for future in as_completed(thread_data):
+                    # get result of future
+                    curr_data = future.result()
 
-        # build and return Geo
-        labels = data['label']
-        return Geo(
-            nodes=len(labels),
-            labels=labels.tolist(),
-            data=data
-        )
+                    # assign dictionary at attribute to resulting array
+                    data[curr_data[0]] = curr_data[1]
+
+            print('...done')
+
+            # build, cache, and return Geo
+            labels = data['label']
+            # save_compressed_geo(self.spec.id, data)
+            return Geo(
+                nodes=len(labels),
+                labels=labels.tolist(),
+                data=data
+            )
