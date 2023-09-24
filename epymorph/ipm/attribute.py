@@ -13,6 +13,7 @@ from epymorph.context import SimContext
 from epymorph.data_shape import (Arbitrary, DataShape, Node, NodeAndArbitrary,
                                  Scalar, Shapes, Time, TimeAndArbitrary,
                                  TimeAndNode, TimeAndNodeAndArbitrary)
+from epymorph.geo import StaticGeo
 from epymorph.ipm.sympy_shim import Symbol, to_symbol
 from epymorph.movement.world import Location
 
@@ -73,7 +74,7 @@ class GeoDef(AttributeDef):
     """An attribute drawn from the Geo Model."""
 
     def get_value(self, ctx: SimContext) -> NDArray:
-        if not self.attribute_name in ctx.geo:
+        if not self.attribute_name in ctx.geo.attributes:
             msg = f"Missing geo attribute '{self.attribute_name}'"
             raise AttributeException(msg)
         return ctx.geo[self.attribute_name]
@@ -172,4 +173,12 @@ def adapt_context(ctx: SimContext, attributes: list[AttributeDef]) -> SimContext
             gs[attr.attribute_name] = attr.get_adapted(ctx)
         elif isinstance(attr, ParamDef):
             ps[attr.attribute_name] = attr.get_adapted(ctx)
-    return dataclasses.replace(ctx, param=ps, geo=gs)
+    if 'population' not in gs:
+        gs['population'] = ctx.geo['population']
+    if 'label' not in gs:
+        gs['label'] = ctx.geo['label']
+    return dataclasses.replace(
+        ctx,
+        param=ps,
+        geo=StaticGeo.from_values(gs)
+    )

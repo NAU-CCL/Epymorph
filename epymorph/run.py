@@ -102,7 +102,7 @@ def plot_event(out: Output, event_idx: int) -> None:
         values = stridesum(
             out.incidence[:, pop_idx, event_idx], len(out.ctx.clock.taus))
         y_axis = values
-        ax.plot(x_axis, y_axis, label=out.ctx.labels[pop_idx])
+        ax.plot(x_axis, y_axis, label=out.ctx.geo['label'][pop_idx])
     if out.ctx.nodes <= 12:
         ax.legend()
     fig.tight_layout()
@@ -112,7 +112,7 @@ def plot_event(out: Output, event_idx: int) -> None:
 def plot_pop(out: Output, pop_idx: int) -> None:
     """Charting: plot all compartments (per 100k people) for the population at the given index."""
     fig, ax = plt.subplots()
-    ax.set_title(f"Prevalence in {out.ctx.labels[pop_idx]}")
+    ax.set_title(f"Prevalence in {out.ctx.geo['label'][pop_idx]}")
     ax.set_xlabel('days')
     ax.set_ylabel('persons (log scale)')
     ax.set_yscale('log')

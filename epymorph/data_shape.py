@@ -10,7 +10,29 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.context import SimDimension
+
+class SimDimension:
+    """The dimensionality of a simulation."""
+
+    nodes: int
+    """How many nodes are there in the GEO?"""
+    compartments: int
+    """How many disease compartments are in the IPM?"""
+    events: int
+    """How many transition events are in the IPM?"""
+    ticks: int
+    """How many ticks are we going to run the simulation for?"""
+    days: int
+    """How many days are we going to run the simulation for?"""
+
+    TNCE: tuple[int, int, int, int]
+    """
+    The critical dimensionalities of the simulation, for ease of unpacking.
+    T: number of ticks;
+    N: number of geo nodes;
+    C: number of IPM compartments;
+    E: number of IPM events (transitions)
+    """
 
 
 class DataShape(ABC):
@@ -79,6 +101,29 @@ class Node(DataShape):
             return value
         if allow_broadcast and value.shape == tuple():
             return np.broadcast_to(value, shape=(dim.nodes,))
+        return None
+
+    def __str__(self):
+        return "N"
+
+
+@dataclass(frozen=True)
+class NodeAndNode(DataShape):
+    """An array of size NxN."""
+
+    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+        if value.shape == (dim.nodes, dim.nodes):
+            return True
+        if allow_broadcast:
+            if value.shape == tuple():
+                return True
+        return False
+
+    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+        if value.shape == (dim.nodes, dim.nodes):
+            return value
+        if allow_broadcast and value.shape == tuple():
+            return np.broadcast_to(value, shape=(dim.nodes, dim.nodes))
         return None
 
     def __str__(self):
@@ -252,6 +297,7 @@ class Shapes:
     S = Scalar()
     T = Time()
     N = Node()
+    NxN = NodeAndNode()
     TxN = TimeAndNode()
     A = Arbitrary
     TxA = TimeAndArbitrary
@@ -286,6 +332,8 @@ def parse_shape(shape: str) -> DataShape:
             return Shapes.T
         case "N":
             return Shapes.N
+        case "NxN":
+            return Shapes.NxN
         case "TxN":
             return Shapes.TxN
         # blank or trailing 'x' means there's an index at the end -> Arbitrary

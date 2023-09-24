@@ -5,17 +5,20 @@ import numpy as np
 
 from epymorph.clock import NEVER, Clock, Tick, TickDelta
 from epymorph.context import Compartments, SimContext, SimDType
+from epymorph.geo import StaticGeo
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.clause import RETURN, ArrayClause
 from epymorph.movement.engine import Movement, MovementEngine
 from epymorph.movement.hypercube import HypercubeEngine
 
 
-def test_sim_context(num_nodes: int) -> SimContext:
+def test_sim_context(pops: list[int]) -> SimContext:
+    geo = StaticGeo.from_values({
+        'population': np.array(pops, dtype=SimDType),
+        'label': np.array([f'node{n}' for n in range(len(pops))], dtype=np.str_),
+    })
     return SimContext(
-        nodes=num_nodes,
-        labels=[f'node{n}' for n in range(num_nodes)],
-        geo={},
+        geo=geo,
         compartments=1,
         compartment_tags=[[]],
         events=0,
@@ -93,7 +96,7 @@ class TestNoMovement(unittest.TestCase):
 
     def _test(self, engine_cls: type[MovementEngine]):
         cs0 = [30_000, 20_000, 10_000]
-        ctx = test_sim_context(num_nodes=len(cs0))
+        ctx = test_sim_context(cs0)
 
         movement = Movement(ctx.clock.taus, [NoClause(ctx)])
         engine = engine_cls(ctx, movement, to_cs(cs0))
@@ -117,7 +120,7 @@ class TestNoMovement(unittest.TestCase):
 class TestTinyMovement(unittest.TestCase):
     def _test(self, engine_cls: type[MovementEngine]):
         cs0 = [10000, 20000]
-        ctx = test_sim_context(num_nodes=len(cs0))
+        ctx = test_sim_context(cs0)
 
         movement = Movement(ctx.clock.taus, [TinyClause(ctx), RETURN])
 
@@ -172,7 +175,7 @@ class TestCrosswalkMovement(unittest.TestCase):
 
     def _test(self, engine_cls: type[MovementEngine]):
         cs0 = [25000, 15000, 10000, 50]
-        ctx = test_sim_context(num_nodes=len(cs0))
+        ctx = test_sim_context(cs0)
 
         # Every tick, send 100 people to each other node.
         # There is a random factor involved in who winds up where,
@@ -227,7 +230,7 @@ class TestCrosswalkMovement(unittest.TestCase):
 class TestSequenceMovement(unittest.TestCase):
     def _test(self, engine_cls: type[MovementEngine]):
         cs0 = [30000, 20000, 15000]
-        ctx = test_sim_context(num_nodes=len(cs0))
+        ctx = test_sim_context(cs0)
 
         # Let's run a sequence of ticks, returning the `travelers_by_home`
         # once at the start and after each tick.

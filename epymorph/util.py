@@ -173,7 +173,20 @@ def is_square(arr: NDArray) -> bool:
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
 
 
-_duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
+def shape_matches(arr: NDArray, expected: tuple[int | Literal['?'], ...]) -> bool:
+    """
+    Does the shape of the given array match this expression?
+    Shape expressions are a tuple where each dimension is either an integer
+    or a '?' character to signify any length is allowed.
+    """
+    if len(arr.shape) != len(expected):
+        return False
+    for actual, exp in zip(arr.shape, expected):
+        if exp == '?':
+            continue
+        if exp != actual:
+            return False
+    return True
 
 
 class NumpyTypeError(Exception):
@@ -220,6 +233,8 @@ def check_ndarray(
 
 
 # custom pydantic types
+
+_duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
 
 
 class Duration(BaseModel):

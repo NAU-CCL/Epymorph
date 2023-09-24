@@ -17,8 +17,7 @@ class NoModelBuilder(IpmBuilder):
         super().__init__(1, 0)
 
     def verify(self, ctx: SimContext) -> None:
-        if 'population' not in ctx.geo:
-            raise Exception("geo missing population")
+        pass
 
     def build(self, ctx: SimContext) -> Ipm:
         return NoModel(ctx)

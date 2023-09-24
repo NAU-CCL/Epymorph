@@ -11,6 +11,8 @@ import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Clock
+from epymorph.data_shape import SimDimension
+from epymorph.geo import Geo
 
 SimDType = np.int64
 """
@@ -57,33 +59,11 @@ def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = 
 # SimContext
 
 
-class SimDimension:
-    """The subset of SimContext that is the dimensionality of a simulation."""
-
-    nodes: int
-    compartments: int
-    events: int
-    ticks: int
-    days: int
-
-    TNCE: tuple[int, int, int, int]
-    """
-    The critical dimensionalities of the simulation, for ease of unpacking.
-    T: number of ticks;
-    N: number of geo nodes;
-    C: number of IPM compartments;
-    E: number of IPM events (transitions)
-    """
-
-
 @dataclass(frozen=True)
 class SimContext(SimDimension):
     """Metadata about the simulation being run."""
 
-    # geo info
-    nodes: int
-    labels: list[str]
-    geo: dict[str, NDArray]
+    geo: Geo
     # ipm info
     compartments: int
     compartment_tags: list[list[str]]
@@ -93,20 +73,15 @@ class SimContext(SimDimension):
     clock: Clock
     rng: np.random.Generator
     # denormalized info
+    nodes: int = field(init=False)
     ticks: int = field(init=False)
     days: int = field(init=False)
     TNCE: tuple[int, int, int, int] = field(init=False)
 
     def __post_init__(self):
+        object.__setattr__(self, 'nodes', self.geo.nodes)
         object.__setattr__(self, 'ticks', self.clock.num_ticks)
         object.__setattr__(self, 'days', self.clock.num_days)
         tnce = (self.clock.num_ticks, self.nodes,
                 self.compartments, self.events)
         object.__setattr__(self, 'TNCE', tnce)
-
-    @property
-    def population(self) -> NDArray[np.integer]:
-        """Get the population of each node."""
-        # This is for convenient type-safety.
-        # TODO: when we construct the geo we should be verifying this fact.
-        return self.geo['population']

@@ -12,7 +12,7 @@ from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
-from epymorph.geo import Geo, GEOBuilder, load_compressed_geo
+from epymorph.geo import Geo, GEOBuilder, StaticGeo
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.dynamic import DynamicMovementBuilder
 from epymorph.movement.engine import MovementBuilder
@@ -50,11 +50,11 @@ def geo_spec_loader(geo_spec_file: Traversable) -> Callable[..., Geo]:
     return load
 
 
-def geo_npz_loader(geo_npz_file: Traversable) -> Callable[..., Geo]:
+def geo_npz_loader(geo_npz_file: Traversable) -> Callable[..., StaticGeo]:
     """Returns a function to load the identified GEO (from npz)."""
-    def load() -> Geo:
+    def load() -> StaticGeo:
         with as_file(geo_npz_file) as file:
-            return load_compressed_geo(file)
+            return StaticGeo.load(file)
     return load
 
 
@@ -84,7 +84,7 @@ mm_library: Library[MovementBuilder] = as_sorted_dict({
 """All epymorph movement models (by id)."""
 
 
-geo_library_compressed: Library[Geo] = as_sorted_dict({
+geo_library_static: Library[StaticGeo] = as_sorted_dict({
     f.name.removesuffix('_geo.npz'): geo_npz_loader(f)
     for f in GEO_PATH.iterdir()
     if f.name.endswith('_geo.npz')
@@ -100,7 +100,7 @@ geo_library_cachable: Library[Geo] = as_sorted_dict({
 
 geo_library: Library[Geo] = as_sorted_dict({
     'single_pop': geo_single_pop_load,
-    **geo_library_compressed,
+    **geo_library_static,
     **geo_library_cachable
 })
 """All epymorph geo models (by id)."""

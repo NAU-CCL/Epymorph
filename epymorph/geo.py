@@ -1,112 +1,147 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from os import PathLike, path
-from typing import NamedTuple, TypeVar
+from os import PathLike
+from types import MappingProxyType
+from typing import Iterable, NamedTuple
 
 import numpy as np
-from numpy.typing import DTypeLike, NDArray
+from numpy.typing import NDArray
 
 from epymorph.adrio import uscounties_library
 from epymorph.adrio.adrio import ADRIOSpec, GEOSpec, deserialize
-from epymorph.util import NDIndices
-
-
-class Geo(NamedTuple):
-    nodes: int
-    labels: list[str]
-    data: dict[str, NDArray]
-
-
-# GEO processing utilities
-
-
-def filter_geo(geo: Geo, selection: NDIndices) -> Geo:
-    nodes = len(selection)
-    labels = (np.array(geo.labels, dtype=str)[selection]).tolist()
-
-    # Handle selections on attribute arrays (NxN arrays need special processing!)
-    # TODO: probably need to support TxNxN arrays too,
-    # but the relationship between time-series data and geos isn't well-founded yet
-    def select(arr: NDArray) -> NDArray:
-        if arr.shape == (geo.nodes, geo.nodes):
-            return arr[selection[:, np.newaxis], selection]
-        else:
-            return arr[selection]
-
-    data = {key: select(arr)
-            for key, arr in geo.data.items()}
-    return Geo(nodes, labels, data)
-
-
-# Schema and Validation
-
-
-class Attribute(NamedTuple):
-    dtype: DTypeLike
-    shape: tuple[int, ...]
-
-
-Schema = dict[str, Attribute]
+from epymorph.util import (DTLike, NDIndices, NumpyTypeError, check_ndarray,
+                           shape_matches)
 
 CentroidDType = np.dtype([('longitude', np.float64), ('latitude', np.float64)])
 
 
-def validate_schema(schema: Schema, data: dict[str, NDArray]) -> None:
-    for name, attr in schema.items():
-        attr_data = data.get(name)
-        validate_attribute(name, attr, attr_data)
+class AttribDef(NamedTuple):
+    """Metadata about a Geo attribute."""
+    name: str
+    dtype: DTLike
 
 
-def validate_attribute(name: str, attr: Attribute, data: NDArray | None) -> None:
-    validate_shape(name, data, attr.shape, attr.dtype)
+# There are two attributes required of every geo:
+POPULATION = AttribDef('population', np.int64)
+LABEL = AttribDef('label', np.str_)
 
 
-T = TypeVar('T', bound=NDArray)
+class Geo(ABC):
+    """
+    Abstract class representing the GEO model.
+    Implementations are thus free to vary how they provide the requested data.
+    """
+
+    attributes: MappingProxyType[str, AttribDef]
+    """The metadata for all attributes provided by this Geo."""
+
+    nodes: int
+    """The number of nodes in this Geo."""
+
+    @abstractmethod
+    def __getitem__(self, name: str) -> NDArray:
+        pass
 
 
-def validate_shape(name: str, data: T | None, shape: tuple[int, ...], dtype: DTypeLike | None = None) -> T:
-    if data is None:
-        msg = f"Geo data '{name}' is missing."
-        raise Exception(msg)
+class StaticGeo(Geo):
+    """A Geo implementation which contains all of data pre-fetched and in-memory."""
 
-    if not data.shape == shape:
-        msg = f"Geo data '{name}' is incorrectly shaped; expected {shape}, loaded {data.shape}"
-        raise Exception(msg)
+    @classmethod
+    def load(cls, npz_file: PathLike) -> StaticGeo:
+        """Load a StaticGeo from its .npz format."""
+        with np.load(npz_file) as npz_data:
+            values = dict(npz_data)
+            return StaticGeo.from_values(values)
 
-    if dtype is not None:
-        exp_dtype = np.dtype(dtype).type
-        if data.dtype.type is not exp_dtype:
-            msg = f"Geo data '{name}' is not the expected type; expected {exp_dtype.__name__}, loaded {data.dtype.type.__name__}"
-            raise Exception(msg)
+    @classmethod
+    def from_values(cls, values: dict[str, NDArray]) -> StaticGeo:
+        """Create a Geo containing the given values as attributes."""
+        return cls(
+            # Infer AttribDefs from the given values
+            # TODO: this breaks for structural types (like CentroidDType). `.type` comes back as `np.void` which isn't ideal
+            attrib_defs=[AttribDef(name, v.dtype.type)
+                         for name, v in values.items()],
+            attrib_values=values
+        )
 
-    return data
+    _values: dict[str, NDArray]
+
+    def __init__(self, attrib_defs: Iterable[AttribDef], attrib_values: dict[str, NDArray]):
+        if LABEL not in attrib_defs:
+            raise ValueError("Geo must provide the 'label' attribute.")
+        if POPULATION not in attrib_defs:
+            raise ValueError("Geo must provide the 'population' attribute.")
+
+        # Check all expected attributes are given and properly typed.
+        for a in attrib_defs:
+            v = attrib_values.get(a.name)
+            if v is None:
+                raise ValueError(f"Geo is missing values for attribute '{a.name}'.")
+            try:
+                check_ndarray(v, dtype=a.dtype)
+            except NumpyTypeError as e:
+                raise ValueError("Geo attribute '{a.name}' is invalid.") from e
+
+        # Verify that label and population are one-dimensional arrays that match in size.
+        labels = attrib_values['label']
+        pops = attrib_values['population']
+        if len(labels.shape) != 1:
+            raise ValueError("Invalid 'label' attribute in Geo.")
+        if len(pops.shape) != 1:
+            raise ValueError("Invalid 'population' attribute in Geo.")
+        if labels.shape != pops.shape:
+            msg = "Geo 'population' and 'label' attributes must be the same size."
+            raise ValueError(msg)
+
+        # We can now assume values to be properly formed.
+        self.attributes = MappingProxyType({a.name: a for a in attrib_defs})
+        self.nodes = len(labels)
+        self._values = {
+            name: values
+            for name, values in attrib_values.items()
+            if name in self.attributes  # weed out extra values
+        }
+
+    def __getitem__(self, name: str) -> NDArray:
+        if name not in self._values:
+            raise KeyError(f"Attribute not found in geo: '{name}'")
+        return self._values[name]
+
+    def filter(self, selection: NDIndices) -> StaticGeo:
+        """
+        Create a new geo by selecting only certain nodes from another geo.
+        Does not alter the original geo.
+        """
+
+        n = self.nodes
+
+        def select(arr: NDArray) -> NDArray:
+            # Handle selections on attribute arrays
+            if shape_matches(arr, (n,)):
+                return arr[selection]
+            elif shape_matches(arr, (n, n)):
+                return arr[selection[:, np.newaxis], selection]
+            elif shape_matches(arr, ('?', n)):  # matches TxN
+                return arr[:, selection]
+            elif shape_matches(arr, (n, '?')):  # matches NxA
+                return arr[selection, :]
+            else:
+                raise Exception(f"Unsupported shape {arr.shape}.")
+
+        filtered_values = {
+            attrib_name: select(self._values[attrib_name])
+            for attrib_name, attrib in self.attributes.items()
+        }
+        return StaticGeo(self.attributes.values(), filtered_values)
+
+    def save(self, npz_file: PathLike) -> None:
+        """Saves a StaticGeo to .npz format."""
+        np.savez_compressed(npz_file, **self._values)
 
 
 # Save and Load
-
-
-def load_compressed_geo(npz_file: str | PathLike) -> Geo:
-    """Read a GEO from its .npz format."""
-    with np.load(npz_file) as npz_data:
-        data = dict(npz_data)
-    labels = data.get('label')
-    if labels is None:
-        msg = f"Geo {id} is missing a 'label' attribute. Cannot be loaded."
-        raise Exception(msg)
-    nodes = len(labels)
-    return Geo(nodes, labels, data)
-
-
-def geo_path(id: str) -> str:
-    return f"./epymorph/data/geo/{id}_geo.npz"
-
-
-def save_compressed_geo(id: str, data: dict[str, NDArray]) -> None:
-    if not 'label' in data:
-        msg = f"Geo {id} must have a 'label' attribute in order to be saved and loaded."
-        raise Exception(msg)
-    np.savez_compressed(geo_path(id), **data)
 
 
 class GEOBuilder:
@@ -146,42 +181,40 @@ class GEOBuilder:
 
     def build(self, force=False) -> Geo:
         """Builds Geo from cached file or geospec object using ADRIOs"""
+
+        # TODO: loading from cache is currently disabled
         # load Geo from compressed file if one exists
-        if path.exists(geo_path(self.spec.id)) and not force:
-            return load_compressed_geo(geo_path(self.spec.id))
+        # if path.exists(geo_path(self.spec.id)) and not force:
+        #     return load_compressed_geo(geo_path(self.spec.id))
         # build Geo using ADRIOs
-        else:
-            data = dict[str, NDArray]()
-            print('Fetching GEO data from ADRIOs...')
+        # else:
 
-            # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
-            # - a literal key to use, or
-            # - None to use the ADRIO's attribute
-            all_adrios = \
-                [('label', self.spec.label)] + \
-                [(None, x) for x in self.spec.adrios]
+        data = dict[str, NDArray]()
+        print('Fetching GEO data from ADRIOs...')
 
-            # initialize threads
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                # call thread on get_attribute
-                thread_data = (executor.submit(self.get_attribute, key, spec)
-                               for key, spec in all_adrios)
+        # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
+        # - a literal key to use, or
+        # - None to use the ADRIO's attribute
+        all_adrios = \
+            [('label', self.spec.label)] + \
+            [(None, x) for x in self.spec.adrios]
 
-                # loop for threads as completed
-                for future in as_completed(thread_data):
-                    # get result of future
-                    curr_data = future.result()
+        # initialize threads
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # call thread on get_attribute
+            thread_data = (executor.submit(self.get_attribute, key, spec)
+                           for key, spec in all_adrios)
 
-                    # assign dictionary at attribute to resulting array
-                    data[curr_data[0]] = curr_data[1]
+            # loop for threads as completed
+            for future in as_completed(thread_data):
+                # get result of future
+                curr_data = future.result()
 
-            print('...done')
+                # assign dictionary at attribute to resulting array
+                data[curr_data[0]] = curr_data[1]
 
-            # build, cache, and return Geo
-            labels = data['label']
-            # save_compressed_geo(self.spec.id, data)
-            return Geo(
-                nodes=len(labels),
-                labels=labels.tolist(),
-                data=data
-            )
+        print('...done')
+
+        # build, cache, and return Geo
+        # save_compressed_geo(self.spec.id, data)
+        return StaticGeo.from_values(data)

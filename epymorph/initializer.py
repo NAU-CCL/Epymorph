@@ -56,7 +56,7 @@ def initialize(init: Initializer, ctx: SimContext) -> Compartments:
         elif p.annotation == SimContext:
             # If context needed, supply context!
             kwargs[p.name] = ctx
-        elif p.name in ctx.geo:
+        elif p.name in ctx.geo.attributes:
             # If name is in geo, use that.
             kwargs[p.name] = ctx.geo[p.name]
         elif p.name in ctx.param:
@@ -88,7 +88,7 @@ def _default_compartments(ctx: SimContext) -> Compartments:
     """
     _, N, C, _ = ctx.TNCE
     cs = np.zeros((N, C), dtype=SimDType)
-    cs[:, 0] = ctx.population
+    cs[:, 0] = ctx.geo['population']
     return cs
 
 
@@ -138,7 +138,7 @@ def proportional(ctx: SimContext, ratios: NDArray[np.integer | np.floating]) -> 
     if np.any(row_sums <= 0):
         raise _as_arg_exception('ratios', "One or more rows sum to zero or less.")
 
-    result = ctx.population[:, np.newaxis] * (ratios / row_sums[:, np.newaxis])
+    result = ctx.geo['population'][:, np.newaxis] * (ratios / row_sums[:, np.newaxis])
     return result.round().astype(SimDType, copy=True)
 
 
@@ -161,7 +161,7 @@ def indexed_locations(ctx: SimContext, selection: NDArray[np.intp], seed_size: i
     if not isinstance(seed_size, int) or seed_size < 0:
         raise _as_arg_exception('seed_size', "Must be a non-negative integer value.")
 
-    selected = ctx.population[selection]
+    selected = ctx.geo['population'][selection]
     available = selected.sum()
     if available < seed_size:
         msg = f"Attempted to infect {seed_size} individuals but only had {available} available."
@@ -193,12 +193,12 @@ def labeled_locations(ctx: SimContext, labels: NDArray[np.str_], seed_size: int)
     try:
         check_ndarray(labels, np.str_)
     except NumpyTypeError as e:
-        raise _as_arg_exception('labels', e) from None
+        raise _as_arg_exception('label', e) from None
 
-    geo_labels = ctx.geo['labels']
+    geo_labels = ctx.geo['label']
     if not np.all(np.isin(labels, geo_labels)):
         raise _as_arg_exception(
-            'labels', "Some labels are not in the geo model.")
+            'label', "Some labels are not in the geo model.")
 
     (selection,) = np.isin(geo_labels, labels).nonzero()
     return indexed_locations(ctx, selection, seed_size)
@@ -238,7 +238,7 @@ def top_locations(ctx: SimContext, attribute: str, num_locations: int, seed_size
     Infect a fixed number of people across a fixed number of locations,
     selecting the top locations as measured by a given geo attribute.
     """
-    if not isinstance(attribute, str) or not attribute in ctx.geo:
+    if not isinstance(attribute, str) or not attribute in ctx.geo.attributes:
         raise _as_arg_exception('attribute',
                                 "Must name an existing attribute in the geo.")
     if not isinstance(num_locations, int) or not 0 < num_locations <= ctx.nodes:
@@ -262,7 +262,7 @@ def bottom_locations(ctx: SimContext, attribute: str, num_locations: int, seed_s
     Infect a fixed number of people across a fixed number of locations,
     selecting the bottom locations as measured by a given geo attribute.
     """
-    if not isinstance(attribute, str) or not attribute in ctx.geo:
+    if not isinstance(attribute, str) or not attribute in ctx.geo.attributes:
         raise _as_arg_exception('attribute',
                                 "Must name an existing attribute in the geo.")
     if not isinstance(num_locations, int) or not 0 < num_locations <= ctx.nodes:
