@@ -30,7 +30,7 @@ def load() -> IpmBuilder:
     # the numerator must also be zero
     N = Max(1, S + I + R)
 
-    sirh = create_model(
+    sirs = create_model(
         symbols=symbols,
         transitions=[
             edge(S, I, rate=β * S * I / N),
@@ -38,4 +38,4 @@ def load() -> IpmBuilder:
             edge(R, S, rate=ξ * R)
         ])
 
-    return CompartmentModelIpmBuilder(sirh)
+    return CompartmentModelIpmBuilder(sirs)
