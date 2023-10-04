@@ -1,53 +1,32 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from typing import Callable
 
-import jsonpickle
 from numpy.typing import NDArray
 
+from epymorph.geo import AttribDef
 
-class ADRIO(ABC):
-    """abstract class to serve as an outline for individual ADRIO implementations"""
-    attribute: str
 
-    def __init__(self, **kwargs) -> None:
-        pass
+class ADRIO:
+    attrib: str
+    _fetch: Callable[[], NDArray]
+
+    def __init__(self, attrib: str, fetch_data: Callable[[], NDArray]) -> None:
+        self.attrib = attrib
+        self._fetch = fetch_data
+
+    def get_value(self, **kwargs) -> NDArray:
+        # TODO: check for cached value
+        return self._fetch()
+
+
+class ADRIOMaker(ABC):
+    """abstract class to serve as an outline for ADRIO makers for specific data sources"""
+    attributes: list[AttribDef]
 
     @abstractmethod
-    def fetch(self, **kwargs) -> NDArray:
+    def make_adrio(self, attrib: AttribDef, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
         pass
 
-
-@dataclass
-class ADRIOSpec:
-    """class used to reference specific ADRIO implementations"""
-    class_name: str
-
-
-@dataclass
-class GEOSpec:
-    """class to create geo spec files used by the ADRIO system to create geos"""
-    id: str
-    granularity: int
-    nodes: dict[str, list[str]]
-    label: ADRIOSpec
-    adrios: list[ADRIOSpec]
-    year: int
-
-
-def serialize(spec: GEOSpec, file_path: str) -> None:
-    """serializes a GEOSpec object to a file at the given path"""
-    json_spec = str(jsonpickle.encode(spec, unpicklable=True))
-    with open(file_path, 'w') as stream:
-        stream.write(json_spec)
-
-
-def deserialize(spec_enc: str) -> GEOSpec:
-    """deserializes a GEOSpec object from a pickled text"""
-    spec_dec = jsonpickle.decode(spec_enc)
-
-    # ensure decoded object is of type GEOSpec
-    if type(spec_dec) is GEOSpec:
-        return spec_dec
-    else:
-        msg = 'GEO spec does not decode to GEOSpec object; ensure file path is correct and file is correctly formatted'
-        raise Exception(msg)
+    # @abstractmethod
+    # def verify(self):
+    #    pass

@@ -1,9 +1,9 @@
-from epymorph.data import geo_library_cachable
+from epymorph.data import geo_library_dynamic
 
 
 def cache_geo(geo_name, force: bool) -> int:
     """CLI command handler: cache Geo data from ADRIOs without running simulation"""
-    builder = geo_library_cachable.get(geo_name)
+    builder = geo_library_dynamic.get(geo_name)
     if builder is not None:
         builder(force)
     else:

@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from os import PathLike
 from types import MappingProxyType
 from typing import Iterable, NamedTuple
 
+import jsonpickle
 import numpy as np
+from attr import dataclass
 from numpy.typing import NDArray
 
-from epymorph.adrio import uscounties_library
-from epymorph.adrio.adrio import ADRIOSpec, GEOSpec, deserialize
+from epymorph.adrio import adrio_maker_library
+from epymorph.adrio.adrio import ADRIO
 from epymorph.util import (DTLike, NDIndices, NumpyTypeError, check_ndarray,
                            shape_matches)
 
@@ -141,46 +143,49 @@ class StaticGeo(Geo):
         np.savez_compressed(npz_file, **self._values)
 
 
-# Save and Load
-
-
-class GEOBuilder:
+class DynamicGeo(Geo):
 
     @classmethod
-    def from_spec(cls, geo_spec: str) -> GEOBuilder:
-        """Create a GEOBuilder from a geo spec text."""
+    def from_spec(cls, geo_spec: str) -> DynamicGeo:
+        """Create a Dynamic Geo from a geo spec text."""
         spec = deserialize(geo_spec)
         return cls(spec)
 
-    def __init__(self, geo_spec: GEOSpec):
-        self.spec = geo_spec
+    _adrios_dict: dict[str, ADRIO]
 
-    def get_attribute(self, key: str | None, spec: ADRIOSpec) -> tuple[str, NDArray]:
+    def __init__(self, geo_spec: GEOSpec) -> None:
+        if geo_spec.source is None:
+            msg = "Error: Attribute sources must be specified when creating a Geo dynamically."
+            raise Exception(msg)
+
+        maker_dict = {}  # type enforce?
+
+        # loop through attributes and make adrios for each
+        for attrib in geo_spec.attributes:
+            source = geo_spec.source.get(attrib.name)
+            # make appropriate adrio maker if it does not already exist
+            if source not in maker_dict.keys() and source is not None:
+                maker_dict[source] = adrio_maker_library.get(source)
+                if maker_dict[source] is not None:
+                    maker_dict[source]()
+            # make adrio
+            self._adrios_dict[attrib.name] = maker_dict[source].make_adrio(
+                attrib, geo_spec.granularity, geo_spec.nodes, geo_spec.year)
+
+    def __getitem__(self, name: str) -> NDArray:
+        if name not in self._adrios_dict.keys():
+            raise KeyError(f"Attribute not found in geo: '{name}'")
+        return self._adrios_dict[name].get_value()
+
+    def fetch_attribute(self, adrio: ADRIO) -> None:
         """Gets a single Geo attribute from an ADRIO asynchronously using threads"""
-        # get adrio class from library dictionary
-        adrio_class = uscounties_library.get(spec.class_name)
-
         # fetch data from adrio
-        if adrio_class is None:
-            raise Exception(f"Unable to load ADRIO for {spec.class_name}; "
-                            "please check that your GEOSpec is valid.")
-        else:
-            adrio = adrio_class(spec=self.spec)
+        print(f'Fetching {adrio.attrib}')
+        # call adrio fetch method
+        adrio.get_value()
 
-            print(f'Fetching {adrio.attribute}')
-            # call adrio fetch method
-            data = adrio.fetch()
-
-            # check for no key
-            if key is None:
-                # assign key to attribute
-                key = adrio.attribute
-
-            # return tuple of key, resulting array
-            return (key, data)
-
-    def build(self, force=False) -> Geo:
-        """Builds Geo from cached file or geospec object using ADRIOs"""
+    def fetch_all(self) -> None:
+        """Retrieves all Geo attributes from geospec object using ADRIOs"""
 
         # TODO: loading from cache is currently disabled
         # load Geo from compressed file if one exists
@@ -189,32 +194,53 @@ class GEOBuilder:
         # build Geo using ADRIOs
         # else:
 
-        data = dict[str, NDArray]()
         print('Fetching GEO data from ADRIOs...')
-
-        # mapping the ADRIOs by key as they will show up in the geo data; we can either declare:
-        # - a literal key to use, or
-        # - None to use the ADRIO's attribute
-        all_adrios = \
-            [('label', self.spec.label)] + \
-            [(None, x) for x in self.spec.adrios]
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
             # call thread on get_attribute
-            thread_data = (executor.submit(self.get_attribute, key, spec)
-                           for key, spec in all_adrios)
-
-            # loop for threads as completed
-            for future in as_completed(thread_data):
-                # get result of future
-                curr_data = future.result()
-
-                # assign dictionary at attribute to resulting array
-                data[curr_data[0]] = curr_data[1]
+            (executor.submit(self.fetch_attribute, adrio)
+             for key, adrio in self._adrios_dict.items())
 
         print('...done')
 
         # build, cache, and return Geo
         # save_compressed_geo(self.spec.id, data)
-        return StaticGeo.from_values(data)
+
+    def save(self, npz_file: PathLike) -> None:
+        values = {}  # type enforce?
+        for attrib, adrio in self._adrios_dict.items():
+            values[attrib] = adrio.get_value()
+        np.savez_compressed(npz_file, **values)
+
+
+@dataclass
+class GEOSpec:
+    """class to create geo spec files used by the ADRIO system to create geos"""
+    id: str
+    label: AttribDef
+    attributes: list[AttribDef]
+    granularity: int
+    nodes: dict[str, list[str]]
+    year: int
+    type: str
+    source: dict[str, str] | None = None
+
+
+def serialize(spec: GEOSpec, file_path: str) -> None:
+    """serializes a GEOSpec object to a file at the given path"""
+    json_spec = str(jsonpickle.encode(spec, unpicklable=True))
+    with open(file_path, 'w') as stream:
+        stream.write(json_spec)
+
+
+def deserialize(spec_enc: str) -> GEOSpec:
+    """deserializes a GEOSpec object from a pickled text"""
+    spec_dec = jsonpickle.decode(spec_enc)
+
+    # ensure decoded object is of type GEOSpec
+    if type(spec_dec) is GEOSpec:
+        return spec_dec
+    else:
+        msg = 'GEO spec does not decode to GEOSpec object; ensure file path is correct and file is correctly formatted'
+        raise Exception(msg)
