@@ -195,10 +195,15 @@ class CompartmentModelIpm(Ipm):
         for eidx in self._random_event_order():
             occur: int = es[eidx]  # type: ignore
             cidx = self.model.source_compartment_for_event[eidx]
-            selected = self.ctx.rng.multivariate_hypergeometric(
-                available[:, cidx], occur).astype(SimDType)
-            occurrences[:, eidx] = selected
-            available[:, cidx] -= selected
+            if cidx == -1:
+                # event is coming from an exogenous source
+                occurrences[:, eidx] = occur
+            else:
+                # event is coming from a modeled compartment
+                selected = self.ctx.rng.multivariate_hypergeometric(
+                    available[:, cidx], occur).astype(SimDType)
+                occurrences[:, eidx] = selected
+                available[:, cidx] -= selected
 
         # Now that events are assigned to pops, update pop compartments using apply matrix.
         deltas = np.matmul(

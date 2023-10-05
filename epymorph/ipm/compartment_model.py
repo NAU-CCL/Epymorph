@@ -22,6 +22,15 @@ class InvalidModelException(Exception):
 ############################################################
 
 
+BIRTH = Symbol('birth_exogenous')
+"""An IPM psuedo-compartment representing exogenous input of individuals."""
+
+DEATH = Symbol('death_exogenous')
+"""An IPM psuedo-compartment representing exogenous removal of individuals."""
+
+_exogenous_states = (BIRTH, DEATH)
+
+
 @dataclass(frozen=True)
 class Transition(ABC):
     rate: Expr
@@ -54,7 +63,9 @@ class Transition(ABC):
         """Extract the set of compartments used by any transition."""
         return set(compartment
                    for _, e in Transition.as_events(trxs)
-                   for compartment in [e.compartment_from, e.compartment_to])
+                   for compartment in [e.compartment_from, e.compartment_to]
+                   # don't include exogenous states in the compartment set
+                   if compartment not in _exogenous_states)
 
     @staticmethod
     def extract_symbols(trxs: Iterable[TransitionDef]) -> set[Symbol]:
@@ -198,9 +209,20 @@ class CompartmentModel:
         return len(self.source_compartment_for_event)
 
 
-def create_model(symbols: CompartmentSymbols, transitions: list[TransitionDef]) -> CompartmentModel:
+def create_model(symbols: CompartmentSymbols, transitions: Iterable[TransitionDef]) -> CompartmentModel:
+    """
+    Construct a CompartmentModel with the given set of symbols and the given transitions.
+    `symbols` must include all of the symbols used in the transition definitions: all compartments and all attributes.
+    """
+
     # Our main task is to verify that the transitions specified are aligned with the symbols provided,
     # then pre-compute some useful metadata about the model.
+
+    # transitions cannot have the source and destination both be exogenous; this would be madness.
+    if any([edge.compartment_from in _exogenous_states and edge.compartment_to in _exogenous_states
+            for _, edge in Transition.as_events(transitions)]):
+        msg = "Transitions cannot use exogenous states (BIRTH/DEATH) as both source and destination."
+        raise InvalidModelException(msg)
 
     # Make sure all transition compartments and attributes are defined in symbols.
     trx_comps = Transition.extract_compartments(transitions)
@@ -233,8 +255,10 @@ Missing attributes: {", ".join(map(str, missing_attrs))}""")
     num_events = Transition.event_count(transitions)
     apply_matrix = np.zeros((num_events, len(used_comps)), dtype=SimDType)
     for eidx, e in Transition.as_events(transitions):
-        apply_matrix[eidx, compartment_index(e.compartment_from)] = -1
-        apply_matrix[eidx, compartment_index(e.compartment_to)] = +1
+        if e.compartment_from not in _exogenous_states:
+            apply_matrix[eidx, compartment_index(e.compartment_from)] = -1
+        if e.compartment_to not in _exogenous_states:
+            apply_matrix[eidx, compartment_index(e.compartment_to)] = +1
 
     # Calc list of events leaving each compartment (each may have 0, 1, or more)
     events_leaving_compartment = [[eidx
@@ -247,7 +271,7 @@ Missing attributes: {", ".join(map(str, missing_attrs))}""")
                                     for _, e in Transition.as_events(transitions)]
 
     return CompartmentModel(
-        transitions,
+        list(transitions),
         used_comps,
         used_attrs,
         apply_matrix,

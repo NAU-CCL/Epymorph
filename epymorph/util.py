@@ -28,6 +28,7 @@ def constant(x: T) -> Callable[..., T]:
 
 
 def index_where(it: Iterable[T], predicate: Callable[[T], bool]) -> int:
+    """Find the first index of `it` where `predicate` evaluates to True. Return -1 if no such value exists."""
     for i, x in enumerate(it):
         if predicate(x):
             return i
