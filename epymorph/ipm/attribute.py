@@ -13,7 +13,7 @@ from epymorph.context import SimContext
 from epymorph.data_shape import (Arbitrary, DataShape, Node, NodeAndArbitrary,
                                  Scalar, Shapes, Time, TimeAndArbitrary,
                                  TimeAndNode, TimeAndNodeAndArbitrary)
-from epymorph.geo import StaticGeo
+from epymorph.geo.geo import StaticGeo
 from epymorph.ipm.sympy_shim import Symbol, to_symbol
 from epymorph.movement.world import Location
 

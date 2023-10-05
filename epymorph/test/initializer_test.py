@@ -7,7 +7,7 @@ import numpy as np
 
 from epymorph.clock import Clock
 from epymorph.context import SimContext, SimDType
-from epymorph.geo import StaticGeo
+from epymorph.geo.geo import StaticGeo
 from epymorph.initializer import (InitializerException, bottom_locations,
                                   explicit, indexed_locations, initialize,
                                   labeled_locations, proportional,

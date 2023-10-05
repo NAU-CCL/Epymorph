@@ -9,8 +9,8 @@ from numpy.typing import NDArray
 from pandas import DataFrame, read_excel
 from pygris import block_groups, counties, states, tracts
 
-from epymorph.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo import AttribDef, CentroidDType
+from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 
 
 class Granularity(Enum):
@@ -88,6 +88,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
     attrib_vars = {'name': ['NAME'],
                    'geoid': ['NAME'],
+                   'centroid': None,
                    'population': ['B01001_001E'],
                    'population_by_age': population_query,
                    'population_by_age_x6': population_query,
@@ -99,7 +100,8 @@ class ADRIOMakerCensus(ADRIOMaker):
                                            'B03002_004E',  # minority population
                                            'B03002_014E'],
                    'gini_index': ['B19083_001E'],
-                   'pop_density_km2': ['B01003_001E']}
+                   'pop_density_km2': ['B01003_001E'],
+                   'commuters': None}
 
     census: Census
 
@@ -182,247 +184,6 @@ class ADRIOMakerCensus(ADRIOMaker):
 
         # return data to adrio for processing
         return data_df
-
-    def postprocess(self, data_df: DataFrame, attrib: AttribDef, granularity: int, data_df2: DataFrame | None = None, geo_df: GeoDataFrame | None = None) -> NDArray:
-        if attrib.name == 'NAME':
-            # strange interaction here - name field is fetched only because a field is required
-            data_df = data_df.drop(columns='NAME')
-
-            # concatenate individual fips codes to yield geoid
-            output = list()
-            for i in range(len(data_df.index)):
-                # state geoid is the same as fips code - no action required
-                if granularity == Granularity.STATE.value:
-                    output.append(str(data_df.loc[i, 'state']))
-                elif granularity == Granularity.COUNTY.value:
-                    output.append(str(data_df.loc[i, 'state']) +
-                                  str(data_df.loc[i, 'county']))
-                elif granularity == Granularity.TRACT.value:
-                    output.append(str(
-                        data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(data_df.loc[i, 'tract']))
-                else:
-                    output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
-                        data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
-
-        elif attrib.name == 'geoid':
-            # strange interaction here - name field is fetched only because a field is required
-            data_df = data_df.drop(columns='NAME')
-
-            # concatenate individual fips codes to yield geoid
-            output = list()
-            for i in range(len(data_df.index)):
-                # state geoid is the same as fips code - no action required
-                if granularity == Granularity.STATE.value:
-                    output.append(str(data_df.loc[i, 'state']))
-                elif granularity == Granularity.COUNTY.value:
-                    output.append(str(data_df.loc[i, 'state']) +
-                                  str(data_df.loc[i, 'county']))
-                elif granularity == Granularity.TRACT.value:
-                    output.append(str(
-                        data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(data_df.loc[i, 'tract']))
-                else:
-                    output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
-                        data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
-
-            return np.array(output, dtype=attrib.dtype)
-
-        elif attrib.name == 'population_by_age':
-            # calculate population of each age bracket and enter into a numpy array to return
-            output = np.zeros((len(data_df.index), 3), dtype=np.int64)
-            minor_pop = 0
-            adult_pop = 0
-            elderly_pop = 0
-            for i in range(len(data_df.index)):
-                for j in range(len(data_df.iloc[i].index)):
-                    if j >= 0 and j < 10:
-                        minor_pop += data_df.iloc[i].iloc[j]
-                    elif j >= 10 and j < 34:
-                        adult_pop += data_df.iloc[i].iloc[j]
-                    else:
-                        elderly_pop += data_df.iloc[i].iloc[j]
-                output[i] = [minor_pop, adult_pop, elderly_pop]
-
-            return output
-
-        elif attrib.name == 'population_by_age_x6':
-            # calculate population of each age bracket and enter into a numpy array to return
-            output = np.zeros((len(data_df.index), 6), dtype=np.int64)
-            pop1 = 0
-            pop2 = 0
-            pop3 = 0
-            pop4 = 0
-            pop5 = 0
-            pop6 = 0
-            for i in range(len(data_df.index)):
-                for j in range(len(data_df.iloc[i].index)):
-                    if j >= 0 and j < 10:
-                        pop1 += data_df.iloc[i].iloc[j]
-                    elif j >= 10 and j < 20:
-                        pop2 += data_df.iloc[i].iloc[j]
-                    elif j >= 20 and j < 28:
-                        pop3 += data_df.iloc[i].iloc[j]
-                    elif j >= 28 and j < 34:
-                        pop4 += data_df.iloc[i].iloc[j]
-                    elif j >= 34 and j < 40:
-                        pop5 += data_df.iloc[i].iloc[j]
-                    else:
-                        pop6 += data_df.iloc[i].iloc[j]
-
-                output[i] = [pop1, pop2, pop3, pop4, pop5, pop6]
-
-            return output
-
-        elif attrib.name == 'median_income' or attrib.name == 'median_age':
-            data_df = data_df.fillna(0).replace(-666666666, 0)
-
-        elif attrib.name == 'dissimilarity_index' and data_df2 is DataFrame:
-            output = np.zeros(len(data_df2.index), dtype=np.float64)
-
-            # loop for counties
-            j = 0
-            for i in range(len(data_df2.index)):
-                # assign county fip to variable
-                county_fip = data_df2.iloc[i][str(
-                    Granularity(granularity).name).lower()]
-                # loop for all tracts in county (while fip == variable)
-                sum = 0.0
-                while data_df.iloc[j][str(Granularity(granularity).name).lower()] == county_fip and j < len(data_df.index) - 1:
-                    # preliminary calculations
-                    tract_minority = data_df.iloc[j]['B03002_004E'] + \
-                        data_df.iloc[j]['B03002_014E']
-                    county_minority = data_df2.iloc[i]['B03002_004E'] + \
-                        data_df2.iloc[i]['B03002_014E']
-                    tract_majority = data_df.iloc[j]['B03002_003E'] + \
-                        data_df.iloc[j]['B03002_013E']
-                    county_majority = data_df2.iloc[i]['B03002_003E'] + \
-                        data_df2.iloc[i]['B03002_013E']
-
-                    # run calculation sum += ( |minority(tract) / minority(county) - majority(tract) / majority(county)| )
-                    if county_minority != 0 and county_majority != 0:
-                        sum = sum + abs(tract_minority / county_minority -
-                                        tract_majority / county_majority)
-                    j += 1
-
-                sum *= .5
-                if sum == 0.:
-                    sum = 0.5
-
-                # assign current output element to sum
-                output[i] = sum
-
-            return output
-
-        elif attrib.name == 'gini_index':
-            data_df['B19083_001E'] = data_df['B19083_001E'].astype(
-                np.float64).fillna(0.5).replace(-666666666, 0.5)
-
-            # set cbg data to that of the parent tract if geo granularity = cbg
-            if granularity == Granularity.CBG.value and data_df2 is DataFrame:
-                print(
-                    'Gini Index cannot be retrieved for block group level, fetching tract level data instead.')
-                j = 0
-                for i in range(len(data_df.index)):
-                    tract_fip = data_df.loc[i, 'tract']
-                    while data_df2.loc[j, 'tract'] == tract_fip and j < len(data_df2.index) - 1:
-                        data_df2.loc[j, 'B01001_001E'] = data_df.loc[i, 'B19083_001E']
-                        j += 1
-                data_df = data_df2
-
-        elif attrib.name == 'pop_density_km2' and geo_df is GeoDataFrame:
-            # merge census data with shapefile data
-            if granularity == Granularity.STATE.value:
-                geo_df = geo_df.merge(data_df, on=['state'])
-            elif granularity == Granularity.COUNTY.value:
-                geo_df = geo_df.merge(data_df, on=['state', 'county'])
-            elif granularity == Granularity.TRACT.value:
-                geo_df = geo_df.merge(data_df, on=['state', 'county', 'tract'])
-            else:
-                geo_df = geo_df.merge(
-                    data_df, on=['state', 'county', 'tract', 'block group'])
-
-            # calculate population density, storing it in a numpy array to return
-            output = np.zeros(len(geo_df.index), dtype=np.float64)
-            for i in range(len(geo_df.index)):
-                output[i] = round(int(geo_df.iloc[i]['B01003_001E']) /
-                                  (geo_df.iloc[i]['ALAND'] / 1e6))
-            return output
-
-        elif attrib.name == 'centroid':
-            # map node's name to its centroid in a numpy array and return
-            output = np.zeros(len(data_df.index), dtype=CentroidDType)
-            for i in range(len(data_df.index)):
-                output[i] = data_df.iloc[i]['geometry'].centroid.coords[0]
-
-            return output
-
-        elif attrib.name == 'tract_median_income' and data_df2 is DataFrame:
-            data_df = data_df.fillna(0).replace(-666666666, 0)
-
-            # set cbg data to that of the parent tract
-            j = 0
-            for i in range(len(data_df.index)):
-                tract_fip = data_df.loc[i, 'tract']
-                while data_df2.loc[j, 'tract'] == tract_fip and j < len(data_df2.index) - 1:
-                    data_df2.loc[j, 'B01001_001E'] = data_df.loc[i, 'B19013_001E']
-                    j += 1
-            data_df = data_df2
-
-        elif attrib.name == 'commuters':
-            # state level
-            if granularity == Granularity.STATE.value:
-                # get unique state identifier
-                unique_states = ('0' + data_df['res_state_code']).unique()
-                state_len = np.count_nonzero(unique_states)
-
-                # create dictionary to be used as array indices
-                states_enum = enumerate(unique_states)
-                states_dict = dict((j, i) for i, j in states_enum)
-
-                # group and aggregate data
-                data_group = data_df.groupby(['res_state_code', 'wrk_state_code'])
-                data_df = data_group.agg({'workers': 'sum'})
-
-                # create and return array for each state
-                output = np.zeros((state_len, state_len), dtype=np.int64)
-
-                # fill array with commuting data
-                for i, row in data_df.iterrows():
-                    if type(i) is tuple:
-                        x = states_dict.get('0' + i[0])
-                        y = states_dict.get(i[1])
-
-                        output[x][y] = row['workers']
-
-            # county level
-            else:
-                # get unique identifier for each county
-                geoid_df = DataFrame()
-                geoid_df['geoid'] = '0' + data_df['res_state_code'] + \
-                    data_df['res_county_code']
-                unique_counties = geoid_df['geoid'].unique()
-
-                # create empty output array
-                county_len = np.count_nonzero(unique_counties)
-                output = np.zeros((county_len, county_len), dtype=np.int64)
-
-                # create dictionary to be used as array indices
-                counties_enum = enumerate(unique_counties)
-                counties_dict = dict((j, i) for i, j in counties_enum)
-
-                data_df.reset_index(drop=True, inplace=True)
-
-                # fill array with commuting data
-                for i in range(len(data_df.index)):
-                    x = counties_dict.get('0' +
-                                          data_df.iloc[i]['res_state_code'] + data_df.iloc[i]['res_county_code'])
-                    y = counties_dict.get(
-                        data_df.iloc[i]['wrk_state_code'] + data_df.iloc[i]['wrk_county_code'])
-
-                    output[x][y] = data_df.iloc[i]['workers']
-
-            return output
-
-        return data_df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype)
 
     def fetch_sf(self, granularity: int, nodes: dict[str, list[str]], year: int) -> GeoDataFrame:
         """
@@ -593,3 +354,244 @@ class ADRIOMakerCensus(ADRIOMaker):
                 data = data.loc[data['wrk_county_code'].isin(counties)]
 
         return data
+
+    def postprocess(self, data_df: DataFrame, attrib: AttribDef, granularity: int, data_df2: DataFrame | None = None, geo_df: GeoDataFrame | None = None) -> NDArray:
+        if attrib.name == 'NAME':
+            # strange interaction here - name field is fetched only because a field is required
+            data_df = data_df.drop(columns='NAME')
+
+            # concatenate individual fips codes to yield geoid
+            output = list()
+            for i in range(len(data_df.index)):
+                # state geoid is the same as fips code - no action required
+                if granularity == Granularity.STATE.value:
+                    output.append(str(data_df.loc[i, 'state']))
+                elif granularity == Granularity.COUNTY.value:
+                    output.append(str(data_df.loc[i, 'state']) +
+                                  str(data_df.loc[i, 'county']))
+                elif granularity == Granularity.TRACT.value:
+                    output.append(str(
+                        data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(data_df.loc[i, 'tract']))
+                else:
+                    output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
+                        data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
+
+        elif attrib.name == 'geoid':
+            # strange interaction here - name field is fetched only because a field is required
+            data_df = data_df.drop(columns='NAME')
+
+            # concatenate individual fips codes to yield geoid
+            output = list()
+            for i in range(len(data_df.index)):
+                # state geoid is the same as fips code - no action required
+                if granularity == Granularity.STATE.value:
+                    output.append(str(data_df.loc[i, 'state']))
+                elif granularity == Granularity.COUNTY.value:
+                    output.append(str(data_df.loc[i, 'state']) +
+                                  str(data_df.loc[i, 'county']))
+                elif granularity == Granularity.TRACT.value:
+                    output.append(str(
+                        data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(data_df.loc[i, 'tract']))
+                else:
+                    output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
+                        data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
+
+            return np.array(output, dtype=attrib.dtype)
+
+        elif attrib.name == 'population_by_age':
+            # calculate population of each age bracket and enter into a numpy array to return
+            output = np.zeros((len(data_df.index), 3), dtype=np.int64)
+            minor_pop = 0
+            adult_pop = 0
+            elderly_pop = 0
+            for i in range(len(data_df.index)):
+                for j in range(len(data_df.iloc[i].index)):
+                    if j >= 0 and j < 10:
+                        minor_pop += data_df.iloc[i].iloc[j]
+                    elif j >= 10 and j < 34:
+                        adult_pop += data_df.iloc[i].iloc[j]
+                    elif j < 47:
+                        elderly_pop += data_df.iloc[i].iloc[j]
+                output[i] = [minor_pop, adult_pop, elderly_pop]
+
+            return output
+
+        elif attrib.name == 'population_by_age_x6':
+            # calculate population of each age bracket and enter into a numpy array to return
+            output = np.zeros((len(data_df.index), 6), dtype=np.int64)
+            pop1 = 0
+            pop2 = 0
+            pop3 = 0
+            pop4 = 0
+            pop5 = 0
+            pop6 = 0
+            for i in range(len(data_df.index)):
+                for j in range(len(data_df.iloc[i].index)):
+                    if j >= 0 and j < 10:
+                        pop1 += data_df.iloc[i].iloc[j]
+                    elif j >= 10 and j < 20:
+                        pop2 += data_df.iloc[i].iloc[j]
+                    elif j >= 20 and j < 28:
+                        pop3 += data_df.iloc[i].iloc[j]
+                    elif j >= 28 and j < 34:
+                        pop4 += data_df.iloc[i].iloc[j]
+                    elif j >= 34 and j < 40:
+                        pop5 += data_df.iloc[i].iloc[j]
+                    elif j < 47:
+                        pop6 += data_df.iloc[i].iloc[j]
+
+                output[i] = [pop1, pop2, pop3, pop4, pop5, pop6]
+
+            return output
+
+        elif attrib.name == 'median_income' or attrib.name == 'median_age':
+            data_df = data_df.fillna(0).replace(-666666666, 0)
+
+        elif attrib.name == 'dissimilarity_index' and data_df2 is DataFrame:
+            output = np.zeros(len(data_df2.index), dtype=np.float64)
+
+            # loop for counties
+            j = 0
+            for i in range(len(data_df2.index)):
+                # assign county fip to variable
+                county_fip = data_df2.iloc[i][str(
+                    Granularity(granularity).name).lower()]
+                # loop for all tracts in county (while fip == variable)
+                sum = 0.0
+                while data_df.iloc[j][str(Granularity(granularity).name).lower()] == county_fip and j < len(data_df.index) - 1:
+                    # preliminary calculations
+                    tract_minority = data_df.iloc[j]['B03002_004E'] + \
+                        data_df.iloc[j]['B03002_014E']
+                    county_minority = data_df2.iloc[i]['B03002_004E'] + \
+                        data_df2.iloc[i]['B03002_014E']
+                    tract_majority = data_df.iloc[j]['B03002_003E'] + \
+                        data_df.iloc[j]['B03002_013E']
+                    county_majority = data_df2.iloc[i]['B03002_003E'] + \
+                        data_df2.iloc[i]['B03002_013E']
+
+                    # run calculation sum += ( |minority(tract) / minority(county) - majority(tract) / majority(county)| )
+                    if county_minority != 0 and county_majority != 0:
+                        sum = sum + abs(tract_minority / county_minority -
+                                        tract_majority / county_majority)
+                    j += 1
+
+                sum *= .5
+                if sum == 0.:
+                    sum = 0.5
+
+                # assign current output element to sum
+                output[i] = sum
+
+            return output
+
+        elif attrib.name == 'gini_index':
+            data_df['B19083_001E'] = data_df['B19083_001E'].astype(
+                np.float64).fillna(0.5).replace(-666666666, 0.5)
+
+            # set cbg data to that of the parent tract if geo granularity = cbg
+            if granularity == Granularity.CBG.value and data_df2 is DataFrame:
+                print(
+                    'Gini Index cannot be retrieved for block group level, fetching tract level data instead.')
+                j = 0
+                for i in range(len(data_df.index)):
+                    tract_fip = data_df.loc[i, 'tract']
+                    while data_df2.loc[j, 'tract'] == tract_fip and j < len(data_df2.index) - 1:
+                        data_df2.loc[j, 'B01001_001E'] = data_df.loc[i, 'B19083_001E']
+                        j += 1
+                data_df = data_df2
+
+        elif attrib.name == 'pop_density_km2' and geo_df is GeoDataFrame:
+            # merge census data with shapefile data
+            if granularity == Granularity.STATE.value:
+                geo_df = geo_df.merge(data_df, on=['state'])
+            elif granularity == Granularity.COUNTY.value:
+                geo_df = geo_df.merge(data_df, on=['state', 'county'])
+            elif granularity == Granularity.TRACT.value:
+                geo_df = geo_df.merge(data_df, on=['state', 'county', 'tract'])
+            else:
+                geo_df = geo_df.merge(
+                    data_df, on=['state', 'county', 'tract', 'block group'])
+
+            # calculate population density, storing it in a numpy array to return
+            output = np.zeros(len(geo_df.index), dtype=np.float64)
+            for i in range(len(geo_df.index)):
+                output[i] = round(int(geo_df.iloc[i]['B01003_001E']) /
+                                  (geo_df.iloc[i]['ALAND'] / 1e6))
+            return output
+
+        elif attrib.name == 'centroid':
+            # map node's name to its centroid in a numpy array and return
+            output = np.zeros(len(data_df.index), dtype=CentroidDType)
+            for i in range(len(data_df.index)):
+                output[i] = data_df.iloc[i]['geometry'].centroid.coords[0]
+
+            return output
+
+        elif attrib.name == 'tract_median_income' and data_df2 is DataFrame:
+            data_df = data_df.fillna(0).replace(-666666666, 0)
+
+            # set cbg data to that of the parent tract
+            j = 0
+            for i in range(len(data_df.index)):
+                tract_fip = data_df.loc[i, 'tract']
+                while data_df2.loc[j, 'tract'] == tract_fip and j < len(data_df2.index) - 1:
+                    data_df2.loc[j, 'B01001_001E'] = data_df.loc[i, 'B19013_001E']
+                    j += 1
+            data_df = data_df2
+
+        elif attrib.name == 'commuters':
+            # state level
+            if granularity == Granularity.STATE.value:
+                # get unique state identifier
+                unique_states = ('0' + data_df['res_state_code']).unique()
+                state_len = np.count_nonzero(unique_states)
+
+                # create dictionary to be used as array indices
+                states_enum = enumerate(unique_states)
+                states_dict = dict((j, i) for i, j in states_enum)
+
+                # group and aggregate data
+                data_group = data_df.groupby(['res_state_code', 'wrk_state_code'])
+                data_df = data_group.agg({'workers': 'sum'})
+
+                # create and return array for each state
+                output = np.zeros((state_len, state_len), dtype=np.int64)
+
+                # fill array with commuting data
+                for i, row in data_df.iterrows():
+                    if type(i) is tuple:
+                        x = states_dict.get('0' + i[0])
+                        y = states_dict.get(i[1])
+
+                        output[x][y] = row['workers']
+
+            # county level
+            else:
+                # get unique identifier for each county
+                geoid_df = DataFrame()
+                geoid_df['geoid'] = '0' + data_df['res_state_code'] + \
+                    data_df['res_county_code']
+                unique_counties = geoid_df['geoid'].unique()
+
+                # create empty output array
+                county_len = np.count_nonzero(unique_counties)
+                output = np.zeros((county_len, county_len), dtype=np.int64)
+
+                # create dictionary to be used as array indices
+                counties_enum = enumerate(unique_counties)
+                counties_dict = dict((j, i) for i, j in counties_enum)
+
+                data_df.reset_index(drop=True, inplace=True)
+
+                # fill array with commuting data
+                for i in range(len(data_df.index)):
+                    x = counties_dict.get('0' +
+                                          data_df.iloc[i]['res_state_code'] + data_df.iloc[i]['res_county_code'])
+                    y = counties_dict.get(
+                        data_df.iloc[i]['wrk_state_code'] + data_df.iloc[i]['wrk_county_code'])
+
+                    output[x][y] = data_df.iloc[i]['workers']
+
+            return output
+
+        return data_df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype)

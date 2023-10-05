@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Clock
 from epymorph.context import SimContext, SimDType, normalize_lists
-from epymorph.geo import Geo
+from epymorph.geo.geo import Geo
 from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.basic import BasicEngine

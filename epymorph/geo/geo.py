@@ -1,29 +1,21 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import PathLike
 from types import MappingProxyType
-from typing import Iterable, NamedTuple
+from typing import Iterable
 
 import jsonpickle
 import numpy as np
 from attr import dataclass
 from numpy.typing import NDArray
 
-from epymorph.adrio import adrio_maker_library
-from epymorph.adrio.adrio import ADRIO
-from epymorph.util import (DTLike, NDIndices, NumpyTypeError, check_ndarray,
+from epymorph.geo import AttribDef
+from epymorph.geo.adrio import adrio_maker_library
+from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
+from epymorph.util import (NDIndices, NumpyTypeError, check_ndarray,
                            shape_matches)
-
-CentroidDType = np.dtype([('longitude', np.float64), ('latitude', np.float64)])
-
-
-class AttribDef(NamedTuple):
-    """Metadata about a Geo attribute."""
-    name: str
-    dtype: DTLike
-
 
 # There are two attributes required of every geo:
 POPULATION = AttribDef('population', np.int64)
@@ -158,19 +150,27 @@ class DynamicGeo(Geo):
             msg = "Error: Attribute sources must be specified when creating a Geo dynamically."
             raise Exception(msg)
 
-        maker_dict = {}  # type enforce?
+        maker_dict: dict[str, ADRIOMaker]
+        maker_dict = {}
+        self._adrios_dict = {}
+
+        all_attributes = [geo_spec.label] + geo_spec.attributes
 
         # loop through attributes and make adrios for each
-        for attrib in geo_spec.attributes:
+        for attrib in all_attributes:
             source = geo_spec.source.get(attrib.name)
             # make appropriate adrio maker if it does not already exist
             if source not in maker_dict.keys() and source is not None:
-                maker_dict[source] = adrio_maker_library.get(source)
-                if maker_dict[source] is not None:
-                    maker_dict[source]()
+                maker = adrio_maker_library.get(source)
+                if maker is not None:
+                    maker_dict[source] = maker()
+
             # make adrio
-            self._adrios_dict[attrib.name] = maker_dict[source].make_adrio(
-                attrib, geo_spec.granularity, geo_spec.nodes, geo_spec.year)
+            if source is not None:
+                self._adrios_dict[attrib.name] = maker_dict[source].make_adrio(
+                    attrib, geo_spec.granularity, geo_spec.nodes, geo_spec.year)
+
+        self._adrios_dict['label'] = self._adrios_dict.pop(geo_spec.label.name)
 
     def __getitem__(self, name: str) -> NDArray:
         if name not in self._adrios_dict.keys():
@@ -198,9 +198,8 @@ class DynamicGeo(Geo):
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
-            # call thread on get_attribute
-            (executor.submit(self.fetch_attribute, adrio)
-             for key, adrio in self._adrios_dict.items())
+            for key, adrio in self._adrios_dict.items():
+                executor.submit(self.fetch_attribute, adrio)
 
         print('...done')
 

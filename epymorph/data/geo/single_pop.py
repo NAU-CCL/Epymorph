@@ -1,7 +1,8 @@
 import numpy as np
 
 from epymorph.context import SimDType
-from epymorph.geo import CentroidDType, Geo, StaticGeo
+from epymorph.geo import CentroidDType
+from epymorph.geo.geo import Geo, StaticGeo
 
 
 def load() -> Geo:

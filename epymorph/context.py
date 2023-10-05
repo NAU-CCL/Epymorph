@@ -12,7 +12,7 @@ from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Clock
 from epymorph.data_shape import SimDimension
-from epymorph.geo import Geo
+from epymorph.geo.geo import Geo
 
 SimDType = np.int64
 """
