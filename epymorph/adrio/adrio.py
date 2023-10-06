@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import jsonpickle
-from attr import dataclass
 from numpy.typing import NDArray
 
 

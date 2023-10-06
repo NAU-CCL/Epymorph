@@ -5,8 +5,7 @@ Abstract base classes for the components of the movement system.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-
-from attr import dataclass
+from dataclasses import dataclass
 
 from epymorph.clock import Tick
 from epymorph.context import Compartments, SimContext

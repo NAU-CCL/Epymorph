@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial, wraps
 from typing import Any, Callable
 
 import numpy as np
-from attr import dataclass
 
 from epymorph.clock import Tick, TickDelta
 from epymorph.context import Compartments, SimContext, SimDType
