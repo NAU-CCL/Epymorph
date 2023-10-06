@@ -5,7 +5,7 @@ import numpy as np
 
 from epymorph.clock import NEVER, Clock, Tick, TickDelta
 from epymorph.context import Compartments, SimContext, SimDType
-from epymorph.geo.geo import StaticGeo
+from epymorph.geo.static import StaticGeo
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.clause import RETURN, ArrayClause
 from epymorph.movement.engine import Movement, MovementEngine

@@ -3,7 +3,7 @@ from typing import Callable
 
 from numpy.typing import NDArray
 
-from epymorph.geo import AttribDef
+from epymorph.geo.common import AttribDef
 
 
 class ADRIO:

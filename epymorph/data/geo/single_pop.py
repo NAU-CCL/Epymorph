@@ -1,11 +1,14 @@
+"""Implement a simple geo with a single population and some basic data. Handy for testing."""
 import numpy as np
 
 from epymorph.context import SimDType
-from epymorph.geo import CentroidDType
-from epymorph.geo.geo import Geo, StaticGeo
+from epymorph.geo.common import CentroidDType
+from epymorph.geo.geo import Geo
+from epymorph.geo.static import StaticGeo
 
 
 def load() -> Geo:
+    """Load the single_pop geo."""
     return StaticGeo.from_values({
         'label': np.array(['AZ'], dtype=np.str_),
         'geoid': np.array(['04'], dtype=np.str_),

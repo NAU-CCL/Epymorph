@@ -86,6 +86,27 @@ def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
     return OrderedDict(sorted(x.items()))
 
 
+class MemoDict(dict[K, V]):
+    """
+    A dict implementation which will call a factory function when the user attempts to access
+    a key which is currently not in the dict.
+
+    This varies slightly from `defaultdict`, which uses a factory function without the ability
+    to pass the requested key.
+    """
+
+    _factory: Callable[[K], V]
+
+    def __init__(self, factory: Callable[[K], V]):
+        super().__init__()
+        self._factory = factory
+
+    def __missing__(self, key: K) -> V:
+        value = self._factory(key)
+        self[key] = value
+        return value
+
+
 # numpy utilities
 
 

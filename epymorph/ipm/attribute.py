@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable
@@ -13,7 +12,6 @@ from epymorph.context import SimContext
 from epymorph.data_shape import (Arbitrary, DataShape, Node, NodeAndArbitrary,
                                  Scalar, Shapes, Time, TimeAndArbitrary,
                                  TimeAndNode, TimeAndNodeAndArbitrary)
-from epymorph.geo.geo import StaticGeo
 from epymorph.ipm.sympy_shim import Symbol, to_symbol
 from epymorph.movement.world import Location
 
@@ -159,26 +157,3 @@ def compile_getter(ctx: SimContext, attr: AttributeDef) -> AttributeGetter:
             return lambda loc, tick: data[tick.day, loc.get_index(), a]
         case _:
             raise ValueError(f"Unsupported shape: {attr.shape}")
-
-
-def adapt_context(ctx: SimContext, attributes: list[AttributeDef]) -> SimContext:
-    """
-    Adapt the given SimContext's geo and params data so all are compatible 
-    with the expected list of attributes.
-    """
-    ps = dict[str, NDArray]()
-    gs = dict[str, NDArray]()
-    for attr in attributes:
-        if isinstance(attr, GeoDef):
-            gs[attr.attribute_name] = attr.get_adapted(ctx)
-        elif isinstance(attr, ParamDef):
-            ps[attr.attribute_name] = attr.get_adapted(ctx)
-    if 'population' not in gs:
-        gs['population'] = ctx.geo['population']
-    if 'label' not in gs:
-        gs['label'] = ctx.geo['label']
-    return dataclasses.replace(
-        ctx,
-        param=ps,
-        geo=StaticGeo.from_values(gs)
-    )

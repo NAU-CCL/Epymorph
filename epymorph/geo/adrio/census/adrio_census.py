@@ -9,8 +9,8 @@ from numpy.typing import NDArray
 from pandas import DataFrame, read_excel
 from pygris import block_groups, counties, states, tracts
 
-from epymorph.geo import AttribDef, CentroidDType
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
+from epymorph.geo.common import AttribDef, CentroidDType
 
 
 class Granularity(Enum):
@@ -356,7 +356,7 @@ class ADRIOMakerCensus(ADRIOMaker):
         return data
 
     def postprocess(self, data_df: DataFrame, attrib: AttribDef, granularity: int, data_df2: DataFrame | None = None, geo_df: GeoDataFrame | None = None) -> NDArray:
-        if attrib.name == 'NAME':
+        if attrib.name == 'name':
             # strange interaction here - name field is fetched only because a field is required
             data_df = data_df.drop(columns='NAME')
 
@@ -375,6 +375,8 @@ class ADRIOMakerCensus(ADRIOMaker):
                 else:
                     output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
                         data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
+
+            return np.array(output, dtype=attrib.dtype)
 
         elif attrib.name == 'geoid':
             # strange interaction here - name field is fetched only because a field is required
@@ -594,4 +596,4 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             return output
 
-        return data_df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype)
+        return data_df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype).squeeze()
