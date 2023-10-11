@@ -25,7 +25,6 @@ class DynamicGeo(Geo):
     _adrios_dict: dict[str, ADRIO]
 
     def __init__(self, geo_spec: GEOSpec):
-        self._adrios_dict = {}
         attributes = MappingProxyType({a.name: a for a in geo_spec.attributes})
         Geo.validate_attributes(attributes.values())
 
@@ -40,6 +39,8 @@ class DynamicGeo(Geo):
             return maker_cls()
 
         maker_dict = MemoDict[str, ADRIOMaker](load_maker)
+
+        self._adrios_dict = {}
 
         # loop through attributes and make adrios for each
         for attrib in attributes.values():
@@ -82,9 +83,7 @@ class DynamicGeo(Geo):
 
     def fetch_attribute(self, adrio: ADRIO) -> None:
         """Gets a single Geo attribute from an ADRIO asynchronously using threads"""
-        # fetch data from adrio
         print(f'Fetching {adrio.attrib}')
-        # call adrio fetch method
         adrio.get_value()
 
     def fetch_all(self) -> None:
@@ -107,11 +106,8 @@ class DynamicGeo(Geo):
 
         print('...done')
 
-        # build, cache, and return Geo
-        # save_compressed_geo(self.spec.id, data)
-
     def save(self, npz_file: PathLike) -> None:
-        values = {}  # type enforce?
+        values = dict[str, NDArray]()
         for attrib, adrio in self._adrios_dict.items():
             values[attrib] = adrio.get_value()
         np.savez_compressed(npz_file, **values)

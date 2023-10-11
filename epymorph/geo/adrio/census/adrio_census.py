@@ -84,6 +84,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                   AttribDef('gini_index', np.float64),
                   AttribDef('median_age', np.int64),
                   AttribDef('median_income', np.int64),
+                  AttribDef('tract_median_income', np.int64),
                   AttribDef('pop_density_km2', np.float64)]
 
     attrib_vars = {'name': ['NAME'],
@@ -95,6 +96,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                    'median_income': ['B19013_001E'],
                    'median_age': ['B01002_001E'],
                    'tract_median_income': ['B19013_001E'],
+                   'average_household_size': ['B25010_001E'],
                    'dissimilarity_index': ['B03002_003E',  # white population
                                            'B03002_013E',
                                            'B03002_004E',  # minority population
@@ -132,7 +134,7 @@ class ADRIOMakerCensus(ADRIOMaker):
             elif attrib.name == 'dissimilarity_index':
                 return self.postprocess(self.fetch_acs5(variables, granularity, nodes, year), attrib, granularity, data_df2=self.fetch_acs5(variables, granularity + 1, nodes, year))
             elif attrib.name == 'tract_median_income' or (attrib.name == 'gini_index' and granularity == Granularity.CBG.value):
-                return self.postprocess(self.fetch_acs5(['B01001_001E'], Granularity.TRACT.value, nodes, year), attrib, granularity, data_df2=self.fetch_acs5(variables, Granularity.CBG.value, nodes, year))
+                return self.postprocess(self.fetch_acs5(variables, Granularity.TRACT.value, nodes, year), attrib, granularity, data_df2=self.fetch_acs5(variables, Granularity.CBG.value, nodes, year))
             # commuting data
             elif attrib.name == 'commuters':
                 return self.postprocess(self.fetch_commuters(granularity, nodes, year), attrib, granularity)
@@ -356,29 +358,7 @@ class ADRIOMakerCensus(ADRIOMaker):
         return data
 
     def postprocess(self, data_df: DataFrame, attrib: AttribDef, granularity: int, data_df2: DataFrame | None = None, geo_df: GeoDataFrame | None = None) -> NDArray:
-        if attrib.name == 'name':
-            # strange interaction here - name field is fetched only because a field is required
-            data_df = data_df.drop(columns='NAME')
-
-            # concatenate individual fips codes to yield geoid
-            output = list()
-            for i in range(len(data_df.index)):
-                # state geoid is the same as fips code - no action required
-                if granularity == Granularity.STATE.value:
-                    output.append(str(data_df.loc[i, 'state']))
-                elif granularity == Granularity.COUNTY.value:
-                    output.append(str(data_df.loc[i, 'state']) +
-                                  str(data_df.loc[i, 'county']))
-                elif granularity == Granularity.TRACT.value:
-                    output.append(str(
-                        data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(data_df.loc[i, 'tract']))
-                else:
-                    output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
-                        data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
-
-            return np.array(output, dtype=attrib.dtype)
-
-        elif attrib.name == 'geoid':
+        if attrib.name == 'geoid':
             # strange interaction here - name field is fetched only because a field is required
             data_df = data_df.drop(columns='NAME')
 
@@ -529,17 +509,17 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             return output
 
-        elif attrib.name == 'tract_median_income' and data_df2 is DataFrame:
+        elif attrib.name == 'tract_median_income' and type(data_df2) is DataFrame:
             data_df = data_df.fillna(0).replace(-666666666, 0)
-
             # set cbg data to that of the parent tract
             j = 0
             for i in range(len(data_df.index)):
                 tract_fip = data_df.loc[i, 'tract']
                 while data_df2.loc[j, 'tract'] == tract_fip and j < len(data_df2.index) - 1:
-                    data_df2.loc[j, 'B01001_001E'] = data_df.loc[i, 'B19013_001E']
+                    data_df2.loc[j, 'B19013_001E'] = data_df.loc[i, 'B19013_001E']
                     j += 1
             data_df = data_df2
+            data_df = data_df.fillna(0).replace(-666666666, 0)
 
         elif attrib.name == 'commuters':
             # state level

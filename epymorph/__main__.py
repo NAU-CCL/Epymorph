@@ -50,9 +50,13 @@ def build_cli() -> ArgumentParser:
             '-p', '--profile',
             action='store_true',
             help="(optional) include this flag to run in profiling mode")
+        p.add_argument(
+            '-i', '--ignore_cache',
+            help='(optional) include this flag to run the simulation without utilizing the Geo cache.'
+        )
 
         def handler(args):
-            return handle_run(args.input, args.engine, args.out, args.chart, args.profile)
+            return handle_run(args.input, args.engine, args.out, args.chart, args.profile, args.ignore_cache)
         p.set_defaults(handler=handler)
     define_run()
 
@@ -83,7 +87,7 @@ def build_cli() -> ArgumentParser:
     define_prepare()
 
     # define "cache" subcommand
-    # ex: python3 -m epymorph cache ./data/geo/us_sw_counties_2015.geo
+    # ex: python3 -m epymorph cache <geo name>
     def define_cache():
         p = command_parser.add_parser(
             'cache',
@@ -91,14 +95,26 @@ def build_cli() -> ArgumentParser:
         p.add_argument(
             'geo',
             type=str,
-            help="the name of a geo from the library")
+            help="the name of a geo from the library",)
         p.add_argument(
             '-f', '--force',
             action='store_true',
             help='(optional) include this flag to force an override of previously cached data')
+        p.add_argument(
+            '-r', '--remove',
+            action='store_true',
+            help='remove the specified geo from the cache')
+        p.add_argument(
+            '-l', '--list',
+            action='store_true',
+            help='list the names of all currently cached geos')
+        p.add_argument(
+            '-c', '--clear',
+            action='store_true',
+            help='clear the cache')
 
         def handler(args):
-            return handle_cache(args.geo, args.force)
+            return handle_cache(args.geo, args.force, args.remove, args.list, args.clear)
         p.set_defaults(handler=handler)
     define_cache()
 

@@ -6,6 +6,7 @@ import re
 import tomllib
 from datetime import date
 from functools import partial
+from os.path import exists
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -13,9 +14,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pydantic import BaseModel, ValidationError
 
+from epymorph.cache import CACHE_PATH
 from epymorph.context import normalize_lists
 from epymorph.data import (Library, geo_library, ipm_library, load_mm,
                            mm_library)
+from epymorph.geo.dynamic import DynamicGeo
 from epymorph.initializer import initializer_library
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementBuilder, MovementEngine
@@ -186,7 +189,8 @@ def run(input_path: str,
         engine_id: str | None,
         out_path: str | None,
         chart: str | None,
-        profiling: bool) -> int:
+        profiling: bool,
+        ignore: bool) -> int:
     """CLI command handler: run a simulation."""
 
     # Read input toml file.
@@ -304,6 +308,10 @@ def run(input_path: str,
             save_csv(out_path, out)
         else:
             print(f"Unknown file format specified for output: {out_path}")
+
+    if not ignore and not exists(CACHE_PATH / f'{geo_name}_geo.npz') and type(geo) is DynamicGeo:
+        geo.save(CACHE_PATH / f'{geo_name}_geo')
+        print(f'{geo_name} cached.')
 
     print("Done")
     return 0  # exit code: success
