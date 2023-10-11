@@ -101,8 +101,9 @@ class BasicEngine(MovementEngine):
         super().__init__(ctx, movement, initial_compartments)
         self.clause_loggers = {c.name: getLogger(f'movement.{c.name}')
                                for c in movement.clauses}
+        initial_copy = initial_compartments.copy()
         self.locations = [BasicLocation.create(i, cs)
-                          for (i, cs) in enumerate(initial_compartments)]
+                          for (i, cs) in enumerate(initial_copy)]
 
     # Implement World
 
