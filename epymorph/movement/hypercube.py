@@ -79,7 +79,7 @@ class HypercubeEngine(MovementEngine):
         T, N, C, _ = ctx.TNCE
         self.time_offset = 0
         self.time_frontier = 0
-        self.home = initial_compartments
+        self.home = initial_compartments.copy()
         self.vstr = np.zeros((N, C), dtype=SimDType)
         self.ldgr = np.zeros((T, N, N, C), dtype=SimDType)
         # each location has a set of views to the main arrays

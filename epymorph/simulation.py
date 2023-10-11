@@ -55,11 +55,18 @@ class Output:
     Array of shape (T,N,E) where T is the number of ticks in the simulation, N is the number of populations, and E is the number of events.
     """
 
+    initial: NDArray[SimDType]
+    """
+    Initial prevalence data by population and compartment.
+    Array of shape (N, C) where N is the number of populations, and C is the number of compartments
+    """
+
     def __init__(self, ctx: SimContext):
         self.ctx = ctx
         T, N, C, E = ctx.TNCE
         self.prevalence = np.zeros((T, N, C), dtype=SimDType)
         self.incidence = np.zeros((T, N, E), dtype=SimDType)
+        self.initial = np.zeros((N, C), dtype=SimDType)
 
 
 class OutputAggregate:
@@ -195,6 +202,9 @@ class Simulation:
         self.on_start.publish(ctx)
 
         out = Output(ctx)
+
+        out.initial = inits
+
         for tick in ctx.clock.ticks:
             t = tick.index
             # First do movement
