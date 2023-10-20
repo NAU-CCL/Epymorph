@@ -1,10 +1,12 @@
 """
 Implements the `run` subcommand executed from __main__.
 """
+
 import re
 import tomllib
 from datetime import date
 from functools import partial
+from pathlib import Path
 from typing import Any, TypeVar
 
 import matplotlib.pyplot as plt
@@ -12,10 +14,11 @@ import numpy as np
 from pydantic import BaseModel, ValidationError
 
 from epymorph.context import normalize_lists
-from epymorph.data import geo_library, ipm_library, mm_library
+from epymorph.data import (Library, geo_library, ipm_library, load_mm,
+                           mm_library)
 from epymorph.initializer import initializer_library
 from epymorph.movement.basic import BasicEngine
-from epymorph.movement.engine import MovementEngine
+from epymorph.movement.engine import MovementBuilder, MovementEngine
 from epymorph.movement.hypercube import HypercubeEngine
 from epymorph.simulation import (Output, Simulation, configure_sim_logging,
                                  with_fancy_messaging)
@@ -37,14 +40,38 @@ def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
 ModelT = TypeVar('ModelT')
 
 
-def load_model(model_type: str, name: str, lib: dict[str, ModelT]) -> ModelT:
+def load_model_mm(name: str) -> MovementBuilder:
+    result = mm_library.get(name)
+    if result is not None:
+        return load_model("MM", name, mm_library)
+
+    else:
+        text = f"MM ({name})"
+        print(f"[-] {text}", end="\r")
+        path = Path(name)
+
+        if path.exists():
+            try:
+                model = load_mm(path)
+            except Exception:
+                print(f"[X] {text}")
+                raise Exception(f"ERROR: Cannot convert file to movement model")
+            else:
+                print(f"[✓] {text}")
+                return model
+        else:
+            print(f"[X] {text}")
+            raise Exception(f"ERROR: Cannot reach file at: {name}")
+
+
+def load_model(model_type: str, name: str, lib: Library[ModelT]) -> ModelT:
     """Load a model from the given library dictionary and print status checkbox."""
     text = f"{model_type} ({name})"
     print(f"[-] {text}", end="\r")
     result = lib.get(name)
     if result is not None:
         print(f"[✓] {text}")
-        return result
+        return result()
     else:
         print(f"[X] {text}")
         raise Exception(f"ERROR: Unknown {model_type}: {name}")
@@ -219,7 +246,7 @@ def run(input_path: str,
 
         print("Loading requirements:")
         ipm_builder = load_model("IPM", ipm_name, ipm_library)
-        mm_builder = load_model("MM", mm_name, mm_library)
+        mm_builder = load_model_mm(mm_name)
         geo_builder = load_model("Geo", geo_name, geo_library)
     except Exception as e:
         print(e)
@@ -236,8 +263,8 @@ def run(input_path: str,
 
     configure_sim_logging(enabled=not profiling)
 
-    geo = geo_builder()
-    sim = with_fancy_messaging(Simulation(geo, ipm_builder(), mm_builder(), engine))
+    geo = geo_builder
+    sim = with_fancy_messaging(Simulation(geo, ipm_builder, mm_builder, engine))
 
     rng = None if run_input.rng_seed is None \
         else np.random.default_rng(run_input.rng_seed)

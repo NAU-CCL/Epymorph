@@ -3,6 +3,7 @@ The library for epymorph's built-in IPMs, MMs, and GEOs.
 """
 from importlib.abc import Traversable
 from importlib.resources import as_file, files
+from pathlib import Path
 from typing import Callable, TypeVar, cast
 
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
@@ -24,13 +25,20 @@ IPM_PATH = DATA_PATH.joinpath('ipm')
 GEO_PATH = DATA_PATH.joinpath('geo')
 
 
-def mm_loader(mm_file: Traversable) -> Callable[..., MovementBuilder]:
-    """Returns a function to load the identified movement model."""
-    def load() -> MovementBuilder:
+def load_mm(mm_file: Traversable | Path) -> MovementBuilder:
+    try:
         spec_string = mm_file.read_text(encoding="utf-8")
         results = movement_spec.parse_string(spec_string, parse_all=True)
         spec = cast(MovementSpec, results[0])
         return DynamicMovementBuilder(spec)
+    except Exception:
+        raise Exception(f"ERROR: Cannot convert file to movement model")
+
+
+def mm_loader(mm_file: Traversable | Path) -> Callable[..., MovementBuilder]:
+    """Returns a function to load the identified movement model."""
+    def load() -> MovementBuilder:
+        return load_mm(mm_file)
     return load
 
 
