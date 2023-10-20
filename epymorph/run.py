@@ -6,9 +6,8 @@ import re
 import tomllib
 from datetime import date
 from functools import partial
-from importlib.resources import files
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
