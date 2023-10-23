@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
@@ -9,8 +10,11 @@ from numpy.typing import NDArray
 from pandas import DataFrame, read_excel
 from pygris import block_groups, counties, states, tracts
 
+from epymorph.data_shape import Shapes
+from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.common import AttribDef, CentroidDType
+from epymorph.geo.spec import (AttribDef, CentroidDType, Geography, TimePeriod,
+                               Year)
 
 
 class Granularity(Enum):
@@ -18,6 +22,12 @@ class Granularity(Enum):
     COUNTY = 1
     TRACT = 2
     CBG = 3
+
+
+@dataclass
+class CensusGeography(Geography):
+    granularity: Granularity
+    filter: dict[str, list[str]]
 
 
 class ADRIOMakerCensus(ADRIOMaker):
@@ -72,38 +82,41 @@ class ADRIOMakerCensus(ADRIOMaker):
                         'B01001_048E',
                         'B01001_049E']
 
-    attributes = [AttribDef('name', np.str_),
-                  AttribDef('population', np.int64),
-                  AttribDef('population_by_age', np.int64),
-                  AttribDef('population_by_age_x6', np.int64),
-                  AttribDef('centroid', CentroidDType),
-                  AttribDef('geoid', np.int64),
-                  AttribDef('average_household_size', np.int64),
-                  AttribDef('dissimilarity_index', np.float64),
-                  AttribDef('commuters', np.int64),
-                  AttribDef('gini_index', np.float64),
-                  AttribDef('median_age', np.int64),
-                  AttribDef('median_income', np.int64),
-                  AttribDef('tract_median_income', np.int64),
-                  AttribDef('pop_density_km2', np.float64)]
+    attributes = [
+        AttribDef('name', np.str_, Shapes.N),
+        AttribDef('population', np.int64, Shapes.N),
+        AttribDef('population_by_age', np.int64, Shapes.NxA(3)),
+        AttribDef('population_by_age_x6', np.int64, Shapes.NxA(6)),
+        AttribDef('centroid', CentroidDType, Shapes.N),
+        AttribDef('geoid', np.int64, Shapes.N),
+        AttribDef('average_household_size', np.int64, Shapes.N),
+        AttribDef('dissimilarity_index', np.float64, Shapes.N),
+        AttribDef('commuters', np.int64, Shapes.NxN),
+        AttribDef('gini_index', np.float64, Shapes.N),
+        AttribDef('median_age', np.int64, Shapes.N),
+        AttribDef('median_income', np.int64, Shapes.N),
+        AttribDef('tract_median_income', np.int64, Shapes.N),
+        AttribDef('pop_density_km2', np.float64, Shapes.N),
+    ]
 
-    attrib_vars = {'name': ['NAME'],
-                   'geoid': ['NAME'],
-                   'centroid': None,
-                   'population': ['B01001_001E'],
-                   'population_by_age': population_query,
-                   'population_by_age_x6': population_query,
-                   'median_income': ['B19013_001E'],
-                   'median_age': ['B01002_001E'],
-                   'tract_median_income': ['B19013_001E'],
-                   'average_household_size': ['B25010_001E'],
-                   'dissimilarity_index': ['B03002_003E',  # white population
-                                           'B03002_013E',
-                                           'B03002_004E',  # minority population
-                                           'B03002_014E'],
-                   'gini_index': ['B19083_001E'],
-                   'pop_density_km2': ['B01003_001E'],
-                   'commuters': None}
+    attrib_vars = {
+        'name': ['NAME'],
+        'geoid': ['NAME'],
+        'centroid': None,
+        'population': ['B01001_001E'],
+        'population_by_age': population_query,
+        'population_by_age_x6': population_query,
+        'median_income': ['B19013_001E'],
+        'median_age': ['B01002_001E'],
+        'tract_median_income': ['B19013_001E'],
+        'dissimilarity_index': ['B03002_003E',  # white population
+                                'B03002_013E',
+                                'B03002_004E',  # minority population
+                                'B03002_014E'],
+        'gini_index': ['B19083_001E'],
+        'pop_density_km2': ['B01003_001E'],
+        'commuters': None,
+    }
 
     census: Census
 
@@ -113,10 +126,20 @@ class ADRIOMakerCensus(ADRIOMaker):
         """
         self.census = Census(os.environ['CENSUS_API_KEY'])
 
-    def make_adrio(self, attrib: AttribDef, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def make_adrio(self, attrib: AttribDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
         if attrib not in self.attributes:
-            msg = f"{attrib.name} is not supported for the Census data source"
-            raise Exception(msg)
+            msg = f"{attrib.name} is not supported for the Census data source."
+            raise GeoValidationException(msg)
+        if not isinstance(geography, CensusGeography):
+            msg = f"Census ADRIO requires CensusGeography, given {type(geography)}."
+            raise GeoValidationException(msg)
+        if not isinstance(time_period, Year):
+            msg = f"Census ADRIO requires Year (TimePeriod), given {type(time_period)}."
+            raise GeoValidationException(msg)
+
+        granularity = geography.granularity.value
+        nodes = geography.filter
+        year = time_period.year
 
         vars = self.attrib_vars[attrib.name]
         fetch_func = self.fetch_builder(vars, granularity, nodes, year, attrib)

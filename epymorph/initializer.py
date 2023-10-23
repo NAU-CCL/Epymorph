@@ -56,7 +56,7 @@ def initialize(init: Initializer, ctx: SimContext) -> Compartments:
         elif p.annotation == SimContext:
             # If context needed, supply context!
             kwargs[p.name] = ctx
-        elif p.name in ctx.geo.attributes:
+        elif p.name in ctx.geo.spec.attribute_map:
             # If name is in geo, use that.
             kwargs[p.name] = ctx.geo[p.name]
         elif p.name in ctx.param:
@@ -238,7 +238,7 @@ def top_locations(ctx: SimContext, attribute: str, num_locations: int, seed_size
     Infect a fixed number of people across a fixed number of locations,
     selecting the top locations as measured by a given geo attribute.
     """
-    if not isinstance(attribute, str) or not attribute in ctx.geo.attributes:
+    if not isinstance(attribute, str) or not attribute in ctx.geo.spec.attribute_map:
         raise _as_arg_exception('attribute',
                                 "Must name an existing attribute in the geo.")
     if not isinstance(num_locations, int) or not 0 < num_locations <= ctx.nodes:
@@ -262,7 +262,7 @@ def bottom_locations(ctx: SimContext, attribute: str, num_locations: int, seed_s
     Infect a fixed number of people across a fixed number of locations,
     selecting the bottom locations as measured by a given geo attribute.
     """
-    if not isinstance(attribute, str) or not attribute in ctx.geo.attributes:
+    if not isinstance(attribute, str) or not attribute in ctx.geo.spec.attribute_map:
         raise _as_arg_exception('attribute',
                                 "Must name an existing attribute in the geo.")
     if not isinstance(num_locations, int) or not 0 < num_locations <= ctx.nodes:

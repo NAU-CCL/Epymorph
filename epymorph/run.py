@@ -19,6 +19,8 @@ from epymorph.context import normalize_lists
 from epymorph.data import (Library, geo_library, ipm_library, load_mm,
                            mm_library)
 from epymorph.geo.dynamic import DynamicGeo
+from epymorph.geo.static import StaticGeoFileOps
+from epymorph.geo.util import convert_to_static_geo
 from epymorph.initializer import initializer_library
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementBuilder, MovementEngine
@@ -310,7 +312,9 @@ def run(input_path: str,
             print(f"Unknown file format specified for output: {out_path}")
 
     if not ignore and not exists(CACHE_PATH / f'{geo_name}_geo.npz') and type(geo) is DynamicGeo:
-        geo.save(CACHE_PATH / f'{geo_name}_geo')
+        filename = StaticGeoFileOps.get_tar_filename(geo_name)
+        static_geo = convert_to_static_geo(geo)
+        static_geo.save(CACHE_PATH / filename)
         print(f'{geo_name} cached.')
 
     print("Done")

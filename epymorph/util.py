@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+from inspect import isbuiltin
 from typing import (Any, Callable, Generic, Iterable, Literal, OrderedDict,
                     TypeGuard, TypeVar)
 
@@ -221,6 +222,11 @@ DTLike = type[DT]
 """(Some) of the things that can be coerced as a numpy dtype."""
 
 
+def dtype_name(d: np.dtype) -> str:
+    """Tries to return the most-human-readable name for a numpy dtype."""
+    return d.name if d.isbuiltin else str(d)
+
+
 def check_ndarray(
     value: Any,
     dtype: DTLike[DT] | list[DTLike[DT]] | None = None,
@@ -243,7 +249,11 @@ def check_ndarray(
         npdtypes = [np.dtype(x) for x in as_list(dtype)]
         is_subtype = map(lambda x: np.issubdtype(value.dtype, x), npdtypes)
         if not any(is_subtype):
-            msg = f"Not a numpy dtype match; got {value.dtype}, required {npdtypes}"
+            if len(npdtypes) == 1:
+                dtype_names = dtype_name(npdtypes[0])
+            else:
+                dtype_names = f"one of ({', '.join(map(dtype_name, npdtypes))})"
+            msg = f"Not a numpy dtype match; got {value.dtype}, required {dtype_names}"
             raise NumpyTypeError(msg)
     if dimensions is not None:
         dimensions = as_list(dimensions)

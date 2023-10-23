@@ -72,7 +72,7 @@ class GeoDef(AttributeDef):
     """An attribute drawn from the Geo Model."""
 
     def get_value(self, ctx: SimContext) -> NDArray:
-        if not self.attribute_name in ctx.geo.attributes:
+        if not self.attribute_name in ctx.geo.spec.attribute_map:
             msg = f"Missing geo attribute '{self.attribute_name}'"
             raise AttributeException(msg)
         return ctx.geo[self.attribute_name]
@@ -127,16 +127,7 @@ AttributeGetter = Callable[[Location, Tick], int | float | str]
 def compile_getter(ctx: SimContext, attr: AttributeDef) -> AttributeGetter:
     """Create an accessor lambda for the given attribute and context."""
 
-    data = attr.shape.adapt(
-        ctx,
-        attr.get_value(ctx),
-        attr.allow_broadcast
-    )
-
-    if data is None:
-        # This should be caught during the verification step, but just in case.
-        msg = f"Attribute '{attr.attribute_name}' cannot broadcast to the required shape."
-        raise AttributeException(msg)
+    data = attr.get_adapted(ctx)
 
     match attr.shape:
         case Scalar():

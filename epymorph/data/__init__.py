@@ -12,6 +12,7 @@ from epymorph.data.ipm.pei import load as ipm_pei_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
 from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
+from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo
@@ -47,8 +48,8 @@ def mm_loader(mm_file: Traversable | Path) -> Callable[..., MovementBuilder]:
 def geo_spec_loader(geo_spec_file: Traversable) -> Callable[..., DynamicGeo]:
     """Returns a function to load the identified GEO (from spec)."""
     def load() -> DynamicGeo:
-        spec_string = geo_spec_file.read_text(encoding="utf-8")
-        return DynamicGeo.from_spec(spec_string)
+        with as_file(geo_spec_file) as file:
+            return DynamicGeo.load(file, adrio_maker_library)
     return load
 
 
@@ -67,7 +68,6 @@ ModelT = TypeVar('ModelT')
 
 Library = dict[str, Callable[..., ModelT]]
 
-
 ipm_library: Library[IpmBuilder] = as_sorted_dict({
     "no": ipm_no_load,
     "pei": ipm_pei_load,
@@ -77,7 +77,6 @@ ipm_library: Library[IpmBuilder] = as_sorted_dict({
 })
 """All epymorph intra-population models (by id)."""
 
-
 mm_library: Library[MovementBuilder] = as_sorted_dict({
     f.name.removesuffix('.movement'): mm_loader(f)
     for f in MM_PATH.iterdir()
@@ -85,11 +84,10 @@ mm_library: Library[MovementBuilder] = as_sorted_dict({
 })
 """All epymorph movement models (by id)."""
 
-
 geo_library_static: Library[StaticGeo] = as_sorted_dict({
-    f.name.removesuffix('_geo.npz'): geo_npz_loader(f)
+    f.name.removesuffix('.geo.tar'): geo_npz_loader(f)
     for f in GEO_PATH.iterdir()
-    if f.name.endswith('_geo.npz')
+    if f.name.endswith('.geo.tar')
 })
 """The subset of GEOs that are saved as npz files."""
 

@@ -5,7 +5,9 @@ import numpy as np
 
 from epymorph.clock import NEVER, Clock, Tick, TickDelta
 from epymorph.context import Compartments, SimContext, SimDType
-from epymorph.geo.static import StaticGeo
+from epymorph.data_shape import Shapes
+from epymorph.geo.spec import LABEL, NO_DURATION, AttribDef
+from epymorph.geo.static import StaticGeo, StaticGeoSpec
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.clause import RETURN, ArrayClause
 from epymorph.movement.engine import Movement, MovementEngine
@@ -13,10 +15,18 @@ from epymorph.movement.hypercube import HypercubeEngine
 
 
 def test_sim_context(pops: list[int]) -> SimContext:
-    geo = StaticGeo.from_values({
-        'population': np.array(pops, dtype=SimDType),
-        'label': np.array([f'node{n}' for n in range(len(pops))], dtype=np.str_),
-    })
+    geo = StaticGeo(
+        spec=StaticGeoSpec(
+            attributes=[
+                AttribDef('population', np.int64, Shapes.N),
+                LABEL,
+            ],
+            time_period=NO_DURATION,
+        ),
+        values={
+            'population': np.array(pops, dtype=SimDType),
+            'label': np.array([f'node{n}' for n in range(len(pops))], dtype=np.str_),
+        })
     return SimContext(
         geo=geo,
         compartments=1,

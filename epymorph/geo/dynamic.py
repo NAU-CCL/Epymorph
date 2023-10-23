@@ -1,52 +1,52 @@
 from __future__ import annotations
 
+import os
 from concurrent.futures import ThreadPoolExecutor
-from os import PathLike
-from types import MappingProxyType
 
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.geo.adrio import adrio_maker_library
-from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.common import AttribDef
-from epymorph.geo.geo import LABEL, Geo, GEOSpec, deserialize
+from epymorph.error import GeoValidationException
+from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
+from epymorph.geo.geo import Geo
+from epymorph.geo.spec import LABEL, AttribDef, DynamicGeoSpec
 from epymorph.util import MemoDict
 
 
-class DynamicGeo(Geo):
+def _memoized_adrio_maker_library(lib: ADRIOMakerLibrary) -> MemoDict[str, ADRIOMaker]:
+    """
+    Memoizes an adrio maker library to avoid constructing the same adrio maker twice.
+    Will raise GeoValidationException if asked for an adrio maker that doesn't exist.
+    """
+    def load_maker(name: str) -> ADRIOMaker:
+        maker_cls = lib.get(name)
+        if maker_cls is None:
+            msg = f"Unknown attribute source: {name}."
+            raise GeoValidationException(msg)
+        return maker_cls()
+    return MemoDict[str, ADRIOMaker](load_maker)
+
+
+class DynamicGeo(Geo[DynamicGeoSpec]):
+    """A Geo implementation which uses ADRIOs to dynamically fetch data from third-party data sources."""
+
+    @staticmethod
+    def load(spec_file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
+        """Load a DynamicGeo from a geo spec file."""
+        return DynamicGeoFileOps.load_from_file(spec_file, adrio_maker_library)
 
     @classmethod
-    def from_spec(cls, geo_spec: str) -> DynamicGeo:
-        """Create a Dynamic Geo from a geo spec text."""
-        spec = deserialize(geo_spec)
-        return cls(spec)
-
-    _adrios_dict: dict[str, ADRIO]
-
-    def __init__(self, geo_spec: GEOSpec):
-        attributes = MappingProxyType({a.name: a for a in geo_spec.attributes})
-        Geo.validate_attributes(attributes.values())
-
-        if geo_spec.source is None:
-            msg = "Error: Attribute sources must be specified when creating a Geo dynamically."
-            raise ValueError(msg)
-
-        def load_maker(name: str) -> ADRIOMaker:
-            maker_cls = adrio_maker_library.get(name)
-            if maker_cls is None:
-                raise ValueError(f"Unknown attribute source: {source}.")
-            return maker_cls()
-
-        maker_dict = MemoDict[str, ADRIOMaker](load_maker)
-
-        self._adrios_dict = {}
+    def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
+        """Given an ADRIOMaker library, construct a DynamicGeo for the given spec."""
+        makers = _memoized_adrio_maker_library(adrio_maker_library)
 
         # loop through attributes and make adrios for each
-        for attrib in attributes.values():
-            source = geo_spec.source.get(attrib.name)
+        adrios = dict[str, ADRIO]()
+        for attrib in spec.attributes:
+            source = spec.source.get(attrib.name)
             if source is None:
-                raise ValueError(f"Missing source for attribute: {attrib.name}.")
+                msg = f"Missing source for attribute: {attrib.name}."
+                raise GeoValidationException(msg)
 
             # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
             # the geo wants to use a different name than the one the maker uses;
@@ -55,31 +55,47 @@ class DynamicGeo(Geo):
             adrio_attrib = attrib
             if ":" in source:
                 maker_name, adrio_attrib_name = source.split(":")[0:2]
-                adrio_attrib = AttribDef(adrio_attrib_name, attrib.dtype)
+                adrio_attrib = AttribDef(adrio_attrib_name, attrib.dtype, attrib.shape)
 
             # Make and store adrio.
-            adrio = maker_dict[maker_name].make_adrio(
+            adrio = makers[maker_name].make_adrio(
                 adrio_attrib,
-                geo_spec.granularity,
-                geo_spec.nodes,
-                geo_spec.year
+                spec.geography,
+                spec.time_period
             )
-            self._adrios_dict[attrib.name] = adrio
+            adrios[attrib.name] = adrio
 
-        # Load required values and validate.
-        checked_values = {
-            a.name: self._adrios_dict[a.name].get_value()
-            for a in Geo.required_attributes
-        }
-        Geo.validate_values(Geo.required_attributes, checked_values)
+        return cls(spec, adrios)
 
-        nodes = len(checked_values[LABEL.name])
-        super().__init__(attributes, nodes)
+    spec: DynamicGeoSpec
+    _adrios: dict[str, ADRIO]
+
+    def __init__(self, spec: DynamicGeoSpec, adrios: dict[str, ADRIO]):
+        self._adrios = adrios
+        labels = self._adrios[LABEL.name].get_value()
+        super().__init__(spec, len(labels))
 
     def __getitem__(self, name: str) -> NDArray:
-        if name not in self._adrios_dict:
+        if name not in self._adrios:
             raise KeyError(f"Attribute not found in geo: '{name}'")
-        return self._adrios_dict[name].get_value()
+        return self._adrios[name].get_value()
+
+    @property
+    def labels(self) -> NDArray[np.str_]:
+        # Since we've already accessed this adrio during construction,
+        # the adrio should have already cached this value.
+        return self._adrios[LABEL.name].get_value()
+
+    # TODO: can we implement a form of validation on dynamic geos short of fetching
+    # all of their data? Maybe not... but maybe if ADRIO had an AttribDef, we could at
+    # least check to see if the ADRIO *should* produce the expected type/shape.
+    # I'll have to think about whether or not this fulfills the purpose of `validate`...
+
+    # def validate(self) -> None:
+    #     """
+    #     Validate this geo against its specification.
+    #     Raises GeoValidationException for any errors.
+    #     """
 
     def fetch_attribute(self, adrio: ADRIO) -> None:
         """Gets a single Geo attribute from an ADRIO asynchronously using threads"""
@@ -100,14 +116,28 @@ class DynamicGeo(Geo):
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
-            for key, adrio in self._adrios_dict.items():
+            for key, adrio in self._adrios.items():
                 executor.submit(self.fetch_attribute, adrio)
             # TODO: do we need to explicitly await these futures?
 
         print('...done')
 
-    def save(self, npz_file: PathLike) -> None:
-        values = dict[str, NDArray]()
-        for attrib, adrio in self._adrios_dict.items():
-            values[attrib] = adrio.get_value()
-        np.savez_compressed(npz_file, **values)
+
+class DynamicGeoFileOps:
+    """Helper functions for saving and loading dynamic geos and specs."""
+
+    @staticmethod
+    def get_spec_filename(geo_id: str) -> str:
+        """Returns the standard filename for a geo spec file."""
+        return f"{geo_id}.geo"
+
+    @staticmethod
+    def load_from_file(file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
+        """Load a DynamicGeo from its spec file."""
+        try:
+            with open(file, mode='r', encoding='utf-8') as f:
+                spec_json = f.read()
+            spec = DynamicGeoSpec.deserialize(spec_json)
+            return DynamicGeo.from_library(spec, adrio_maker_library)
+        except Exception as e:
+            raise GeoValidationException(f"Unable to load '{file}' as a geo.") from e

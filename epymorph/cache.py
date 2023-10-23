@@ -3,6 +3,8 @@ from pathlib import Path
 from platform import system
 
 from epymorph.data import geo_library_dynamic
+from epymorph.geo.static import StaticGeoFileOps
+from epymorph.geo.util import convert_to_static_geo
 
 # TODO: add case for Mac
 if system() == 'Linux':
@@ -42,25 +44,27 @@ def cache_geo(geo_name: str | None, force: bool, remove: bool, list: bool, clear
     # assume operation is being done on single geo
     if geo_name is not None:
         # cache specified geo
+        filepath = CACHE_PATH / StaticGeoFileOps.get_tar_filename(geo_name)
         if not remove:
             choice = 'n'
-            if os.path.exists(Path(f'{CACHE_PATH}/{geo_name}_geo.npz')) and not force:
+            if os.path.exists(filepath) and not force:
                 choice = input(f'{geo_name} is already cached, overwrite? [y/n]')
             if force or choice == 'y':
                 geo_load = geo_library_dynamic.get(geo_name)
                 if geo_load is not None:
                     geo = geo_load()
-                    geo.save(Path(f'{CACHE_PATH}/{geo_name}_geo.npz'))
+                    static_geo = convert_to_static_geo(geo)
+                    static_geo.save(filepath)
                     print('Geo sucessfully cached.')
         # remove specified geo
         else:
-            os.remove(Path(f'{CACHE_PATH}/{geo_name}_geo.npz'))
+            os.remove(filepath)
             print(f'{geo_name} removed from cache.')
 
     # list geos in cache
     elif list:
         for file in os.listdir(Path(f'{CACHE_PATH}')):
-            print(file.removesuffix('_geo.npz'))
+            print(file.removesuffix('.geo.tar'))
 
     # clear geo cache
     elif clear:

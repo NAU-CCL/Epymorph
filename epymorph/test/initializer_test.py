@@ -7,7 +7,9 @@ import numpy as np
 
 from epymorph.clock import Clock
 from epymorph.context import SimContext, SimDType
-from epymorph.geo.static import StaticGeo
+from epymorph.data_shape import Shapes
+from epymorph.geo.spec import LABEL, NO_DURATION, AttribDef
+from epymorph.geo.static import StaticGeo, StaticGeoSpec
 from epymorph.initializer import (InitializerException, bottom_locations,
                                   explicit, indexed_locations, initialize,
                                   labeled_locations, proportional,
@@ -15,11 +17,20 @@ from epymorph.initializer import (InitializerException, bottom_locations,
 
 
 def test_context():
-    geo = StaticGeo.from_values({
-        'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
-        'label': np.array(list('ABCDE'), dtype=np.str_),
-        'foosball_championships': np.array([2, 4, 1, 9, 6]),
-    })
+    geo = StaticGeo(
+        spec=StaticGeoSpec(
+            attributes=[
+                LABEL,
+                AttribDef('population', np.int64, Shapes.N),
+                AttribDef('foosball_championships', np.int64, Shapes.N),
+            ],
+            time_period=NO_DURATION,
+        ),
+        values={
+            'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
+            'label': np.array(list('ABCDE'), dtype=np.str_),
+            'foosball_championships': np.array([2, 4, 1, 9, 6]),
+        })
     return SimContext(
         geo=geo,
         compartments=3,

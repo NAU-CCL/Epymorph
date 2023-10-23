@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Callable
 
 from numpy.typing import NDArray
 
-from epymorph.geo.common import AttribDef
+from epymorph.geo.spec import AttribDef, Geography, TimePeriod
 
 
 class ADRIO:
@@ -27,9 +29,12 @@ class ADRIOMaker(ABC):
     attributes: list[AttribDef]
 
     @abstractmethod
-    def make_adrio(self, attrib: AttribDef, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def make_adrio(self, attrib: AttribDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
         pass
 
     # @abstractmethod
     # def verify(self):
     #    pass
+
+
+ADRIOMakerLibrary = dict[str, type[ADRIOMaker]]

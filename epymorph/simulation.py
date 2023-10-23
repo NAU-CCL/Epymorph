@@ -187,7 +187,7 @@ class Simulation:
         # Verification checks:
         self.ipm_builder.verify(ctx)
         self.mvm_builder.verify(ctx)
-        self.mvm_builder.verify(ctx)
+        # initializer.verify(ctx)
 
         if initializer is None:
             initializer = DEFAULT_INITIALIZER

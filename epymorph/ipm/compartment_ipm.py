@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -9,9 +8,7 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Tick
 from epymorph.context import Compartments, Events, SimContext, SimDType
-from epymorph.geo.static import StaticGeo
-from epymorph.ipm.attribute import (AttributeDef, AttributeException,
-                                    AttributeGetter, GeoDef, ParamDef,
+from epymorph.ipm.attribute import (AttributeException, AttributeGetter,
                                     compile_getter)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                             TransitionDef)
@@ -85,38 +82,13 @@ class CompartmentModelIpmBuilder(IpmBuilder):
             *(a.symbol for a in self.model.attributes)
         ]
 
-        adapted_ctx = adapt_context(ctx, self.model.attributes)
-
         return CompartmentModelIpm(
-            adapted_ctx,
+            ctx,
             self.model,
-            attr_getters=[compile_getter(adapted_ctx, a)
+            attr_getters=[compile_getter(ctx, a)
                           for a in self.model.attributes],
             transitions=[compile_transition(t, rate_params)
                          for t in self.model.transitions])
-
-
-def adapt_context(ctx: SimContext, attributes: list[AttributeDef]) -> SimContext:
-    """
-    Adapt the given SimContext's geo and params data so all are compatible 
-    with the expected list of attributes.
-    """
-    ps = dict[str, NDArray]()
-    gs = dict[str, NDArray]()
-    for attr in attributes:
-        if isinstance(attr, GeoDef):
-            gs[attr.attribute_name] = attr.get_adapted(ctx)
-        elif isinstance(attr, ParamDef):
-            ps[attr.attribute_name] = attr.get_adapted(ctx)
-    if 'population' not in gs:
-        gs['population'] = ctx.geo['population']
-    if 'label' not in gs:
-        gs['label'] = ctx.geo['label']
-    return dataclasses.replace(
-        ctx,
-        param=ps,
-        geo=StaticGeo.from_values(gs)
-    )
 
 
 class CompartmentModelIpm(Ipm):
