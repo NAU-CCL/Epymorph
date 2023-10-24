@@ -25,7 +25,7 @@ def load() -> IpmBuilder:
             compartment('R', 'recovered')
         ],
         attributes=[
-            param('beta_1', 'beta', Shapes.S),
+            param('beta_1', 'beta', Shapes.TxN),
             param('omega_1', 'omega', Shapes.TxNxA(0)),
             param('omega_2', 'omega', Shapes.TxNxA(1)),
             param('delta_1', 'delta', Shapes.TxNxA(0)),
