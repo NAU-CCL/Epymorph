@@ -1,7 +1,10 @@
 """
 A common exception framework for epymorph.
 """
+from __future__ import annotations
+
 from abc import ABC
+from typing import Self
 
 
 class ValidationException(Exception, ABC):
@@ -41,6 +44,18 @@ class SimValidationException(ValidationException):
 
 class SimulationException(Exception, ABC):
     """Superclass for exceptions which happen during simulation runtime."""
+
+
+class InitException(SimulationException):
+    """Exception for invalid initialization."""
+
+    @classmethod
+    def for_arg(cls, name: str, addendum: str | None = None) -> Self:
+        """Init is invalid due to improper/missing argument."""
+        if addendum is None:
+            return cls(f"Invalid argument '{name}'.")
+        else:
+            return cls(f"Invalid argument '{name}': {addendum}")
 
 
 class IpmSimException(SimulationException):

@@ -238,8 +238,10 @@ def check_ndarray(
     (If you pass a list of dtypes or shapes, they will be matched as though combined with an "or".)
     Type-guards if true, raises a NumpyTypeError if false.
     """
+    if value is None:
+        raise NumpyTypeError('Value is None.')
     if not isinstance(value, np.ndarray):
-        raise NumpyTypeError("Not a numpy array.")
+        raise NumpyTypeError('Not a numpy array.')
     if shape is not None:
         shape = as_list(shape)
         if not value.shape in shape:
