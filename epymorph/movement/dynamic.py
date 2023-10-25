@@ -244,17 +244,16 @@ class DynamicMovementBuilder(MovementBuilder):
         # results = movement_spec.parse_string(spec_string, parse_all=True)
         # spec: MovementSpec = results[0]  # type: ignore
 
-        if self.namespace is None:
-            namespace = make_global_namespace(ctx)
+        namespace = make_global_namespace(ctx)
 
-            # t0 = time.perf_counter()
-            predef = {} if self.spec.predef is None else \
-                execute_predef(self.spec.predef, namespace)
-            # t1 = time.perf_counter()
-            # print(f"Executed predef in {(1000 * (t1 - t0)):.3f} ms")
+        # t0 = time.perf_counter()
+        predef = {} if self.spec.predef is None else \
+            execute_predef(self.spec.predef, namespace)
+        # t1 = time.perf_counter()
+        # print(f"Executed predef in {(1000 * (t1 - t0)):.3f} ms")
 
-            namespace = namespace | {'predef': predef}
-            self.namespace = namespace
+        namespace = namespace | {'predef': predef}
+        self.namespace = namespace
 
         if self.compilers is None:
             self.compilers = [to_clause_compiler(c) for c in self.spec.clauses]
