@@ -136,7 +136,8 @@ class GeoSpec(ABC):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['attribute_map']  # don't pickle properties!
+        if 'attribute_map' in state.keys():
+            del state['attribute_map']  # don't pickle properties!
         return state
 
     def serialize(self) -> str:

@@ -113,6 +113,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                                 'B03002_013E',
                                 'B03002_004E',  # minority population
                                 'B03002_014E'],
+        'average_household_size': ['B25010_001E'],
         'gini_index': ['B19083_001E'],
         'pop_density_km2': ['B01003_001E'],
         'commuters': None,
