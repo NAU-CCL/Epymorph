@@ -8,10 +8,11 @@ import numpy as np
 from epymorph.clock import Clock
 from epymorph.context import SimContext, SimDType
 from epymorph.data_shape import Shapes
+from epymorph.error import InitException
 from epymorph.geo.spec import LABEL, NO_DURATION, AttribDef
 from epymorph.geo.static import StaticGeo, StaticGeoSpec
-from epymorph.initializer import (InitializerException, bottom_locations,
-                                  explicit, indexed_locations, initialize,
+from epymorph.initializer import (bottom_locations, explicit,
+                                  indexed_locations, initialize,
                                   labeled_locations, proportional,
                                   single_location, top_locations)
 
@@ -101,7 +102,7 @@ class TestProportionalInitializer(unittest.TestCase):
             assert_array_equal(self, out, expected)
 
     def test_bad_args(self):
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # row sums to zero!
             ratios = np.array([
                 [50, 20, 30],
@@ -112,7 +113,7 @@ class TestProportionalInitializer(unittest.TestCase):
             ])
             proportional(test_context(), ratios=ratios)
 
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # row sums to negative!
             ratios = np.array([
                 [50, 20, 30],
@@ -140,21 +141,21 @@ class TestIndexedInitializer(unittest.TestCase):
         self.assertEqual(out[:, 1].sum(), 100)
 
     def test_indexed_locations_bad(self):
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # indices must be one dimension
             indexed_locations(
                 test_context(),
                 selection=np.array([[1], [3]], dtype=np.intp),
                 seed_size=100
             )
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # indices must be in range (positive)
             indexed_locations(
                 test_context(),
                 selection=np.array([1, 8], dtype=np.intp),
                 seed_size=100
             )
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # indices must be in range (negative)
             indexed_locations(
                 test_context(),
@@ -179,7 +180,7 @@ class TestLabeledInitializer(unittest.TestCase):
         self.assertEqual(out[:, 1].sum(), 100)
 
     def test_labeled_locations_bad(self):
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             labeled_locations(
                 test_context(),
                 labels=np.array(["A", "B", "Z"]),
@@ -283,27 +284,27 @@ class TestInitialize(unittest.TestCase):
         assert_array_equal(self, act, exp)
 
     def test_initialize_bad(self):
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # Missing param
             ctx = test_context()
             initialize(single_location, ctx)
 
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # Bad param type
             ctx = dataclasses.replace(test_context(), param={'location': 13})
             initialize(single_location, ctx)
 
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # Bad param type
             ctx = dataclasses.replace(test_context(), param={'location': [1, 2]})
             initialize(single_location, ctx)
 
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # Bad param type
             ctx = dataclasses.replace(test_context(), param={'location': 'abc'})
             initialize(single_location, ctx)
 
-        with self.assertRaises(InitializerException):
+        with self.assertRaises(InitException):
             # Bad param type
             ctx = dataclasses.replace(test_context(),
                                       param={'location': np.arange(20).reshape((4, 5))})
