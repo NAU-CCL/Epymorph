@@ -4,6 +4,7 @@ and all of its data is resident in memory when loaded.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import tarfile
@@ -18,7 +19,7 @@ from epymorph.error import GeoValidationException
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, StaticGeoSpec,
                                validate_geo_values)
-from epymorph.util import NDIndices
+from epymorph.util import NDIndices, as_sorted_dict
 
 
 class StaticGeo(Geo[StaticGeoSpec]):
@@ -109,7 +110,14 @@ class StaticGeoFileOps:
 
         # Write the data file in memory
         npz_file = io.BytesIO()
-        np.savez_compressed(npz_file, **geo.values)
+        # sorting the geo values makes the sha256 a little more stable
+        np.savez_compressed(npz_file, **as_sorted_dict(geo.values))
+
+        # Compute data file's sha256
+        npz_file.seek(0)
+        sha256 = hashlib.sha256()
+        sha256.update(npz_file.read())
+        geo.spec.sha256 = sha256.hexdigest()
 
         # Write the spec file in memory
         geo_file = io.BytesIO()
@@ -145,13 +153,21 @@ class StaticGeoFileOps:
                     msg = 'Archive is missing data and/or spec files.'
                     raise GeoValidationException(msg)
 
-                # Read the data file in memory
-                with np.load(npz_file) as data:
-                    values = dict(data)
-
                 # Read the spec file in memory
                 spec_json = geo_file.read().decode('utf8')
                 spec = StaticGeoSpec.deserialize(spec_json)
+
+                # Compute data file's sha256 and check against spec
+                sha256 = hashlib.sha256()
+                sha256.update(npz_file.read())
+                if spec.sha256 != sha256.hexdigest():
+                    msg = 'Archive data checksum did not match. It is possible the file has been corrupted.'
+                    raise GeoValidationException(msg)
+
+                # Read the data file in memory
+                npz_file.seek(0)
+                with np.load(npz_file) as data:
+                    values = dict(data)
 
                 return StaticGeo(spec, values)
 

@@ -4,7 +4,7 @@ its attributes and specific dimensions in time and space.
 """
 import calendar
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import cached_property
 from types import MappingProxyType
@@ -148,9 +148,12 @@ class GeoSpec(ABC):
 @dataclass
 class StaticGeoSpec(GeoSpec):
     """The spec for a StaticGeo."""
-    # Yeah, nothing here that's not already in the GeoSpec,
-    # but we still need a nominal type so it's distinguishable
-    # in the spec file serialization.
+    sha256: str | None = field(default=None)
+    """
+    Optional: the sha256 checksum (hex encoded) for the data.npz file contents.
+    If present, it will be used to verify the integrity of the data file when loaded.
+    It will be added automatically when a StaticGeo is saved to a file.
+    """
 
 
 @dataclass
