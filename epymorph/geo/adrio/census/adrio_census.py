@@ -1,7 +1,6 @@
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
 
 import numpy as np
 from census import Census
@@ -18,6 +17,7 @@ from epymorph.geo.spec import (AttribDef, CentroidDType, Geography, TimePeriod,
 
 
 class Granularity(Enum):
+    """Enumeration of Census granularity levels."""
     STATE = 0
     COUNTY = 1
     TRACT = 2
@@ -26,13 +26,18 @@ class Granularity(Enum):
 
 @dataclass
 class CensusGeography(Geography):
+    """Dataclass used to describe geographies for Census ADRIOs."""
+
     granularity: Granularity
+    """The granularity level to fetch data from."""
+
     filter: dict[str, list[str]]
+    """A list of locations to fetch data from as FIPS codes for relevant granularities."""
 
 
 class ADRIOMakerCensus(ADRIOMaker):
     """
-    Census ADRIO template to serve as parent class and provide utility functions for Census-based ADRIOS
+    Census ADRIO template to serve as parent class and provide utility functions for Census-based ADRIOS.
     """
 
     population_query = ['B01001_003E',  # population 0-19
@@ -102,7 +107,6 @@ class ADRIOMakerCensus(ADRIOMaker):
     attrib_vars = {
         'name': ['NAME'],
         'geoid': ['NAME'],
-        'centroid': None,
         'population': ['B01001_001E'],
         'population_by_age': population_query,
         'population_by_age_x6': population_query,
@@ -116,16 +120,18 @@ class ADRIOMakerCensus(ADRIOMaker):
         'average_household_size': ['B25010_001E'],
         'gini_index': ['B19083_001E'],
         'pop_density_km2': ['B01003_001E'],
-        'commuters': None,
     }
 
     census: Census
+    """Census API interface object."""
 
     def __init__(self) -> None:
-        """
-        Initializer to create Census object
-        """
-        self.census = Census(os.environ['CENSUS_API_KEY'])
+        """Initializer to create Census object."""
+        api_key = os.environ.get('CENSUS_API_KEY')
+        if api_key is None:
+            msg = "Census API key not found. Please ensure you have an API key and have assigned it to an environment variable named 'CENSUS_API_KEY'"
+            raise Exception(msg)
+        self.census = Census(api_key)
 
     def make_adrio(self, attrib: AttribDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
         if attrib not in self.attributes:
@@ -142,35 +148,27 @@ class ADRIOMakerCensus(ADRIOMaker):
         nodes = geography.filter
         year = time_period.year
 
-        vars = self.attrib_vars[attrib.name]
-        fetch_func = self.fetch_builder(vars, granularity, nodes, year, attrib)
-        return ADRIO(attrib.name, fetch_func)
-
-    def fetch_builder(self, variables: list[str], granularity: int, nodes: dict[str, list[str]], year: int, attrib: AttribDef) -> Callable[..., NDArray]:
-        def fetch_compose() -> NDArray:
-            # shape file only
-            if attrib.name == 'centroid':
-                return self.postprocess(self.fetch_sf(granularity, nodes, year), attrib, granularity)
-            # acs5 data and shape file
-            elif attrib.name == 'pop_density_km2':
-                return self.postprocess(self.fetch_acs5(variables, granularity, nodes, year), attrib, granularity, geo_df=self.fetch_sf(granularity, nodes, year))
-            # acs5 data from multiple granularities
-            elif attrib.name == 'dissimilarity_index':
-                return self.postprocess(self.fetch_acs5(variables, granularity, nodes, year), attrib, granularity, data_df2=self.fetch_acs5(variables, granularity + 1, nodes, year))
-            elif attrib.name == 'tract_median_income' or (attrib.name == 'gini_index' and granularity == Granularity.CBG.value):
-                return self.postprocess(self.fetch_acs5(variables, Granularity.TRACT.value, nodes, year), attrib, granularity, data_df2=self.fetch_acs5(variables, Granularity.CBG.value, nodes, year))
-            # commuting data
-            elif attrib.name == 'commuters':
-                return self.postprocess(self.fetch_commuters(granularity, nodes, year), attrib, granularity)
-            # acs5 data only
-            else:
-                return self.postprocess(self.fetch_acs5(variables, granularity, nodes, year), attrib, granularity)
-        return fetch_compose
+        if attrib.name == 'geoid':
+            return self._make_geoid_adrio(granularity, nodes, year)
+        elif attrib.name == 'population_by_age':
+            return self._make_population_adrio(granularity, nodes, year, 3)
+        elif attrib.name == 'dissimilarity_index':
+            return self._make_dissimilarity_index_adrio(granularity, nodes, year)
+        elif attrib.name == 'gini_index':
+            return self._make_gini_index_adrio(granularity, nodes, year)
+        elif attrib.name == 'pop_density_km2':
+            return self._make_pop_density_adrio(granularity, nodes, year)
+        elif attrib.name == 'centroid':
+            return self._make_centroid_adrio(granularity, nodes, year)
+        elif attrib.name == 'tract_median_income':
+            return self._make_tract_med_income_adrio(nodes, year)
+        elif attrib.name == 'commuters':
+            return self._make_commuter_adrio(granularity, nodes, year)
+        else:
+            return self._make_simple_adrios(attrib, granularity, nodes, year)
 
     def fetch_acs5(self, variables: list[str], granularity: int, nodes: dict[str, list[str]], year: int) -> DataFrame:
-        """
-        Utility function to fetch Census data by building queries from ADRIO data
-        """
+        """Utility function to fetch Census data by building queries from ADRIO data."""
         # verify node types and convert to strings usable by census api
         states = nodes.get('state')
         counties = nodes.get('county')
@@ -212,9 +210,7 @@ class ADRIOMakerCensus(ADRIOMaker):
         return data_df
 
     def fetch_sf(self, granularity: int, nodes: dict[str, list[str]], year: int) -> GeoDataFrame:
-        """
-        Utility function to fetch shape files from Census for specified regions
-        """
+        """Utility function to fetch shape files from Census for specified regions."""
         state_fips = nodes.get('state')
         county_fips = nodes.get('county')
         tract_fips = nodes.get('tract')
@@ -300,7 +296,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
     def fetch_commuters(self, granularity: int, nodes: dict[str, list[str]], year: int) -> DataFrame:
         """
-        Utility function to fetch commuting data from .xslx format filtered down to requested regions
+        Utility function to fetch commuting data from .xslx format filtered down to requested regions.
         """
         # check for invalid granularity
         if granularity == Granularity.CBG.value or granularity == Granularity.TRACT.value:
@@ -381,8 +377,11 @@ class ADRIOMakerCensus(ADRIOMaker):
 
         return data
 
-    def postprocess(self, data_df: DataFrame, attrib: AttribDef, granularity: int, data_df2: DataFrame | None = None, geo_df: GeoDataFrame | None = None) -> NDArray:
-        if attrib.name == 'geoid':
+    def _make_geoid_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+        """Makes an ADRIO to retrieve GEOID."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_acs5(
+                self.attrib_vars['geoid'], granularity, nodes, year)
             # strange interaction here - name field is fetched only because a field is required
             data_df = data_df.drop(columns='NAME')
 
@@ -402,58 +401,51 @@ class ADRIOMakerCensus(ADRIOMaker):
                     output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
                         data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
 
-            return np.array(output, dtype=attrib.dtype)
+            return np.array(output, dtype=np.int64)
+        return ADRIO('geoid', fetch)
 
-        elif attrib.name == 'population_by_age':
+    def _make_population_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int, num_groups: int) -> ADRIO:
+        """Makes an ADRIO to retrieve population data split into 3 or 6 age groups."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_acs5(self.population_query, granularity, nodes, year)
             # calculate population of each age bracket and enter into a numpy array to return
-            output = np.zeros((len(data_df.index), 3), dtype=np.int64)
-            minor_pop = 0
-            adult_pop = 0
-            elderly_pop = 0
+            output = np.zeros((len(data_df.index), num_groups), dtype=np.int64)
+            pop = [0, 0, 0, 0, 0, 0]
             for i in range(len(data_df.index)):
                 for j in range(len(data_df.iloc[i].index)):
                     if j >= 0 and j < 10:
-                        minor_pop += data_df.iloc[i].iloc[j]
-                    elif j >= 10 and j < 34:
-                        adult_pop += data_df.iloc[i].iloc[j]
-                    elif j < 47:
-                        elderly_pop += data_df.iloc[i].iloc[j]
-                output[i] = [minor_pop, adult_pop, elderly_pop]
-
-            return output
-
-        elif attrib.name == 'population_by_age_x6':
-            # calculate population of each age bracket and enter into a numpy array to return
-            output = np.zeros((len(data_df.index), 6), dtype=np.int64)
-            pop1 = 0
-            pop2 = 0
-            pop3 = 0
-            pop4 = 0
-            pop5 = 0
-            pop6 = 0
-            for i in range(len(data_df.index)):
-                for j in range(len(data_df.iloc[i].index)):
-                    if j >= 0 and j < 10:
-                        pop1 += data_df.iloc[i].iloc[j]
+                        pop[0] += data_df.iloc[i].iloc[j]
                     elif j >= 10 and j < 20:
-                        pop2 += data_df.iloc[i].iloc[j]
+                        pop[1] += data_df.iloc[i].iloc[j]
                     elif j >= 20 and j < 28:
-                        pop3 += data_df.iloc[i].iloc[j]
+                        pop[2] += data_df.iloc[i].iloc[j]
                     elif j >= 28 and j < 34:
-                        pop4 += data_df.iloc[i].iloc[j]
+                        pop[3] += data_df.iloc[i].iloc[j]
                     elif j >= 34 and j < 40:
-                        pop5 += data_df.iloc[i].iloc[j]
+                        pop[4] += data_df.iloc[i].iloc[j]
                     elif j < 47:
-                        pop6 += data_df.iloc[i].iloc[j]
+                        pop[5] += data_df.iloc[i].iloc[j]
 
-                output[i] = [pop1, pop2, pop3, pop4, pop5, pop6]
+                if num_groups == 3:
+                    output[i] = [pop[0], pop[1] + pop[2] + pop[3], pop[4] + pop[5]]
+                else:
+                    output[i] = pop
 
             return output
 
-        elif attrib.name == 'median_income' or attrib.name == 'median_age':
-            data_df = data_df.fillna(0).replace(-666666666, 0)
+        if num_groups == 3:
+            return ADRIO('population_by_age', fetch)
+        else:
+            return ADRIO('population_by_age_x6', fetch)
 
-        elif attrib.name == 'dissimilarity_index' and data_df2 is DataFrame:
+    def _make_dissimilarity_index_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+        """Makes an ADRIO to retrieve dissimilarity index."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_acs5(
+                self.attrib_vars['dissimilarity_index'], granularity, nodes, year)
+            data_df2 = self.fetch_acs5(
+                self.attrib_vars['dissimilarity_index'], granularity + 1, nodes, year)
+
             output = np.zeros(len(data_df2.index), dtype=np.float64)
 
             # loop for counties
@@ -489,15 +481,23 @@ class ADRIOMakerCensus(ADRIOMaker):
                 output[i] = sum
 
             return output
+        return ADRIO('dissimilarity_index', fetch)
 
-        elif attrib.name == 'gini_index':
+    def _make_gini_index_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+        """Makes an ADRIO to retrieve gini index."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_acs5(
+                self.attrib_vars['gini_index'], granularity, nodes, year)
+            data_df2 = None
             data_df['B19083_001E'] = data_df['B19083_001E'].astype(
                 np.float64).fillna(0.5).replace(-666666666, 0.5)
 
             # set cbg data to that of the parent tract if geo granularity = cbg
-            if granularity == Granularity.CBG.value and data_df2 is DataFrame:
+            if granularity == Granularity.CBG.value:
                 print(
                     'Gini Index cannot be retrieved for block group level, fetching tract level data instead.')
+                data_df2 = self.fetch_acs5(
+                    self.attrib_vars['gini_index'], granularity - 1, nodes, year)
                 j = 0
                 for i in range(len(data_df.index)):
                     tract_fip = data_df.loc[i, 'tract']
@@ -505,8 +505,15 @@ class ADRIOMakerCensus(ADRIOMaker):
                         data_df2.loc[j, 'B01001_001E'] = data_df.loc[i, 'B19083_001E']
                         j += 1
                 data_df = data_df2
+            return data_df[self.attrib_vars['gini_index']].to_numpy(dtype=np.float64).squeeze()
+        return ADRIO('gini_index', fetch)
 
-        elif attrib.name == 'pop_density_km2' and geo_df is GeoDataFrame:
+    def _make_pop_density_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+        """Makes an ADRIO to retrieve population density per km2."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_acs5(
+                self.attrib_vars['pop_density_km2'], granularity, nodes, year)
+            geo_df = self.fetch_sf(granularity, nodes, year)
             # merge census data with shapefile data
             if granularity == Granularity.STATE.value:
                 geo_df = geo_df.merge(data_df, on=['state'])
@@ -524,16 +531,27 @@ class ADRIOMakerCensus(ADRIOMaker):
                 output[i] = round(int(geo_df.iloc[i]['B01003_001E']) /
                                   (geo_df.iloc[i]['ALAND'] / 1e6))
             return output
+        return ADRIO('pop_density_km2', fetch)
 
-        elif attrib.name == 'centroid':
+    def _make_centroid_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int):
+        """Makes an ADRIO to retrieve geographic centroid coordinates."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_sf(granularity, nodes, year)
             # map node's name to its centroid in a numpy array and return
             output = np.zeros(len(data_df.index), dtype=CentroidDType)
             for i in range(len(data_df.index)):
                 output[i] = data_df.iloc[i]['geometry'].centroid.coords[0]
 
             return output
+        return ADRIO('centroid', fetch)
 
-        elif attrib.name == 'tract_median_income' and type(data_df2) is DataFrame:
+    def _make_tract_med_income_adrio(self, nodes: dict[str, list[str]], year: int) -> ADRIO:
+        """Makes an ADRIO to retrieve median income at the Census tract level."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_acs5(
+                self.attrib_vars['median_income'], Granularity.TRACT.value, nodes, year)
+            data_df2 = self.fetch_acs5(
+                self.attrib_vars['median_income'], Granularity.CBG.value, nodes, year)
             data_df = data_df.fillna(0).replace(-666666666, 0)
             # set cbg data to that of the parent tract
             j = 0
@@ -544,8 +562,13 @@ class ADRIOMakerCensus(ADRIOMaker):
                     j += 1
             data_df = data_df2
             data_df = data_df.fillna(0).replace(-666666666, 0)
+            return data_df[self.attrib_vars['median_income']].to_numpy(dtype=np.int64).squeeze()
+        return ADRIO('tract_median_income', fetch)
 
-        elif attrib.name == 'commuters':
+    def _make_commuter_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+        """Makes an ADRIO to retrieve ACS commuting flow data."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_commuters(granularity, nodes, year)
             # state level
             if granularity == Granularity.STATE.value:
                 # get unique state identifier
@@ -599,5 +622,15 @@ class ADRIOMakerCensus(ADRIOMaker):
                     output[x][y] = data_df.iloc[i]['workers']
 
             return output
+        return ADRIO('commuters', fetch)
 
-        return data_df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype).squeeze()
+    def _make_simple_adrios(self, attrib: AttribDef, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+        """Makes ADRIOs for simple attributes that require no additional postprocessing."""
+        def fetch() -> NDArray:
+            data_df = self.fetch_acs5(
+                self.attrib_vars[attrib.name], granularity, nodes, year)
+            if attrib.name == 'median_income' or attrib.name == 'median_age':
+                data_df = data_df.fillna(0).replace(-666666666, 0)
+
+            return data_df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype).squeeze()
+        return ADRIO(attrib.name, fetch)

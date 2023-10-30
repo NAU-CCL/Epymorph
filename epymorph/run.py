@@ -14,10 +14,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pydantic import BaseModel, ValidationError
 
-from epymorph.cache import CACHE_PATH
 from epymorph.context import normalize_lists
 from epymorph.data import (Library, geo_library, ipm_library, load_mm,
                            mm_library)
+from epymorph.geo.cache import swap_with_cache
 from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.static import StaticGeoFileOps
 from epymorph.geo.util import convert_to_static_geo
@@ -192,7 +192,7 @@ def run(input_path: str,
         out_path: str | None,
         chart: str | None,
         profiling: bool,
-        ignore: bool) -> int:
+        ignore_cache: bool) -> int:
     """CLI command handler: run a simulation."""
 
     # Read input toml file.
@@ -269,8 +269,10 @@ def run(input_path: str,
 
     configure_sim_logging(enabled=not profiling)
 
-    geo = geo_builder
-    sim = with_fancy_messaging(Simulation(geo, ipm_builder, mm_builder, engine))
+    if not ignore_cache:
+        geo_builder = swap_with_cache(geo_builder, geo_name)
+
+    sim = with_fancy_messaging(Simulation(geo_builder, ipm_builder, mm_builder, engine))
 
     rng = None if run_input.rng_seed is None \
         else np.random.default_rng(run_input.rng_seed)
@@ -310,12 +312,6 @@ def run(input_path: str,
             save_csv(out_path, out)
         else:
             print(f"Unknown file format specified for output: {out_path}")
-
-    if not ignore and not exists(CACHE_PATH / f'{geo_name}_geo.npz') and type(geo) is DynamicGeo:
-        filename = StaticGeoFileOps.get_tar_filename(geo_name)
-        static_geo = convert_to_static_geo(geo)
-        static_geo.save(CACHE_PATH / filename)
-        print(f'{geo_name} cached.')
 
     print("Done")
     return 0  # exit code: success
