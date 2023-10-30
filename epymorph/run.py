@@ -249,7 +249,9 @@ def run(input_path: str,
         print("Loading requirements:")
         ipm_builder = load_model("IPM", ipm_name, ipm_library)
         mm_builder = load_model_mm(mm_name)
-        geo_builder = load_model("Geo", geo_name, geo_library)
+        geo = load_model("Geo", geo_name, geo_library)
+        if not ignore_cache:
+            geo = swap_with_cache(geo, geo_name)
     except Exception as e:
         print(e)
         return 2  # error loading models
@@ -265,10 +267,7 @@ def run(input_path: str,
 
     configure_sim_logging(enabled=not profiling)
 
-    if not ignore_cache:
-        geo_builder = swap_with_cache(geo_builder, geo_name)
-
-    sim = with_fancy_messaging(Simulation(geo_builder, ipm_builder, mm_builder, engine))
+    sim = with_fancy_messaging(Simulation(geo, ipm_builder, mm_builder, engine))
 
     rng = None if run_input.rng_seed is None \
         else np.random.default_rng(run_input.rng_seed)
