@@ -80,6 +80,6 @@ include = ["epymorph*"]
 
 [tool.setuptools.package-data]
 "epymorph" = ["py.typed"]
-"epymorph.data.geo" = ["*.npz", "*.geo"]
+"epymorph.data.geo" = ["*.geo.tar", "*.geo"]
 "epymorph.data.mm" = ["*.movement"]
 "epymorph.data.ipm" = ["*.ipm"]

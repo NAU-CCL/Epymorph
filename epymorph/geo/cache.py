@@ -4,7 +4,7 @@ from platform import system
 
 from epymorph.data import geo_library_dynamic
 from epymorph.geo.geo import Geo
-from epymorph.geo.static import StaticGeoFileOps
+from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
 
 # TODO: add case for Mac
@@ -22,7 +22,7 @@ def cache_fetch(geo_name: str):
         os.makedirs(CACHE_PATH)
 
     # cache specified geo
-    filepath = CACHE_PATH / StaticGeoFileOps.get_tar_filename(geo_name)
+    filepath = CACHE_PATH / F.to_archive_filename(geo_name)
     geo_load = geo_library_dynamic.get(geo_name)
     if geo_load is not None:
         geo = geo_load()
@@ -32,7 +32,7 @@ def cache_fetch(geo_name: str):
 
 def cache_remove(geo_name: str):
     """Removes a Geo's data from the cache."""
-    filepath = CACHE_PATH / StaticGeoFileOps.get_tar_filename(geo_name)
+    filepath = CACHE_PATH / F.to_archive_filename(geo_name)
     os.remove(filepath)
 
 
@@ -43,7 +43,7 @@ def cache_list():
         print('cache is empty')
     else:
         for file in files:
-            print(file.removesuffix('.geo.tar'))
+            print(F.to_geo_name(file))
 
 
 def cache_clear():
@@ -54,8 +54,8 @@ def cache_clear():
 
 def swap_with_cache(dynamic_geo: Geo, geo_name: str) -> Geo:
     """Checks whether a dynamic Geo has already been cached and returns it if so."""
-    file_path = CACHE_PATH / StaticGeoFileOps.get_tar_filename(geo_name)
+    file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     if not os.path.exists(file_path):
         return dynamic_geo
     else:
-        return StaticGeoFileOps.load_from_tar(file_path)
+        return F.load_from_archive(file_path)

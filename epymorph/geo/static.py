@@ -8,7 +8,8 @@ import hashlib
 import io
 import os
 import tarfile
-from typing import cast
+from importlib.abc import Traversable
+from typing import Iterator, cast
 
 import jsonpickle
 import numpy as np
@@ -28,7 +29,7 @@ class StaticGeo(Geo[StaticGeoSpec]):
     @staticmethod
     def load(tar_file: os.PathLike) -> StaticGeo:
         """Load a StaticGeo from tar format."""
-        return StaticGeoFileOps.load_from_tar(tar_file)
+        return StaticGeoFileOps.load_from_archive(tar_file)
 
     values: dict[str, NDArray]
 
@@ -93,19 +94,36 @@ class StaticGeo(Geo[StaticGeoSpec]):
 
     def save(self, file: os.PathLike) -> None:
         """Saves this geo to tar format."""
-        StaticGeoFileOps.save_as_tar(self, file)
+        StaticGeoFileOps.save_as_archive(self, file)
 
 
 class StaticGeoFileOps:
     """Helper functions for saving and loading static geos as files."""
 
     @staticmethod
-    def get_tar_filename(geo_id: str) -> str:
-        """Returns the standard filename for a geo tar."""
+    def to_archive_filename(geo_id: str) -> str:
+        """Returns the standard filename for a geo archive."""
         return f"{geo_id}.geo.tar"
 
     @staticmethod
-    def save_as_tar(geo: StaticGeo, file: os.PathLike) -> None:
+    def to_geo_name(filename: str) -> str:
+        """Returns the geo ID from a standard geo archive filename."""
+        return filename.removesuffix('.geo.tar')
+
+    @staticmethod
+    def iterate_dir(directory: Traversable) -> Iterator[tuple[Traversable, str]]:
+        """
+        Iterates through the given directory non-recursively, returning all archived geos.
+        Each item in the returned iterator is a tuple containing:
+        1. the Traversable instance for the file itself, and 
+        2. the geo's ID.
+        """
+        return ((f, StaticGeoFileOps.to_geo_name(f.name))
+                for f in directory.iterdir()
+                if f.is_file() and f.name.endswith('.geo.tar'))
+
+    @staticmethod
+    def save_as_archive(geo: StaticGeo, file: os.PathLike) -> None:
         """Save a StaticGeo to its tar format."""
 
         # Write the data file in memory
@@ -136,7 +154,7 @@ class StaticGeoFileOps:
             add_file(geo_file, 'spec.geo')
 
     @staticmethod
-    def load_from_tar(file: os.PathLike) -> StaticGeo:
+    def load_from_archive(file: os.PathLike) -> StaticGeo:
         """Load a StaticGeo from its tar format."""
         try:
             # Read the tar file into memory

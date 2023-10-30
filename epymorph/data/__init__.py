@@ -15,7 +15,7 @@ from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
 from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.geo import Geo
-from epymorph.geo.static import StaticGeo
+from epymorph.geo.static import StaticGeo, StaticGeoFileOps
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.dynamic import DynamicMovementBuilder
 from epymorph.movement.engine import MovementBuilder
@@ -53,10 +53,10 @@ def geo_spec_loader(geo_spec_file: Traversable) -> Callable[..., DynamicGeo]:
     return load
 
 
-def geo_npz_loader(geo_npz_file: Traversable) -> Callable[..., StaticGeo]:
-    """Returns a function to load the identified GEO (from npz)."""
+def geo_archive_loader(geo_archive_file: Traversable) -> Callable[..., StaticGeo]:
+    """Returns a function to load a static geo from its archive file."""
     def load() -> StaticGeo:
-        with as_file(geo_npz_file) as file:
+        with as_file(geo_archive_file) as file:
             return StaticGeo.load(file)
     return load
 
@@ -85,11 +85,10 @@ mm_library: Library[MovementBuilder] = as_sorted_dict({
 """All epymorph movement models (by id)."""
 
 geo_library_static: Library[StaticGeo] = as_sorted_dict({
-    f.name.removesuffix('.geo.tar'): geo_npz_loader(f)
-    for f in GEO_PATH.iterdir()
-    if f.name.endswith('.geo.tar')
+    name: geo_archive_loader(file)
+    for file, name in StaticGeoFileOps.iterate_dir(GEO_PATH)
 })
-"""The subset of GEOs that are saved as npz files."""
+"""The subset of GEOs that are saved as archive files."""
 
 geo_library_dynamic: Library[DynamicGeo] = as_sorted_dict({
     f.name.removesuffix('.geo'): geo_spec_loader(f)

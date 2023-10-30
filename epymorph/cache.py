@@ -13,7 +13,7 @@ from epymorph.geo.static import StaticGeoFileOps
 def cache_fetch_CLI(geo_name: str, force: bool) -> int:
     """CLI command handler: cache dynamic Geo data."""
     # cache specified geo
-    filepath = CACHE_PATH / StaticGeoFileOps.get_tar_filename(geo_name)
+    filepath = CACHE_PATH / StaticGeoFileOps.to_archive_filename(geo_name)
     choice = 'y'
     if os.path.exists(filepath) and not force:
         choice = input(f'{geo_name} is already cached, overwrite? [y/n]')
@@ -30,7 +30,7 @@ def cache_remove_CLI(geo_name: str) -> int:
         print('cache directory not found')
         return 2  # exit code: no cache
 
-    filepath = CACHE_PATH / StaticGeoFileOps.get_tar_filename(geo_name)
+    filepath = CACHE_PATH / StaticGeoFileOps.to_archive_filename(geo_name)
 
     if not os.path.exists(filepath):
         print(f'{geo_name} not found in cache, check your spelling or use the list subcommand to view all currently cached Geos')
