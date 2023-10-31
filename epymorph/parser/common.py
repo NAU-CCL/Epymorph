@@ -32,6 +32,7 @@ def tag(tag_name: str, fields: list[E]) -> E:
 
 
 num_list: E = bracketed(P.delimited_list(fraction | fnumber))
+"""Parser for a list of numbers in brackets, like: `[1,2,3]`"""
 
 
 class Duration(NamedTuple):
@@ -60,3 +61,4 @@ def marshal_duration(results: P.ParseResults):
 
 fn_body = P.SkipTo(P.AtLineStart(']'))\
     .set_parse_action(lambda toks: toks.as_list()[0].strip())
+"""Parser for a function body, which runs until the end of a clause ends."""

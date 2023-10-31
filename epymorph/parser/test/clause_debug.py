@@ -1,7 +1,7 @@
 import ast
 import typing
 
-from epymorph.parser.move_clause import Daily, daily
+from epymorph.parser.move_clause import DailyClause, daily
 
 
 def main():
@@ -18,10 +18,10 @@ def f(t, src, dst):
     # print(r.dump())
     # print(r[0])
 
-    clause = typing.cast(Daily, r[0])
-    print(clause.f)
+    clause = typing.cast(DailyClause, r[0])
+    print(clause.function)
 
-    node = ast.parse(clause.f, '<string>', mode='exec')
+    node = ast.parse(clause.function, '<string>', mode='exec')
     # code = compile(node, '<string>', mode='exec')
 
     print(node.body[0])

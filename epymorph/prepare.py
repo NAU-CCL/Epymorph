@@ -5,7 +5,6 @@ import tomli_w
 
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.run import RunInput, interactive_select
-from epymorph.util import Duration
 
 
 def prepare_run_toml(out_path: str,
@@ -35,7 +34,7 @@ def prepare_run_toml(out_path: str,
         mm=mm_name,
         geo=geo_name,
         start_date=date.today(),
-        duration=Duration(count=14, unit="d"),
+        duration_days=14,
         rng_seed=None,
         init={
             'initializer': 'single_location',

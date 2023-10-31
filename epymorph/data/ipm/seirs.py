@@ -1,15 +1,13 @@
 # type: ignore
 from sympy import Max
 
+from epymorph.compartment_model import (CompartmentModel, compartment,
+                                        create_model, create_symbols, edge,
+                                        param)
 from epymorph.data_shape import Shapes
-from epymorph.ipm.attribute import param
-from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
-from epymorph.ipm.compartment_model import (compartment, create_model,
-                                            create_symbols, edge)
-from epymorph.ipm.ipm import IpmBuilder
 
 
-def load() -> IpmBuilder:
+def load() -> CompartmentModel:
     symbols = create_symbols(
         compartments=[
             compartment('S'),
@@ -29,7 +27,7 @@ def load() -> IpmBuilder:
 
     N = Max(1, S + E + I + R)
 
-    seirs = create_model(
+    return create_model(
         symbols=symbols,
         transitions=[
             edge(S, E, rate=β * S * I / N),
@@ -37,5 +35,3 @@ def load() -> IpmBuilder:
             edge(I, R, rate=γ * I),
             edge(R, S, rate=ξ * R)
         ])
-
-    return CompartmentModelIpmBuilder(seirs)

@@ -5,32 +5,35 @@ Implements the `run` subcommand executed from __main__.
 import re
 import tomllib
 from datetime import date
-from functools import partial
+from functools import partial, wraps
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Callable, ParamSpec, TypeVar
 
-import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import DTypeLike
 from pydantic import BaseModel, ValidationError
 
-from epymorph.context import normalize_lists
-from epymorph.data import (Library, geo_library, ipm_library, load_mm,
-                           mm_library)
+import epymorph.plots as plots
+from epymorph.compartment_model import CompartmentModel
+from epymorph.data import Library, geo_library, ipm_library, mm_library
+from epymorph.engine.context import ExecutionConfig, normalize_params
+from epymorph.engine.standard_sim import Output, StandardSimulation
+from epymorph.error import UnknownModel
 from epymorph.geo.cache import load_from_cache
 from epymorph.geo.geo import Geo
 from epymorph.initializer import initializer_library
-from epymorph.movement.basic import BasicEngine
-from epymorph.movement.engine import MovementBuilder, MovementEngine
-from epymorph.movement.hypercube import HypercubeEngine
-from epymorph.simulation import (Output, Simulation, configure_sim_logging,
-                                 with_fancy_messaging)
-from epymorph.util import Duration, stridesum
+from epymorph.parser.movement import MovementSpec
+from epymorph.simulation import TimeFrame, enable_logging, sim_messaging
 
 
-def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
+def interactive_select(model_type: str, lib: Library) -> str:
+    """
+    Provide an interactive selection for a model, allowing the user
+    to pick an implementation from the built-in model library.
+    """
     keys = list(lib.keys())
     keys.sort()
-    print(f"Select the {lib_name} you would like to use: ")
+    print(f"Select the {model_type} you would like to use: ")
     for i, name in enumerate(keys):
         print(f'{i+1}. {name}')
     entry = input("Enter the number: ")
@@ -40,149 +43,90 @@ def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
 
 
 ModelT = TypeVar('ModelT')
+P = ParamSpec('P')
 
 
-def load_model_geo(name: str, ignore_cache: bool) -> Geo:
-    geo = None
-    if not ignore_cache:
-        geo = load_from_cache(name)
-    if geo is None:
-        return load_model("GEO", name, geo_library)
-    else:
-        text = f"GEO ({name})"
-        print(f"[✓] {text}")
-        return geo
-
-
-def load_model_mm(name: str) -> MovementBuilder:
-    result = mm_library.get(name)
-    if result is not None:
-        return load_model("MM", name, mm_library)
-
-    else:
-        text = f"MM ({name})"
-        print(f"[-] {text}", end="\r")
-        path = Path(name)
-
-        if path.exists():
-            try:
-                model = load_mm(path)
-            except Exception:
-                print(f"[X] {text}")
-                raise Exception(f"ERROR: Cannot convert file to movement model")
+def load_messaging(description: str):
+    """Decorates a loading function to make it emit pretty messages."""
+    def make_decorator(func: Callable[P, ModelT]) -> Callable[P, ModelT]:
+        @wraps(func)
+        def decorator(*args: P.args, **kwargs: P.kwargs) -> ModelT:
+            # assumes first param is name
+            if len(args) > 0 and isinstance(args[0], str):
+                name = args[0]
+                full_description = f"{description} ({name})"
             else:
-                print(f"[✓] {text}")
-                return model
+                full_description = description
+
+            try:
+                print(f"[-] {full_description}", end="\r")
+                value = func(*args, **kwargs)
+                print(f"[✓] {full_description}")
+                return value
+            except Exception as e:
+                print(f"[X] {full_description}")
+                raise e
+        return decorator
+    return make_decorator
+
+
+@load_messaging("GEO")
+def load_model_geo(name: str, ignore_cache: bool) -> Geo:
+    """Loads a geo by name."""
+    if not ignore_cache:
+        cached = load_from_cache(name)
+        if cached is not None:
+            return cached
+
+    if name not in geo_library:
+        raise UnknownModel('GEO', name)
+
+    return geo_library[name]()
+
+
+@load_messaging("IPM")
+def load_model_ipm(name: str) -> CompartmentModel:
+    """Loads an IPM by name."""
+    if name not in mm_library:
+        raise UnknownModel('IPM', name)
+
+    return ipm_library[name]()
+
+
+@load_messaging("MM")
+def load_model_mm(name_or_path: str) -> MovementSpec:
+    """Loads a movement model by name or path."""
+    if name_or_path in mm_library:
+        return mm_library[name_or_path]()
+
+    path = Path(name_or_path)
+    if not path.exists():
+        raise UnknownModel('MM', name_or_path)
+
+    with open(path, mode='r', encoding='utf-8') as file:
+        spec_string = file.read()
+        return MovementSpec.load(spec_string)
+
+
+def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
+    """
+    Normalize a dictionary of values so that all lists are replaced with numpy arrays.
+    If you would like to force certain values to take certain dtypes, provide the `dtypes` argument 
+    with a mapping from key to dtype (types will not affect non-list values).
+    """
+    # TODO: refactor this...?
+    if dtypes is None:
+        dtypes = {}
+    ps = dict[str, Any]()
+    # Replace list values with numpy arrays.
+    for key, value in data.items():
+        if isinstance(value, list):
+            dt = dtypes.get(key, None)
+            ps[key] = np.asarray(value, dtype=dt)
         else:
-            print(f"[X] {text}")
-            raise Exception(f"ERROR: Cannot reach file at: {name}")
+            ps[key] = value
+    return ps
 
-
-def load_model(model_type: str, name: str, lib: Library[ModelT]) -> ModelT:
-    """Load a model from the given library dictionary and print status checkbox."""
-    text = f"{model_type} ({name})"
-    print(f"[-] {text}", end="\r")
-    result = lib.get(name)
-    if result is not None:
-        print(f"[✓] {text}")
-        return result()
-    else:
-        print(f"[X] {text}")
-        raise Exception(f"ERROR: Unknown {model_type}: {name}")
-
-
-def load_params(path: str) -> dict[str, Any]:
-    """Load parameters from a file and print status checkbox."""
-    text = f"Parameters (file:{path})"
-    print(f"[-] {text}", end="\r")
-    try:
-        with open(path, 'rb') as file:
-            result = tomllib.load(file)
-        print(f"[✓] {text}")
-        return result
-    except Exception:
-        print(f"[X] {text}")
-        raise Exception(f"ERROR: Unable to load parameters: {path}")
-
-
-def plot_event(out: Output, event_idx: int) -> None:
-    """Charting: plot the event with the given index for all populations."""
-    fig, ax = plt.subplots()
-    ax.set_title(f"event {event_idx} incidence")
-    ax.set_xlabel('days')
-    ax.set_ylabel(f"e{event_idx}")
-    x_axis = list(range(out.ctx.clock.num_days))
-    for pop_idx in range(out.ctx.nodes):
-        values = stridesum(
-            out.incidence[:, pop_idx, event_idx], len(out.ctx.clock.taus))
-        y_axis = values
-        ax.plot(x_axis, y_axis, label=out.ctx.geo['label'][pop_idx])
-    if out.ctx.nodes <= 12:
-        ax.legend()
-    fig.tight_layout()
-    plt.show()
-
-
-def plot_pop(out: Output, pop_idx: int) -> None:
-    """Charting: plot all compartments (per 100k people) for the population at the given index."""
-    fig, ax = plt.subplots()
-    ax.set_title(f"Prevalence in {out.ctx.geo['label'][pop_idx]}")
-    ax.set_xlabel('days')
-    ax.set_ylabel('persons (log scale)')
-    ax.set_yscale('log')
-    # ax.set_ylim(bottom=1, top=10 ** 8)
-    x_axis = [t.tausum for t in out.ctx.clock.ticks]
-    compartments = [f"c{n}" for n in range(out.ctx.compartments)]
-    for i, event in enumerate(compartments):
-        y_axis = out.prevalence[:, pop_idx, i]
-        ax.plot(x_axis, y_axis, label=event)
-    if out.ctx.compartments <= 12:
-        ax.legend()
-    fig.tight_layout()
-    plt.show()
-
-
-def save_npz(path: str, out: Output) -> None:
-    """
-    Save output prevalence and incidence as a compressed npz file.
-    Key 'prevalence' will be a 3D array, of shape (T,P,C) -- just like it is in the Output object
-    Key 'incidence' will be a 3D array, of shape (T,P,E) -- just like it is in the Output object
-    """
-    np.savez(path, prevalence=out.prevalence, incidence=out.incidence)
-    # This can be loaded, for example as:
-    # with load("./path/to/my-output-file.npz") as file:
-    #     prev = file['prevalence']
-
-
-def save_csv(path: str, out: Output) -> None:
-    """
-    Save output prevalence and incidence as a csv file.
-    The data must be reshaped and labeled to fit a 2D format.
-    Columns are: tick index, population index, then each compartment and then each event in IPM-specific order; ex:
-    `t, p, c0, c1, c2, e0, e1, e2`
-    """
-    T, N, C, E = out.ctx.TNCE
-
-    # reshape to 2d: (T,P,C) -> (T*P,C) and (T,P,E) -> (T*P,E)
-    prv = np.reshape(out.prevalence, (T * N, C))
-    inc = np.reshape(out.incidence, (T * N, E))
-
-    # tick and pop index columns
-    t_indices = np.reshape(np.repeat(np.arange(T), N), (T * N, 1))
-    p_indices = np.reshape(np.tile(np.arange(N), T), (T * N, 1))
-
-    data = np.concatenate((t_indices, p_indices, prv, inc), axis=1)
-    c_labels = [f"c{i}" for i in range(C)]  # compartment headers
-    e_labels = [f"e{i}" for i in range(E)]  # event headers
-    header = "t,p," + ",".join(c_labels + e_labels)
-    np.savetxt(path, data, fmt="%d", delimiter=",",
-               header=header, comments="")
-
-
-# Exit codes:
-# - 0 success
-# - 1 invalid input
-# - 2 error loading models/files
 
 class RunInput(BaseModel):
     """Pydantic model describing the contents of the input toml file."""
@@ -190,19 +134,23 @@ class RunInput(BaseModel):
     mm: str | None = None
     geo: str | None = None
     start_date: date
-    duration: Duration
+    duration_days: int
     rng_seed: int | None = None
     init: dict[str, Any]
     params: dict[str, Any]
 
 
 def run(input_path: str,
-        engine_id: str | None,
         out_path: str | None,
         chart: str | None,
         profiling: bool,
         ignore_cache: bool) -> int:
     """CLI command handler: run a simulation."""
+
+    # Exit codes:
+    # - 0 success
+    # - 1 invalid input
+    # - 2 error loading models/files
 
     # Read input toml file.
 
@@ -217,20 +165,6 @@ def run(input_path: str,
         print(e)
         print(f"ERROR: unable to open input file ({input_path})")
         return 1  # invalid input
-
-    # Select engine.
-
-    if engine_id is None:
-        engine = None
-    else:
-        try:
-            engine = dict[str, type[MovementEngine]]({
-                'basic': BasicEngine,
-                'hypercube': HypercubeEngine,
-            })[engine_id]
-        except KeyError:
-            print(f"ERROR: Unknown engine: {engine_id}")
-            return 2  # invalid input
 
     # Configure initializer.
 
@@ -260,10 +194,9 @@ def run(input_path: str,
             else interactive_select("GEO", geo_library)
 
         print("Loading requirements:")
-        ipm_builder = load_model("IPM", ipm_name, ipm_library)
-        mm_builder = load_model_mm(mm_name)
+        ipm = load_model_ipm(ipm_name)
+        mm = load_model_mm(mm_name)
         geo = load_model_geo(geo_name, ignore_cache)
-
     except Exception as e:
         print(e)
         return 2  # error loading models
@@ -273,21 +206,20 @@ def run(input_path: str,
 
     # Create and run simulation.
 
-    start_date = run_input.start_date
-    end_date = start_date + run_input.duration.to_relativedelta()
-    duration_days = (end_date - start_date).days
+    time_frame = TimeFrame(run_input.start_date, run_input.duration_days)
+    params = normalize_params(run_input.params, geo, time_frame.duration_days)
 
-    configure_sim_logging(enabled=not profiling)
+    sim = StandardSimulation(ExecutionConfig(
+        geo, ipm, mm, params, time_frame, initializer,
+        rng=lambda: np.random.default_rng(run_input.rng_seed)))
 
-    sim = with_fancy_messaging(Simulation(geo, ipm_builder, mm_builder, engine))
+    if not profiling:
+        enable_logging()
 
-    rng = None if run_input.rng_seed is None \
-        else np.random.default_rng(run_input.rng_seed)
+    with sim_messaging(sim):
+        out = sim.run()
 
-    out = sim.run(run_input.params, start_date, duration_days, initializer, rng)
-
-    # Handle output.
-
+    # Draw charts (if specified).
     # NOTE: this method of chart handling is a placeholder implementation
     if chart is not None:
         chart_regex = re.compile(r"^([ep])(\d+)$")
@@ -300,16 +232,17 @@ def run(input_path: str,
             chart_idx = int(match.group(2))
 
             if chart_type == 'e':
-                if chart_idx < out.ctx.events:
-                    plot_event(out, chart_idx)
+                if chart_idx < out.dim.events:
+                    plots.plot_event(out, chart_idx)
                 else:
                     print("Unable to display chart: there are not enough events!")
             elif chart_type == 'p':
-                if chart_idx < out.ctx.nodes:
-                    plot_pop(out, chart_idx)
+                if chart_idx < out.dim.nodes:
+                    plots.plot_pop(out, chart_idx)
                 else:
                     print("Unable to display chart: there are not enough nodes!")
 
+    # Write output to file (if specified).
     if out_path is not None:
         if out_path.endswith(".npz"):
             print(f"Writing output to file: {out_path}")
@@ -322,3 +255,40 @@ def run(input_path: str,
 
     print("Done")
     return 0  # exit code: success
+
+
+def save_npz(path: str, out: Output) -> None:
+    """
+    Save output prevalence and incidence as a compressed npz file.
+    Key 'prevalence' will be a 3D array, of shape (T,P,C) -- just like it is in the Output object
+    Key 'incidence' will be a 3D array, of shape (T,P,E) -- just like it is in the Output object
+    """
+    np.savez(path, prevalence=out.prevalence, incidence=out.incidence)
+    # This can be loaded, for example as:
+    # with load("./path/to/my-output-file.npz") as file:
+    #     prev = file['prevalence']
+
+
+def save_csv(path: str, out: Output) -> None:
+    """
+    Save output prevalence and incidence as a csv file.
+    The data must be reshaped and labeled to fit a 2D format.
+    Columns are: tick index, population index, then each compartment and then each event in IPM-specific order; ex:
+    `t, p, c0, c1, c2, e0, e1, e2`
+    """
+    T, N, C, E = out.dim.TNCE
+
+    # reshape to 2d: (T,P,C) -> (T*P,C) and (T,P,E) -> (T*P,E)
+    prv = np.reshape(out.prevalence, (T * N, C))
+    inc = np.reshape(out.incidence, (T * N, E))
+
+    # tick and pop index columns
+    t_indices = np.reshape(np.repeat(np.arange(T), N), (T * N, 1))
+    p_indices = np.reshape(np.tile(np.arange(N), T), (T * N, 1))
+
+    data = np.concatenate((t_indices, p_indices, prv, inc), axis=1)
+    c_labels = [f"c{i}" for i in range(C)]  # compartment headers
+    e_labels = [f"e{i}" for i in range(E)]  # event headers
+    header = "t,p," + ",".join(c_labels + e_labels)
+    np.savetxt(path, data, fmt="%d", delimiter=",",
+               header=header, comments="")

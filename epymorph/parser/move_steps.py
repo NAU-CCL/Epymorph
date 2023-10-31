@@ -8,7 +8,10 @@ from epymorph.parser.common import field, integer, num_list, tag
 
 
 class MoveSteps(NamedTuple):
-    steps: list[float]
+    """The data model for a MoveSteps clause."""
+
+    step_lengths: list[float]
+    """The lengths of each tau step. This should sum to 1."""
 
 
 move_steps: P.ParserElement = tag('move-steps', [

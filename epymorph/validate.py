@@ -1,15 +1,17 @@
-from typing import Callable
+"""
+Implements the `validate` subcommand executed from __main__.
+"""
+from typing import Any, Callable
 
-from epymorph.movement.dynamic import check_movement_spec
+from epymorph.parser.movement import MovementSpec
 
 
 def validate_spec_file(file_path: str) -> int:
     """CLI command handler: check the validity of a specification file."""
 
-    # TODO: add validation logic for other spec files...
-    validation_func: Callable[[str], None]
+    validation_func: Callable[[str], Any]
     if file_path.endswith(".movement"):
-        validation_func = check_movement_spec
+        validation_func = MovementSpec.load
     # elif file_path.endswith(".geo"):
     #     ...
     # elif file_path.endswith(".ipm");
@@ -19,12 +21,13 @@ def validate_spec_file(file_path: str) -> int:
         return 1  # exit code: invalid spec file
 
     try:
-        with open(file_path, 'r') as file:
+        with open(file_path, 'r', encoding='utf-8') as file:
             contents = file.read()
         validation_func(contents)
         print(f"[✓] Valid specification: {file_path}")
         return 0  # exit code: success
     except OSError as e:
+        print(e)
         print(f"[✗] Unable to open file: {file_path}")
         return 2  # exit code: can't read file
     except Exception as e:

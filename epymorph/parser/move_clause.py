@@ -17,12 +17,13 @@ DayOfWeek = Literal['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 ALL_DAYS: list[DayOfWeek] = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 
 
-class Daily(NamedTuple):
+class DailyClause(NamedTuple):
+    """The data model for a daily movement clause."""
     days: list[DayOfWeek]
     leave_step: int
     duration: Duration
     return_step: int
-    f: str
+    function: str
 
 
 daily: P.ParserElement = tag('mtype', [
@@ -30,12 +31,13 @@ daily: P.ParserElement = tag('mtype', [
     field('leave', integer('leave')),
     field('duration', duration('duration')),
     field('return', integer('return')),
-    field('function', fn_body('f'))
+    field('function', fn_body('function'))
 ])
 
 
 @daily.set_parse_action
 def marshal_daily(results: P.ParseResults):
+    """Convert a pyparsing result to a Daily."""
     fields = results.as_dict()
     days = fields['days']
     if not isinstance(days, list):
@@ -45,9 +47,12 @@ def marshal_daily(results: P.ParseResults):
         days = ALL_DAYS.copy()
     else:
         days = cast(list[DayOfWeek], days)
-    return Daily(
+    return DailyClause(
         days,
-        fields['leave'],
+        fields['leave'] - 1,
         fields['duration'][0],
-        fields['return'],
-        fields['f'])
+        fields['return'] - 1,
+        fields['function'])
+
+
+MovementClause = DailyClause

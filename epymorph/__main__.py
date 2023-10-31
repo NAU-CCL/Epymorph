@@ -41,9 +41,6 @@ def build_cli() -> ArgumentParser:
             'input',
             help="the path to an input toml file")
         p.add_argument(
-            '-e', '--engine',
-            help="(optional) the id of a runtime engine to use")
-        p.add_argument(
             '-o', '--out',
             help="(optional) path to an output file to save the simulated prevalence data; specify either a .csv or .npz file")
         p.add_argument(
@@ -59,7 +56,7 @@ def build_cli() -> ArgumentParser:
         )
 
         def handler(args):
-            return handle_run(args.input, args.engine, args.out, args.chart, args.profile, args.ignore_cache)
+            return handle_run(args.input, args.out, args.chart, args.profile, args.ignore_cache)
         p.set_defaults(handler=handler)
     define_run()
 
