@@ -321,4 +321,4 @@ def run(input_path: str,
             print(f"Unknown file format specified for output: {out_path}")
 
     print("Done")
-    return 0  # exit code: success
+    return out  # exit code: success

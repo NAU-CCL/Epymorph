@@ -10,8 +10,8 @@ from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
 from epymorph.clock import Clock
-from epymorph.context import SimContext, SimDType, normalize_lists
-from epymorph.geo.geo import Geo
+from epymorph.context import SimContext, SimDType, normalize_params
+from epymorph.geo import Geo
 from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.basic import BasicEngine
@@ -161,7 +161,7 @@ class Simulation:
             compartments=self.ipm_builder.compartments,
             compartment_tags=self.ipm_builder.compartment_tags(),
             events=self.ipm_builder.events,
-            param=normalize_lists(param),
+            param=normalize_params(param, self.geo.nodes, duration_days),
             clock=Clock(start_date, duration_days, self.mvm_builder.taus),
             rng=np.random.default_rng() if rng is None else rng
         )

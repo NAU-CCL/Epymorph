@@ -4,6 +4,8 @@ the SimContext structure is here to contain that info and avoid circular depende
 """
 from __future__ import annotations
 
+import inspect
+import string
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,6 +15,8 @@ from numpy.typing import DTypeLike, NDArray
 from epymorph.clock import Clock
 from epymorph.data_shape import SimDimension
 from epymorph.geo.geo import Geo
+from epymorph.util import (compile_function, has_function_structure,
+                           parse_function)
 
 SimDType = np.int64
 """
@@ -56,6 +60,75 @@ def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = 
     return ps
 
 
+def normalize_params(data: dict[str, Any], compartments: int, duration: int, dtypes: dict[str, DTypeLike] | None = None) -> dict[str, NDArray]:
+    """
+    Normalize a dictionary of values so that all lists are replaced with numpy arrays.
+
+    Args:
+        data: A dictionary of values to normalize.
+        compartments: The number of compartments in the system.
+        duration: The duration of the simulation.
+        dtypes: A dictionary of data types for the parameters.
+
+    Returns:
+        A dictionary of numpy arrays representing the normalized parameters.
+    """
+    if dtypes is None:
+        dtypes = {}
+
+    parameter_arrays = dict[str, NDArray]()
+
+    for key, value in data.items():
+
+        dt = dtypes.get(key, None)
+
+        if callable(value):
+            parameter_arrays[key] = evaluate_function(value, compartments, duration, dt)
+        elif isinstance(value, str) and has_function_structure(str(value)):
+            function_definition = parse_function(value)
+            compiled_function = compile_function(function_definition, {})
+            parameter_arrays[key] = evaluate_function(
+                compiled_function, compartments, duration, dt)
+        else:
+            parameter_arrays[key] = np.asarray(value, dtype=dtypes.get(key, None))
+
+    return parameter_arrays
+
+
+def evaluate_function(function: callable, compartments: int, duration: int, dt: DTypeLike | None = None) -> NDArray:  # type: ignore
+    """
+    Evaluate a function and return the result as a numpy array.
+
+    Args:
+        function: The function to evaluate.
+        compartments: The number of compartments in the system.
+        duration: The duration of the simulation.
+        dt: The data type for the result of the function evaluation.
+
+    Returns:
+        A numpy array representing the result of the evaluation.
+    """
+
+    signature = tuple(inspect.signature(function).parameters.keys())
+
+    match signature:
+        case ():
+            result = function()
+        case ('t', ):
+            result = [function(d) for d in range(duration)]
+        case ('n', ):
+            result = [function(c) for c in range(compartments)]
+        case ('t', 'n'):
+            result = [[function(d, c) for d in range(duration)]
+                      for c in range(compartments)]
+        case ('n', 't'):
+            result = [[function(d, c) for c in range(compartments)]
+                      for d in range(duration)]
+        case _:
+            raise ValueError(f"Unsupported function signature for function: {function}")
+
+    return np.asarray(result, dtype=dt)
+
 # SimContext
 
 
@@ -69,7 +142,7 @@ class SimContext(SimDimension):
     compartment_tags: list[list[str]]
     events: int
     # run info
-    param: dict[str, Any]
+    param: dict[str, NDArray]
     clock: Clock
     rng: np.random.Generator
     # denormalized info
