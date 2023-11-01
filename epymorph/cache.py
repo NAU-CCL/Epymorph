@@ -1,7 +1,7 @@
 import os
 
 from epymorph.geo import cache
-from epymorph.geo.static import StaticGeoFileOps
+from epymorph.geo.static import StaticGeoFileOps as F
 
 # Exit codes:
 # - 0 success
@@ -12,7 +12,7 @@ from epymorph.geo.static import StaticGeoFileOps
 def fetch(geo_name: str, force: bool) -> int:
     """CLI command handler: cache dynamic geo data."""
     # cache specified geo
-    filepath = cache.CACHE_PATH / StaticGeoFileOps.to_archive_filename(geo_name)
+    filepath = cache.CACHE_PATH / F.to_archive_filename(geo_name)
     choice = 'y'
     if os.path.exists(filepath) and not force:
         choice = input(f'{geo_name} is already cached, overwrite? [y/n]')
