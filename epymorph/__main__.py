@@ -3,10 +3,10 @@ import sys
 from argparse import ArgumentParser
 from importlib.metadata import version
 
-from epymorph.cache import cache_clear_CLI as handle_clear
-from epymorph.cache import cache_fetch_CLI as handle_fetch
-from epymorph.cache import cache_list_CLI as handle_list
-from epymorph.cache import cache_remove_CLI as handle_remove
+from epymorph.cache import clear as handle_clear
+from epymorph.cache import fetch as handle_fetch
+from epymorph.cache import list as handle_list
+from epymorph.cache import remove as handle_remove
 from epymorph.prepare import prepare_run_toml as handle_prepare
 from epymorph.run import run as handle_run
 from epymorph.validate import validate_spec_file as handle_validate

@@ -53,6 +53,12 @@ class TimePeriod(ABC):
 
 
 @dataclass(frozen=True)
+class DateRange(TimePeriod):
+    start_date: date
+    end_date: date
+
+
+@dataclass(frozen=True)
 class Year(TimePeriod):
     """TimePeriod representing a specific year."""
     year: int
