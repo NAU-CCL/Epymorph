@@ -42,6 +42,7 @@ dependencies = [
   "pygris",
   "shapely",
   "openpyxl",
+  "platformdirs",
 ]
 
 [project.optional-dependencies]
