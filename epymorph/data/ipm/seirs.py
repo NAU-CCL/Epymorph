@@ -18,22 +18,24 @@ def load() -> IpmBuilder:
             compartment('R'),
         ],
         attributes=[
-            param('beta', shape=Shapes.TxN),  # infectivity
+            param('beta', shape=Shapes.TxN),   # infectivity
             param('sigma', shape=Shapes.TxN),  # progression from exposed to infected
-            param('gamma', shape=Shapes.TxN)  # progression from infected to recovered
+            param('gamma', shape=Shapes.TxN),  # progression from infected to recovered
+            param('xi', shape=Shapes.TxN)      # progression from recoved to susceptible
         ])
 
-    [S,E,I, R] = symbols.compartment_symbols
-    [β, ξ, γ] = symbols.attribute_symbols
+    [S, E, I, R] = symbols.compartment_symbols
+    [β, σ, γ, ξ] = symbols.attribute_symbols
 
     N = Max(1, S + E + I + R)
 
-    seir = create_model(
+    seirs = create_model(
         symbols=symbols,
         transitions=[
             edge(S, E, rate=β * S * I / N),
-            edge(E, I, rate=ξ * E),
-            edge(I, R, rate=γ * I)
+            edge(E, I, rate=σ * E),
+            edge(I, R, rate=γ * I),
+            edge(R, S, rate=ξ * R)
         ])
 
-    return CompartmentModelIpmBuilder(seir)
+    return CompartmentModelIpmBuilder(seirs)

@@ -8,8 +8,8 @@ from typing import Callable, TypeVar, cast
 from epymorph.data.geo.single_pop import load as geo_single_pop_load
 from epymorph.data.ipm.no import load as ipm_no_load
 from epymorph.data.ipm.pei import load as ipm_pei_load
+from epymorph.data.ipm.seirs import load as ipm_seirs_load
 from epymorph.data.ipm.sirh import load as ipm_sirh_load
-from epymorph.data.ipm.seir import load as ipm_seir_load
 from epymorph.data.ipm.sirs import load as ipm_sirs_load
 from epymorph.data.ipm.sparsemod import load as ipm_sparsemod_load
 from epymorph.geo import Geo, GEOBuilder, load_compressed_geo
@@ -64,7 +64,7 @@ ipm_library: Library[IpmBuilder] = as_sorted_dict({
     "pei": ipm_pei_load,
     "sirs": ipm_sirs_load,
     "sirh": ipm_sirh_load,
-    "seir": ipm_seir_load,
+    "seirs": ipm_seirs_load,
     "sparsemod": ipm_sparsemod_load
 })
 """All epymorph intra-population models (by id)."""
