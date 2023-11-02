@@ -10,10 +10,14 @@ from epymorph.geo.util import convert_to_static_geo
 CACHE_PATH = user_cache_path(appname='epymorph', ensure_exists=True)
 
 
-def fetch(geo_name: str) -> bool:
+class GeoCacheException(Exception):
+    """An exception raised when a geo cache operation fails."""
+
+
+def fetch(geo_name: str) -> None:
     """
     Caches all attribute data for a dynamic geo from the library.
-    Returns true if geo fetched or false if spec not found.
+    Raises GeoCacheException if spec not found.
     """
     filepath = CACHE_PATH / F.to_archive_filename(geo_name)
     geo_load = geo_library_dynamic.get(geo_name)
@@ -21,30 +25,27 @@ def fetch(geo_name: str) -> bool:
         geo = geo_load()
         static_geo = convert_to_static_geo(geo)
         static_geo.save(filepath)
-        return True
     else:
-        return False
+        raise GeoCacheException(f'spec file for {geo_name} not found.')
 
 
-def remove(geo_name: str) -> bool:
+def remove(geo_name: str) -> None:
     """
     Removes a geo's data from the cache.
-    Returns true if geo removed or false if not found.
+    Raises GeoCacheException if geo not found in cache.
     """
     filepath = CACHE_PATH / F.to_archive_filename(geo_name)
     if not os.path.exists(filepath):
-        return False
+        msg = f'{geo_name} not found in cache, check your spelling or use the list subcommand to view all currently cached geos'
+        raise GeoCacheException(msg)
     else:
         os.remove(filepath)
-        return True
 
 
-def list():
-    """Lists the names of all currently cached geos."""
-    files = os.listdir(CACHE_PATH)
-    for file in files:
-        print(
-            f"* {F.to_geo_name(file)} ({format_size(os.path.getsize(CACHE_PATH / file))})")
+def list_geos() -> list[tuple[str, int]]:
+    """Return a list of all cached geos, including name and file size."""
+    return [(F.to_geo_name(file), os.path.getsize(CACHE_PATH / file))
+            for file in os.listdir(CACHE_PATH)]
 
 
 def clear():

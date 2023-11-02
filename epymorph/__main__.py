@@ -5,7 +5,7 @@ from importlib.metadata import version
 
 from epymorph.cache import clear as handle_clear
 from epymorph.cache import fetch as handle_fetch
-from epymorph.cache import list as handle_list
+from epymorph.cache import print_geos as handle_list
 from epymorph.cache import remove as handle_remove
 from epymorph.prepare import prepare_run_toml as handle_prepare
 from epymorph.run import run as handle_run
