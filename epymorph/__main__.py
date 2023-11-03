@@ -94,14 +94,14 @@ def build_cli() -> ArgumentParser:
     def define_cache():
         p = command_parser.add_parser(
             'cache',
-            help='cache Geos and access Geo cache information')
+            help='cache geos and access geo cache information')
         sp = p.add_subparsers(
             title='cache_commands',
             dest='cache_commands',
             required=True)
         fetch = sp.add_parser(
             'fetch',
-            help='fetch and cache data for a Geo')
+            help='fetch and cache data for a geo')
         fetch.add_argument(
             'geo',
             type=str,
@@ -112,14 +112,14 @@ def build_cli() -> ArgumentParser:
             help='(optional) include this flag to force an override of previously cached data')
         remove = sp.add_parser(
             'remove',
-            help='remove a Geo\'s data from the cache')
+            help='remove a geo\'s data from the cache')
         remove.add_argument(
             'geo',
             type=str,
-            help='the name of a Geo from the library')
+            help='the name of a geo from the library')
         cache_list = sp.add_parser(
             'list',
-            help='list the names of all currently cached Geos')
+            help='list the names of all currently cached geos')
         clear = sp.add_parser(
             'clear',
             help='clear the cache')

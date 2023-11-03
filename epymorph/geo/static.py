@@ -9,6 +9,7 @@ import io
 import os
 import tarfile
 from importlib.abc import Traversable
+from pathlib import Path
 from typing import Iterator, cast
 
 import jsonpickle
@@ -116,6 +117,18 @@ class StaticGeoFileOps:
         Iterates through the given directory non-recursively, returning all archived geos.
         Each item in the returned iterator is a tuple containing:
         1. the Traversable instance for the file itself, and 
+        2. the geo's ID.
+        """
+        return ((f, StaticGeoFileOps.to_geo_name(f.name))
+                for f in directory.iterdir()
+                if f.is_file() and f.name.endswith('.geo.tar'))
+
+    @staticmethod
+    def iterate_dir_path(directory: Path) -> Iterator[tuple[Path, str]]:
+        """
+        Iterates through the given directory non-recursively, returning all archived geos.
+        Each item in the returned iterator is a tuple containing:
+        1. the Path for the file itself, and 
         2. the geo's ID.
         """
         return ((f, StaticGeoFileOps.to_geo_name(f.name))

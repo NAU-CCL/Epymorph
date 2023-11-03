@@ -35,23 +35,23 @@ def remove(geo_name: str) -> None:
     Raises GeoCacheException if geo not found in cache.
     """
     filepath = CACHE_PATH / F.to_archive_filename(geo_name)
-    if not os.path.exists(filepath):
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    else:
         msg = f'{geo_name} not found in cache, check your spelling or use the list subcommand to view all currently cached geos'
         raise GeoCacheException(msg)
-    else:
-        os.remove(filepath)
 
 
 def list_geos() -> list[tuple[str, int]]:
     """Return a list of all cached geos, including name and file size."""
-    return [(F.to_geo_name(file), os.path.getsize(CACHE_PATH / file))
-            for file in os.listdir(CACHE_PATH)]
+    return [(name, os.path.getsize(CACHE_PATH / F.to_archive_filename(name)))
+            for file, name in F.iterate_dir_path(CACHE_PATH)]
 
 
 def clear():
     """Clears the cache of all geo data."""
-    for file in os.listdir(CACHE_PATH):
-        os.remove(CACHE_PATH / file)
+    for file in F.iterate_dir_path(CACHE_PATH):
+        os.remove(CACHE_PATH / file[0])
 
 
 def swap_with_cache(dynamic_geo: Geo, geo_name: str) -> Geo:
@@ -81,6 +81,7 @@ def format_size(size: int) -> str:
 
 
 def get_total_size() -> str:
+    """Returns the total size of all files in the geo cache using 1024-based unit representation."""
     files = os.listdir(CACHE_PATH)
     total_size = 0
     for file in files:
