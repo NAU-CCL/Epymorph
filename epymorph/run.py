@@ -16,7 +16,8 @@ from pydantic import BaseModel, ValidationError
 from epymorph.context import normalize_lists
 from epymorph.data import (Library, geo_library, ipm_library, load_mm,
                            mm_library)
-from epymorph.geo.cache import swap_with_cache
+from epymorph.geo.cache import load_from_cache
+from epymorph.geo.geo import Geo
 from epymorph.initializer import initializer_library
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementBuilder, MovementEngine
@@ -39,6 +40,18 @@ def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
 
 
 ModelT = TypeVar('ModelT')
+
+
+def load_model_geo(name: str, ignore_cache: bool) -> Geo:
+    geo = None
+    if not ignore_cache:
+        geo = load_from_cache(name)
+    if geo is None:
+        return load_model("GEO", name, geo_library)
+    else:
+        text = f"GEO ({name})"
+        print(f"[✓] {text}")
+        return geo
 
 
 def load_model_mm(name: str) -> MovementBuilder:
@@ -249,9 +262,8 @@ def run(input_path: str,
         print("Loading requirements:")
         ipm_builder = load_model("IPM", ipm_name, ipm_library)
         mm_builder = load_model_mm(mm_name)
-        geo = load_model("Geo", geo_name, geo_library)
-        if not ignore_cache:
-            geo = swap_with_cache(geo, geo_name)
+        geo = load_model_geo(geo_name, ignore_cache)
+
     except Exception as e:
         print(e)
         return 2  # error loading models

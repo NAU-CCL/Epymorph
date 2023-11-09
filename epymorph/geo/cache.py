@@ -54,11 +54,11 @@ def clear():
         os.remove(CACHE_PATH / file[0])
 
 
-def swap_with_cache(dynamic_geo: Geo, geo_name: str) -> Geo:
+def load_from_cache(geo_name: str) -> Geo | None:
     """Checks whether a dynamic geo has already been cached and returns it if so."""
     file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     if not os.path.exists(file_path):
-        return dynamic_geo
+        return None
     else:
         return F.load_from_archive(file_path)
 

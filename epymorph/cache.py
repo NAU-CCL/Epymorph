@@ -39,11 +39,12 @@ def remove(geo_name: str) -> int:
 
 def print_geos() -> int:
     """CLI command handler: print geo cache information"""
-    num_geos = len(os.listdir(cache.CACHE_PATH))
+    geos = cache.list_geos()
+    num_geos = len(geos)
     if num_geos > 0:
         print(
             f'epymorph geo cache contains {num_geos} geos totaling {cache.get_total_size()} ({cache.CACHE_PATH})')
-        for (name, file_size) in cache.list_geos():
+        for (name, file_size) in geos:
             print(f"* {name} ({cache.format_size(file_size)})")
     else:
         print(f'epymorph geo cache is empty ({cache.CACHE_PATH})')
