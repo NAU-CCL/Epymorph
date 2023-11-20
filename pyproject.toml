@@ -8,6 +8,8 @@ authors = [
   { name = "Frank Burkhart", email = "jfb84@nau.edu" },
   { name = "Alex Nez", email = "an974@nau.edu" },
   { name = "Trevor Johnson", email = "tkj44@nau.edu" },
+  { name = "Jarom Craghead", email = "jc4885@nau.edu" },
+  { name = "Ajay Shyam Pasam", email = "ap3535@nau.edu" },
 ]
 
 description = "EpiMoRPH disease modeling"
