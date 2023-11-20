@@ -1,19 +1,39 @@
 # devlog
 
-This folder is a handy place to put Jupyter notebooks or other documents which help to demonstrate the state of the project at a particular point in time.
+This folder is a handy place to put Jupyter notebooks or other documents which help to demonstrate the state of the project at a particular point in time. Because these are point-in-time demos, there's no guarantee they will continue to be runnable as changes are made to the project. That's expected. (If you really need to run a Notebook in its original context, you can git-checkout back to the commit that added the Notebook and run it there; caveat emptor).
 
-Because these are point-in-time demos, there's no guarantee they will continue to be runnable as changes are made to the project. That's expected. If you really need to run a Notebook in its original context, you should be able to git-checkout back to the git commit that added the Notebook and run it there (caveat emptor).
+**Notable Devlogs:** Some devlogs are more than mere experiments, acting like documentation -- demoing new features of the project or novel approaches to problem solving. These devlogs are check-marked as _Maintained_ in the index below (indicating that they are intended to be kept up to date as the project changes).
 
-## Notable devlogs
+## Devlog Index
 
-Some devlogs are experiments, but some act like documentation of a sort -- demoing new features of the project. Here's an index of the most historically interesting devlogs.
-
-- **2023-06-30**: demos how to write IPMs
-- **2023-07-12**, **2023-07-07**, **2023-07-06**: are scripts to generate GEOs, sometimes loading data from third-party APIs
-- **2023-07-13**: runs a compatibility matrix test to determine which IPM/MM/GEO combos run successfully (and how long they take to run)
-- **2023-08-17**: demos simulation Initializer functions for establishing the initial compartments of a simulation
-- **2023-08-23**: demos how parameter broadcasting can allow users to provide multiple shapes of data for simulation parameters
-- **2023-10-05**: demos creating an IPM with exogenous inputs (births and deaths external to the model)
+| Filename | Author | Maintained? | Description |
+| --- | --- | --- | --- |
+| 2023-05-03.ipynb | Tyler | | An obsolete demo, running different movement models with the Pei IPM/Geo. |
+| 2023-05-04.ipynb | Tyler | | An experiment in running epymorph simulations in parallel using `multiprocessing`.
+| 2023-05-16.ipynb | Tyler | | An attempt to simplify project organization by turning then-hard-coded examples into Jupyter notebooks. |
+| 2023-05-17.ipynb | Tyler | | Demo of the newly-added .toml file input scheme for providing parameter values for CLI simulations. |
+| 2023-05-31-mm.ipynb | Alex | | Movement model experimentation. |
+| 2023-05-31-sirh.ipynb | Alex | | SIRH IPM experimentation. |
+| 2023-06-01-pei-example.ipynb | Frank | | Demonstration of the 'pei' movement model. |
+| 2023-06-01-sparsemod-example.ipynb | Frank | | Demonstration of the 'sparsemod' movement model. |
+| 2023-06-28.ipynb | Tyler | | Proving validity of the newly-added declarative compartment model IPM implementation. |
+| 2023-06-30.ipynb | Tyler | ✓ | Demonstrating the newly-added declarative compartment model IPM system. (This is a good reference for building custom IPMs, so we're keeping it current.) |
+| 2023-07-06.ipynb | Tyler | ✓ | Creates the Pei Geo. (Maintained until such a time as the ADRIO system can replace it.) |
+| 2023-07-07.ipynb | Tyler | ✓ | Creates the 2015 US States and US Counties Geos. (Maintained until such a time as the ADRIO system can replace them.) |
+| 2023-07-12.ipynb | Tyler | ✓ | Creates the 2019 Maricopa County CBGs Geo. (Maintained until such a time as the ADRIO system can replace it.) |
+| 2023-07-13.ipynb | Tyler | ✓ | Implements a compatibility matrix test: are all possible combinations of IPM/MM/GEO valid? |
+| 2023-07-14.ipynb | Tyler | | Demonstrates filtering a geo down to a subset of its nodes. (While the motivation to do this still exists, recent changes have made this exact approach obsolete.) |
+| 2023-07-24.ipynb | Tyler | | Experiments with adapting an IPM by "attaching" a function to an IPM parameter. This approach has been superseded by a design for direct support for functional parameters. |
+| 2023-08-11.ipynb | Tyler | | Demonstrates performance differences between the Basic and Hypercube movement engines. A pending refactor will make the concept of movement engines obsolete. |
+| 2023-08-17.ipynb | Tyler | ✓ | Demonstrates the newly-added Initializer functions, including library examples and custom initializers. |
+| 2023-08-23.ipynb | Tyler | ✓ | Describes what IPM attribute broadcasting is and why it's useful. Introduces our concept of data shapes. |
+| 2023-09-22-adrio-demo.ipynb | Trevor | | Demonstrates the newly-added ADRIOs functionality by fetching data from the US Census ACS5. |
+| 2023-09-29.ipynb | Tyler | | Experiments in representing exogenous births and deaths in the existing compartment IPM system. |
+| 2023-10-05.ipynb | Tyler | | Demonstrates the newly-added first-class support for exogenous births and deaths in the compartment IPM system. |
+| 2023-10-10.ipynb | Tyler | | A demo of various epymorph workflows in a Notebook environment, designed for a live presentation. |
+| 2023-10-26.ipynb | Tyler | | Describes a major Geo system refactor and introduces new systems. |
+| 2023-11-03-seirs-example.ipynb | Ajay | | Demonstrates the building and running of an SEIRS model. |
+| 2023-11-20-adrio-phase-2-demo.ipynb | Trevor | | Demonstrates the refactor work on DynamicGeos and the ADRIO system, and geo cache handling. |
 
 ## Contributing
 
