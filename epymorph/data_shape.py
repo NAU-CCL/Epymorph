@@ -10,7 +10,29 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.context import SimDimension
+
+class SimDimension:
+    """The dimensionality of a simulation."""
+
+    nodes: int
+    """How many nodes are there in the GEO?"""
+    compartments: int
+    """How many disease compartments are in the IPM?"""
+    events: int
+    """How many transition events are in the IPM?"""
+    ticks: int
+    """How many ticks are we going to run the simulation for?"""
+    days: int
+    """How many days are we going to run the simulation for?"""
+
+    TNCE: tuple[int, int, int, int]
+    """
+    The critical dimensionalities of the simulation, for ease of unpacking.
+    T: number of ticks;
+    N: number of geo nodes;
+    C: number of IPM compartments;
+    E: number of IPM events (transitions)
+    """
 
 
 class DataShape(ABC):
@@ -24,6 +46,10 @@ class DataShape(ABC):
     def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         """Adapt the given value to this shape, if possible."""
 
+    @abstractmethod
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        """Return a concrete shape as a tuple, using the given number of nodes and days to fill in for N and T."""
+
 
 @dataclass(frozen=True)
 class Scalar(DataShape):
@@ -36,6 +62,9 @@ class Scalar(DataShape):
         if not self.matches(dim, value, allow_broadcast):
             return None
         return value
+
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return ()
 
     def __str__(self):
         return "S"
@@ -59,6 +88,9 @@ class Time(DataShape):
             return np.broadcast_to(value, shape=(dim.days,))
         return None
 
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return (days,)
+
     def __str__(self):
         return "T"
 
@@ -80,6 +112,35 @@ class Node(DataShape):
         if allow_broadcast and value.shape == tuple():
             return np.broadcast_to(value, shape=(dim.nodes,))
         return None
+
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return (nodes,)
+
+    def __str__(self):
+        return "N"
+
+
+@dataclass(frozen=True)
+class NodeAndNode(DataShape):
+    """An array of size NxN."""
+
+    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+        if value.shape == (dim.nodes, dim.nodes):
+            return True
+        if allow_broadcast:
+            if value.shape == tuple():
+                return True
+        return False
+
+    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+        if value.shape == (dim.nodes, dim.nodes):
+            return value
+        if allow_broadcast and value.shape == tuple():
+            return np.broadcast_to(value, shape=(dim.nodes, dim.nodes))
+        return None
+
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return (nodes, nodes)
 
     def __str__(self):
         return "N"
@@ -113,6 +174,9 @@ class TimeAndNode(DataShape):
                 return np.broadcast_to(value[:dim.days, np.newaxis], shape=(dim.days, dim.nodes))
         return None
 
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return (days, nodes)
+
     def __str__(self):
         return "TxN"
 
@@ -136,6 +200,14 @@ class Arbitrary(DataShape):
         if len(value.shape) == 1 and value.shape[0] > self.index:
             return value
         return None
+
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        # for arbitrary, assume "index" represents the length
+        # this is a bit odd, but arises because we need shapes in two subtly different situations:
+        # 1. in the MM/IPM to "pull" specific attributes, and 2. in the GEO to define available attributes
+        # The GEO defines what it has; while the MM/IPM must slice the available data for its needs.
+        # The MM/IPM usage is more like a selection than a shape... maybe we should be using Slice for that...
+        return (self.index,)
 
     def __str__(self):
         return f"A({self.index})"
@@ -169,6 +241,9 @@ class TimeAndArbitrary(DataShape):
                 return np.broadcast_to(value, shape=(dim.days, a))
         return None
 
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return (days, self.index)
+
     def __str__(self):
         return f"TxA({self.index})"
 
@@ -200,6 +275,9 @@ class NodeAndArbitrary(DataShape):
             if len(value.shape) == 1 and a > self.index:
                 return np.broadcast_to(value, shape=(dim.nodes, a))
         return None
+
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return (nodes, self.index)
 
     def __str__(self):
         return f"NxA({self.index})"
@@ -241,6 +319,9 @@ class TimeAndNodeAndArbitrary(DataShape):
                 return np.broadcast_to(value[:dim.days, np.newaxis, :], shape=(dim.days, dim.nodes, a))
         return None
 
+    def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
+        return (days, nodes, self.index)
+
     def __str__(self):
         return f"TxNxA({self.index})"
 
@@ -252,6 +333,7 @@ class Shapes:
     S = Scalar()
     T = Time()
     N = Node()
+    NxN = NodeAndNode()
     TxN = TimeAndNode()
     A = Arbitrary
     TxA = TimeAndArbitrary
@@ -286,6 +368,8 @@ def parse_shape(shape: str) -> DataShape:
             return Shapes.T
         case "N":
             return Shapes.N
+        case "NxN":
+            return Shapes.NxN
         case "TxN":
             return Shapes.TxN
         # blank or trailing 'x' means there's an index at the end -> Arbitrary

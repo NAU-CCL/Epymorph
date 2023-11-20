@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable
@@ -73,7 +72,7 @@ class GeoDef(AttributeDef):
     """An attribute drawn from the Geo Model."""
 
     def get_value(self, ctx: SimContext) -> NDArray:
-        if not self.attribute_name in ctx.geo:
+        if not self.attribute_name in ctx.geo.spec.attribute_map:
             msg = f"Missing geo attribute '{self.attribute_name}'"
             raise AttributeException(msg)
         return ctx.geo[self.attribute_name]
@@ -128,16 +127,7 @@ AttributeGetter = Callable[[Location, Tick], int | float | str]
 def compile_getter(ctx: SimContext, attr: AttributeDef) -> AttributeGetter:
     """Create an accessor lambda for the given attribute and context."""
 
-    data = attr.shape.adapt(
-        ctx,
-        attr.get_value(ctx),
-        attr.allow_broadcast
-    )
-
-    if data is None:
-        # This should be caught during the verification step, but just in case.
-        msg = f"Attribute '{attr.attribute_name}' cannot broadcast to the required shape."
-        raise AttributeException(msg)
+    data = attr.get_adapted(ctx)
 
     match attr.shape:
         case Scalar():
@@ -158,18 +148,3 @@ def compile_getter(ctx: SimContext, attr: AttributeDef) -> AttributeGetter:
             return lambda loc, tick: data[tick.day, loc.get_index(), a]
         case _:
             raise ValueError(f"Unsupported shape: {attr.shape}")
-
-
-def adapt_context(ctx: SimContext, attributes: list[AttributeDef]) -> SimContext:
-    """
-    Adapt the given SimContext's geo and params data so all are compatible 
-    with the expected list of attributes.
-    """
-    ps = dict[str, NDArray]()
-    gs = dict[str, NDArray]()
-    for attr in attributes:
-        if isinstance(attr, GeoDef):
-            gs[attr.attribute_name] = attr.get_adapted(ctx)
-        elif isinstance(attr, ParamDef):
-            ps[attr.attribute_name] = attr.get_adapted(ctx)
-    return dataclasses.replace(ctx, param=ps, geo=gs)

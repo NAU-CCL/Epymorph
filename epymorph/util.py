@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+from inspect import isbuiltin
 from typing import (Any, Callable, Generic, Iterable, Literal, OrderedDict,
                     TypeGuard, TypeVar)
 
@@ -84,6 +85,27 @@ K, V = TypeVar('K'), TypeVar('V')
 def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
     """Returns a sorted OrderedDict of the given dict."""
     return OrderedDict(sorted(x.items()))
+
+
+class MemoDict(dict[K, V]):
+    """
+    A dict implementation which will call a factory function when the user attempts to access
+    a key which is currently not in the dict.
+
+    This varies slightly from `defaultdict`, which uses a factory function without the ability
+    to pass the requested key.
+    """
+
+    _factory: Callable[[K], V]
+
+    def __init__(self, factory: Callable[[K], V]):
+        super().__init__()
+        self._factory = factory
+
+    def __missing__(self, key: K) -> V:
+        value = self._factory(key)
+        self[key] = value
+        return value
 
 
 # numpy utilities
@@ -173,7 +195,20 @@ def is_square(arr: NDArray) -> bool:
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
 
 
-_duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
+def shape_matches(arr: NDArray, expected: tuple[int | Literal['?'], ...]) -> bool:
+    """
+    Does the shape of the given array match this expression?
+    Shape expressions are a tuple where each dimension is either an integer
+    or a '?' character to signify any length is allowed.
+    """
+    if len(arr.shape) != len(expected):
+        return False
+    for actual, exp in zip(arr.shape, expected):
+        if exp == '?':
+            continue
+        if exp != actual:
+            return False
+    return True
 
 
 class NumpyTypeError(Exception):
@@ -187,6 +222,11 @@ DTLike = type[DT]
 """(Some) of the things that can be coerced as a numpy dtype."""
 
 
+def dtype_name(d: np.dtype) -> str:
+    """Tries to return the most-human-readable name for a numpy dtype."""
+    return d.name if d.isbuiltin else str(d)
+
+
 def check_ndarray(
     value: Any,
     dtype: DTLike[DT] | list[DTLike[DT]] | None = None,
@@ -198,8 +238,10 @@ def check_ndarray(
     (If you pass a list of dtypes or shapes, they will be matched as though combined with an "or".)
     Type-guards if true, raises a NumpyTypeError if false.
     """
+    if value is None:
+        raise NumpyTypeError('Value is None.')
     if not isinstance(value, np.ndarray):
-        raise NumpyTypeError("Not a numpy array.")
+        raise NumpyTypeError('Not a numpy array.')
     if shape is not None:
         shape = as_list(shape)
         if not value.shape in shape:
@@ -209,7 +251,11 @@ def check_ndarray(
         npdtypes = [np.dtype(x) for x in as_list(dtype)]
         is_subtype = map(lambda x: np.issubdtype(value.dtype, x), npdtypes)
         if not any(is_subtype):
-            msg = f"Not a numpy dtype match; got {value.dtype}, required {npdtypes}"
+            if len(npdtypes) == 1:
+                dtype_names = dtype_name(npdtypes[0])
+            else:
+                dtype_names = f"one of ({', '.join(map(dtype_name, npdtypes))})"
+            msg = f"Not a numpy dtype match; got {value.dtype}, required {dtype_names}"
             raise NumpyTypeError(msg)
     if dimensions is not None:
         dimensions = as_list(dimensions)
@@ -220,6 +266,8 @@ def check_ndarray(
 
 
 # custom pydantic types
+
+_duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
 
 
 class Duration(BaseModel):

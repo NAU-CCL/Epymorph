@@ -16,6 +16,8 @@ from pydantic import BaseModel, ValidationError
 from epymorph.context import normalize_lists
 from epymorph.data import (Library, geo_library, ipm_library, load_mm,
                            mm_library)
+from epymorph.geo.cache import load_from_cache
+from epymorph.geo.geo import Geo
 from epymorph.initializer import initializer_library
 from epymorph.movement.basic import BasicEngine
 from epymorph.movement.engine import MovementBuilder, MovementEngine
@@ -38,6 +40,18 @@ def interactive_select(lib_name: str, lib: dict[str, Any]) -> str:
 
 
 ModelT = TypeVar('ModelT')
+
+
+def load_model_geo(name: str, ignore_cache: bool) -> Geo:
+    geo = None
+    if not ignore_cache:
+        geo = load_from_cache(name)
+    if geo is None:
+        return load_model("GEO", name, geo_library)
+    else:
+        text = f"GEO ({name})"
+        print(f"[✓] {text}")
+        return geo
 
 
 def load_model_mm(name: str) -> MovementBuilder:
@@ -102,7 +116,7 @@ def plot_event(out: Output, event_idx: int) -> None:
         values = stridesum(
             out.incidence[:, pop_idx, event_idx], len(out.ctx.clock.taus))
         y_axis = values
-        ax.plot(x_axis, y_axis, label=out.ctx.labels[pop_idx])
+        ax.plot(x_axis, y_axis, label=out.ctx.geo['label'][pop_idx])
     if out.ctx.nodes <= 12:
         ax.legend()
     fig.tight_layout()
@@ -112,7 +126,7 @@ def plot_event(out: Output, event_idx: int) -> None:
 def plot_pop(out: Output, pop_idx: int) -> None:
     """Charting: plot all compartments (per 100k people) for the population at the given index."""
     fig, ax = plt.subplots()
-    ax.set_title(f"Prevalence in {out.ctx.labels[pop_idx]}")
+    ax.set_title(f"Prevalence in {out.ctx.geo['label'][pop_idx]}")
     ax.set_xlabel('days')
     ax.set_ylabel('persons (log scale)')
     ax.set_yscale('log')
@@ -186,7 +200,8 @@ def run(input_path: str,
         engine_id: str | None,
         out_path: str | None,
         chart: str | None,
-        profiling: bool) -> int:
+        profiling: bool,
+        ignore_cache: bool) -> int:
     """CLI command handler: run a simulation."""
 
     # Read input toml file.
@@ -247,7 +262,8 @@ def run(input_path: str,
         print("Loading requirements:")
         ipm_builder = load_model("IPM", ipm_name, ipm_library)
         mm_builder = load_model_mm(mm_name)
-        geo_builder = load_model("Geo", geo_name, geo_library)
+        geo = load_model_geo(geo_name, ignore_cache)
+
     except Exception as e:
         print(e)
         return 2  # error loading models
@@ -263,7 +279,6 @@ def run(input_path: str,
 
     configure_sim_logging(enabled=not profiling)
 
-    geo = geo_builder
     sim = with_fancy_messaging(Simulation(geo, ipm_builder, mm_builder, engine))
 
     rng = None if run_input.rng_seed is None \

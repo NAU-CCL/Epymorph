@@ -3,7 +3,10 @@ import sys
 from argparse import ArgumentParser
 from importlib.metadata import version
 
-from epymorph.cache import cache_geo as handle_cache
+from epymorph.cache import clear as handle_clear
+from epymorph.cache import fetch as handle_fetch
+from epymorph.cache import print_geos as handle_list
+from epymorph.cache import remove as handle_remove
 from epymorph.prepare import prepare_run_toml as handle_prepare
 from epymorph.run import run as handle_run
 from epymorph.validate import validate_spec_file as handle_validate
@@ -50,9 +53,13 @@ def build_cli() -> ArgumentParser:
             '-p', '--profile',
             action='store_true',
             help="(optional) include this flag to run in profiling mode")
+        p.add_argument(
+            '-i', '--ignore_cache',
+            help='(optional) include this flag to run the simulation without utilizing the Geo cache.'
+        )
 
         def handler(args):
-            return handle_run(args.input, args.engine, args.out, args.chart, args.profile)
+            return handle_run(args.input, args.engine, args.out, args.chart, args.profile, args.ignore_cache)
         p.set_defaults(handler=handler)
     define_run()
 
@@ -83,23 +90,56 @@ def build_cli() -> ArgumentParser:
     define_prepare()
 
     # define "cache" subcommand
-    # ex: python3 -m epymorph cache ./data/geo/us_sw_counties_2015.geo
+    # ex: python3 -m epymorph cache <geo name>
     def define_cache():
         p = command_parser.add_parser(
             'cache',
-            help='fetch and cache data for a Geo')
-        p.add_argument(
+            help='cache geos and access geo cache information')
+        sp = p.add_subparsers(
+            title='cache_commands',
+            dest='cache_commands',
+            required=True)
+        fetch = sp.add_parser(
+            'fetch',
+            help='fetch and cache data for a geo')
+        fetch.add_argument(
             'geo',
             type=str,
-            help="the name of a geo from the library")
-        p.add_argument(
+            help='the name of a geo from the library')
+        fetch.add_argument(
             '-f', '--force',
             action='store_true',
             help='(optional) include this flag to force an override of previously cached data')
+        remove = sp.add_parser(
+            'remove',
+            help='remove a geo\'s data from the cache')
+        remove.add_argument(
+            'geo',
+            type=str,
+            help='the name of a geo from the library')
+        cache_list = sp.add_parser(
+            'list',
+            help='list the names of all currently cached geos')
+        clear = sp.add_parser(
+            'clear',
+            help='clear the cache')
 
-        def handler(args):
-            return handle_cache(args.geo, args.force)
-        p.set_defaults(handler=handler)
+        def fetch_handler(args):
+            return handle_fetch(args.geo, args.force)
+
+        def remove_handler(args):
+            return handle_remove(args.geo)
+
+        def list_handler(args):
+            return handle_list()
+
+        def clear_handler(args):
+            return handle_clear()
+
+        fetch.set_defaults(handler=fetch_handler)
+        remove.set_defaults(handler=remove_handler)
+        cache_list.set_defaults(handler=list_handler)
+        clear.set_defaults(handler=clear_handler)
     define_cache()
 
     # define "check" subcommand

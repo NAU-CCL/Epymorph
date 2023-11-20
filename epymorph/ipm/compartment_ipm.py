@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from epymorph.clock import Tick
 from epymorph.context import Compartments, Events, SimContext, SimDType
 from epymorph.ipm.attribute import (AttributeException, AttributeGetter,
-                                    adapt_context, compile_getter)
+                                    compile_getter)
 from epymorph.ipm.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                             TransitionDef)
 from epymorph.ipm.ipm import Ipm, IpmBuilder
@@ -82,12 +82,10 @@ class CompartmentModelIpmBuilder(IpmBuilder):
             *(a.symbol for a in self.model.attributes)
         ]
 
-        adapted_ctx = adapt_context(ctx, self.model.attributes)
-
         return CompartmentModelIpm(
-            adapted_ctx,
+            ctx,
             self.model,
-            attr_getters=[compile_getter(adapted_ctx, a)
+            attr_getters=[compile_getter(ctx, a)
                           for a in self.model.attributes],
             transitions=[compile_transition(t, rate_params)
                          for t in self.model.transitions])

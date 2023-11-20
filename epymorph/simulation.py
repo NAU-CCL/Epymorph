@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 
 from epymorph.clock import Clock
 from epymorph.context import SimContext, SimDType, normalize_lists
-from epymorph.geo import Geo
+from epymorph.geo.geo import Geo
 from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
 from epymorph.ipm.ipm import IpmBuilder
 from epymorph.movement.basic import BasicEngine
@@ -40,7 +40,7 @@ class Output:
     and incidence for all populations and all IPM events.
     """
 
-    ctx: SimContext
+    ctx: SimContext  # TODO: this should be a static subset of SimContext, excluding things like Geo and rng
     """The context under which this output was generated."""
 
     prevalence: NDArray[SimDType]
@@ -76,7 +76,7 @@ class OutputAggregate:
     - incidence for all populations and all IPM events.
     """
 
-    ctx: SimContext
+    ctx: SimContext  # TODO: this should be a static subset of SimContext, excluding things like Geo and rng
     min_prevalence: NDArray[SimDType]
     max_prevalence: NDArray[SimDType]
     min_incidence: NDArray[SimDType]
@@ -155,11 +155,9 @@ class Simulation:
         self.on_tick = Event()
         self.on_end = Event()
 
-    def _make_context(self, param: dict[str, Any], start_date: date, duration_days: int, rng: np.random.Generator | None) -> SimContext:
+    def _make_context(self, geo: Geo, param: dict[str, Any], start_date: date, duration_days: int, rng: np.random.Generator | None) -> SimContext:
         return SimContext(
-            nodes=self.geo.nodes,
-            labels=self.geo.labels,
-            geo=self.geo.data,
+            geo=geo,
             compartments=self.ipm_builder.compartments,
             compartment_tags=self.ipm_builder.compartment_tags(),
             events=self.ipm_builder.events,
@@ -184,12 +182,12 @@ class Simulation:
         - rng: (optional) a psuedo-random number generator used in all stochastic calculations
         """
 
-        ctx = self._make_context(param, start_date, duration_days, rng)
+        ctx = self._make_context(self.geo, param, start_date, duration_days, rng)
 
         # Verification checks:
         self.ipm_builder.verify(ctx)
         self.mvm_builder.verify(ctx)
-        self.mvm_builder.verify(ctx)
+        # initializer.verify(ctx)
 
         if initializer is None:
             initializer = DEFAULT_INITIALIZER
