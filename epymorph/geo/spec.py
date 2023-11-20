@@ -4,7 +4,7 @@ its attributes and specific dimensions in time and space.
 """
 import calendar
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import cached_property
 from types import MappingProxyType
@@ -142,7 +142,7 @@ class GeoSpec(ABC):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        if 'attribute_map' in state.keys():
+        if 'attribute_map' in state:
             del state['attribute_map']  # don't pickle properties!
         return state
 
@@ -154,12 +154,7 @@ class GeoSpec(ABC):
 @dataclass
 class StaticGeoSpec(GeoSpec):
     """The spec for a StaticGeo."""
-    sha256: str | None = field(default=None)
-    """
-    Optional: the sha256 checksum (hex encoded) for the data.npz file contents.
-    If present, it will be used to verify the integrity of the data file when loaded.
-    It will be added automatically when a StaticGeo is saved to a file.
-    """
+    # Nothing but the default stuff here.
 
 
 @dataclass

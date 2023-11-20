@@ -143,17 +143,26 @@ class StaticGeoFileOps:
         npz_file = io.BytesIO()
         # sorting the geo values makes the sha256 a little more stable
         np.savez_compressed(npz_file, **as_sorted_dict(geo.values))
-
-        # Compute data file's sha256
+        # Data checksum
         npz_file.seek(0)
-        sha256 = hashlib.sha256()
-        sha256.update(npz_file.read())
-        geo.spec.sha256 = sha256.hexdigest()
+        data_sha256 = hashlib.sha256()
+        data_sha256.update(npz_file.read())
 
         # Write the spec file in memory
         geo_file = io.BytesIO()
         geo_json = cast(str, jsonpickle.encode(geo.spec, unpicklable=True))
         geo_file.write(geo_json.encode('utf-8'))
+        # Spec checksum
+        geo_file.seek(0)
+        spec_sha256 = hashlib.sha256()
+        spec_sha256.update(geo_file.read())
+
+        # Write sha256 checksums file in memory
+        sha_file = io.BytesIO()
+        sha_text = f"""\
+{data_sha256.hexdigest()}  data.npz
+{spec_sha256.hexdigest()}  spec.geo"""
+        sha_file.write(bytes(sha_text, encoding='utf-8'))
 
         # Write the tar to disk
         with tarfile.open(file, 'w') as tar:
@@ -165,6 +174,7 @@ class StaticGeoFileOps:
 
             add_file(npz_file, 'data.npz')
             add_file(geo_file, 'spec.geo')
+            add_file(sha_file, 'checksums.sha256')
 
     @staticmethod
     def load_from_archive(file: os.PathLike) -> StaticGeo:
@@ -179,21 +189,37 @@ class StaticGeoFileOps:
             with tarfile.open(fileobj=tar_buffer, mode='r') as tar:
                 npz_file = tar.extractfile(tar.getmember('data.npz'))
                 geo_file = tar.extractfile(tar.getmember('spec.geo'))
+                sha_file = tar.extractfile(tar.getmember('checksums.sha256'))
 
-                if npz_file is None or geo_file is None:
-                    msg = 'Archive is missing data and/or spec files.'
+                if npz_file is None or geo_file is None or sha_file is None:
+                    msg = 'Archive is incomplete: missing data, spec, and/or checksum files.'
                     raise GeoValidationException(msg)
+
+                # Verify the checksums
+                for line_bytes in sha_file.readlines():
+                    line = str(line_bytes, encoding='utf-8')
+                    [checksum, filename] = line.strip().split('  ')
+                    match filename:
+                        case 'data.npz':
+                            file_to_check = npz_file
+                        case 'spec.geo':
+                            file_to_check = geo_file
+                        case _:
+                            # There shouldn't be any other files listed in the checksum.
+                            msg = f"Unknown file listing in checksums.sha256 ({filename})."
+                            raise GeoValidationException(msg)
+                    file_to_check.seek(0)
+                    sha256 = hashlib.sha256()
+                    sha256.update(file_to_check.read())
+                    if checksum != sha256.hexdigest():
+                        msg = f"Archive checksum did not match (for file {filename}). "\
+                            "It is possible the file has been corrupted."
+                        raise GeoValidationException(msg)
 
                 # Read the spec file in memory
+                geo_file.seek(0)
                 spec_json = geo_file.read().decode('utf8')
                 spec = StaticGeoSpec.deserialize(spec_json)
-
-                # Compute data file's sha256 and check against spec
-                sha256 = hashlib.sha256()
-                sha256.update(npz_file.read())
-                if spec.sha256 != sha256.hexdigest():
-                    msg = 'Archive data checksum did not match. It is possible the file has been corrupted.'
-                    raise GeoValidationException(msg)
 
                 # Read the data file in memory
                 npz_file.seek(0)
