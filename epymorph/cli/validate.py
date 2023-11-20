@@ -9,6 +9,11 @@ from epymorph.parser.movement import MovementSpec
 def validate_spec_file(file_path: str) -> int:
     """CLI command handler: check the validity of a specification file."""
 
+    # Exit codes:
+    # - 0 success
+    # - 2 can't read file
+    # - 3 spec is invalid
+
     validation_func: Callable[[str], Any]
     if file_path.endswith(".movement"):
         validation_func = MovementSpec.load

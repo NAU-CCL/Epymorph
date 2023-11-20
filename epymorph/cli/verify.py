@@ -1,15 +1,28 @@
+"""
+Implements the `verify` subcommand executed from __main__.
+"""
 import numpy as np
 
-
-# "verify" subcommand
 # Exit codes:
 # - 0 verification success
 # - 1 verification failed
 # - 2 error loading files
+
+
 def verify(output_file: str) -> int:
+    """
+    CLI command handler: verify a simulation output.
+    Basically checks to make sure that, given compartmentalized populations at time zero
+    along with the time-series of events affecting the populations, this checks to verify that
+    the time-series of population by compartment has been calculated correctly.
+    """
+
+    # Currently this only works for SIRS output. However it should be possible
+    # to extend this to work for any CompartmentModel, if given the model as well.
+
     # open output csv file
     try:
-        with open(output_file, 'r') as out_file:
+        with open(output_file, 'r', encoding='utf-8') as out_file:
             next(out_file)
             data = np.loadtxt(out_file, dtype=np.int64, delimiter=',')
     except Exception as e:

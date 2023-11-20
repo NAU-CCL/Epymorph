@@ -3,14 +3,14 @@ import sys
 from argparse import ArgumentParser
 from importlib.metadata import version
 
-from epymorph.cache import clear as handle_clear
-from epymorph.cache import fetch as handle_fetch
-from epymorph.cache import print_geos as handle_list
-from epymorph.cache import remove as handle_remove
-from epymorph.prepare import prepare_run_toml as handle_prepare
-from epymorph.run import run as handle_run
-from epymorph.validate import validate_spec_file as handle_validate
-from epymorph.verify import verify as handle_verify
+from epymorph.cli.cache import clear as handle_clear
+from epymorph.cli.cache import fetch as handle_fetch
+from epymorph.cli.cache import print_geos as handle_list
+from epymorph.cli.cache import remove as handle_remove
+from epymorph.cli.prepare import prepare_run_toml as handle_prepare
+from epymorph.cli.run import run as handle_run
+from epymorph.cli.validate import validate_spec_file as handle_validate
+from epymorph.cli.verify import verify as handle_verify
 
 
 def build_cli() -> ArgumentParser:
@@ -96,6 +96,7 @@ def build_cli() -> ArgumentParser:
             title='cache_commands',
             dest='cache_commands',
             required=True)
+
         fetch = sp.add_parser(
             'fetch',
             help='fetch and cache data for a geo')
@@ -107,6 +108,7 @@ def build_cli() -> ArgumentParser:
             '-f', '--force',
             action='store_true',
             help='(optional) include this flag to force an override of previously cached data')
+
         remove = sp.add_parser(
             'remove',
             help='remove a geo\'s data from the cache')
@@ -114,9 +116,11 @@ def build_cli() -> ArgumentParser:
             'geo',
             type=str,
             help='the name of a geo from the library')
+
         cache_list = sp.add_parser(
             'list',
             help='list the names of all currently cached geos')
+
         clear = sp.add_parser(
             'clear',
             help='clear the cache')
@@ -127,10 +131,10 @@ def build_cli() -> ArgumentParser:
         def remove_handler(args):
             return handle_remove(args.geo)
 
-        def list_handler(args):
+        def list_handler(_args):
             return handle_list()
 
-        def clear_handler(args):
+        def clear_handler(_args):
             return handle_clear()
 
         fetch.set_defaults(handler=fetch_handler)

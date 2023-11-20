@@ -1,10 +1,13 @@
+"""
+Implements the `prepare` subcommand executed from __main__.
+"""
 import os
 from datetime import date
 
 import tomli_w
 
+from epymorph.cli.run import RunInput, interactive_select
 from epymorph.data import geo_library, ipm_library, mm_library
-from epymorph.run import RunInput, interactive_select
 
 
 def prepare_run_toml(out_path: str,
@@ -12,6 +15,10 @@ def prepare_run_toml(out_path: str,
                      mm_name: str | None,
                      geo_name: str | None) -> int:
     """CLI command handler: create a skeleton toml input file."""
+
+    # Exit codes:
+    # - 0 success
+    # - 1 unable to write file
 
     if os.path.exists(out_path):
         print(f"A file already exists at {out_path}")

@@ -1,3 +1,6 @@
+"""
+Implements the `cache` subcommands executed from __main__.
+"""
 import os
 
 from epymorph.geo import cache
