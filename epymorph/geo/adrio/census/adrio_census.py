@@ -7,7 +7,7 @@ import numpy as np
 from census import Census
 from geopandas import GeoDataFrame
 from numpy.typing import NDArray
-from pandas import DataFrame, read_excel
+from pandas import DataFrame, concat, read_excel
 from pygris import block_groups, counties, states, tracts
 
 from epymorph.data_shape import Shapes
@@ -228,7 +228,13 @@ class ADRIOMakerCensus(ADRIOMaker):
             sort_param = ['state']
 
         elif granularity == Granularity.COUNTY.value:
-            data_df = counties(state=state_fips, year=year)
+            if state_fips is not None and state_fips[0] != '*':
+                data_df = GeoDataFrame(concat([
+                    counties(state=s, year=year)
+                    for s in state_fips
+                ]))
+            else:
+                data_df = counties(year=year)
             data_df = data_df.rename(columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
 
             if county_fips is not None and county_fips[0] != '*':
