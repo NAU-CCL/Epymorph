@@ -93,7 +93,7 @@ class ADRIOMakerCensus(ADRIOMaker):
         AttribDef('population_by_age', np.int64, Shapes.NxA(3)),
         AttribDef('population_by_age_x6', np.int64, Shapes.NxA(6)),
         AttribDef('centroid', CentroidDType, Shapes.N),
-        AttribDef('geoid', np.int64, Shapes.N),
+        AttribDef('geoid', np.str_, Shapes.N),
         AttribDef('average_household_size', np.int64, Shapes.N),
         AttribDef('dissimilarity_index', np.float64, Shapes.N),
         AttribDef('commuters', np.int64, Shapes.NxN),
@@ -401,7 +401,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                     output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
                         data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
 
-            return np.array(output, dtype=np.int64)
+            return np.array(output, dtype=np.str_)
         return ADRIO('geoid', fetch)
 
     def _make_population_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int, num_groups: int) -> ADRIO:
