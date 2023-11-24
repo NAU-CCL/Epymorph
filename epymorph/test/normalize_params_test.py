@@ -163,7 +163,7 @@ class TestProxyGeo(unittest.TestCase):
         proxy = _ProxyGeo()
         mock_geo = MagicMock(spec=Geo)
         data = {'key1': 123, 'key2': 456}
-        mock_geo.spec = data
+        mock_geo = data
         proxy.set_actual_geo(mock_geo)
 
         self.assertEqual(proxy['key1'], 123,
