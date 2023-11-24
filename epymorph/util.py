@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+from functools import partial, wraps
 from inspect import isbuiltin
 from typing import (Any, Callable, Generic, Iterable, Literal, OrderedDict,
                     TypeGuard, TypeVar)
@@ -428,6 +429,7 @@ class ImmutableNamespace:
 def ns(data: dict[str, Any]) -> ImmutableNamespace:
     return ImmutableNamespace(data)
 
+
 def has_function_structure(s):
     """
     Check if a string has the structure of a function definition.
@@ -442,3 +444,73 @@ def has_function_structure(s):
     match = re.search(pattern, s)
 
     return bool(match)
+
+
+def make_namespace(geo, SimDType) -> dict[str, Any]:
+    """Make a safe namespace for user-defined functions."""
+
+    return {
+        # simulation data
+        'geo': geo,
+        'SimDType': SimDType,
+        # our utility functions
+        'pairwise_haversine': pairwise_haversine,
+        'row_normalize': row_normalize,
+        # numpy namespace
+        'np': ns({
+            # numpy utility functions
+            'array': partial(np.array, dtype=SimDType),
+            'zeros': partial(np.zeros, dtype=SimDType),
+            'zeros_like': partial(np.zeros_like, dtype=SimDType),
+            'full': partial(np.full, dtype=SimDType),
+            'sum': partial(np.sum, dtype=SimDType),
+            'newaxis': np.newaxis,
+            # numpy math functions
+            'radians': np.radians,
+            'degrees': np.degrees,
+            'exp': np.exp,
+            'log': np.log,
+            'sin': np.sin,
+            'cos': np.cos,
+            'tan': np.tan,
+            'arcsin': np.arcsin,
+            'arccos': np.arccos,
+            'arctan': np.arctan,
+            'arctan2': np.arctan2,
+            'sqrt': np.sqrt,
+            'add': np.add,
+            'subtract': np.subtract,
+            'multiply': np.multiply,
+            'divide': np.divide,
+            'maximum': np.maximum,
+            'minimum': np.minimum,
+            'absolute': np.absolute,
+            'floor': np.floor,
+            'ceil': np.ceil,
+        }),
+        # Restricted names: this is a security bandaid.
+        # TODO: I think the only sensible security measure is to analyze the functions' ASTs to detect bad behavior.
+        'globals': None,
+        'locals': None,
+        'import': None,
+        'compile': None,
+        'eval': None,
+        'exec': None,
+        'object': None,
+        'print': None,
+        'open': None,
+        'quit': None,
+        'exit': None,
+        'copyright': None,
+        'credits': None,
+        'license': None,
+        'help': None,
+        'breakpoint': None,
+    }
+
+
+def preprocess_signature(signature):
+    # Replace the entire parameter name with an underscore if it starts with an underscore
+    processed_signature = tuple('_' if param.startswith('_')
+                                else param for param in signature)
+    return processed_signature

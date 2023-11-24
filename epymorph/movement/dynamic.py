@@ -15,8 +15,8 @@ from epymorph.movement.engine import Movement, MovementBuilder
 from epymorph.parser.move_clause import ALL_DAYS, Daily, DayOfWeek
 from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
-from epymorph.util import (compile_function, ns, pairwise_haversine,
-                           parse_function, row_normalize)
+from epymorph.util import (compile_function, make_namespace, ns,
+                           pairwise_haversine, parse_function, row_normalize)
 
 
 @dataclass
@@ -143,7 +143,6 @@ def execute_predef(predef: Predef, global_namespace: Namespace) -> Namespace:
 
 def make_global_namespace(ctx: SimContext) -> dict[str, Any]:
     """Make a safe namespace for user-defined functions."""
-
     def as_simdtype(func):
         @wraps(func)
         def wrapped_func(*args, **kwargs):
@@ -154,70 +153,21 @@ def make_global_namespace(ctx: SimContext) -> dict[str, Any]:
                 return result.astype(SimDType)
         return wrapped_func
 
-    return {
-        # simulation data
-        'geo': ctx.geo,
-        'nodes': ctx.nodes,
-        'param': ctx.param,
-        'SimDType': SimDType,
-        # our utility functions
-        'pairwise_haversine': pairwise_haversine,
-        'row_normalize': row_normalize,
-        # numpy namespace
-        'np': ns({
-            # rng functions
-            'poisson': as_simdtype(ctx.rng.poisson),
-            'binomial': as_simdtype(ctx.rng.binomial),
-            'multinomial': as_simdtype(ctx.rng.multinomial),
-            # numpy utility functions
-            'array': partial(np.array, dtype=SimDType),
-            'zeros': partial(np.zeros, dtype=SimDType),
-            'zeros_like': partial(np.zeros_like, dtype=SimDType),
-            'full': partial(np.full, dtype=SimDType),
-            'sum': partial(np.sum, dtype=SimDType),
-            'newaxis': np.newaxis,
-            # numpy math functions
-            'radians': np.radians,
-            'degrees': np.degrees,
-            'exp': np.exp,
-            'log': np.log,
-            'sin': np.sin,
-            'cos': np.cos,
-            'tan': np.tan,
-            'arcsin': np.arcsin,
-            'arccos': np.arccos,
-            'arctan': np.arctan,
-            'arctan2': np.arctan2,
-            'sqrt': np.sqrt,
-            'add': np.add,
-            'subtract': np.subtract,
-            'multiply': np.multiply,
-            'divide': np.divide,
-            'maximum': np.maximum,
-            'minimum': np.minimum,
-            'absolute': np.absolute,
-            'floor': np.floor,
-            'ceil': np.ceil,
-        }),
-        # Restricted names: this is a security bandaid.
-        # TODO: I think the only sensible security measure is to analyze the functions' ASTs to detect bad behavior.
-        'globals': None,
-        'locals': None,
-        'import': None,
-        'compile': None,
-        'eval': None,
-        'exec': None,
-        'object': None,
-        'print': None,
-        'open': None,
-        'quit': None,
-        'exit': None,
-        'copyright': None,
-        'credits': None,
-        'license': None,
-        'help': None,
-        'breakpoint': None,
+    geo = ctx.geo
+    global_namespace = make_namespace(geo=geo, SimDType=SimDType)
+
+    # Adding more elements to the namespace
+    global_namespace['param'] = ctx.param
+    global_namespace['nodes'] = ctx.nodes
+    # rng functions
+    np_dict = global_namespace['np'].to_dict_shallow() | {
+        'poisson': as_simdtype(ctx.rng.poisson),
+        'binomial': as_simdtype(ctx.rng.binomial),
+        'multinomial': as_simdtype(ctx.rng.multinomial)
     }
+    global_namespace['np'] = ns(np_dict)
+
+    return global_namespace
 
 
 class DynamicMovementBuilder(MovementBuilder):

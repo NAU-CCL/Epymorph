@@ -5,18 +5,19 @@ the SimContext structure is here to contain that info and avoid circular depende
 from __future__ import annotations
 
 import inspect
-import string
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Clock
 from epymorph.data_shape import SimDimension
+from epymorph.geo.abstract import _ProxyGeo, proxy
 from epymorph.geo.geo import Geo
 from epymorph.util import (compile_function, has_function_structure,
-                           parse_function)
+                           make_namespace, parse_function,
+                           preprocess_signature)
 
 SimDType = np.int64
 """
@@ -60,7 +61,7 @@ def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = 
     return ps
 
 
-def normalize_params(data: dict[str, Any], compartments: int, duration: int, dtypes: dict[str, DTypeLike] | None = None) -> dict[str, NDArray]:
+def normalize_params(data: dict[str, Any], geo: Geo, duration: int, dtypes: dict[str, DTypeLike] | None = None) -> dict[str, NDArray]:
     """
     Normalize a dictionary of values so that all lists are replaced with numpy arrays.
 
@@ -77,16 +78,22 @@ def normalize_params(data: dict[str, Any], compartments: int, duration: int, dty
         dtypes = {}
 
     parameter_arrays = dict[str, NDArray]()
+    compartments = geo.nodes
+    p = cast(_ProxyGeo, proxy)
+    p.set_actual_geo(geo)
+
+    global_namespace = make_namespace(geo=geo, SimDType=SimDType)
 
     for key, value in data.items():
 
         dt = dtypes.get(key, None)
 
         if callable(value):
-            parameter_arrays[key] = evaluate_function(value, compartments, duration, dt)
+            parameter_arrays[key] = evaluate_function(
+                value, compartments, duration, dt)
         elif isinstance(value, str) and has_function_structure(str(value)):
             function_definition = parse_function(value)
-            compiled_function = compile_function(function_definition, {})
+            compiled_function = compile_function(function_definition, global_namespace)
             parameter_arrays[key] = evaluate_function(
                 compiled_function, compartments, duration, dt)
         else:
@@ -95,7 +102,7 @@ def normalize_params(data: dict[str, Any], compartments: int, duration: int, dty
     return parameter_arrays
 
 
-def evaluate_function(function: callable, compartments: int, duration: int, dt: DTypeLike | None = None) -> NDArray:  # type: ignore
+def evaluate_function(function: callable, compartments: int, duration: int, dt: DTypeLike | None = None) -> NDArray:  # type:ignore
     """
     Evaluate a function and return the result as a numpy array.
 
@@ -110,24 +117,33 @@ def evaluate_function(function: callable, compartments: int, duration: int, dt: 
     """
 
     signature = tuple(inspect.signature(function).parameters.keys())
-
-    match signature:
-        case ():
-            result = function()
-        case ('t', ):
-            result = [function(d) for d in range(duration)]
-        case ('n', ):
-            result = [function(c) for c in range(compartments)]
-        case ('t', 'n'):
-            result = [[function(d, c) for d in range(duration)]
-                      for c in range(compartments)]
-        case ('n', 't'):
+    processed_signature = preprocess_signature(signature)
+    try:
+        # Handle different cases based on the function signature
+        if processed_signature == ('_', '_'):
+            result = function(None, None)
+        elif processed_signature == ('t', '_'):
+            result = [function(d, None) for d in range(duration)]
+        elif processed_signature == ('_', 'n'):
+            result = [function(None, c) for c in range(compartments)]
+        elif processed_signature == ('t', 'n'):
             result = [[function(d, c) for c in range(compartments)]
                       for d in range(duration)]
-        case _:
-            raise ValueError(f"Unsupported function signature for function: {function}")
+        else:
+            # Handle unsupported function signatures
+            if len(signature) != 2:
+                raise ValueError(
+                    f"Unsupported function signature for function: {function.__name__}. Function must have two parameters, def func_name(_, _)")
+            else:
+                raise ValueError(
+                    f"Unsupported function signature for function: {function.__name__}. Parameter names can only be 't', 'n', or '_'.")
+
+    except (IndexError, ValueError, IndentationError) as e:
+        raise ValueError(
+            f"An error occurred while running the parameter function '{function.__name__}': {str(e)}") from e
 
     return np.asarray(result, dtype=dt)
+
 
 # SimContext
 

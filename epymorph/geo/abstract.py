@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from numpy.typing import NDArray
 
-from epymorph.geo import Geo
+from epymorph.geo.geo import Geo
 
 
 class ProxyGeoProtocol(ABC):
@@ -24,7 +24,7 @@ class _ProxyGeo(ProxyGeoProtocol):
     def __getitem__(self, key):
         if self._actual_geo is None:
             raise ValueError("Geo infomration has not been set.")
-        return self._actual_geo.data[key]
+        return self._actual_geo[key]
 
     def set_actual_geo(self, geo):
         """
