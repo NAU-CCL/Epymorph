@@ -197,16 +197,6 @@ class StandardIpmExecutor(IpmExecutor):
 
     def _distribute(self, cohorts: NDArray[SimDType], events: NDArray[SimDType]) -> NDArray[SimDType]:
         """Distribute all events across a location's cohorts and return the compartment deltas for each."""
-
-        # TODO: analysis -- is the following necessary or not necessary?
-        # Process events in random order as a (probably somewhat naive) way to avoid biasing
-        # events, since a fixed order risks "eating up" all the available individuals every round.
-        #
-        # The best option might be to shuffle a "deck" of event occurrences, draw an event, and then
-        # draw a random individual (without replacement) to assign to that event. Repeat until all
-        # events are distributed. However that sounds like a major performance hit if we're not careful
-        # how to do it, so we're going with this for now.
-
         x = cohorts.shape[0]
         e = self._ctx.dim.events
         occurrences = np.zeros((x, e), dtype=SimDType)
