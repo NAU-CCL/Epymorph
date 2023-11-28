@@ -1,4 +1,5 @@
 import os
+from copy import copy
 from dataclasses import dataclass
 from enum import Enum
 
@@ -320,8 +321,8 @@ class ADRIOMakerCensus(ADRIOMaker):
             print(
                 f"Commuting data cannot be retrieved for {passed_year}, fetching {year} data instead.")
 
-        states = nodes.get('state')
-        counties = nodes.get('county')
+        states = copy(nodes.get('state'))
+        counties = copy(nodes.get('county'))
 
         if year != 2010:
             url = f'https://www2.census.gov/programs-surveys/demo/tables/metro-micro/{year}/commuting-flows-{year}/table1.xlsx'
