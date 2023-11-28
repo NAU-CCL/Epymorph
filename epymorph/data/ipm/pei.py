@@ -19,9 +19,9 @@ def load() -> CompartmentModel:
             compartment('R'),
         ],
         attributes=[
-            param('D', 'infection_duration', Shapes.TxN),
-            param('L', 'immunity_duration', Shapes.TxN),
-            geo('H', 'humidity', Shapes.TxN),
+            param('infection_duration', Shapes.TxN, float, 'D'),
+            param('immunity_duration', Shapes.TxN, float, 'L'),
+            geo('humidity', Shapes.TxN, float, 'H'),
         ])
 
     [S, I, R] = symbols.compartment_symbols

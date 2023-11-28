@@ -1,3 +1,4 @@
+"""General simulation data types, events, and utility functions."""
 import logging
 from contextlib import contextmanager
 from datetime import date, timedelta
@@ -8,7 +9,6 @@ from typing import (Any, Generator, NamedTuple, Protocol, Sequence,
                     runtime_checkable)
 
 import numpy as np
-from numpy.typing import NDArray
 
 from epymorph.util import (Event, ImmutableNamespace, pairwise_haversine,
                            progress, row_normalize, subscriptions)
@@ -99,10 +99,6 @@ class SimDimensions(NamedTuple):
     C: number of IPM compartments;
     E: number of IPM events (transitions)
     """
-
-
-Params = dict[str, NDArray]
-"""Simulation parameters in their normalized form: numpy arrays."""
 
 
 class OnStart(NamedTuple):

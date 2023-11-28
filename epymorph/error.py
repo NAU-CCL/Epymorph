@@ -1,7 +1,7 @@
 """
 A common exception framework for epymorph.
 """
-from abc import ABC
+from contextlib import contextmanager
 from typing import Self
 
 
@@ -20,7 +20,15 @@ class ModelRegistryException(Exception):
     """Exception during model library initialization."""
 
 
-class ValidationException(Exception, ABC):
+class ParseException(Exception):
+    """Superclass for exceptions which happen while parsing a model."""
+
+
+class MmParseException(ParseException):
+    """Exception parsing a Movement Model."""
+
+
+class ValidationException(Exception):
     """Superclass for exceptions which happen during simulation validation."""
 
 
@@ -59,12 +67,20 @@ class SimValidationException(ValidationException):
     """
 
 
-class SimulationException(Exception, ABC):
-    """Superclass for exceptions which happen during simulation runtime."""
-
-
-class SimCompileException(SimulationException):
+class CompilationException(Exception):
     """Exception during the compilation phase of the simulation."""
+
+
+class IpmCompileException(CompilationException):
+    """Exception during the compilation of the IPM."""
+
+
+class MmCompileException(CompilationException):
+    """Exception during the compilation of the MM."""
+
+
+class SimulationException(Exception):
+    """Superclass for exceptions which happen during simulation runtime."""
 
 
 class InitException(SimulationException):
@@ -89,3 +105,25 @@ class MmSimException(SimulationException):
 
 class SimStateException(SimulationException):
     """Exception when the simulation is not in a valid state to perform the requested operation."""
+
+
+@contextmanager
+def error_gate(description: str, exception_type: type[Exception], *reraises: type[Exception]):
+    """
+    Provide nice error messaging linked to a phase of the simulation.
+    `description` should describe the phase in gerund form.
+    If an exception of type `exception_type` is caught, it will be re-raised as-is.
+    If an exception is caught from the list of exception types in `reraises`,
+    the exception will be stringified and re-raised as `exception_type`.
+    All other exceptions will be labeled "unknown errors" with the given description.
+    """
+    try:
+        yield
+    except exception_type as e:
+        raise e
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        if any(isinstance(e, r) for r in reraises):
+            raise exception_type(str(e)) from e
+
+        msg = f"Unknown error {description}."
+        raise exception_type(msg) from e

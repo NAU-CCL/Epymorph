@@ -6,11 +6,14 @@ and to adapt equivalent shapes.
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Callable, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.simulation import SimDimensions
+from epymorph.simulation import SimDimensions, Tick
+
+DataT = TypeVar('DataT', bound=np.generic)
 
 
 class DataShape(ABC):
@@ -28,6 +31,10 @@ class DataShape(ABC):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         """Return a concrete shape as a tuple, using the given number of nodes and days to fill in for N and T."""
 
+    @abstractmethod
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        """Returns an accessor function for the given shape on the given data array."""
+
 
 @dataclass(frozen=True)
 class Scalar(DataShape):
@@ -43,6 +50,9 @@ class Scalar(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return ()
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, _node: data  # type: ignore
 
     def __str__(self):
         return "S"
@@ -69,6 +79,9 @@ class Time(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days,)
 
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, _node: data[tick.day]
+
     def __str__(self):
         return "T"
 
@@ -93,6 +106,9 @@ class Node(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes,)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, node: data[node]
 
     def __str__(self):
         return "N"
@@ -119,6 +135,9 @@ class NodeAndNode(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes, nodes)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, node: data[node]
 
     def __str__(self):
         return "N"
@@ -155,6 +174,9 @@ class TimeAndNode(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, nodes)
 
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, node: data[tick.day, node]
+
     def __str__(self):
         return "TxN"
 
@@ -186,6 +208,9 @@ class Arbitrary(DataShape):
         # The GEO defines what it has; while the MM/IPM must slice the available data for its needs.
         # The MM/IPM usage is more like a selection than a shape... maybe we should be using Slice for that...
         return (self.index,)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, _node: data[self.index]
 
     def __str__(self):
         return f"A({self.index})"
@@ -222,6 +247,9 @@ class TimeAndArbitrary(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, self.index)
 
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, _node: data[tick.day, self.index]
+
     def __str__(self):
         return f"TxA({self.index})"
 
@@ -256,6 +284,9 @@ class NodeAndArbitrary(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes, self.index)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, node: data[node, self.index]
 
     def __str__(self):
         return f"NxA({self.index})"
@@ -299,6 +330,9 @@ class TimeAndNodeAndArbitrary(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, nodes, self.index)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, node: data[tick.day, node, self.index]
 
     def __str__(self):
         return f"TxNxA({self.index})"

@@ -17,7 +17,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 import epymorph.data_shape as shape
-from epymorph.error import GeoValidationException
+from epymorph.error import AttributeException, GeoValidationException
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, StaticGeoSpec,
                                validate_geo_values)
@@ -40,11 +40,12 @@ class StaticGeo(Geo[StaticGeoSpec]):
 
     def __getitem__(self, name: str) -> NDArray:
         if name not in self.values:
-            raise KeyError(f"Attribute not found in geo: '{name}'")
+            raise AttributeException(f"Attribute not found in geo: '{name}'")
         return self.values[name]
 
     @property
     def labels(self) -> NDArray[np.str_]:
+        """The labels for every node in this geo."""
         return self.values[LABEL.name]
 
     def validate(self) -> None:

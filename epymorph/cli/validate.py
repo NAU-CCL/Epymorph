@@ -3,7 +3,7 @@ Implements the `validate` subcommand executed from __main__.
 """
 from typing import Any, Callable
 
-from epymorph.parser.movement import MovementSpec
+from epymorph.movement.parser import parse_movement_spec
 
 
 def validate_spec_file(file_path: str) -> int:
@@ -16,7 +16,7 @@ def validate_spec_file(file_path: str) -> int:
 
     validation_func: Callable[[str], Any]
     if file_path.endswith(".movement"):
-        validation_func = MovementSpec.load
+        validation_func = parse_movement_spec
     # elif file_path.endswith(".geo"):
     #     ...
     # elif file_path.endswith(".ipm");

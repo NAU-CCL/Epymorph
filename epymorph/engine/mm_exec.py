@@ -7,9 +7,11 @@ from logging import DEBUG, Logger, getLogger
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.engine.context import ExecutionContext
+from epymorph.engine.context import RumeContext
 from epymorph.engine.world import World
-from epymorph.movement_model import TravelClause
+from epymorph.movement.compile import compile_spec
+from epymorph.movement.movement_model import TravelClause
+from epymorph.movement.parser import MovementSpec
 from epymorph.simulation import SimDType, Tick
 from epymorph.util import row_normalize
 
@@ -34,21 +36,29 @@ class MovementExecutor(ABC):
 class StandardMovementExecutor(MovementExecutor):
     """The standard implementation of movement model execution."""
 
-    _ctx: ExecutionContext
+    _ctx: RumeContext
     _log: Logger
+    _clauses: list[TravelClause]
     _clause_masks: dict[TravelClause, NDArray[np.bool_]]
 
-    def __init__(self, ctx: ExecutionContext):
+    def __init__(self, ctx: RumeContext):
+        # If we were given a MovementSpec, we need to compile it to get its clauses.
+        if isinstance(ctx.mm, MovementSpec):
+            clauses = compile_spec(ctx, ctx.mm).clauses
+        else:
+            clauses = ctx.mm.clauses
+
         self._ctx = ctx
         self._log = getLogger('movement')
-        self._clause_masks = {c: c.mask(ctx) for c in ctx.mm.clauses}
+        self._clauses = clauses
+        self._clause_masks = {c: c.mask(ctx) for c in clauses}
 
     def apply(self, world: World, tick: Tick) -> None:
         """Applies movement for this tick, mutating the world state."""
         self._log.debug('Processing movement for day %s, step %s', tick.day, tick.step)
 
         # Process travel clauses.
-        for clause in self._ctx.mm.clauses:
+        for clause in self._clauses:
             if not clause.predicate(self._ctx, tick):
                 continue
             local_array = world.get_local_array()

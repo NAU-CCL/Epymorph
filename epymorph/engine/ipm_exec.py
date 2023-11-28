@@ -8,13 +8,13 @@ from typing import ClassVar
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.compartment_model import (EdgeDef, ForkDef, Transition,
+from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
-from epymorph.engine.context import ExecutionContext, Tick
+from epymorph.engine.context import RumeContext, Tick
 from epymorph.engine.world import World
 from epymorph.simulation import SimDType
-from epymorph.sympy_shim import Symbol, SympyLambda, lambdify, lambdify_list
-from epymorph.util import index_where
+from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
+from epymorph.util import index_of
 
 
 class IpmExecutor(ABC):
@@ -55,10 +55,30 @@ class _ForkedTrx:
 _Trx = _IndependentTrx | _ForkedTrx
 
 
+def _make_apply_matrix(ipm: CompartmentModel) -> NDArray[SimDType]:
+    """
+    Calc apply matrix; this matrix is used to apply a set of events
+    to the compartments they impact. In general, an event indicates
+    a transition from one state to another, so it is subtracted from one
+    and added to the other. Events involving exogenous states, however,
+    either add or subtract from the model but not both. By nature, they
+    alter the number of individuals in the model. Matrix values are {+1, 0, -1}.
+    """
+    csymbols = [c.symbol for c in ipm.compartments]
+    matrix_size = (ipm.num_events, ipm.num_compartments)
+    apply_matrix = np.zeros(matrix_size, dtype=SimDType)
+    for eidx, e in enumerate(ipm.events):
+        if e.compartment_from not in exogenous_states:
+            apply_matrix[eidx, index_of(csymbols, e.compartment_from)] = -1
+        if e.compartment_to not in exogenous_states:
+            apply_matrix[eidx, index_of(csymbols, e.compartment_to)] = +1
+    return apply_matrix
+
+
 class StandardIpmExecutor(IpmExecutor):
     """The standard implementation of compartment model IPM execution."""
 
-    _ctx: ExecutionContext
+    _ctx: RumeContext
     """the sim context"""
     _trxs: list[_Trx]
     """compiled transitions"""
@@ -69,38 +89,22 @@ class StandardIpmExecutor(IpmExecutor):
     _source_compartment_for_event: list[int]
     """mapping from event index to the compartment index it sources from"""
 
-    def __init__(self, ctx: ExecutionContext):
+    def __init__(self, ctx: RumeContext):
         ipm = ctx.ipm
-        transitions = ipm.transitions
-        compartments = ipm.compartments
-        attributes = ipm.attributes
-
-        def compartment_index(s: Symbol) -> int:
-            return index_where(compartments, lambda c: c.symbol == s)
-
-        # Calc apply matrix -- values are {+1, 0, -1}
-        E = ipm.num_events
-        C = ipm.num_compartments
-        apply_matrix = np.zeros((E, C), dtype=SimDType)
-        for eidx, e in enumerate(Transition.as_events(transitions)):
-            if e.compartment_from not in exogenous_states:
-                apply_matrix[eidx, compartment_index(e.compartment_from)] = -1
-            if e.compartment_to not in exogenous_states:
-                apply_matrix[eidx, compartment_index(e.compartment_to)] = +1
 
         # Calc list of events leaving each compartment (each may have 0, 1, or more)
         events_leaving_compartment = [[eidx
-                                       for eidx, e in enumerate(Transition.as_events(transitions))
+                                       for eidx, e in enumerate(ipm.events)
                                        if e.compartment_from == c.symbol]
-                                      for c in compartments]
+                                      for c in ipm.compartments]
 
         # Calc the source compartment for each event
-        source_compartment_for_event = [compartment_index(e.compartment_from)
-                                        for e in Transition.as_events(transitions)]
+        csymbols = [c.symbol for c in ipm.compartments]
+        source_compartment_for_event = [index_of(csymbols, e.compartment_from)
+                                        for e in ipm.events]
 
         # The parameters to pass to all rate lambdas
-        rate_params = [*(c.symbol for c in compartments),
-                       *(a.symbol for a in attributes)]
+        rate_params = [*csymbols, *(a.symbol for a in ipm.attributes)]
 
         def compile_transition(transition: TransitionDef) -> _Trx:
             match transition:
@@ -114,8 +118,8 @@ class StandardIpmExecutor(IpmExecutor):
                     return _ForkedTrx(size, rate_lambda, prob_lambda)
 
         self._ctx = ctx
-        self._trxs = [compile_transition(t) for t in transitions]
-        self._apply_matrix = apply_matrix
+        self._trxs = [compile_transition(t) for t in ipm.transitions]
+        self._apply_matrix = _make_apply_matrix(ipm)
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
 
@@ -147,7 +151,7 @@ class StandardIpmExecutor(IpmExecutor):
     def _events(self, node: int, tick: Tick, effective_pop: NDArray[SimDType]) -> NDArray[SimDType]:
         """Calculate how many events will happen this tick, correcting for the possibility of overruns."""
         rate_args = [*effective_pop,
-                     *(self._ctx.get_attribute(a.attribute, tick, node)  # attribs
+                     *(self._ctx.get_attribute(a, tick, node)  # attribs
                        for a in self._ctx.ipm.attributes)]
 
         # Evaluate the event rates and do random draws for all transition events.

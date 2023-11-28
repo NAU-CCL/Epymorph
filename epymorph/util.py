@@ -1,3 +1,4 @@
+"""epymorph general utility functions and classes."""
 import ast
 import re
 from contextlib import contextmanager
@@ -15,10 +16,12 @@ T = TypeVar('T')
 
 
 def identity(x: T) -> T:
+    """A function which just returns the argument it is called with."""
     return x
 
 
 def constant(x: T) -> Callable[..., T]:
+    """A function which returns a constant value, regardless of what arguments its called with."""
     return lambda *_: x
 
 
@@ -43,6 +46,14 @@ def index_where(it: Iterable[T], predicate: Callable[[T], bool]) -> int:
     return -1
 
 
+def index_of(it: Iterable[T], item: T) -> int:
+    """Find the first index of `it` where `item` evaluates as equal. Return -1 if no such value exists."""
+    for i, x in enumerate(it):
+        if x == item:
+            return i
+    return -1
+
+
 def iterator_length(it: Iterable[Any]) -> int:
     """
     Count the number of items in the given iterator.
@@ -55,15 +66,12 @@ def iterator_length(it: Iterable[Any]) -> int:
 
 
 def list_not_none(it: Iterable[T]) -> list[T]:
+    """Convert an iterable to a list, skipping any entries that are None."""
     return [x for x in it if x is not None]
 
 
-class NotUniqueException(Exception):
-    def __init__(self):
-        super().__init__("Collection contains non-unique values.")
-
-
 def filter_unique(xs: Iterable[T]) -> list[T]:
+    """Convert an iterable to a list, keeping only the unique values and maintaining the order as first-seen."""
     xset = set[T]()
     ys = list[T]()
     for x in xs:
@@ -71,14 +79,6 @@ def filter_unique(xs: Iterable[T]) -> list[T]:
             ys.append(x)
             xset.add(x)
     return ys
-
-
-def as_unique_set(xs: list[T]) -> set[T]:
-    """Transform list to set, raising a NotUniqueException if the list contains non-unique values."""
-    xs_set = set(xs)
-    if len(xs_set) != len(xs):
-        raise NotUniqueException()
-    return xs_set
 
 
 def as_list(x: T | list[T]) -> list[T]:
@@ -410,7 +410,6 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
 
 class ImmutableNamespace:
     """A simple dot-accessible dictionary."""
-    # TODO: is it possible to use vars(my_immutable_namespace) to get a mutable handle on this class' data?
 
     __slots__ = ['_data']
 
@@ -425,14 +424,15 @@ class ImmutableNamespace:
         if __name == '_data':
             __cls = self.__class__.__name__
             raise AttributeError(f"{__cls} object has no attribute '{__name}'")
-        return object.__getattribute__(self, __name)
-
-    def __getattr__(self, __name: str) -> Any:
-        data = object.__getattribute__(self, '_data')
-        if __name not in data:
-            __cls = self.__class__.__name__
-            raise AttributeError(f"{__cls} object has no attribute '{__name}'")
-        return data[__name]
+        try:
+            return object.__getattribute__(self, __name)
+        except AttributeError:
+            data = object.__getattribute__(self, '_data')
+            if __name not in data:
+                __cls = self.__class__.__name__
+                msg = f"{__cls} object has no attribute '{__name}'"
+                raise AttributeError(msg) from None
+            return data[__name]
 
     def __setattr__(self, __name: str, __value: Any) -> None:
         raise Exception(f"{self.__class__.__name__} is immutable.")

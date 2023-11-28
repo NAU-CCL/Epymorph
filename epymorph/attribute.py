@@ -1,3 +1,4 @@
+"""Utilities for defining data attributes in epymorph."""
 from dataclasses import dataclass
 from typing import Literal
 
@@ -22,6 +23,7 @@ class AttributeDef:
 
     @property
     def dtype_as_np(self) -> np.dtype:
+        """Return the dtype of this attribute in a numpy-equivalent type."""
         if self.dtype == int:
             return np.dtype(np.int64)
         elif self.dtype == float:

@@ -25,6 +25,9 @@ class Geo(Generic[SpecT], ABC):
     nodes: int
     """The number of nodes in this Geo."""
 
+    labels: NDArray[np.str_]
+    """The labels for every node in this geo."""
+
     def __init__(self, spec: SpecT, nodes: int):
         self.spec = spec
         self.nodes = nodes
@@ -32,8 +35,3 @@ class Geo(Generic[SpecT], ABC):
     @abstractmethod
     def __getitem__(self, name: str) -> NDArray:
         pass
-
-    @property
-    @abstractmethod
-    def labels(self) -> NDArray[np.str_]:
-        """Return the labels for every nodes in this geo."""

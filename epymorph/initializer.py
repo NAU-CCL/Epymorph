@@ -12,7 +12,8 @@ from numpy.typing import NDArray
 
 from epymorph.error import InitException
 from epymorph.geo.geo import Geo
-from epymorph.simulation import Params, SimDimensions, SimDType
+from epymorph.params import ContextParams
+from epymorph.simulation import SimDimensions, SimDType
 from epymorph.util import NumpyTypeError, check_ndarray
 
 Initializer = Callable[..., NDArray[SimDType]]
@@ -23,12 +24,12 @@ and returns a compartments array.
 
 
 class InitContext(Protocol):
-    """The subset of the ExecutionContext that initialization might need."""
+    """The subset of the RumeContext that initialization might need."""
     # This machine avoids circular deps.
     dim: SimDimensions
     rng: np.random.Generator
     geo: Geo
-    params: Params
+    params: ContextParams
 
 
 def _default_compartments(ctx: InitContext) -> NDArray[SimDType]:

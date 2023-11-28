@@ -3,15 +3,13 @@
 from typing import Any, Callable, cast
 
 import sympy
-
-Expr = sympy.Expr
-Symbol = sympy.Symbol
+from sympy import Expr, Float, Integer, Symbol
 
 
 def to_symbol(name: str) -> Symbol:
     """
-    Create a symbol from the given string. To be consistent with the typing given, only include a single symbol.
-    (But this is not checked.)
+    Create a symbol from the given string. To be consistent with the typing given,
+    only include a single symbol. (But this is not checked.)
     """
     return cast(Symbol, sympy.symbols(name))
 
@@ -31,13 +29,34 @@ SympyLambda = Callable[[list[Any]], Any]
 
 
 def lambdify(params: list[Any], expr: Expr) -> SympyLambda:
-    """Create a lambda function from the given expression, taking the given parameters and returning a single result."""
-    # Note: calling lambdify with `[params]` means we will call it with a list of arguments later (rather than having to spread the list)
+    """
+    Create a lambda function from the given expression,
+    taking the given parameters and returning a single result.
+    """
+    # Note: calling lambdify with `[params]` means we will call it with a list of arguments later
+    # (rather than having to spread the list)
     # i.e., f([1,2,3]) rather than f(*[1,2,3])
     # This is better because we have to construct the arguments at run-time as lists.
     return cast(SympyLambda, sympy.lambdify([params], expr))
 
 
 def lambdify_list(params: list[Any], exprs: list[Expr]) -> SympyLambda:
-    """Create a lambda function from the given expressions, taking the given parameters and returning a list of results."""
+    """
+    Create a lambda function from the given expressions,
+    taking the given parameters and returning a list of results.
+    """
     return cast(SympyLambda, sympy.lambdify([params], exprs))
+
+
+__all__ = [
+    'Expr',
+    'Integer',
+    'Float',
+    'Symbol',
+    'to_symbol',
+    'simplify',
+    'simplify_sum',
+    'SympyLambda',
+    'lambdify',
+    'lambdify_list',
+]

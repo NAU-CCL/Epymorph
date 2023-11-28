@@ -13,7 +13,7 @@ from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo, StaticGeoFileOps
-from epymorph.parser.movement import MovementSpec
+from epymorph.movement.parser import MovementSpec, parse_movement_spec
 from epymorph.util import as_sorted_dict
 
 ModelT = TypeVar('ModelT')
@@ -126,7 +126,7 @@ def _mm_spec_loader(mm_spec_file: Traversable) -> Callable[[], MovementSpec]:
     def load() -> MovementSpec:
         with as_file(mm_spec_file) as file:
             spec_string = file.read_text(encoding="utf-8")
-            return MovementSpec.load(spec_string)
+            return parse_movement_spec(spec_string)
     return load
 
 

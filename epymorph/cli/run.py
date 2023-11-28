@@ -16,13 +16,12 @@ from pydantic import BaseModel, ValidationError
 import epymorph.plots as plots
 from epymorph.compartment_model import CompartmentModel
 from epymorph.data import Library, geo_library, ipm_library, mm_library
-from epymorph.engine.context import ExecutionConfig, normalize_params
 from epymorph.engine.standard_sim import Output, StandardSimulation
 from epymorph.error import UnknownModel
 from epymorph.geo.cache import load_from_cache
 from epymorph.geo.geo import Geo
 from epymorph.initializer import initializer_library
-from epymorph.parser.movement import MovementSpec
+from epymorph.movement.parser import MovementSpec, parse_movement_spec
 from epymorph.simulation import TimeFrame, enable_logging, sim_messaging
 
 
@@ -105,7 +104,7 @@ def load_model_mm(name_or_path: str) -> MovementSpec:
 
     with open(path, mode='r', encoding='utf-8') as file:
         spec_string = file.read()
-        return MovementSpec.load(spec_string)
+        return parse_movement_spec(spec_string)
 
 
 def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
@@ -114,7 +113,7 @@ def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = 
     If you would like to force certain values to take certain dtypes, provide the `dtypes` argument 
     with a mapping from key to dtype (types will not affect non-list values).
     """
-    # TODO: refactor this...?
+    # TODO: refactor this? maybe more along the lines of normalize_params
     if dtypes is None:
         dtypes = {}
     ps = dict[str, Any]()
@@ -201,17 +200,15 @@ def run(input_path: str,
         print(e)
         return 2  # error loading models
 
-    # TODO: model compatibility check
-    # print("[✓] Model compatibility check")
-
     # Create and run simulation.
 
-    time_frame = TimeFrame(run_input.start_date, run_input.duration_days)
-    params = normalize_params(run_input.params, geo, time_frame.duration_days)
-
-    sim = StandardSimulation(ExecutionConfig(
-        geo, ipm, mm, params, time_frame, initializer,
-        rng=lambda: np.random.default_rng(run_input.rng_seed)))
+    sim = StandardSimulation(
+        geo, ipm, mm,
+        run_input.params,
+        TimeFrame(run_input.start_date, run_input.duration_days),
+        initializer,
+        lambda: np.random.default_rng(run_input.rng_seed)
+    )
 
     if not profiling:
         enable_logging()

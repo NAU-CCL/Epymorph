@@ -5,14 +5,14 @@ from typing import cast
 
 from numpy.typing import NDArray
 
-from epymorph.engine.context import ExecutionContext
+from epymorph.engine.context import RumeContext
 from epymorph.error import InitException
 from epymorph.initializer import InitContext, Initializer
 from epymorph.simulation import SimDType
 from epymorph.util import NumpyTypeError, check_ndarray
 
 
-def initialize(init: Initializer, ctx: ExecutionContext) -> NDArray[SimDType]:
+def initialize(init: Initializer, ctx: RumeContext) -> NDArray[SimDType]:
     """Executes an initializer, attempting to auto-wire arguments from the context."""
     # NOTE: initializers and partials generated from them should exclusively use keyword arguments
 
