@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import partial, wraps
+from functools import wraps
 from typing import Any, Callable
 
 import numpy as np
 
 from epymorph.clock import Tick, TickDelta
-from epymorph.context import Compartments, SimContext, SimDType
+from epymorph.context import Compartments, SimContext, SimDType, make_namespace
 from epymorph.movement.clause import (RETURN, ArrayClause, CellClause, Clause,
                                       CompartmentPredicate, RowClause,
                                       TravelClause)
@@ -15,8 +15,7 @@ from epymorph.movement.engine import Movement, MovementBuilder
 from epymorph.parser.move_clause import ALL_DAYS, Daily, DayOfWeek
 from epymorph.parser.move_predef import Predef
 from epymorph.parser.movement import MovementSpec, movement_spec
-from epymorph.util import (compile_function, make_namespace, ns,
-                           pairwise_haversine, parse_function, row_normalize)
+from epymorph.util import compile_function, ns, parse_function
 
 
 @dataclass

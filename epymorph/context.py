@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass, field
-from typing import Any, cast
+from functools import partial
+from typing import Any, Callable, cast
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -15,9 +16,8 @@ from epymorph.clock import Clock
 from epymorph.data_shape import SimDimension
 from epymorph.geo.abstract import _ProxyGeo, proxy
 from epymorph.geo.geo import Geo
-from epymorph.util import (compile_function, has_function_structure,
-                           make_namespace, parse_function,
-                           preprocess_signature)
+from epymorph.util import (compile_function, has_function_structure, ns,
+                           pairwise_haversine, parse_function, row_normalize)
 
 SimDType = np.int64
 """
@@ -91,7 +91,7 @@ def normalize_params(data: dict[str, Any], geo: Geo, duration: int, dtypes: dict
         if callable(value):
             parameter_arrays[key] = evaluate_function(
                 value, compartments, duration, dt)
-        elif isinstance(value, str) and has_function_structure(str(value)):
+        elif isinstance(value, str) and has_function_structure(value):
             function_definition = parse_function(value)
             compiled_function = compile_function(function_definition, global_namespace)
             parameter_arrays[key] = evaluate_function(
@@ -102,7 +102,7 @@ def normalize_params(data: dict[str, Any], geo: Geo, duration: int, dtypes: dict
     return parameter_arrays
 
 
-def evaluate_function(function: callable, compartments: int, duration: int, dt: DTypeLike | None = None) -> NDArray:  # type:ignore
+def evaluate_function(function: Callable, compartments: int, duration: int, dt: DTypeLike | None = None) -> NDArray:
     """
     Evaluate a function and return the result as a numpy array.
 
@@ -117,7 +117,8 @@ def evaluate_function(function: callable, compartments: int, duration: int, dt: 
     """
 
     signature = tuple(inspect.signature(function).parameters.keys())
-    processed_signature = preprocess_signature(signature)
+    processed_signature = tuple('_' if param.startswith('_')
+                                else param for param in signature)
     try:
         # Handle different cases based on the function signature
         if processed_signature == ('_', '_'):
@@ -174,3 +175,65 @@ class SimContext(SimDimension):
         tnce = (self.clock.num_ticks, self.nodes,
                 self.compartments, self.events)
         object.__setattr__(self, 'TNCE', tnce)
+
+
+def make_namespace(geo: Geo, SimDType) -> dict[str, Any]:
+    """Make a safe namespace for user-defined functions."""
+    return {
+        # simulation data
+        'geo': geo,
+        'SimDType': SimDType,
+        # our utility functions
+        'pairwise_haversine': pairwise_haversine,
+        'row_normalize': row_normalize,
+        # numpy namespace
+        'np': ns({
+            # numpy utility functions
+            'array': partial(np.array, dtype=SimDType),
+            'zeros': partial(np.zeros, dtype=SimDType),
+            'zeros_like': partial(np.zeros_like, dtype=SimDType),
+            'full': partial(np.full, dtype=SimDType),
+            'sum': partial(np.sum, dtype=SimDType),
+            'newaxis': np.newaxis,
+            # numpy math functions
+            'radians': np.radians,
+            'degrees': np.degrees,
+            'exp': np.exp,
+            'log': np.log,
+            'sin': np.sin,
+            'cos': np.cos,
+            'tan': np.tan,
+            'arcsin': np.arcsin,
+            'arccos': np.arccos,
+            'arctan': np.arctan,
+            'arctan2': np.arctan2,
+            'sqrt': np.sqrt,
+            'add': np.add,
+            'subtract': np.subtract,
+            'multiply': np.multiply,
+            'divide': np.divide,
+            'maximum': np.maximum,
+            'minimum': np.minimum,
+            'absolute': np.absolute,
+            'floor': np.floor,
+            'ceil': np.ceil,
+        }),
+        # Restricted names: this is a security bandaid.
+        # TODO: I think the only sensible security measure is to analyze the functions' ASTs to detect bad behavior.
+        'globals': None,
+        'locals': None,
+        'import': None,
+        'compile': None,
+        'eval': None,
+        'exec': None,
+        'object': None,
+        'print': None,
+        'open': None,
+        'quit': None,
+        'exit': None,
+        'copyright': None,
+        'credits': None,
+        'license': None,
+        'help': None,
+        'breakpoint': None,
+    }
