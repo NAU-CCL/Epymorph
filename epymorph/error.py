@@ -16,6 +16,10 @@ class UnknownModel(Exception):
         self.name_or_path = name_or_path
 
 
+class ModelRegistryException(Exception):
+    """Exception during model library initialization."""
+
+
 class ValidationException(Exception, ABC):
     """Superclass for exceptions which happen during simulation validation."""
 

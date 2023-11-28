@@ -5,9 +5,11 @@ from sympy import Max, parse_expr
 from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge,
                                         geo, param)
+from epymorph.data import registry
 from epymorph.data_shape import Shapes
 
 
+@registry.ipm('pei')
 def load() -> CompartmentModel:
     """Load the 'pei' IPM."""
     symbols = create_symbols(
