@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 from time import perf_counter
+from typing import Any
 
 import numpy as np
 from dateutil.relativedelta import relativedelta

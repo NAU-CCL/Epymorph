@@ -340,6 +340,21 @@ class Event(Generic[T]):
 # AST function utilities
 
 
+def has_function_structure(s: str) -> bool:
+    """
+    Check if a string has the structure of a function definition.
+
+    Args:
+        s: The string to check.
+
+    Returns:
+        True if the string has the structure of a function definition, False otherwise.
+    """
+    pattern = r"def\s+\w+\s*\([^)]*\):"
+    match = re.search(pattern, s)
+    return match is not None
+
+
 def parse_function(code_string: str) -> ast.FunctionDef:
     """
     Parse a function from a code string, returning the function's AST.
@@ -426,19 +441,3 @@ class ImmutableNamespace:
 
 def ns(data: dict[str, Any]) -> ImmutableNamespace:
     return ImmutableNamespace(data)
-
-
-def has_function_structure(s: str):
-    """
-    Check if a string has the structure of a function definition.
-
-    Args:
-        s: The string to check.
-
-    Returns:
-        True if the string has the structure of a function definition, False otherwise.
-    """
-    pattern = r"def\s+\w+\s*\([^)]*\):"
-    match = re.search(pattern, s)
-
-    return bool(match)

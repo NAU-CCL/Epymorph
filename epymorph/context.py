@@ -82,7 +82,7 @@ def normalize_params(data: dict[str, Any], geo: Geo, duration: int, dtypes: dict
     p = cast(_ProxyGeo, proxy)
     p.set_actual_geo(geo)
 
-    global_namespace = make_namespace(geo=geo, SimDType=SimDType)
+    global_namespace = make_namespace(geo)
 
     for key, value in data.items():
 
@@ -177,7 +177,7 @@ class SimContext(SimDimension):
         object.__setattr__(self, 'TNCE', tnce)
 
 
-def make_namespace(geo: Geo, SimDType) -> dict[str, Any]:
+def make_namespace(geo: Geo) -> dict[str, Any]:
     """Make a safe namespace for user-defined functions."""
     return {
         # simulation data

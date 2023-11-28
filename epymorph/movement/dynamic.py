@@ -153,7 +153,7 @@ def make_global_namespace(ctx: SimContext) -> dict[str, Any]:
         return wrapped_func
 
     geo = ctx.geo
-    global_namespace = make_namespace(geo=geo, SimDType=SimDType)
+    global_namespace = make_namespace(geo)
 
     # Adding more elements to the namespace
     global_namespace['param'] = ctx.param
