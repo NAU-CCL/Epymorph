@@ -1,8 +1,6 @@
 """
 A common exception framework for epymorph.
 """
-from __future__ import annotations
-
 from abc import ABC
 from typing import Self
 

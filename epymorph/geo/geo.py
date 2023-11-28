@@ -2,8 +2,6 @@
 A geo represents a simulation's metapopulation model
 with all of its attached data attributes.
 """
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 

@@ -1,6 +1,4 @@
 """World implementation: HypercubeWorld."""
-from __future__ import annotations
-
 from typing import Self
 
 import numpy as np

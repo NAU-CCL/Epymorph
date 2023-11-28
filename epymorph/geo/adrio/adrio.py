@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import Callable
 
@@ -39,7 +37,6 @@ class ADRIOMaker(ABC):
     @abstractmethod
     def make_adrio(self, attrib: AttribDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
         """Creates an ADRIO to fetch the specified attribute for the specified time and place."""
-        pass
 
 
 ADRIOMakerLibrary = dict[str, type[ADRIOMaker]]

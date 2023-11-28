@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from contextlib import contextmanager
 from datetime import date, timedelta
@@ -69,12 +67,15 @@ Any Tick plus Never returns Never.
 class SimDimensions(NamedTuple):
     """The dimensionality of a simulation."""
 
-    @staticmethod
-    def build(tau_step_lengths: Sequence[float], days: int, nodes: int, compartments: int, events: int) -> SimDimensions:
+    @classmethod
+    def build(cls, tau_step_lengths: Sequence[float], days: int, nodes: int, compartments: int, events: int):
         """Convenience constructor which reduces the overhead of initializing duplicative fields."""
         tau_steps = len(tau_step_lengths)
         ticks = tau_steps * days
-        return SimDimensions(tau_step_lengths, tau_steps, days, ticks, nodes, compartments, events, (ticks, nodes, compartments, events))
+        return cls(
+            tau_step_lengths, tau_steps, days, ticks,
+            nodes, compartments, events,
+            (ticks, nodes, compartments, events))
 
     tau_step_lengths: Sequence[float]
     """The lengths of each tau step in the MM."""

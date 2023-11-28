@@ -13,26 +13,26 @@ class TestCohort(EpymorphTestCase):
     def test_can_merge(self):
         c1 = Cohort(np.array([100]), 0, ListWorld.HOME_TICK)
         c2 = Cohort(np.array([200]), 0, ListWorld.HOME_TICK)
-        self.assertTrue(Cohort.can_merge(c1, c1))
-        self.assertTrue(Cohort.can_merge(c2, c2))
-        self.assertTrue(Cohort.can_merge(c1, c2))
-        self.assertTrue(Cohort.can_merge(c2, c1))
+        self.assertTrue(c1.can_merge_with(c1))
+        self.assertTrue(c2.can_merge_with(c2))
+        self.assertTrue(c1.can_merge_with(c2))
+        self.assertTrue(c2.can_merge_with(c1))
 
     def test_can_not_merge(self):
         # if return tick varies -- no merge
         c1 = Cohort(np.array([100]), 0, 1)
         c2 = Cohort(np.array([200]), 0, 2)
-        self.assertFalse(Cohort.can_merge(c1, c2))
+        self.assertFalse(c1.can_merge_with(c2))
         # if return location varies -- no merge
         c3 = Cohort(np.array([300]), 1, 1)
-        self.assertFalse(Cohort.can_merge(c1, c3))
+        self.assertFalse(c1.can_merge_with(c3))
         # if both vary -- no merge
-        self.assertFalse(Cohort.can_merge(c2, c3))
+        self.assertFalse(c2.can_merge_with(c3))
 
     def test_merge(self):
         c1 = Cohort(np.array([100, 33]), 13, 42)
         c2 = Cohort(np.array([200, 66]), 13, 42)
-        Cohort.merge(c1, c2)
+        c1.merge_from(c2)
         # c1 (only compartment value) has changed...
         self.assertNpEqual(c1.compartments, [300, 99])
         self.assertEqual(c1.return_location, 13)

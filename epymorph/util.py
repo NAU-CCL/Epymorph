@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import ast
 import re
 from contextlib import contextmanager
@@ -412,6 +410,8 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
 
 class ImmutableNamespace:
     """A simple dot-accessible dictionary."""
+    # TODO: is it possible to use vars(my_immutable_namespace) to get a mutable handle on this class' data?
+
     __slots__ = ['_data']
 
     _data: dict[str, Any]

@@ -1,6 +1,4 @@
 """World implementation: ListWorld."""
-from __future__ import annotations
-
 from operator import attrgetter
 from typing import Iterable, Self
 
@@ -16,22 +14,12 @@ class Cohort:
     Represents a group of individuals, divided into IPM compartments as appropriate for the simulation.
     These individuals share the same "home location" and a time at which they should return there.
 
-    These are somewhat abstract concepts, however; a completely nomadic group doesn't really have a home location, merely the next
-    location in a chain of movements.
+    These are somewhat abstract concepts, however; a completely nomadic group doesn't really have a home location,
+    merely the next location in a chain of movements.
     """
 
     SORT_KEY = attrgetter('return_tick', 'return_location')
     """The natural sort order of a Cohort."""
-
-    @staticmethod
-    def can_merge(a: Cohort, b: Cohort) -> bool:
-        """Returns true if two cohorts can be merged."""
-        return a.return_tick == b.return_tick and a.return_location == b.return_location
-
-    @staticmethod
-    def merge(intoc: Cohort, fromc: Cohort) -> None:
-        """Merges two cohorts (right-into-left), modifying the first in-place."""
-        intoc.compartments += fromc.compartments
 
     compartments: NDArray[SimDType]
     return_location: int
@@ -45,6 +33,15 @@ class Cohort:
         self.compartments = compartments
         self.return_location = return_location
         self.return_tick = return_tick
+
+    def can_merge_with(self, other: Self) -> bool:
+        """Returns true if two cohorts can be merged."""
+        return self.return_tick == other.return_tick \
+            and self.return_location == other.return_location
+
+    def merge_from(self, from_cohort: Self) -> None:
+        """Merges another cohort into this one, modifying in-place."""
+        self.compartments += from_cohort.compartments
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Cohort):
@@ -96,8 +93,8 @@ class ListWorld(World):
             while j < len(cohorts):
                 prev = cohorts[j - 1]
                 curr = cohorts[j]
-                if Cohort.can_merge(prev, curr):
-                    Cohort.merge(prev, curr)
+                if prev.can_merge_with(curr):
+                    prev.merge_from(curr)
                     del cohorts[j]
                 else:
                     j += 1
