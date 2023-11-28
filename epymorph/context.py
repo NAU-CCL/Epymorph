@@ -4,15 +4,20 @@ the SimContext structure is here to contain that info and avoid circular depende
 """
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
-from typing import Any
+from functools import partial
+from typing import Any, Callable, cast
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from epymorph.clock import Clock
 from epymorph.data_shape import SimDimension
+from epymorph.geo.abstract import _ProxyGeo, proxy
 from epymorph.geo.geo import Geo
+from epymorph.util import (compile_function, has_function_structure, ns,
+                           pairwise_haversine, parse_function, row_normalize)
 
 SimDType = np.int64
 """
@@ -56,6 +61,91 @@ def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = 
     return ps
 
 
+def normalize_params(data: dict[str, Any], geo: Geo, duration: int, dtypes: dict[str, DTypeLike] | None = None) -> dict[str, NDArray]:
+    """
+    Normalize a dictionary of values so that all lists are replaced with numpy arrays.
+
+    Args:
+        data: A dictionary of values to normalize.
+        compartments: The number of compartments in the system.
+        duration: The duration of the simulation.
+        dtypes: A dictionary of data types for the parameters.
+
+    Returns:
+        A dictionary of numpy arrays representing the normalized parameters.
+    """
+    if dtypes is None:
+        dtypes = {}
+
+    parameter_arrays = dict[str, NDArray]()
+    compartments = geo.nodes
+    p = cast(_ProxyGeo, proxy)
+    p.set_actual_geo(geo)
+
+    global_namespace = make_namespace(geo)
+
+    for key, value in data.items():
+
+        dt = dtypes.get(key, None)
+
+        if callable(value):
+            parameter_arrays[key] = evaluate_function(
+                value, compartments, duration, dt)
+        elif isinstance(value, str) and has_function_structure(value):
+            function_definition = parse_function(value)
+            compiled_function = compile_function(function_definition, global_namespace)
+            parameter_arrays[key] = evaluate_function(
+                compiled_function, compartments, duration, dt)
+        else:
+            parameter_arrays[key] = np.asarray(value, dtype=dtypes.get(key, None))
+
+    return parameter_arrays
+
+
+def evaluate_function(function: Callable, compartments: int, duration: int, dt: DTypeLike | None = None) -> NDArray:
+    """
+    Evaluate a function and return the result as a numpy array.
+
+    Args:
+        function: The function to evaluate.
+        compartments: The number of compartments in the system.
+        duration: The duration of the simulation.
+        dt: The data type for the result of the function evaluation.
+
+    Returns:
+        A numpy array representing the result of the evaluation.
+    """
+
+    signature = tuple(inspect.signature(function).parameters.keys())
+    processed_signature = tuple('_' if param.startswith('_')
+                                else param for param in signature)
+    try:
+        # Handle different cases based on the function signature
+        if processed_signature == ('_', '_'):
+            result = function(None, None)
+        elif processed_signature == ('t', '_'):
+            result = [function(d, None) for d in range(duration)]
+        elif processed_signature == ('_', 'n'):
+            result = [function(None, c) for c in range(compartments)]
+        elif processed_signature == ('t', 'n'):
+            result = [[function(d, c) for c in range(compartments)]
+                      for d in range(duration)]
+        else:
+            # Handle unsupported function signatures
+            if len(signature) != 2:
+                raise ValueError(
+                    f"Unsupported function signature for function: {function.__name__}. Function must have two parameters, def func_name(_, _)")
+            else:
+                raise ValueError(
+                    f"Unsupported function signature for function: {function.__name__}. Parameter names can only be 't', 'n', or '_'.")
+
+    except (IndexError, ValueError, IndentationError) as e:
+        raise ValueError(
+            f"An error occurred while running the parameter function '{function.__name__}': {str(e)}") from e
+
+    return np.asarray(result, dtype=dt)
+
+
 # SimContext
 
 
@@ -69,7 +159,7 @@ class SimContext(SimDimension):
     compartment_tags: list[list[str]]
     events: int
     # run info
-    param: dict[str, Any]
+    param: dict[str, NDArray]
     clock: Clock
     rng: np.random.Generator
     # denormalized info
@@ -85,3 +175,65 @@ class SimContext(SimDimension):
         tnce = (self.clock.num_ticks, self.nodes,
                 self.compartments, self.events)
         object.__setattr__(self, 'TNCE', tnce)
+
+
+def make_namespace(geo: Geo) -> dict[str, Any]:
+    """Make a safe namespace for user-defined functions."""
+    return {
+        # simulation data
+        'geo': geo,
+        'SimDType': SimDType,
+        # our utility functions
+        'pairwise_haversine': pairwise_haversine,
+        'row_normalize': row_normalize,
+        # numpy namespace
+        'np': ns({
+            # numpy utility functions
+            'array': partial(np.array, dtype=SimDType),
+            'zeros': partial(np.zeros, dtype=SimDType),
+            'zeros_like': partial(np.zeros_like, dtype=SimDType),
+            'full': partial(np.full, dtype=SimDType),
+            'sum': partial(np.sum, dtype=SimDType),
+            'newaxis': np.newaxis,
+            # numpy math functions
+            'radians': np.radians,
+            'degrees': np.degrees,
+            'exp': np.exp,
+            'log': np.log,
+            'sin': np.sin,
+            'cos': np.cos,
+            'tan': np.tan,
+            'arcsin': np.arcsin,
+            'arccos': np.arccos,
+            'arctan': np.arctan,
+            'arctan2': np.arctan2,
+            'sqrt': np.sqrt,
+            'add': np.add,
+            'subtract': np.subtract,
+            'multiply': np.multiply,
+            'divide': np.divide,
+            'maximum': np.maximum,
+            'minimum': np.minimum,
+            'absolute': np.absolute,
+            'floor': np.floor,
+            'ceil': np.ceil,
+        }),
+        # Restricted names: this is a security bandaid.
+        # TODO: I think the only sensible security measure is to analyze the functions' ASTs to detect bad behavior.
+        'globals': None,
+        'locals': None,
+        'import': None,
+        'compile': None,
+        'eval': None,
+        'exec': None,
+        'object': None,
+        'print': None,
+        'open': None,
+        'quit': None,
+        'exit': None,
+        'copyright': None,
+        'credits': None,
+        'license': None,
+        'help': None,
+        'breakpoint': None,
+    }

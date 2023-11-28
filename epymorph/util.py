@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import re
-from inspect import isbuiltin
 from typing import (Any, Callable, Generic, Iterable, Literal, OrderedDict,
                     TypeGuard, TypeVar)
 
@@ -341,10 +340,30 @@ class Event(Generic[T]):
 # AST function utilities
 
 
+def has_function_structure(s: str) -> bool:
+    """
+    Check if a string has the structure of a function definition.
+
+    Args:
+        s: The string to check.
+
+    Returns:
+        True if the string has the structure of a function definition, False otherwise.
+    """
+    pattern = r"def\s+\w+\s*\([^)]*\):"
+    match = re.search(pattern, s)
+    return match is not None
+
+
 def parse_function(code_string: str) -> ast.FunctionDef:
     """
     Parse a function from a code string, returning the function's AST.
     It will be assumed that the string contains only a single Python function definition.
+    Args:
+        function_string: The function string to parse.
+
+    Returns:
+        An AST.FunctionDef node representing the function.
     """
 
     # Parse the code string into an AST
@@ -360,6 +379,12 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
     """
     Compile the given function's AST using the given global namespace.
     Returns the function.
+    Args:
+        function_definition: The function definition to compile.
+        global_vars: A dictionary of global variables to make available to the compiled function.
+
+    Returns:
+        A callable object representing the compiled function.
     """
 
     # Compile the code and execute it, providing global and local namespaces
