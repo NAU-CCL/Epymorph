@@ -83,6 +83,17 @@ def cal(t,_):
         exp = np.array([my_function(t, None) for t in range(100)])
         np.testing.assert_array_equal(normed["a"], exp)
 
+    def test_normalize_params_copies_ndarrays(self):
+        alpha = np.array([1, 2, 3, 4, 5], dtype=np.int64)
+
+        normed = normalize_params({"alpha": alpha}, self.test_geo, 100)
+
+        alpha_n = normed['alpha']
+        self.assertFalse(
+            np.shares_memory(alpha, alpha_n),
+            "Normalized ndarrays should be distinct copies of the input."
+        )
+
 
 class TestEvaluateFunction(unittest.TestCase):
 

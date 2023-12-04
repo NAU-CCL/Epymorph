@@ -8,8 +8,7 @@ from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.error import (AttributeException, MmCompileException,
-                            MmValidationException)
+from epymorph.error import AttributeException, MmCompileException, error_gate
 from epymorph.movement.movement_model import (DynamicTravelClause,
                                               MovementContext,
                                               MovementFunction, MovementModel,
@@ -22,7 +21,8 @@ from epymorph.util import ImmutableNamespace, compile_function, parse_function
 
 def compile_spec(ctx: MovementContext, spec: MovementSpec) -> MovementModel:
     """Compile a movement model from a spec, given a simulation context."""
-    try:
+    with error_gate("compiling the movement model", MmCompileException, AttributeException):
+
         # Prepare a namespace within which to execute our movement functions.
         global_namespace = _movement_global_namespace(ctx)
 
@@ -34,7 +34,15 @@ def compile_spec(ctx: MovementContext, spec: MovementSpec) -> MovementModel:
                 parse_function(spec.predef.function),
                 global_namespace
             )
-            predef_result = predef_f()
+
+            try:
+                predef_result = predef_f()
+            except KeyError as e:
+                # NOTE: catching KeyError here will be necessary (to get nice error messages)
+                # until we can properly validate the MM clauses.
+                msg = f"Missing attribute {e} required by movement model predef."
+                raise AttributeException(msg) from None
+
             if not isinstance(predef_result, dict):
                 msg = f"Movement predef: did not return a dictionary result (got: {type(predef_result)})"
                 raise MmCompileException(msg)
@@ -42,62 +50,10 @@ def compile_spec(ctx: MovementContext, spec: MovementSpec) -> MovementModel:
         # Merge predef into our namespace.
         global_namespace |= {'predef': predef_result}
 
-        def compile_clause(clause: MovementClause) -> TravelClause:
-            """Compiles a movement clause in this context."""
-            # Parse AST for the function.
-            try:
-                fn_ast = parse_function(clause.function)
-                fn = compile_function(fn_ast, global_namespace)
-            except Exception as e:
-                msg = "Unable to compile movement clause function."
-                raise MmCompileException(msg) from e
-
-            # Construct a mask for IPM compartments subject to movement.
-            def mask_predicate(ctx: MovementContext) -> NDArray[np.bool_]:
-                return np.array(
-                    ['immobile' not in c.tags for c in ctx.ipm.compartments],
-                    dtype=np.bool_
-                )
-
-            # Handle different types of MovementClause.
-            match clause:
-                case DailyClause():
-                    clause_weekdays = set(
-                        i for (i, d) in enumerate(ALL_DAYS)
-                        if d in clause.days
-                    )
-
-                    def move_predicate(_ctx: MovementContext, tick: Tick) -> bool:
-                        return clause.leave_step == tick.step and \
-                            tick.date.weekday() in clause_weekdays
-
-                    def returns(_ctx, _tick) -> TickDelta:
-                        return TickDelta(
-                            days=clause.duration.to_days(),
-                            step=clause.return_step
-                        )
-
-                    return DynamicTravelClause(
-                        name=fn_ast.name,
-                        mask_predicate=mask_predicate,
-                        move_predicate=move_predicate,
-                        requested=_adapt_move_function(fn, fn_ast),
-                        returns=returns
-                    )
-
         return MovementModel(
             tau_steps=spec.steps.step_lengths,
-            clauses=[compile_clause(c) for c in spec.clauses]
+            clauses=[_compile_clause(c, global_namespace) for c in spec.clauses]
         )
-
-    except AttributeException as e:
-        msg = f"Unable to compile movement model:\n- {e}"
-        raise MmCompileException(msg) from None
-    except MmCompileException as e:
-        raise e
-    except Exception as e:
-        msg = "Unknown exception during movement model compilation."
-        raise MmCompileException(msg) from e
 
 
 def _movement_global_namespace(ctx: MovementContext) -> dict[str, Any]:
@@ -128,6 +84,50 @@ def _movement_global_namespace(ctx: MovementContext) -> dict[str, Any]:
         'np': np_ns,
     }
     return global_namespace
+
+
+def _compile_clause(clause: MovementClause, global_namespace: dict[str, Any]) -> TravelClause:
+    """Compiles a movement clause in a given namespace."""
+    # Parse AST for the function.
+    try:
+        fn_ast = parse_function(clause.function)
+        fn = compile_function(fn_ast, global_namespace)
+    except Exception as e:
+        msg = "Unable to parse and compile movement clause function."
+        raise MmCompileException(msg) from e
+
+    # Construct a mask for IPM compartments subject to movement.
+    def mask_predicate(ctx: MovementContext) -> NDArray[np.bool_]:
+        return np.array(
+            ['immobile' not in c.tags for c in ctx.ipm.compartments],
+            dtype=np.bool_
+        )
+
+    # Handle different types of MovementClause.
+    match clause:
+        case DailyClause():
+            clause_weekdays = set(
+                i for (i, d) in enumerate(ALL_DAYS)
+                if d in clause.days
+            )
+
+            def move_predicate(_ctx: MovementContext, tick: Tick) -> bool:
+                return clause.leave_step == tick.step and \
+                    tick.date.weekday() in clause_weekdays
+
+            def returns(_ctx: MovementContext, _tick: Tick) -> TickDelta:
+                return TickDelta(
+                    days=clause.duration.to_days(),
+                    step=clause.return_step
+                )
+
+            return DynamicTravelClause(
+                name=fn_ast.name,
+                mask_predicate=mask_predicate,
+                move_predicate=move_predicate,
+                requested=_adapt_move_function(fn, fn_ast),
+                returns=returns
+            )
 
 
 def _adapt_move_function(fn: Callable, fn_ast: FunctionDef) -> MovementFunction:
@@ -168,4 +168,4 @@ def _adapt_move_function(fn: Callable, fn_ast: FunctionDef) -> MovementFunction:
 
         case invalid_num_args:
             msg = f"Movement clause '{fn_ast.name}' has an invalid number of arguments ({invalid_num_args})"
-            raise MmValidationException(msg)
+            raise MmCompileException(msg)

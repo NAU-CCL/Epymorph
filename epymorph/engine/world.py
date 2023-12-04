@@ -1,3 +1,10 @@
+"""
+The World represents the simulation state at a given point in time.
+World implementations keep track of how many locations are being simulated,
+and the compartmental breakdown of individuals in each of those locations.
+They also keep track of groups of individuals which have moved between locations
+and will eventually be returning or moving to another location.
+"""
 from abc import ABC, abstractmethod
 
 from numpy.typing import NDArray

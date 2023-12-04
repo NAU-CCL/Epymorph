@@ -5,7 +5,7 @@ There are potentially many ways to do this, driven by source data from
 the geo or simulation parameters, so this module provides a uniform interface
 to accomplish the task, as well as a few common implementations.
 """
-from typing import Callable, Protocol, cast
+from typing import Any, Callable, Protocol, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -260,3 +260,18 @@ initializer_library: dict[str, Initializer] = {
     'bottom_locations': bottom_locations,
 }
 """A library for the built-in initializer functions."""
+
+
+def normalize_init_params(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize parameters for initializers."""
+    return {
+        # Replace list values with numpy arrays.
+        # NOTE: this is necessary for now, since TOML file input doesn't give us any way
+        # to supply numpy arrays as input. However we can't array-ify _everything_ like we do
+        # with params, because it makes sense to allow initializers to use other types for arguments.
+        # A definite point of akwardness when it comes to auto-wiring initializer arguments from the
+        # simulation parameters. We have to duplicate this normalization there, too, for it to be consistent.
+        # In any case, we'll need come up with something smarter than this, but this is okay for now.
+        key: np.asarray(value) if isinstance(value, list) else value
+        for key, value in data.items()
+    }

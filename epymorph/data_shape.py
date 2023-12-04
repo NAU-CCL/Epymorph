@@ -33,7 +33,11 @@ class DataShape(ABC):
 
     @abstractmethod
     def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        """Returns an accessor function for the given shape on the given data array."""
+        """
+        Returns an accessor function for the given shape on the given data array.
+        The accessor function is designed to retrieve a scalar value for a given simulation tick
+        and a given geo node (by index).
+        """
 
 
 @dataclass(frozen=True)

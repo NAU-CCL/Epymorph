@@ -11,7 +11,7 @@ class UnknownModel(Exception):
     name_or_path: str
 
     def __init__(self, model_type: str, name_or_path: str):
-        super().__init__(f"Unable to load {model_type} model at {name_or_path}")
+        super().__init__(f"Unable to load {model_type} model '{name_or_path}'")
         self.model_type = model_type
         self.name_or_path = name_or_path
 

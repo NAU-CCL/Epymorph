@@ -18,10 +18,10 @@ from epymorph.error import (AttributeException, InitException,
                             IpmValidationException)
 from epymorph.geo.abstract import proxy_geo
 from epymorph.geo.geo import Geo
-from epymorph.initializer import Initializer
+from epymorph.initializer import Initializer, normalize_init_params
 from epymorph.movement.movement_model import MovementModel
 from epymorph.movement.parser import MovementSpec
-from epymorph.params import ContextParams, Params, normalize_params
+from epymorph.params import ContextParams, ParamNp, Params, normalize_params
 from epymorph.simulation import (SimDimensions, SimDType, Tick, TickDelta,
                                  TimeFrame)
 from epymorph.util import MemoDict, NumpyTypeError, check_ndarray
@@ -117,12 +117,12 @@ class RumeContext:
         return -1 if delta.days == -1 else \
             tick.index - tick.step + (self.dim.tau_steps * delta.days) + delta.step
 
-    # def update_params(self, params: ContextParams) -> None:
-        # TODO: is this necessary? test if mutation of the underlying data is possible
-        # without having to re-create the associated getter...
-        # might be fine as long as the data array can changed in-place
-        # self.params = params
-        # self._attribute_getters.clear()
+    def update_param(self, name: str, value: ParamNp) -> None:
+        """Updates a params value."""
+        self.params[name] = value.copy()
+        attrs = [a for a in self._attribute_getters if a.name == name]
+        for a in attrs:
+            del self._attribute_getters[a]
 
     def _get_attribute_value(self, attr: AttributeDef) -> NDArray:
         """Retrieve the value associated with the given attribute."""
@@ -188,15 +188,24 @@ def _simulation_clock(dim: SimDimensions, start_date: date) -> Iterable[Tick]:
 
 
 def _initialize(ctx: RumeContext) -> NDArray[SimDType]:
+    """
+    Executes the initialization logic for a RumeContext.
+    Much of the processing here is an attempt to auto-wire initializer
+    function parameters from the context -- providing either the context itself,
+    a geo attribute, a params attribute, or a default argument -- if they have
+    not otherwise been provided using partial.
+    """
     init = ctx.initializer
     partial_kwargs = set[str]()
     if isinstance(init, partial):
         # partial funcs require a bit of extra massaging
         init_name = init.func.__name__
-        partial_kwargs = set(init.keywords.keys())
+        partial_kwargs = set(init.keywords)
         init = cast(Initializer, init)
     else:
         init_name = cast(str, getattr(init, '__name__', 'UNKNOWN'))
+
+    init_params = normalize_init_params({**ctx.raw_params})
 
     # get list of args for function
     sig = inspect.signature(init)
@@ -218,9 +227,9 @@ def _initialize(ctx: RumeContext) -> NDArray[SimDType]:
         elif p.name in ctx.geo.spec.attribute_map:
             # If name is in geo, use that.
             kwargs[p.name] = ctx.geo[p.name]
-        elif p.name in ctx.raw_params:
+        elif p.name in init_params:
             # If name is in params, use that.
-            kwargs[p.name] = ctx.raw_params[p.name]
+            kwargs[p.name] = init_params[p.name]
         elif p.default is not inspect.Parameter.empty:
             # If arg has a default, use that.
             kwargs[p.name] = p.default

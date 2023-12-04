@@ -63,6 +63,30 @@ class Output:
         self.prevalence = np.zeros((T, N, C), dtype=SimDType)
         self.incidence = np.zeros((T, N, E), dtype=SimDType)
 
+    @property
+    def incidence_per_day(self) -> NDArray[SimDType]:
+        """
+        Returns this output's `incidence` from a per-tick value to a per-day value.
+        Returns a shape (D,N,E) array, where D is the number of simulation days.
+        """
+        T, N, _, E = self.dim.TNCE
+        taus = self.dim.tau_steps
+        return np.sum(
+            self.incidence.reshape((T // taus, taus, N, E)),
+            axis=1,
+            dtype=SimDType
+        )
+
+    @property
+    def ticks_in_days(self) -> NDArray[np.float64]:
+        """
+        Create a series with as many values as there are simulation ticks,
+        but in the scale of fractional days. That is: the cumulative sum of
+        the simulation's tau step lengths across the simulation duration.
+        Returns a shape (T,) array, where T is the number of simulation ticks.
+        """
+        return np.cumsum(np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64)
+
 
 class StandardSimulation(SimulationEvents):
     """Runs singular simulation passes, producing time-series output."""
@@ -119,7 +143,7 @@ class StandardSimulation(SimulationEvents):
 
         for tick in ctx.clock():
             # First do movement
-            with error_gate("executing_the_movement_model", MmSimException, AttributeException):
+            with error_gate("executing the movement model", MmSimException, AttributeException):
                 movement_exec.apply(world, tick)
 
             # Then do IPM

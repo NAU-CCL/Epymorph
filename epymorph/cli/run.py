@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Callable, ParamSpec, TypeVar
 
 import numpy as np
-from numpy.typing import DTypeLike
 from pydantic import BaseModel, ValidationError
 
 import epymorph.plots as plots
@@ -20,9 +19,10 @@ from epymorph.engine.standard_sim import Output, StandardSimulation
 from epymorph.error import UnknownModel
 from epymorph.geo.cache import load_from_cache
 from epymorph.geo.geo import Geo
-from epymorph.initializer import initializer_library
+from epymorph.initializer import initializer_library, normalize_init_params
 from epymorph.movement.parser import MovementSpec, parse_movement_spec
-from epymorph.simulation import TimeFrame, enable_logging, sim_messaging
+from epymorph.simulation import (TimeFrame, default_rng, enable_logging,
+                                 sim_messaging)
 
 
 def interactive_select(model_type: str, lib: Library) -> str:
@@ -86,7 +86,7 @@ def load_model_geo(name: str, ignore_cache: bool) -> Geo:
 @load_messaging("IPM")
 def load_model_ipm(name: str) -> CompartmentModel:
     """Loads an IPM by name."""
-    if name not in mm_library:
+    if name not in ipm_library:
         raise UnknownModel('IPM', name)
 
     return ipm_library[name]()
@@ -105,26 +105,6 @@ def load_model_mm(name_or_path: str) -> MovementSpec:
     with open(path, mode='r', encoding='utf-8') as file:
         spec_string = file.read()
         return parse_movement_spec(spec_string)
-
-
-def normalize_lists(data: dict[str, Any], dtypes: dict[str, DTypeLike] | None = None) -> dict[str, Any]:
-    """
-    Normalize a dictionary of values so that all lists are replaced with numpy arrays.
-    If you would like to force certain values to take certain dtypes, provide the `dtypes` argument 
-    with a mapping from key to dtype (types will not affect non-list values).
-    """
-    # TODO: refactor this? maybe more along the lines of normalize_params
-    if dtypes is None:
-        dtypes = {}
-    ps = dict[str, Any]()
-    # Replace list values with numpy arrays.
-    for key, value in data.items():
-        if isinstance(value, list):
-            dt = dtypes.get(key, None)
-            ps[key] = np.asarray(value, dtype=dt)
-        else:
-            ps[key] = value
-    return ps
 
 
 class RunInput(BaseModel):
@@ -167,9 +147,9 @@ def run(input_path: str,
 
     # Configure initializer.
 
-    init_args = run_input.init
+    init_params = run_input.init.copy()
     try:
-        init_fn = init_args.pop('initializer')
+        init_fn = init_params.pop('initializer')
     except KeyError:
         print("ERROR: Required configuration `init.initializer` not found.")
         return 2  # invalid input
@@ -178,7 +158,8 @@ def run(input_path: str,
     except KeyError:
         print(f"ERROR: Unknown initializer: {init_fn}")
         return 2  # invalid input
-    initializer = partial(init, **normalize_lists(init_args))
+
+    initializer = partial(init, **normalize_init_params(init_params))
 
     # Load models.
 
@@ -207,7 +188,7 @@ def run(input_path: str,
         run_input.params,
         TimeFrame(run_input.start_date, run_input.duration_days),
         initializer,
-        lambda: np.random.default_rng(run_input.rng_seed)
+        default_rng(run_input.rng_seed)
     )
 
     if not profiling:

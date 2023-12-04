@@ -58,6 +58,7 @@ class _ProxyGeoSingleton:
 
 
 _proxy_geo_singleton = _ProxyGeoSingleton()
+"""Internal-use proxy geo singleton instance."""
 
 
 @contextmanager

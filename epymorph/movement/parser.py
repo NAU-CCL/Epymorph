@@ -6,6 +6,13 @@ import pyparsing as P
 import epymorph.movement.parser_util as p
 from epymorph.error import MmParseException
 
+# A MovementSpec has the following object structure:
+#
+# - MovementSpec
+#   - MoveSteps (1)
+#   - Predef (0 or 1)
+#   - MovementClause (1 or more)
+
 ############################################################
 # MoveSteps
 ############################################################

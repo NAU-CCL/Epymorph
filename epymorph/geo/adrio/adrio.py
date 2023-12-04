@@ -1,3 +1,7 @@
+"""
+ADRIOs enable dynamic geos to fetch data from varied external data sources,
+and ADRIOMakers create ADRIOs for a data soruce and specialized for a geo's purposes.
+"""
 from abc import ABC, abstractmethod
 from typing import Callable
 

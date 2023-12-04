@@ -5,7 +5,7 @@ populations as groupings of integer-numbered individuals.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Iterable, Iterator
 
@@ -143,7 +143,7 @@ class CompartmentDef:
     symbol: Symbol
     name: str
     tags: list[str]
-    description: str | None
+    description: str | None = field(default=None)
 
 
 def compartment(name: str, tags: list[str] | None = None, description: str | None = None) -> CompartmentDef:

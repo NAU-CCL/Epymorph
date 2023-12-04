@@ -1,3 +1,4 @@
+"""Logic for saving to, loading from, and managing a cache of geos on the user's hard disk."""
 import os
 
 from platformdirs import user_cache_path

@@ -3,7 +3,7 @@ A geo specification contains metadata about a geo:
 its attributes and specific dimensions in time and space.
 """
 import calendar
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import cached_property
@@ -46,26 +46,46 @@ class Geography(ABC):
 class TimePeriod(ABC):
     """Expresses the time period covered by a GeoSpec."""
 
-    @property
-    @abstractmethod
-    def days(self) -> int:
-        """The time period as a number of days."""
+    days: int
+    """The time period as a number of days."""
+
+
+class SpecificTimePeriod(TimePeriod, ABC):
+    """Expresses a real time period, with a determinable start and end date."""
+
+    start_date: date
+    """The start date of the date range. [start_date, end_date)"""
+    end_date: date
+    """The non-inclusive end date of the date range. [start_date, end_date)"""
 
 
 @dataclass(frozen=True)
-class DateRange(TimePeriod):
+class DateRange(SpecificTimePeriod):
+    """TimePeriod representing the time between two dates, exclusive of the end date."""
     start_date: date
     end_date: date
 
+    @property
+    def days(self) -> int:
+        return (self.end_date - self.start_date).days
+
 
 @dataclass(frozen=True)
-class Year(TimePeriod):
+class Year(SpecificTimePeriod):
     """TimePeriod representing a specific year."""
     year: int
 
     @property
     def days(self) -> int:
         return 366 if calendar.isleap(self.year) else 365
+
+    @property
+    def start_date(self) -> date:
+        return date(self.year, 1, 1)
+
+    @property
+    def end_date(self) -> date:
+        return date(self.year + 1, 1, 1)
 
 
 @dataclass(frozen=True)
@@ -92,14 +112,6 @@ NO_DURATION = NonspecificDuration(1)
 class DateAndDuration(NonspecificDuration):
     """TimePeriod representing a number of days starting on the given date."""
     start_date: date
-
-    @property
-    def last_date(self) -> date:
-        """
-        Returns the last date included, i.e., the inclusive end of the date range.
-        [start_date, last_date]
-        """
-        return self.start_date + timedelta(days=self.days-1)
 
     @property
     def end_date(self) -> date:

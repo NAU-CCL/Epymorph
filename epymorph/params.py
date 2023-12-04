@@ -22,8 +22,7 @@ Types for raw parameter values. Users can supply any of these forms when constru
 simulation parameters.
 """
 
-# TODO: should this be a Mapping for covariance?
-Params = dict[str, ParamValue]
+Params = Mapping[str, ParamValue]
 """Simulation parameters in their non-normalized input form."""
 
 ContextParams = dict[str, ParamNp]
@@ -32,7 +31,11 @@ ContextParams = dict[str, ParamNp]
 
 def normalize_params(raw_params: Params, geo: Geo, duration: int,
                      dtypes: Mapping[str, DTypeLike] | None = None) -> dict[str, ParamNp]:
-    """Normalize raw parameter values to numpy arrays."""
+    """
+    Normalize raw parameter values to numpy arrays. dtypes can be enforced
+    by passing a mapping from attribute name to the desired dtype.
+    Any parameters that are already in the form of a numpy array will be copied.
+    """
     def _get_dtype(name: str) -> DTypeLike | None:
         return None if dtypes is None else dtypes.get(name, None)
 
@@ -47,8 +50,9 @@ def normalize_params(raw_params: Params, geo: Geo, duration: int,
 
         if callable(raw):
             return _evaluate_param_function(raw, geo.nodes, duration, dtype)
-        else:
-            return np.asarray(raw, dtype=dtype)
+        if isinstance(raw, np.ndarray):
+            return raw.astype(dtype=dtype, copy=True)
+        return np.asarray(raw, dtype=dtype)
 
     return {k: _norm(k, v) for k, v in raw_params.items()}
 

@@ -11,6 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.compartment_model import CompartmentModel
+from epymorph.error import AttributeException
 from epymorph.geo.geo import Geo
 from epymorph.params import ContextParams
 from epymorph.simulation import SimDimensions, SimDType, Tick, TickDelta
@@ -99,7 +100,13 @@ class DynamicTravelClause(TravelClause):
         return self._move(ctx, tick)
 
     def requested(self, ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
-        return self._requested(ctx, tick)
+        try:
+            return self._requested(ctx, tick)
+        except KeyError as e:
+            # NOTE: catching KeyError here will be necessary (to get nice error messages)
+            # until we can properly validate the MM clauses.
+            msg = f"Missing attribute {e} required by movement model clause '{self.name}'."
+            raise AttributeException(msg) from None
 
     def returns(self, ctx: MovementContext, tick: Tick) -> TickDelta:
         return self._returns(ctx, tick)
