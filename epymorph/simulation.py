@@ -1,14 +1,16 @@
 """General simulation data types, events, and utility functions."""
 import logging
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import partial
 from importlib import reload
 from time import perf_counter
-from typing import (Any, Generator, NamedTuple, Protocol, Sequence,
-                    runtime_checkable)
+from typing import (Any, Callable, Generator, NamedTuple, Protocol, Self,
+                    Sequence, runtime_checkable)
 
 import numpy as np
+from numpy.random import SeedSequence
 
 from epymorph.util import (Event, ImmutableNamespace, pairwise_haversine,
                            progress, row_normalize, subscriptions)
@@ -23,8 +25,23 @@ they should take pains to use this type at all times (if possible).
 # SimDType being centrally-located means we can change it reliably.
 
 
-class TimeFrame(NamedTuple):
+def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:
+    """
+    Convenience constructor to create a factory function for a simulation's random number generator,
+    optionally with a given seed.
+    """
+    return lambda: np.random.default_rng(seed)
+
+
+@dataclass(frozen=True)
+class TimeFrame:
     """The time frame of a simulation."""
+
+    @classmethod
+    def of(cls, start_date_iso8601: str, duration_days: int) -> Self:
+        """Alternate constructor for TimeFrame, parsing start date from an ISO-8601 string."""
+        return cls(date.fromisoformat(start_date_iso8601), duration_days)
+
     start_date: date
     duration_days: int
 
@@ -147,7 +164,8 @@ def sim_messaging(sim: SimulationEvents) -> Generator[None, None, None]:
     use_progress_bar = sim.on_tick is not None
 
     def on_start(ctx: OnStart) -> None:
-        start_date, duration_days = ctx.time_frame
+        start_date = ctx.time_frame.start_date
+        duration_days = ctx.time_frame.duration_days
         end_date = ctx.time_frame.end_date
 
         print(f"Running simulation ({sim.__class__.__name__}):")
