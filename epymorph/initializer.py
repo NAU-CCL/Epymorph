@@ -18,8 +18,31 @@ from epymorph.util import NumpyTypeError, check_ndarray
 
 Initializer = Callable[..., NDArray[SimDType]]
 """
-An Initializer is just a function that takes any number of arguments
-and returns a compartments array.
+An Initializer is a function that takes an arbitrary set of parameters
+and returns the initial conditions for a simulation, appropriate for the GEO and IPM
+being simulated.
+
+It answers the question: what are the initial populations of every node,
+and what disease compartments are they in, at time-zero? (There are many ways
+to answer this question depending on your goals, and hence many initializers!)
+
+The expected return type is a numpy array of integers (compatible with SimDType)
+whose shape is two-dimensions -- (N,C) -- with N being the number of GEO nodes
+and C being the number of IPM compartments.
+
+Initializer implementations can specify a variety of parameters that they need
+to fulfill their function. These parameters will be auto-wired from all of the
+available simulation data when the simulation starts. Data sources include
+geo attributes, parameter attributes, and the initializer block of the toml file
+(if running via the CLI). Matches from these sources happen by name -- so
+if you specify an initializer parameter called 'population' and there's a geo
+attribute called 'population', those can be auto-wired together. (If a geo attribute
+and params attribute happened to use the same name, geo wins.) There is also a special
+value to get the simulation's context info: the name 'ctx' and/or any parameter with
+RumeContext or InitContext as its type annotation will be auto-wired with the context.
+This gives access to useful things like the simulation dimensions and random number generator.
+Of course you can always use partial function application to directly specify initializer arguments,
+if that's your style.
 """
 
 
