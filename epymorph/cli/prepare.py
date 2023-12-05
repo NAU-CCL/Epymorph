@@ -2,12 +2,43 @@
 Implements the `prepare` subcommand executed from __main__.
 """
 import os
+from argparse import _SubParsersAction
 from datetime import date
 
 import tomli_w
 
 from epymorph.cli.run import RunInput, interactive_select
 from epymorph.data import geo_library, ipm_library, mm_library
+
+
+def define_argparser(command_parser: _SubParsersAction):
+    """
+    Define `prepare` subcommand.
+    ex: `epymorph prepare ./scratch/params.toml`
+    """
+    p = command_parser.add_parser(
+        'prepare', help='prepare an input toml file for the run command')
+    p.add_argument(
+        'file',
+        help='the path at which to save the file')
+    p.add_argument(
+        '--ipm',
+        type=str,
+        help='(optional) the name of an IPM from the library')
+    p.add_argument(
+        '--mm',
+        type=str,
+        help='(optional) the name of an MM from the library')
+    p.add_argument(
+        '--geo',
+        type=str,
+        help='(optional) the name of a Geo from the library')
+    p.set_defaults(handler=lambda args: prepare_run_toml(
+        out_path=args.file,
+        ipm_name=args.ipm,
+        mm_name=args.mm,
+        geo_name=args.geo,
+    ))
 
 
 def prepare_run_toml(out_path: str,

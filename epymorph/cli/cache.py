@@ -2,9 +2,63 @@
 Implements the `cache` subcommands executed from __main__.
 """
 import os
+from argparse import _SubParsersAction
 
 from epymorph.geo import cache
 from epymorph.geo.static import StaticGeoFileOps as F
+
+
+def define_argparser(command_parser: _SubParsersAction):
+    """
+    Define `cache` subcommand.
+    ex: `epymorph cache <geo name>`
+    """
+    p = command_parser.add_parser(
+        'cache',
+        help='cache geos and access geo cache information')
+
+    sp = p.add_subparsers(
+        title='cache_commands',
+        dest='cache_commands',
+        required=True)
+
+    fetch_command = sp.add_parser(
+        'fetch',
+        help='fetch and cache data for a geo')
+    fetch_command.add_argument(
+        'geo',
+        type=str,
+        help='the name of a geo from the library')
+    fetch_command.add_argument(
+        '-f', '--force',
+        action='store_true',
+        help='(optional) include this flag to force an override of previously cached data')
+    fetch_command.set_defaults(handler=lambda args: fetch(
+        geo_name=args.geo,
+        force=args.force
+    ))
+
+    remove_command = sp.add_parser(
+        'remove',
+        help="remove a geo's data from the cache")
+    remove_command.add_argument(
+        'geo',
+        type=str,
+        help='the name of a geo from the library')
+    remove_command.set_defaults(handler=lambda args: remove(
+        geo_name=args.geo
+    ))
+
+    list_command = sp.add_parser(
+        'list',
+        help='list the names of all currently cached geos')
+    list_command.set_defaults(handler=lambda args: print_geos())
+
+    clear_command = sp.add_parser(
+        'clear',
+        help='clear the cache')
+    clear_command.set_defaults(handler=lambda args: clear())
+
 
 # Exit codes:
 # - 0 success

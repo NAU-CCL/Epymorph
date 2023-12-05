@@ -1,7 +1,26 @@
 """
 Implements the `verify` subcommand executed from __main__.
 """
+from argparse import _SubParsersAction
+
 import numpy as np
+
+
+def define_argparser(command_parser: _SubParsersAction):
+    """
+    Define `verify` subcommand.
+    ex: `epymorph verify ./output.csv`
+    """
+    p = command_parser.add_parser(
+        'verify',
+        help="check output file for data consistency")
+    p.add_argument(
+        'file',
+        type=str,
+        help="the path to the output file")
+    p.set_defaults(handler=lambda args: verify(
+        output_file=args.file
+    ))
 
 # Exit codes:
 # - 0 verification success

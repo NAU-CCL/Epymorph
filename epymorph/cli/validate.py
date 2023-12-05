@@ -1,9 +1,27 @@
 """
 Implements the `validate` subcommand executed from __main__.
 """
+from argparse import _SubParsersAction
 from typing import Any, Callable
 
 from epymorph.movement.parser import parse_movement_spec
+
+
+def define_argparser(command_parser: _SubParsersAction):
+    """
+    Define `validate` subcommand.
+    ex: `epymorph check ./epymorph/data/mm/pei.movement`
+    """
+    p = command_parser.add_parser(
+        'validate',
+        help='check a specification file for validity')
+    p.add_argument(
+        'file',
+        type=str,
+        help='the path to the specification file')
+    p.set_defaults(handler=lambda args: validate_spec_file(
+        file_path=args.file
+    ))
 
 
 def validate_spec_file(file_path: str) -> int:

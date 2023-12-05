@@ -4,6 +4,7 @@ Implements the `run` subcommand executed from __main__.
 
 import re
 import tomllib
+from argparse import _SubParsersAction
 from datetime import date
 from functools import partial, wraps
 from pathlib import Path
@@ -25,86 +26,37 @@ from epymorph.simulation import (TimeFrame, default_rng, enable_logging,
                                  sim_messaging)
 
 
-def interactive_select(model_type: str, lib: Library) -> str:
+def define_argparser(command_parser: _SubParsersAction):
     """
-    Provide an interactive selection for a model, allowing the user
-    to pick an implementation from the built-in model library.
+    Define `run` subcommand.
+    ex: `epymorph run ./scratch/params.toml --chart e0`
     """
-    keys = list(lib.keys())
-    keys.sort()
-    print(f"Select the {model_type} you would like to use: ")
-    for i, name in enumerate(keys):
-        print(f'{i+1}. {name}')
-    entry = input("Enter the number: ")
-    print()
-    index = int(entry) - 1
-    return keys[index]
-
-
-ModelT = TypeVar('ModelT')
-P = ParamSpec('P')
-
-
-def load_messaging(description: str):
-    """Decorates a loading function to make it emit pretty messages."""
-    def make_decorator(func: Callable[P, ModelT]) -> Callable[P, ModelT]:
-        @wraps(func)
-        def decorator(*args: P.args, **kwargs: P.kwargs) -> ModelT:
-            # assumes first param is name
-            if len(args) > 0 and isinstance(args[0], str):
-                name = args[0]
-                full_description = f"{description} ({name})"
-            else:
-                full_description = description
-
-            try:
-                print(f"[-] {full_description}", end="\r")
-                value = func(*args, **kwargs)
-                print(f"[✓] {full_description}")
-                return value
-            except Exception as e:
-                print(f"[X] {full_description}")
-                raise e
-        return decorator
-    return make_decorator
-
-
-@load_messaging("GEO")
-def load_model_geo(name: str, ignore_cache: bool) -> Geo:
-    """Loads a geo by name."""
-    if not ignore_cache:
-        cached = load_from_cache(name)
-        if cached is not None:
-            return cached
-
-    if name not in geo_library:
-        raise UnknownModel('GEO', name)
-
-    return geo_library[name]()
-
-
-@load_messaging("IPM")
-def load_model_ipm(name: str) -> CompartmentModel:
-    """Loads an IPM by name."""
-    if name not in ipm_library:
-        raise UnknownModel('IPM', name)
-
-    return ipm_library[name]()
-
-
-@load_messaging("MM")
-def load_model_mm(name_or_path: str) -> MovementSpec:
-    """Loads a movement model by name or path."""
-    if name_or_path in mm_library:
-        return mm_library[name_or_path]()
-
-    path = Path(name_or_path)
-    if not path.exists():
-        raise UnknownModel('MM', name_or_path)
-
-    with open(path, mode='r', encoding='utf-8') as file:
-        spec_string = file.read()
-        return parse_movement_spec(spec_string)
+    p = command_parser.add_parser(
+        'run', help='run a simulation from library models')
+    p.add_argument(
+        'input',
+        help='the path to an input toml file')
+    p.add_argument(
+        '-o', '--out',
+        help="(optional) path to an output file to save the simulated prevalence data; specify either a .csv or .npz file")
+    p.add_argument(
+        '-c', '--chart',
+        help='(optional) ID for chart to draw; "e0" for event incidence 0; "p2" for pop prevalence 2; etc. (this is a temporary feature in lieu of better output handling)')
+    p.add_argument(
+        '-p', '--profile',
+        action='store_true',
+        help='(optional) include this flag to run in profiling mode')
+    p.add_argument(
+        '-i', '--ignore_cache',
+        help='(optional) include this flag to run the simulation without utilizing the Geo cache.'
+    )
+    p.set_defaults(handler=lambda args: run(
+        input_path=args.input,
+        out_path=args.out,
+        chart=args.chart,
+        profiling=args.profile,
+        ignore_cache=args.ignore_cache
+    ))
 
 
 class RunInput(BaseModel):
@@ -233,6 +185,88 @@ def run(input_path: str,
 
     print("Done")
     return 0  # exit code: success
+
+
+def interactive_select(model_type: str, lib: Library) -> str:
+    """
+    Provide an interactive selection for a model, allowing the user
+    to pick an implementation from the built-in model library.
+    """
+    keys = list(lib.keys())
+    keys.sort()
+    print(f"Select the {model_type} you would like to use: ")
+    for i, name in enumerate(keys):
+        print(f'{i+1}. {name}')
+    entry = input("Enter the number: ")
+    print()
+    index = int(entry) - 1
+    return keys[index]
+
+
+ModelT = TypeVar('ModelT')
+P = ParamSpec('P')
+
+
+def load_messaging(description: str):
+    """Decorates a loading function to make it emit pretty messages."""
+    def make_decorator(func: Callable[P, ModelT]) -> Callable[P, ModelT]:
+        @wraps(func)
+        def decorator(*args: P.args, **kwargs: P.kwargs) -> ModelT:
+            # assumes first param is name
+            if len(args) > 0 and isinstance(args[0], str):
+                name = args[0]
+                full_description = f"{description} ({name})"
+            else:
+                full_description = description
+
+            try:
+                print(f"[-] {full_description}", end="\r")
+                value = func(*args, **kwargs)
+                print(f"[✓] {full_description}")
+                return value
+            except Exception as e:
+                print(f"[X] {full_description}")
+                raise e
+        return decorator
+    return make_decorator
+
+
+@load_messaging("GEO")
+def load_model_geo(name: str, ignore_cache: bool) -> Geo:
+    """Loads a geo by name."""
+    if not ignore_cache:
+        cached = load_from_cache(name)
+        if cached is not None:
+            return cached
+
+    if name not in geo_library:
+        raise UnknownModel('GEO', name)
+
+    return geo_library[name]()
+
+
+@load_messaging("IPM")
+def load_model_ipm(name: str) -> CompartmentModel:
+    """Loads an IPM by name."""
+    if name not in ipm_library:
+        raise UnknownModel('IPM', name)
+
+    return ipm_library[name]()
+
+
+@load_messaging("MM")
+def load_model_mm(name_or_path: str) -> MovementSpec:
+    """Loads a movement model by name or path."""
+    if name_or_path in mm_library:
+        return mm_library[name_or_path]()
+
+    path = Path(name_or_path)
+    if not path.exists():
+        raise UnknownModel('MM', name_or_path)
+
+    with open(path, mode='r', encoding='utf-8') as file:
+        spec_string = file.read()
+        return parse_movement_spec(spec_string)
 
 
 def save_npz(path: str, out: Output) -> None:
