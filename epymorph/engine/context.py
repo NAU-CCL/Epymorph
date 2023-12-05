@@ -18,7 +18,8 @@ from epymorph.error import (AttributeException, InitException,
                             IpmValidationException)
 from epymorph.geo.abstract import proxy_geo
 from epymorph.geo.geo import Geo
-from epymorph.initializer import Initializer, normalize_init_params
+from epymorph.initializer import (InitContext, Initializer,
+                                  normalize_init_params)
 from epymorph.movement.movement_model import MovementModel
 from epymorph.movement.parser import MovementSpec
 from epymorph.params import ContextParams, ParamNp, Params, normalize_params
@@ -221,7 +222,7 @@ def _initialize(ctx: RumeContext) -> NDArray[SimDType]:
         if p.name in partial_kwargs:
             # Skip any args in partial_kwargs, otherwise we're just repeating them.
             continue
-        elif p.name == 'ctx' or p.annotation == RumeContext:
+        elif p.name == 'ctx' or p.annotation in [RumeContext, InitContext]:
             # If context needed, supply context!
             kwargs[p.name] = ctx
         elif p.name in ctx.geo.spec.attribute_map:
