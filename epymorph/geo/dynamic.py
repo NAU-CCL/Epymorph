@@ -3,10 +3,9 @@ A dynamic geo is capable of fetching data from arbitrary external data sources
 via the use of ADRIO implementations. It may fetch this data lazily, loading
 only the attributes needed by the simulation.
 """
-from __future__ import annotations
-
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
+from typing import Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,13 +35,8 @@ def _memoized_adrio_maker_library(lib: ADRIOMakerLibrary) -> MemoDict[str, ADRIO
 class DynamicGeo(Geo[DynamicGeoSpec]):
     """A Geo implementation which uses ADRIOs to dynamically fetch data from third-party data sources."""
 
-    @staticmethod
-    def load(spec_file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
-        """Load a DynamicGeo from a geo spec file."""
-        return DynamicGeoFileOps.load_from_file(spec_file, adrio_maker_library)
-
     @classmethod
-    def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
+    def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> Self:
         """Given an ADRIOMaker library, construct a DynamicGeo for the given spec."""
         makers = _memoized_adrio_maker_library(adrio_maker_library)
 
@@ -137,7 +131,7 @@ class DynamicGeoFileOps:
         return f"{geo_id}.geo"
 
     @staticmethod
-    def load_from_file(file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
+    def load_from_spec(file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
         """Load a DynamicGeo from its spec file."""
         try:
             with open(file, mode='r', encoding='utf-8') as f:

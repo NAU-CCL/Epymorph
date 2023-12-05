@@ -3,8 +3,6 @@ The basis of the intra-population model (disease mechanics) system in epymorph.
 This represents disease mechanics using a compartmental model for tracking
 populations as groupings of integer-numbered individuals.
 """
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Iterable, Iterator

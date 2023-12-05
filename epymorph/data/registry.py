@@ -10,7 +10,7 @@ from typing import Callable, NamedTuple, TypeGuard, TypeVar, cast
 from epymorph.compartment_model import CompartmentModel
 from epymorph.error import ModelRegistryException
 from epymorph.geo.adrio import adrio_maker_library
-from epymorph.geo.dynamic import DynamicGeo
+from epymorph.geo.dynamic import DynamicGeo, DynamicGeoFileOps
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo, StaticGeoFileOps
 from epymorph.movement.parser import MovementSpec, parse_movement_spec
@@ -134,7 +134,7 @@ def _geo_spec_loader(geo_spec_file: Traversable) -> Callable[[], DynamicGeo]:
     """Returns a function to load the identified GEO (from spec)."""
     def load() -> DynamicGeo:
         with as_file(geo_spec_file) as file:
-            return DynamicGeo.load(file, adrio_maker_library)
+            return DynamicGeoFileOps.load_from_spec(file, adrio_maker_library)
     return load
 
 
@@ -142,7 +142,7 @@ def _geo_archive_loader(geo_archive_file: Traversable) -> Callable[[], StaticGeo
     """Returns a function to load a static geo from its archive file."""
     def load() -> StaticGeo:
         with as_file(geo_archive_file) as file:
-            return StaticGeo.load(file)
+            return StaticGeoFileOps.load_from_archive(file)
     return load
 
 

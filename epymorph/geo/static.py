@@ -2,15 +2,13 @@
 A static geo is one that is pre-packaged with all of its data; it doesn't need to fetch any data from outside itself,
 and all of its data is resident in memory when loaded.
 """
-from __future__ import annotations
-
 import hashlib
 import io
 import os
 import tarfile
 from importlib.abc import Traversable
 from pathlib import Path
-from typing import Iterator, cast
+from typing import Iterator, Self, cast
 
 import jsonpickle
 import numpy as np
@@ -26,11 +24,6 @@ from epymorph.util import NDIndices, as_sorted_dict
 
 class StaticGeo(Geo[StaticGeoSpec]):
     """A Geo implementation which contains all of data pre-fetched and in-memory."""
-
-    @staticmethod
-    def load(tar_file: os.PathLike) -> StaticGeo:
-        """Load a StaticGeo from tar format."""
-        return StaticGeoFileOps.load_from_archive(tar_file)
 
     values: dict[str, NDArray]
 
@@ -57,7 +50,7 @@ class StaticGeo(Geo[StaticGeoSpec]):
             raise GeoValidationException('Geo values do not match the given spec.')
         validate_geo_values(self.spec, self.values)
 
-    def filter(self, selection: NDIndices) -> StaticGeo:
+    def filter(self, selection: NDIndices) -> Self:
         """
         Create a new geo by selecting only certain nodes from another geo.
         Does not alter the original geo.
@@ -92,7 +85,7 @@ class StaticGeo(Geo[StaticGeoSpec]):
             attrib.name: select(attrib)
             for attrib in self.spec.attributes
         }
-        return StaticGeo(self.spec, filtered_values)
+        return self.__class__(self.spec, filtered_values)
 
     def save(self, file: os.PathLike) -> None:
         """Saves this geo to tar format."""
