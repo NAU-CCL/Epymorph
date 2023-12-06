@@ -1,23 +1,20 @@
-import dataclasses
+# pylint: disable=missing-docstring
 import unittest
-from datetime import date
-from functools import partial
+from unittest.mock import MagicMock
 
 import numpy as np
 
-from epymorph.clock import Clock
-from epymorph.context import SimContext, SimDType
 from epymorph.data_shape import Shapes
 from epymorph.error import InitException
 from epymorph.geo.spec import LABEL, NO_DURATION, AttribDef
 from epymorph.geo.static import StaticGeo, StaticGeoSpec
-from epymorph.initializer import (bottom_locations, explicit,
-                                  indexed_locations, initialize,
-                                  labeled_locations, proportional,
-                                  single_location, top_locations)
+from epymorph.initializer import (InitContext, bottom_locations, explicit,
+                                  indexed_locations, labeled_locations,
+                                  proportional, single_location, top_locations)
+from epymorph.simulation import SimDimensions, SimDType
 
 
-def test_context():
+def test_context() -> InitContext:
     geo = StaticGeo(
         spec=StaticGeoSpec(
             attributes=[
@@ -28,29 +25,21 @@ def test_context():
             time_period=NO_DURATION,
         ),
         values={
-            'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
             'label': np.array(list('ABCDE'), dtype=np.str_),
+            'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
             'foosball_championships': np.array([2, 4, 1, 9, 6]),
         })
-    return SimContext(
-        geo=geo,
-        compartments=3,
-        events=3,
-        param={},
-        compartment_tags=[[], [], []],
-        clock=Clock(date(2019, 1, 1), 20, [.5, .5]),
-        rng=np.random.default_rng(1)
-    )
 
-
-def assert_array_equal(testcase, test, expected):
-    """Tests if two numpy arrays are equal."""
-    testcase.assertTrue(
-        np.array_equal(test, expected),
-        f"""arrays not equal:
-expected: {expected}
-received: {test}"""
+    init_context = MagicMock(spec=InitContext)
+    init_context.dim = SimDimensions.build(
+        tau_step_lengths=[1 / 3, 2 / 3], days=100, nodes=geo.nodes,
+        compartments=3, events=3
     )
+    init_context.rng = np.random.default_rng(1)
+    init_context.geo = geo
+    init_context.params = {}
+
+    return init_context
 
 
 class TestExplicitInitializer(unittest.TestCase):
@@ -63,8 +52,9 @@ class TestExplicitInitializer(unittest.TestCase):
             [300, 100, 0],
             [0, 0, 500],
         ])
-        out = explicit(test_context(), initials)
-        assert_array_equal(self, out, initials)
+        exp = initials.copy()
+        act = explicit(test_context(), initials)
+        np.testing.assert_array_equal(act, exp)
 
 
 class TestProportionalInitializer(unittest.TestCase):
@@ -91,15 +81,15 @@ class TestProportionalInitializer(unittest.TestCase):
         ratios3 = np.array([
             [.5, .2, .3],
             [.25, .6, .15],
-            [1/3, 1/3, 1/3],
+            [1 / 3, 1 / 3, 1 / 3],
             [0.75, 0.25, 0],
             [0, 0, 1],
         ])
 
-        expected = ratios1
-        for rs in [ratios1, ratios2, ratios3]:
-            out = proportional(test_context(), ratios=rs)
-            assert_array_equal(self, out, expected)
+        exp = ratios1.copy()
+        for ratios in [ratios1, ratios2, ratios3]:
+            act = proportional(test_context(), ratios)
+            np.testing.assert_array_equal(act, exp)
 
     def test_bad_args(self):
         with self.assertRaises(InitException):
@@ -111,7 +101,7 @@ class TestProportionalInitializer(unittest.TestCase):
                 [300, 100, 0],
                 [0, 0, 500],
             ])
-            proportional(test_context(), ratios=ratios)
+            proportional(test_context(), ratios)
 
         with self.assertRaises(InitException):
             # row sums to negative!
@@ -122,7 +112,7 @@ class TestProportionalInitializer(unittest.TestCase):
                 [300, 100, 0],
                 [0, 0, 500],
             ])
-            proportional(test_context(), ratios=ratios)
+            proportional(test_context(), ratios)
 
 
 class TestIndexedInitializer(unittest.TestCase):
@@ -136,7 +126,7 @@ class TestIndexedInitializer(unittest.TestCase):
         # Make sure only the selected locations get infected.
         act = out[:, 1] > 0
         exp = np.array([False, True, False, True, False])
-        assert_array_equal(self, act, exp)
+        np.testing.assert_array_equal(act, exp)
         # And check for 100 infected in total.
         self.assertEqual(out[:, 1].sum(), 100)
 
@@ -175,7 +165,7 @@ class TestLabeledInitializer(unittest.TestCase):
         # Make sure only the selected locations get infected.
         act = out[:, 1] > 0
         exp = np.array([False, True, False, True, False])
-        assert_array_equal(self, act, exp)
+        np.testing.assert_array_equal(act, exp)
         # And check for 100 infected in total.
         self.assertEqual(out[:, 1].sum(), 100)
 
@@ -203,7 +193,7 @@ class TestSingleInitializer(unittest.TestCase):
             location=2,
             seed_size=99
         )
-        assert_array_equal(self, act, exp)
+        np.testing.assert_array_equal(act, exp)
 
 
 class TestTopInitializer(unittest.TestCase):
@@ -217,7 +207,7 @@ class TestTopInitializer(unittest.TestCase):
         )
         act = out[:, 1] > 0
         exp = np.array([False, True, False, True, True])
-        assert_array_equal(self, act, exp)
+        np.testing.assert_array_equal(act, exp)
 
 
 class TestBottomInitializer(unittest.TestCase):
@@ -231,81 +221,4 @@ class TestBottomInitializer(unittest.TestCase):
         )
         act = out[:, 1] > 0
         exp = np.array([True, True, True, False, False])
-        assert_array_equal(self, act, exp)
-
-
-class TestInitialize(unittest.TestCase):
-
-    def test_initialize_01(self):
-        # Mostly to determine if auto-wiring from params works as expected.
-        ctx = dataclasses.replace(
-            test_context(),
-            param={
-                'selection': np.array([1, 3], dtype=np.intp),
-                'seed_size': 100
-            }
-        )
-        out = initialize(indexed_locations, ctx)
-        act = out[:, 1] > 0
-        exp = np.array([False, True, False, True, False])
-        assert_array_equal(self, act, exp)
-
-    def test_initialize_02(self):
-        # Mixing partial with some params.
-        ctx = dataclasses.replace(
-            test_context(),
-            param={
-                'selection': np.array([1, 3], dtype=np.intp),
-            }
-        )
-        ini = partial(indexed_locations, seed_size=100)
-        out = initialize(ini, ctx)
-        # Make sure only the selected locations get infected.
-        act = out[:, 1] > 0
-        exp = np.array([False, True, False, True, False])
-        assert_array_equal(self, act, exp)
-        # And check for 100 infected in total.
-        self.assertEqual(out[:, 1].sum(), 100)
-
-    def test_initialize_03(self):
-        # Partial-provided args should take precedence over params.
-        ctx = dataclasses.replace(
-            test_context(),
-            param={
-                'selection': np.array([2, 4], dtype=np.intp),
-                'seed_size': 100,
-            }
-        )
-        ini = partial(indexed_locations, selection=np.array([1, 3], dtype=np.intp))
-        out = initialize(ini, ctx)
-        # Make sure only the selected locations get infected.
-        act = out[:, 1] > 0
-        exp = np.array([False, True, False, True, False])
-        assert_array_equal(self, act, exp)
-
-    def test_initialize_bad(self):
-        with self.assertRaises(InitException):
-            # Missing param
-            ctx = test_context()
-            initialize(single_location, ctx)
-
-        with self.assertRaises(InitException):
-            # Bad param type
-            ctx = dataclasses.replace(test_context(), param={'location': 13})
-            initialize(single_location, ctx)
-
-        with self.assertRaises(InitException):
-            # Bad param type
-            ctx = dataclasses.replace(test_context(), param={'location': [1, 2]})
-            initialize(single_location, ctx)
-
-        with self.assertRaises(InitException):
-            # Bad param type
-            ctx = dataclasses.replace(test_context(), param={'location': 'abc'})
-            initialize(single_location, ctx)
-
-        with self.assertRaises(InitException):
-            # Bad param type
-            ctx = dataclasses.replace(test_context(),
-                                      param={'location': np.arange(20).reshape((4, 5))})
-            initialize(single_location, ctx)
+        np.testing.assert_array_equal(act, exp)

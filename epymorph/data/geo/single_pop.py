@@ -1,14 +1,15 @@
 """Implement a simple geo with a single population and some basic data. Handy for testing."""
 import numpy as np
 
+from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, NO_DURATION, AttribDef, CentroidDType,
                                StaticGeoSpec)
 from epymorph.geo.static import StaticGeo
 
 
-def load() -> Geo:
+@registry.geo('single_pop')
+def load() -> StaticGeo:
     """Load the single_pop geo."""
     spec = StaticGeoSpec(
         attributes=[

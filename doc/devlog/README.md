@@ -23,6 +23,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2023-07-12.ipynb | Tyler | ✓ | Creates the 2019 Maricopa County CBGs Geo. (Maintained until such a time as the ADRIO system can replace it.) |
 | 2023-07-13.ipynb | Tyler | ✓ | Implements a compatibility matrix test: are all possible combinations of IPM/MM/GEO valid? |
 | 2023-07-14.ipynb | Tyler | | Demonstrates filtering a geo down to a subset of its nodes. (While the motivation to do this still exists, recent changes have made this exact approach obsolete.) |
+| 2023-07-20-movement-probs.ipynb | Tyler | | Analyzing statistical correctness of our movement processing algorithms. |
 | 2023-07-24.ipynb | Tyler | | Experiments with adapting an IPM by "attaching" a function to an IPM parameter. This approach has been superseded by a design for direct support for functional parameters. |
 | 2023-08-11.ipynb | Tyler | | Demonstrates performance differences between the Basic and Hypercube movement engines. A pending refactor will make the concept of movement engines obsolete. |
 | 2023-08-17.ipynb | Tyler | ✓ | Demonstrates the newly-added Initializer functions, including library examples and custom initializers. |
@@ -34,6 +35,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2023-10-26.ipynb | Tyler | | Describes a major Geo system refactor and introduces new systems. |
 | 2023-11-03-seirs-example.ipynb | Ajay | | Demonstrates the building and running of an SEIRS model. |
 | 2023-11-20-adrio-phase-2-demo.ipynb | Trevor | | Demonstrates the refactor work on DynamicGeos and the ADRIO system, and geo cache handling. |
+| 2023-11-22-ipm-probs.ipynb | Tyler | | Analyzing statistical correctness of our IPM processing algorithms. |
 
 ## Contributing
 

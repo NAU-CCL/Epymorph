@@ -1,14 +1,13 @@
-from __future__ import annotations
-
+"""epymorph general utility functions and classes."""
 import ast
 import re
-from typing import (Any, Callable, Generic, Iterable, Literal, OrderedDict,
-                    TypeGuard, TypeVar)
+from contextlib import contextmanager
+from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
+                    OrderedDict, TypeGuard, TypeVar)
 
 import numpy as np
-from dateutil.relativedelta import relativedelta
 from numpy.typing import DTypeLike, NDArray
-from pydantic import BaseModel, model_serializer, model_validator
+from typing_extensions import deprecated
 
 # function utilities
 
@@ -17,11 +16,23 @@ T = TypeVar('T')
 
 
 def identity(x: T) -> T:
+    """A function which just returns the argument it is called with."""
     return x
 
 
 def constant(x: T) -> Callable[..., T]:
+    """A function which returns a constant value, regardless of what arguments its called with."""
     return lambda *_: x
+
+
+def noop():
+    """A function which does nothing."""
+
+
+def call_all(*fs: Callable[[], Any]) -> None:
+    """Given a list of no-arg functions, call all of the functions and return None."""
+    for f in fs:
+        f()
 
 
 # collection utilities
@@ -31,6 +42,14 @@ def index_where(it: Iterable[T], predicate: Callable[[T], bool]) -> int:
     """Find the first index of `it` where `predicate` evaluates to True. Return -1 if no such value exists."""
     for i, x in enumerate(it):
         if predicate(x):
+            return i
+    return -1
+
+
+def index_of(it: Iterable[T], item: T) -> int:
+    """Find the first index of `it` where `item` evaluates as equal. Return -1 if no such value exists."""
+    for i, x in enumerate(it):
+        if x == item:
             return i
     return -1
 
@@ -47,15 +66,12 @@ def iterator_length(it: Iterable[Any]) -> int:
 
 
 def list_not_none(it: Iterable[T]) -> list[T]:
+    """Convert an iterable to a list, skipping any entries that are None."""
     return [x for x in it if x is not None]
 
 
-class NotUniqueException(Exception):
-    def __init__(self):
-        super().__init__("Collection contains non-unique values.")
-
-
 def filter_unique(xs: Iterable[T]) -> list[T]:
+    """Convert an iterable to a list, keeping only the unique values and maintaining the order as first-seen."""
     xset = set[T]()
     ys = list[T]()
     for x in xs:
@@ -63,14 +79,6 @@ def filter_unique(xs: Iterable[T]) -> list[T]:
             ys.append(x)
             xset.add(x)
     return ys
-
-
-def as_unique_set(xs: list[T]) -> set[T]:
-    """Transform list to set, raising a NotUniqueException if the list contains non-unique values."""
-    xs_set = set(xs)
-    if len(xs_set) != len(xs):
-        raise NotUniqueException()
-    return xs_set
 
 
 def as_list(x: T | list[T]) -> list[T]:
@@ -115,12 +123,14 @@ N = TypeVar('N', bound=np.number)
 NDIndices = NDArray[np.intp]
 
 
+@deprecated("Don't use this; use np.repeat")
 def stutter(it: Iterable[T], times: int) -> Iterable[T]:
     """Make the iterable `it` repeat each item `times` times.
        (Unlike `itertools.repeat` which repeats whole sequences in order.)"""
     return (xs for x in it for xs in (x,) * times)
 
 
+@deprecated("Don't use this; use np.reshape and np.sum")
 def stridesum(arr: NDArray[N], n: int, dtype: DTypeLike = None) -> NDArray[N]:
     """Compute a new array by grouping every `n` rows and summing them together."""
     if len(arr) % n != 0:
@@ -264,51 +274,6 @@ def check_ndarray(
     return True
 
 
-# custom pydantic types
-
-_duration_regex = re.compile(r"^([0-9]+)([dwmy])$", re.IGNORECASE)
-
-
-class Duration(BaseModel):
-    """Pydantic model describing a duration; serializes to/from a string representation."""
-    # NOTE: the JSON schema for this isn't quite right but fixing that seems non-trivial.
-    # Since we're not using JSON schema yet, a task for another day.
-    count: int
-    unit: Literal['d', 'w', 'm', 'y']
-
-    def to_relativedelta(self) -> relativedelta:
-        match self.unit:
-            case "d":
-                return relativedelta(days=self.count)
-            case "w":
-                return relativedelta(weeks=self.count)
-            case "m":
-                return relativedelta(months=self.count)
-            case "y":
-                return relativedelta(years=self.count)
-
-    def __str__(self) -> str:
-        return f"{self.count}{self.unit}"
-
-    @model_serializer
-    def _serialize(self) -> str:
-        return str(self)
-
-    @model_validator(mode='before')
-    @classmethod
-    def _validator(cls, value: Any) -> Any:
-        if isinstance(value, str):
-            match = _duration_regex.search(value)
-            if not match:
-                raise ValueError(
-                    "not a valid duration (e.g., '100d' for 100 days)")
-            else:
-                count, unit = match.groups()
-                return {'count': count, 'unit': unit}
-        else:
-            return value
-
-
 # console decorations
 
 
@@ -324,17 +289,58 @@ def progress(percent: float) -> str:
 
 
 class Event(Generic[T]):
-    subscribers: list[Callable[[T], None]]
+    """A typed pub-sub event."""
+    _subscribers: list[Callable[[T], None]]
 
     def __init__(self):
-        self.subscribers = []
+        self._subscribers = []
 
-    def subscribe(self, sub: Callable[[T], None]) -> None:
-        self.subscribers.append(sub)
+    def subscribe(self, sub: Callable[[T], None]) -> Callable[[], None]:
+        """Subscribe a handler to this event. Returns an unsubscribe function."""
+        self._subscribers.append(sub)
+
+        def unsubscribe() -> None:
+            self._subscribers.remove(sub)
+        return unsubscribe
 
     def publish(self, event: T) -> None:
-        for subscriber in self.subscribers:
+        """Publish an event occurrence to all current subscribers."""
+        for subscriber in self._subscribers:
             subscriber(event)
+
+
+class Subscriber:
+    """
+    Utility class to track a list of subscriptions for ease of unsubscription.
+    Consider using this via the `subscriptions()` context.
+    """
+
+    _unsubscribers: list[Callable[[], None]]
+
+    def __init__(self):
+        self._unsubscribers = []
+
+    def subscribe(self, event: Event[T], handler: Callable[[T], None]) -> None:
+        """Subscribe through this Subscriber to the given event."""
+        unsub = event.subscribe(handler)
+        self._unsubscribers.append(unsub)
+
+    def unsubscribe(self) -> None:
+        """Unsubscribe from all of this Subscriber's subscriptions."""
+        for unsub in self._unsubscribers:
+            unsub()
+        self._unsubscribers.clear()
+
+
+@contextmanager
+def subscriptions() -> Generator[Subscriber, None, None]:
+    """
+    Manage a subscription context, where all subscriptions added through the returned Subscriber
+    will be automatically unsubscribed when the context closes.
+    """
+    sub = Subscriber()
+    yield sub
+    sub.unsubscribe()
 
 
 # AST function utilities
@@ -404,6 +410,7 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
 
 class ImmutableNamespace:
     """A simple dot-accessible dictionary."""
+
     __slots__ = ['_data']
 
     _data: dict[str, Any]
@@ -417,14 +424,15 @@ class ImmutableNamespace:
         if __name == '_data':
             __cls = self.__class__.__name__
             raise AttributeError(f"{__cls} object has no attribute '{__name}'")
-        return object.__getattribute__(self, __name)
-
-    def __getattr__(self, __name: str) -> Any:
-        data = object.__getattribute__(self, '_data')
-        if __name not in data:
-            __cls = self.__class__.__name__
-            raise AttributeError(f"{__cls} object has no attribute '{__name}'")
-        return data[__name]
+        try:
+            return object.__getattribute__(self, __name)
+        except AttributeError:
+            data = object.__getattribute__(self, '_data')
+            if __name not in data:
+                __cls = self.__class__.__name__
+                msg = f"{__cls} object has no attribute '{__name}'"
+                raise AttributeError(msg) from None
+            return data[__name]
 
     def __setattr__(self, __name: str, __value: Any) -> None:
         raise Exception(f"{self.__class__.__name__} is immutable.")
@@ -437,7 +445,3 @@ class ImmutableNamespace:
         # This is necessary in order to pass it to exec or eval.
         # The shallow copy allows child-namespaces to remain dot-accessible.
         return object.__getattribute__(self, '_data').copy()
-
-
-def ns(data: dict[str, Any]) -> ImmutableNamespace:
-    return ImmutableNamespace(data)

@@ -6,65 +6,57 @@ and to adapt equivalent shapes.
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Callable, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.simulation import SimDimensions, Tick
 
-class SimDimension:
-    """The dimensionality of a simulation."""
-
-    nodes: int
-    """How many nodes are there in the GEO?"""
-    compartments: int
-    """How many disease compartments are in the IPM?"""
-    events: int
-    """How many transition events are in the IPM?"""
-    ticks: int
-    """How many ticks are we going to run the simulation for?"""
-    days: int
-    """How many days are we going to run the simulation for?"""
-
-    TNCE: tuple[int, int, int, int]
-    """
-    The critical dimensionalities of the simulation, for ease of unpacking.
-    T: number of ticks;
-    N: number of geo nodes;
-    C: number of IPM compartments;
-    E: number of IPM events (transitions)
-    """
+DataT = TypeVar('DataT', bound=np.generic)
 
 
 class DataShape(ABC):
     """Description of a data attribute's shape relative to a simulation context."""
 
     @abstractmethod
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         """Does the given value match this shape expression?"""
 
     @abstractmethod
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         """Adapt the given value to this shape, if possible."""
 
     @abstractmethod
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         """Return a concrete shape as a tuple, using the given number of nodes and days to fill in for N and T."""
 
+    @abstractmethod
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        """
+        Returns an accessor function for the given shape on the given data array.
+        The accessor function is designed to retrieve a scalar value for a given simulation tick
+        and a given geo node (by index).
+        """
+
 
 @dataclass(frozen=True)
 class Scalar(DataShape):
     """A scalar value."""
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         return value.shape == tuple()
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         if not self.matches(dim, value, allow_broadcast):
             return None
         return value
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return ()
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, _node: data  # type: ignore
 
     def __str__(self):
         return "S"
@@ -74,14 +66,14 @@ class Scalar(DataShape):
 class Time(DataShape):
     """An array of at least size T (the number of simulation days)."""
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         if len(value.shape) == 1 and value.shape[0] >= dim.days:
             return True
         if allow_broadcast and value.shape == tuple():
             return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         if len(value.shape) == 1 and value.shape[0] >= dim.days:
             return value[:dim.days]
         if allow_broadcast and value.shape == tuple():
@@ -91,6 +83,9 @@ class Time(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days,)
 
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, _node: data[tick.day]
+
     def __str__(self):
         return "T"
 
@@ -99,14 +94,14 @@ class Time(DataShape):
 class Node(DataShape):
     """An array of size N (the number of simulation nodes)."""
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         if len(value.shape) == 1 and value.shape[0] == dim.nodes:
             return True
         if allow_broadcast and value.shape == tuple():
             return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         if len(value.shape) == 1 and value.shape[0] == dim.nodes:
             return value
         if allow_broadcast and value.shape == tuple():
@@ -116,6 +111,9 @@ class Node(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes,)
 
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, node: data[node]
+
     def __str__(self):
         return "N"
 
@@ -124,7 +122,7 @@ class Node(DataShape):
 class NodeAndNode(DataShape):
     """An array of size NxN."""
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         if value.shape == (dim.nodes, dim.nodes):
             return True
         if allow_broadcast:
@@ -132,7 +130,7 @@ class NodeAndNode(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         if value.shape == (dim.nodes, dim.nodes):
             return value
         if allow_broadcast and value.shape == tuple():
@@ -142,6 +140,9 @@ class NodeAndNode(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes, nodes)
 
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, node: data[node]
+
     def __str__(self):
         return "N"
 
@@ -150,7 +151,7 @@ class NodeAndNode(DataShape):
 class TimeAndNode(DataShape):
     """An array of size at-least-T by exactly-N."""
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         if len(value.shape) == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
             return True
         if allow_broadcast:
@@ -162,7 +163,7 @@ class TimeAndNode(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         if len(value.shape) == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
             return value[:dim.days, :]
         if allow_broadcast:
@@ -176,6 +177,9 @@ class TimeAndNode(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, nodes)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, node: data[tick.day, node]
 
     def __str__(self):
         return "TxN"
@@ -191,12 +195,12 @@ class Arbitrary(DataShape):
         if self.index < 0:
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         if len(value.shape) == 1 and value.shape[0] > self.index:
             return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         if len(value.shape) == 1 and value.shape[0] > self.index:
             return value
         return None
@@ -208,6 +212,9 @@ class Arbitrary(DataShape):
         # The GEO defines what it has; while the MM/IPM must slice the available data for its needs.
         # The MM/IPM usage is more like a selection than a shape... maybe we should be using Slice for that...
         return (self.index,)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, _node: data[self.index]
 
     def __str__(self):
         return f"A({self.index})"
@@ -223,7 +230,7 @@ class TimeAndArbitrary(DataShape):
         if self.index < 0:
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         a = value.shape[-1]
         if len(value.shape) == 2 and value.shape[0] >= dim.days and a > self.index:
             return True
@@ -232,7 +239,7 @@ class TimeAndArbitrary(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         a = value.shape[-1]
         if len(value.shape) == 2 and value.shape[0] >= dim.days and a > self.index:
             return value[:dim.days, :]
@@ -243,6 +250,9 @@ class TimeAndArbitrary(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, self.index)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, _node: data[tick.day, self.index]
 
     def __str__(self):
         return f"TxA({self.index})"
@@ -258,7 +268,7 @@ class NodeAndArbitrary(DataShape):
         if self.index < 0:
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         a = value.shape[-1]
         if len(value.shape) == 2 and value.shape[0] == dim.nodes and a > self.index:
             return True
@@ -267,7 +277,7 @@ class NodeAndArbitrary(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         a = value.shape[-1]
         if len(value.shape) == 2 and value.shape[0] == dim.nodes and a > self.index:
             return value
@@ -278,6 +288,9 @@ class NodeAndArbitrary(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes, self.index)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda _tick, node: data[node, self.index]
 
     def __str__(self):
         return f"NxA({self.index})"
@@ -293,7 +306,7 @@ class TimeAndNodeAndArbitrary(DataShape):
         if self.index < 0:
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
-    def matches(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
         a = value.shape[-1]
         if len(value.shape) == 3 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes and a > self.index:
             return True
@@ -306,7 +319,7 @@ class TimeAndNodeAndArbitrary(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimension, value: NDArray, allow_broadcast: bool) -> NDArray | None:
+    def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
         a = value.shape[-1]
         if len(value.shape) == 3 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes and a > self.index:
             return value[:dim.days, :, :]
@@ -321,6 +334,9 @@ class TimeAndNodeAndArbitrary(DataShape):
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, nodes, self.index)
+
+    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+        return lambda tick, node: data[tick.day, node, self.index]
 
     def __str__(self):
         return f"TxNxA({self.index})"

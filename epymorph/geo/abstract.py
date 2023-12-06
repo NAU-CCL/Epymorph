@@ -1,36 +1,77 @@
-from abc import ABC, abstractmethod
+"""
+Proxy instances to epymorph models. Intended for use when evalution must be deferred,
+e.g., when constructing simulation parameters as Python functions. We may wish to
+define a function which depends on geo values, but before the geo itself has been defined.
+"""
+from abc import abstractmethod
+from contextlib import contextmanager
+from typing import Protocol, cast
 
+import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.geo.geo import Geo
+
+class ProxyUnsetException(Exception):
+    """Exception for when a proxy is accessed but does not currently have a valid subject."""
 
 
-class ProxyGeoProtocol(ABC):
+class GeoProtocol(Protocol):
+    """A Geo-compatible protocol for proxy usage."""
+
+    nodes: int
+    """The number of nodes in this Geo."""
+
+    labels: NDArray[np.str_]
+    """The labels for every node in this geo."""
+
     @abstractmethod
-    def __getitem__(self, key) -> NDArray:
+    def __getitem__(self, name: str) -> NDArray:
         pass
 
 
-class _ProxyGeo(ProxyGeoProtocol):
-    _actual_geo: Geo
-    _instance = None
+class _ProxyGeoSingleton:
+    _subject: GeoProtocol | None = None
 
-    def __new__(cls):
-        # Ensure only one instance is created
-        if cls._instance is None:
-            cls._instance = super(_ProxyGeo, cls).__new__(cls)
-        return cls._instance
+    def set_actual_geo(self, actual_geo: GeoProtocol | None):
+        """Sets or clears the proxy subject. Internal use only please."""
+        self._subject = actual_geo
 
-    def __getitem__(self, key):
-        if self._actual_geo is None:
-            raise ValueError("Geo infomration has not been set.")
-        return self._actual_geo[key]
+    @property
+    def nodes(self) -> int:
+        """Proxy to `geo.nodes`"""
+        if self._subject is None:
+            raise ProxyUnsetException("Proxy geo has not been set.")
+        return self._subject.nodes
 
-    def set_actual_geo(self, geo):
-        """
-        Set the actual_geo for the Singleton instance. For internal use only.
-        """
-        self._actual_geo = geo
+    @property
+    def labels(self) -> NDArray[np.str_]:
+        """Proxy to `geo.labels`"""
+        if self._subject is None:
+            raise ProxyUnsetException("Proxy geo has not been set.")
+        return self._subject.labels
+
+    def __getitem__(self, name: str) -> NDArray:
+        """Proxy to `geo[name]`"""
+        if self._subject is None:
+            raise ProxyUnsetException("Proxy geo has not been set.")
+        return self._subject[name]
 
 
-proxy: ProxyGeoProtocol = _ProxyGeo()
+_proxy_geo_singleton = _ProxyGeoSingleton()
+"""Internal-use proxy geo singleton instance."""
+
+
+@contextmanager
+def proxy_geo(actual_geo: GeoProtocol):
+    """For the duration of this context, set the geo which the proxy geo should defer to."""
+    _proxy_geo_singleton.set_actual_geo(actual_geo)
+    yield
+    _proxy_geo_singleton.set_actual_geo(None)
+
+
+geo = cast(GeoProtocol, _proxy_geo_singleton)
+"""
+A proxy to the simulation geo.
+You can use this proxy for function definitions and it will defer
+to the simulation's geo at evaluation time.
+"""

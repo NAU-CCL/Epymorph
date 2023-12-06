@@ -1,5 +1,7 @@
-from __future__ import annotations
-
+"""
+ADRIOs enable dynamic geos to fetch data from varied external data sources,
+and ADRIOMakers create ADRIOs for a data soruce and specialized for a geo's purposes.
+"""
 from abc import ABC, abstractmethod
 from typing import Callable
 
@@ -39,7 +41,6 @@ class ADRIOMaker(ABC):
     @abstractmethod
     def make_adrio(self, attrib: AttribDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
         """Creates an ADRIO to fetch the specified attribute for the specified time and place."""
-        pass
 
 
 ADRIOMakerLibrary = dict[str, type[ADRIOMaker]]

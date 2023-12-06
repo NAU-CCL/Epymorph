@@ -1,25 +1,19 @@
+# pylint: disable=missing-docstring
 import unittest
 
 import numpy as np
 
-from epymorph.context import SimDimension
-from epymorph.data_shape import Shapes, parse_shape
-
-
-class TestDims(SimDimension):
-    def __init__(self, dims: tuple[int, int, int, int, int]):
-        D, T, N, C, E = dims
-        self.nodes = N
-        self.compartments = C
-        self.events = E
-        self.ticks = T
-        self.days = D
-        self.TNCE = T, N, C, E
-
-
-DIM = TestDims((90, 180, 6, 3, 2))
+from epymorph.data_shape import Shapes, SimDimensions, parse_shape
 
 _to_str = np.vectorize(str)
+
+_dim = SimDimensions.build(
+    tau_step_lengths=[0.5, 0.5],
+    days=90,
+    nodes=6,
+    compartments=3,
+    events=2
+)
 
 
 class DataShape(unittest.TestCase):
@@ -34,7 +28,7 @@ class DataShape(unittest.TestCase):
 
     def test_scalar(self):
         ttt, fff = self.as_bool_asserts(
-            lambda x: Shapes.S.matches(DIM, x, False)
+            lambda x: Shapes.S.matches(_dim, x, False)
         )
 
         ttt(np.asarray(1))
@@ -47,7 +41,7 @@ class DataShape(unittest.TestCase):
 
     def test_time(self):
         ttt, fff = self.as_bool_asserts(
-            lambda x, bc=False: Shapes.T.matches(DIM, x, bc)
+            lambda x, bc=False: Shapes.T.matches(_dim, x, bc)
         )
 
         ttt(np.arange(90), False)
@@ -65,7 +59,7 @@ class DataShape(unittest.TestCase):
 
     def test_node(self):
         ttt, fff = self.as_bool_asserts(
-            lambda x, bc=False: Shapes.N.matches(DIM, x, bc)
+            lambda x, bc=False: Shapes.N.matches(_dim, x, bc)
         )
 
         ttt(np.arange(6))
@@ -81,7 +75,7 @@ class DataShape(unittest.TestCase):
 
     def test_time_and_node(self):
         ttt, fff = self.as_bool_asserts(
-            lambda x, bc=False: Shapes.TxN.matches(DIM, x, bc)
+            lambda x, bc=False: Shapes.TxN.matches(_dim, x, bc)
         )
 
         ttt(np.arange(90 * 6).reshape((90, 6)))
@@ -101,67 +95,68 @@ class DataShape(unittest.TestCase):
 
     def test_arbitrary(self):
         self.assertTrue(
-            Shapes.A(0).matches(DIM, np.array([1, 2, 3]), False)
+            Shapes.A(0).matches(_dim, np.array([1, 2, 3]), False)
         )
         self.assertTrue(
-            Shapes.A(1).matches(DIM, np.array([1, 2, 3]), False)
+            Shapes.A(1).matches(_dim, np.array([1, 2, 3]), False)
         )
         self.assertTrue(
-            Shapes.A(2).matches(DIM, np.array([1, 2, 3]), False)
+            Shapes.A(2).matches(_dim, np.array([1, 2, 3]), False)
         )
         self.assertFalse(
-            Shapes.A(3).matches(DIM, np.asarray(1), False)
+            Shapes.A(3).matches(_dim, np.asarray(1), False)
         )
         self.assertFalse(
-            Shapes.A(3).matches(DIM, np.array([1, 2, 3]), False)
+            Shapes.A(3).matches(_dim, np.array([1, 2, 3]), False)
         )
         self.assertFalse(
-            Shapes.A(1).matches(DIM, np.arange(9).reshape((3, 3)), False)
+            Shapes.A(1).matches(_dim, np.arange(9).reshape((3, 3)), False)
         )
 
     def test_time_and_arbitrary(self):
         self.assertTrue(
-            Shapes.TxA(2).matches(DIM, np.arange(90 * 3).reshape((90, 3)), False)
+            Shapes.TxA(2).matches(_dim, np.arange(90 * 3).reshape((90, 3)), False)
         )
         self.assertTrue(
-            Shapes.TxA(2).matches(DIM, np.arange(90 * 6).reshape((90, 6)), False)
+            Shapes.TxA(2).matches(_dim, np.arange(90 * 6).reshape((90, 6)), False)
         )
         self.assertFalse(
-            Shapes.TxA(2).matches(DIM, np.arange(90 * 2).reshape((90, 2)), False)
+            Shapes.TxA(2).matches(_dim, np.arange(90 * 2).reshape((90, 2)), False)
         )
         self.assertFalse(
-            Shapes.TxA(2).matches(DIM, np.arange(90), False)
+            Shapes.TxA(2).matches(_dim, np.arange(90), False)
         )
         self.assertFalse(
-            Shapes.TxA(2).matches(DIM, np.arange(90 * 3 * 3).reshape((90, 3, 3)), False)
+            Shapes.TxA(2).matches(_dim, np.arange(
+                90 * 3 * 3).reshape((90, 3, 3)), False)
         )
 
     def test_node_and_arbitrary(self):
         self.assertTrue(
-            Shapes.NxA(2).matches(DIM, np.arange(6 * 3).reshape((6, 3)), False)
+            Shapes.NxA(2).matches(_dim, np.arange(6 * 3).reshape((6, 3)), False)
         )
         self.assertTrue(
-            Shapes.NxA(2).matches(DIM, np.arange(6 * 6).reshape((6, 6)), False)
+            Shapes.NxA(2).matches(_dim, np.arange(6 * 6).reshape((6, 6)), False)
         )
         self.assertFalse(
-            Shapes.NxA(2).matches(DIM, np.arange(6 * 2).reshape((6, 2)), False)
+            Shapes.NxA(2).matches(_dim, np.arange(6 * 2).reshape((6, 2)), False)
         )
         self.assertFalse(
-            Shapes.NxA(2).matches(DIM, np.arange(6), False)
+            Shapes.NxA(2).matches(_dim, np.arange(6), False)
         )
         self.assertFalse(
-            Shapes.NxA(2).matches(DIM, np.arange(6 * 3 * 3).reshape((6, 3, 3)), False)
+            Shapes.NxA(2).matches(_dim, np.arange(6 * 3 * 3).reshape((6, 3, 3)), False)
         )
 
     def test_time_and_node_and_arbitrary(self):
         self.assertTrue(
             Shapes.TxNxA(0).matches(
-                DIM, np.arange(90 * 6 * 2).reshape((90, 6, 2)), False
+                _dim, np.arange(90 * 6 * 2).reshape((90, 6, 2)), False
             )
         )
         self.assertFalse(
             Shapes.TxNxA(4).matches(
-                DIM, np.arange(90 * 6 * 2).reshape((90, 6, 2)), False
+                _dim, np.arange(90 * 6 * 2).reshape((90, 6, 2)), False
             )
         )
 

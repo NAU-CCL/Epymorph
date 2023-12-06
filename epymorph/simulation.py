@@ -1,142 +1,147 @@
-from __future__ import annotations
-
+"""General simulation data types, events, and utility functions."""
 import logging
-from datetime import date
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import date, timedelta
+from functools import partial
+from importlib import reload
 from time import perf_counter
-from typing import Any
+from typing import (Any, Callable, Generator, NamedTuple, Protocol, Self,
+                    Sequence, runtime_checkable)
 
 import numpy as np
-from dateutil.relativedelta import relativedelta
-from numpy.typing import NDArray
+from numpy.random import SeedSequence
 
-from epymorph.clock import Clock
-from epymorph.context import SimContext, SimDType, normalize_params
-from epymorph.geo.geo import Geo
-from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
-from epymorph.ipm.ipm import IpmBuilder
-from epymorph.movement.basic import BasicEngine
-from epymorph.movement.engine import MovementBuilder, MovementEngine
-from epymorph.util import Event, progress
+from epymorph.util import (Event, ImmutableNamespace, pairwise_haversine,
+                           progress, row_normalize, subscriptions)
+
+SimDType = np.int64
+"""
+This is the numpy datatype that should be used to represent internal simulation data.
+Where segments of the application maintain compartment and/or event counts,
+they should take pains to use this type at all times (if possible).
+"""
+
+# SimDType being centrally-located means we can change it reliably.
 
 
-def configure_sim_logging(enabled: bool) -> None:
+def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:
     """
-    Configure standard logging for simulation runs.
-    `True` for verbose logging, `False` to minimize logging.
+    Convenience constructor to create a factory function for a simulation's random number generator,
+    optionally with a given seed.
     """
-
-    if enabled:
-        # Verbose output to file.
-        logging.basicConfig(filename='debug.log', filemode='w')
-        logging.getLogger('movement').setLevel(logging.DEBUG)
-    else:
-        # Only critical output to console.
-        logging.basicConfig(level=logging.CRITICAL)
+    return lambda: np.random.default_rng(seed)
 
 
-class Output:
+@dataclass(frozen=True)
+class TimeFrame:
+    """The time frame of a simulation."""
+
+    @classmethod
+    def of(cls, start_date_iso8601: str, duration_days: int) -> Self:
+        """Alternate constructor for TimeFrame, parsing start date from an ISO-8601 string."""
+        return cls(date.fromisoformat(start_date_iso8601), duration_days)
+
+    start_date: date
+    duration_days: int
+
+    @property
+    def end_date(self) -> date:
+        """The end date (the first day not included in the simulation)."""
+        return self.start_date + timedelta(days=self.duration_days)
+
+
+class Tick(NamedTuple):
     """
-    The output of a simulation run, including prevalence for all populations and all IPM compartments
-    and incidence for all populations and all IPM events.
+    A Tick bundles related time-step information. For instance, each time step corresponds to a calendar day,
+    a numeric day (i.e., relative to the start of the simulation), which tau step this corresponds to, and so on.
     """
+    index: int  # step increment regardless of tau (0,1,2,3,...)
+    day: int  # day increment, same for each tau step (0,0,1,1,2,2,...)
+    date: date  # calendar date corresponding to `day`
+    step: int  # which tau step? (0,1,0,1,0,1,...)
+    tau: float  # the current tau length (0.666,0.333,0.666,0.333,...)
 
-    ctx: SimContext  # TODO: this should be a static subset of SimContext, excluding things like Geo and rng
-    """The context under which this output was generated."""
 
-    prevalence: NDArray[SimDType]
+class TickDelta(NamedTuple):
     """
-    Prevalence data by timestep, population, and compartment.
-    Array of shape (T,N,C) where T is the number of ticks in the simulation, N is the number of populations, and C is the number of compartments.
+    An offset relative to a Tick expressed as a number of days which should elapse,
+    and the step on which to end up. In applying this delta, it does not matter which
+    step we start on. We need the Clock configuration to apply a TickDelta, so see
+    Clock for the relevant method.
     """
+    days: int  # number of whole days
+    step: int  # which tau step within that day (zero-indexed)
 
-    incidence: NDArray[SimDType]
+
+NEVER = TickDelta(-1, -1)
+"""
+A special TickDelta value which expresses an event that should never happen.
+Any Tick plus Never returns Never.
+"""
+
+
+class SimDimensions(NamedTuple):
+    """The dimensionality of a simulation."""
+
+    @classmethod
+    def build(cls, tau_step_lengths: Sequence[float], days: int, nodes: int, compartments: int, events: int):
+        """Convenience constructor which reduces the overhead of initializing duplicative fields."""
+        tau_steps = len(tau_step_lengths)
+        ticks = tau_steps * days
+        return cls(
+            tau_step_lengths, tau_steps, days, ticks,
+            nodes, compartments, events,
+            (ticks, nodes, compartments, events))
+
+    tau_step_lengths: Sequence[float]
+    """The lengths of each tau step in the MM."""
+    tau_steps: int
+    """How many tau steps are in the MM?"""
+    days: int
+    """How many days are we going to run the simulation for?"""
+    ticks: int
+    """How many clock ticks are we going to run the simulation for?"""
+    nodes: int
+    """How many nodes are there in the GEO?"""
+    compartments: int
+    """How many disease compartments are in the IPM?"""
+    events: int
+    """How many transition events are in the IPM?"""
+    TNCE: tuple[int, int, int, int]
     """
-    Incidence data by timestep, population, and event.
-    Array of shape (T,N,E) where T is the number of ticks in the simulation, N is the number of populations, and E is the number of events.
-    """
-
-    initial: NDArray[SimDType]
-    """
-    Initial prevalence data by population and compartment.
-    Array of shape (N, C) where N is the number of populations, and C is the number of compartments
-    """
-
-    def __init__(self, ctx: SimContext):
-        self.ctx = ctx
-        T, N, C, E = ctx.TNCE
-        self.prevalence = np.zeros((T, N, C), dtype=SimDType)
-        self.incidence = np.zeros((T, N, E), dtype=SimDType)
-        self.initial = np.zeros((N, C), dtype=SimDType)
-
-
-class OutputAggregate:
-    """
-    The output of many simulation runs, reporting the min and max values for:
-    - prevalence for all populations and all IPM compartments, and
-    - incidence for all populations and all IPM events.
-    """
-
-    ctx: SimContext  # TODO: this should be a static subset of SimContext, excluding things like Geo and rng
-    min_prevalence: NDArray[SimDType]
-    max_prevalence: NDArray[SimDType]
-    min_incidence: NDArray[SimDType]
-    max_incidence: NDArray[SimDType]
-
-    def __init__(self, ctx: SimContext):
-        self.ctx = ctx
-        T, N, C, E = ctx.TNCE
-        min_int = np.iinfo(SimDType).min
-        max_int = np.iinfo(SimDType).max
-        self.min_prevalence = np.full((T, N, C), max_int, dtype=SimDType)
-        self.max_prevalence = np.full((T, N, C), min_int, dtype=SimDType)
-        self.min_incidence = np.full((T, N, E), max_int, dtype=SimDType)
-        self.max_incidence = np.full((T, N, E), min_int, dtype=SimDType)
-
-    def __add__(self, that: Output) -> OutputAggregate:
-        """Update this aggregate by including the results from the given Output object."""
-        np.minimum(self.min_prevalence, that.prevalence,
-                   out=self.min_prevalence)
-        np.maximum(self.max_prevalence, that.prevalence,
-                   out=self.max_prevalence)
-        np.minimum(self.min_incidence, that.incidence,
-                   out=self.min_incidence)
-        np.maximum(self.max_incidence, that.incidence,
-                   out=self.max_incidence)
-        return self
-
-    def merge(self, that: OutputAggregate) -> OutputAggregate:
-        """Merge two OutputAggregates."""
-        np.minimum(self.min_prevalence, that.min_prevalence,
-                   out=self.min_prevalence)
-        np.maximum(self.max_prevalence, that.max_prevalence,
-                   out=self.max_prevalence)
-        np.minimum(self.min_incidence, that.min_incidence,
-                   out=self.min_incidence)
-        np.maximum(self.max_incidence, that.max_incidence,
-                   out=self.max_incidence)
-        return self
-
-
-class Simulation:
-    """
-    The combination of a Geo, IPM, and MM which can be executed at a calendar date and
-    for a specified duration to produce time-series output.
+    The critical dimensionalities of the simulation, for ease of unpacking.
+    T: number of ticks;
+    N: number of geo nodes;
+    C: number of IPM compartments;
+    E: number of IPM events (transitions)
     """
 
-    geo: Geo
-    ipm_builder: IpmBuilder
-    mvm_builder: MovementBuilder
-    mvm_engine: type[MovementEngine]
 
-    # Progress events
-    on_start: Event[SimContext]
+class OnStart(NamedTuple):
+    """The payload of a Simulation on_start event."""
+    dim: SimDimensions
+    time_frame: TimeFrame
+
+
+class SimTick(NamedTuple):
+    """The payload of a Simulation tick event."""
+    tick_index: int
+    percent_complete: float
+
+
+@runtime_checkable
+class SimulationEvents(Protocol):
+    """Protocol for Simulations that support lifecycle events."""
+
+    on_start: Event[OnStart]
     """
-    Event fires at the start of every simulation run. Payload is the SimContext for this run.
+    Event fires at the start of a simulation run. Payload is a subset of the context for this run.
     """
 
-    on_tick: Event[tuple[int, float]]
+    on_tick: Event[SimTick] | None
     """
-    Event fires after each tick has been processed.
+    Optional event which fires after each tick has been processed.
     Event payload is a tuple containing the tick index just completed (an integer),
     and the percentage complete (a float).
     """
@@ -146,118 +151,118 @@ class Simulation:
     Event fires after a simulation run is complete.
     """
 
-    def __init__(self, geo: Geo, ipm_builder: IpmBuilder, mvm_builder: MovementBuilder, mvm_engine: type[MovementEngine] | None = None):
-        self.geo = geo
-        self.ipm_builder = ipm_builder
-        self.mvm_builder = mvm_builder
-        self.mvm_engine = BasicEngine if mvm_engine is None else mvm_engine
-        self.on_start = Event()
-        self.on_tick = Event()
-        self.on_end = Event()
 
-    def _make_context(self, geo: Geo, param: dict[str, Any], start_date: date, duration_days: int, rng: np.random.Generator | None) -> SimContext:
-        return SimContext(
-            geo=geo,
-            compartments=self.ipm_builder.compartments,
-            compartment_tags=self.ipm_builder.compartment_tags(),
-            events=self.ipm_builder.events,
-            param=normalize_params(param, self.geo, duration_days),
-            clock=Clock(start_date, duration_days, self.mvm_builder.taus),
-            rng=np.random.default_rng() if rng is None else rng
-        )
-
-    def run(self,
-            param: dict[str, Any],
-            start_date: date,
-            duration_days: int,
-            initializer: Initializer | None = None,
-            rng: np.random.Generator | None = None) -> Output:
-        """
-        Execute the simulation with the given parameters:
-
-        - param: a dictionary of named simulation parameters available for use by the IPM and MM
-        - start_date: the calendar date on which to start the simulation
-        - duration: the number of days to run the simulation
-        - initializer: a function that initializes the compartments for each geo node; if None is provided, a default initializer will be used
-        - rng: (optional) a psuedo-random number generator used in all stochastic calculations
-        """
-
-        ctx = self._make_context(self.geo, param, start_date, duration_days, rng)
-
-        # Verification checks:
-        self.ipm_builder.verify(ctx)
-        self.mvm_builder.verify(ctx)
-        # initializer.verify(ctx)
-
-        if initializer is None:
-            initializer = DEFAULT_INITIALIZER
-        inits = initialize(initializer, ctx)
-
-        mvm = self.mvm_engine(ctx, self.mvm_builder.build(ctx), inits)
-
-        ipm = self.ipm_builder.build(ctx)
-
-        self.on_start.publish(ctx)
-
-        out = Output(ctx)
-
-        out.initial = inits
-
-        for tick in ctx.clock.ticks:
-            t = tick.index
-            # First do movement
-            mvm.apply(tick)
-            # Then for each location:
-            for p, loc in enumerate(mvm.get_locations()):
-                # Calc events by compartment
-                es = ipm.events(loc, tick)
-                # Store incidence
-                out.incidence[t, p] = es
-                # Distribute events
-                ipm.apply_events(loc, es)
-                # Store prevalence
-                # TODO: maybe better to do this all at once rather than per loc
-                out.prevalence[t, p] = loc.get_compartments()
-            self.on_tick.publish((t, (t + 1) / ctx.clock.num_ticks))
-
-        mvm.shutdown()
-        self.on_end.publish(None)
-        return out
-
-
-def with_fancy_messaging(sim: Simulation) -> Simulation:
+@contextmanager
+def sim_messaging(sim: SimulationEvents) -> Generator[None, None, None]:
     """
     Attach fancy console messaging to a Simulation, e.g., a progress bar.
     This creates subscriptions on `sim`'s events, so you only need to do it once
     per sim. Returns `sim` as a convenience.
     """
 
-    # Keep track of simulation runtime.
     start_time = 0.0
+    use_progress_bar = sim.on_tick is not None
 
-    def on_start(ctx: SimContext) -> None:
-        duration_days = ctx.clock.num_days
-        start_date = ctx.clock.start_date
-        end_date = start_date + relativedelta(days=duration_days)
+    def on_start(ctx: OnStart) -> None:
+        start_date = ctx.time_frame.start_date
+        duration_days = ctx.time_frame.duration_days
+        end_date = ctx.time_frame.end_date
 
-        print(f"Running simulation ({sim.mvm_engine.__name__}):")
+        print(f"Running simulation ({sim.__class__.__name__}):")
         print(f"• {start_date} to {end_date} ({duration_days} days)")
-        print(f"• {ctx.nodes} geo nodes")
-        print(progress(0.0), end='\r')
+        print(f"• {ctx.dim.nodes} geo nodes")
+        if use_progress_bar:
+            print(progress(0.0), end='\r')
+        else:
+            print('Running...')
 
         nonlocal start_time
         start_time = perf_counter()
 
-    def on_tick(tick: tuple[int, float]) -> None:
-        print(progress(tick[1]), end='\r')
+    def on_tick(tick: SimTick) -> None:
+        print(progress(tick.percent_complete), end='\r')
 
     def on_end(_: None) -> None:
-        print(progress(1.0))
         end_time = perf_counter()
+        if use_progress_bar:
+            print(progress(1.0))
+        else:
+            print('Complete.')
         print(f"Runtime: {(end_time - start_time):.3f}s")
 
-    sim.on_start.subscribe(on_start)
-    sim.on_tick.subscribe(on_tick)
-    sim.on_end.subscribe(on_end)
+    # Set up a subscriptions context, subscribe our handlers,
+    # then yield to the outer context (ostensibly where the sim will be run).
+    with subscriptions() as subs:
+        subs.subscribe(sim.on_start, on_start)
+        if sim.on_tick is not None:
+            subs.subscribe(sim.on_tick, on_tick)
+        subs.subscribe(sim.on_end, on_end)
+        yield
 
-    return sim
+
+def enable_logging(filename: str = 'debug.log', movement: bool = True) -> None:
+    """Enable simulation logging to file."""
+    reload(logging)
+    logging.basicConfig(filename=filename, filemode='w')
+    if movement:
+        logging.getLogger('movement').setLevel(logging.DEBUG)
+
+
+def base_namespace() -> dict[str, Any]:
+    """Make a safe namespace for user-defined functions."""
+    return {
+        'SimDType': SimDType,
+        # our utility functions
+        'pairwise_haversine': pairwise_haversine,
+        'row_normalize': row_normalize,
+        # numpy namespace
+        'np': ImmutableNamespace({
+            # numpy utility functions
+            'array': partial(np.array, dtype=SimDType),
+            'zeros': partial(np.zeros, dtype=SimDType),
+            'zeros_like': partial(np.zeros_like, dtype=SimDType),
+            'full': partial(np.full, dtype=SimDType),
+            'sum': partial(np.sum, dtype=SimDType),
+            'newaxis': np.newaxis,
+            # numpy math functions
+            'radians': np.radians,
+            'degrees': np.degrees,
+            'exp': np.exp,
+            'log': np.log,
+            'sin': np.sin,
+            'cos': np.cos,
+            'tan': np.tan,
+            'arcsin': np.arcsin,
+            'arccos': np.arccos,
+            'arctan': np.arctan,
+            'arctan2': np.arctan2,
+            'sqrt': np.sqrt,
+            'add': np.add,
+            'subtract': np.subtract,
+            'multiply': np.multiply,
+            'divide': np.divide,
+            'maximum': np.maximum,
+            'minimum': np.minimum,
+            'absolute': np.absolute,
+            'floor': np.floor,
+            'ceil': np.ceil,
+        }),
+        # Restricted names: this is a security bandaid.
+        # TODO: I think the only sensible security measure is to analyze the functions' ASTs to detect bad behavior.
+        'globals': None,
+        'locals': None,
+        'import': None,
+        'compile': None,
+        'eval': None,
+        'exec': None,
+        'object': None,
+        'print': None,
+        'open': None,
+        'quit': None,
+        'exit': None,
+        'copyright': None,
+        'credits': None,
+        'license': None,
+        'help': None,
+        'breakpoint': None,
+    }

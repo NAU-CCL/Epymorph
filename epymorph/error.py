@@ -1,14 +1,39 @@
 """
 A common exception framework for epymorph.
 """
-from __future__ import annotations
-
-from abc import ABC
+from contextlib import contextmanager
 from typing import Self
 
 
-class ValidationException(Exception, ABC):
+class UnknownModel(Exception):
+    """Exception for the inability to load a model as specified."""
+    model_type: str
+    name_or_path: str
+
+    def __init__(self, model_type: str, name_or_path: str):
+        super().__init__(f"Unable to load {model_type} model '{name_or_path}'")
+        self.model_type = model_type
+        self.name_or_path = name_or_path
+
+
+class ModelRegistryException(Exception):
+    """Exception during model library initialization."""
+
+
+class ParseException(Exception):
+    """Superclass for exceptions which happen while parsing a model."""
+
+
+class MmParseException(ParseException):
+    """Exception parsing a Movement Model."""
+
+
+class ValidationException(Exception):
     """Superclass for exceptions which happen during simulation validation."""
+
+
+class AttributeException(ValidationException):
+    """Exception handling data attributes."""
 
 
 class GeoValidationException(ValidationException):
@@ -42,7 +67,19 @@ class SimValidationException(ValidationException):
     """
 
 
-class SimulationException(Exception, ABC):
+class CompilationException(Exception):
+    """Exception during the compilation phase of the simulation."""
+
+
+class IpmCompileException(CompilationException):
+    """Exception during the compilation of the IPM."""
+
+
+class MmCompileException(CompilationException):
+    """Exception during the compilation of the MM."""
+
+
+class SimulationException(Exception):
     """Superclass for exceptions which happen during simulation runtime."""
 
 
@@ -64,3 +101,29 @@ class IpmSimException(SimulationException):
 
 class MmSimException(SimulationException):
     """Exception during MM processing."""
+
+
+class SimStateException(SimulationException):
+    """Exception when the simulation is not in a valid state to perform the requested operation."""
+
+
+@contextmanager
+def error_gate(description: str, exception_type: type[Exception], *reraises: type[Exception]):
+    """
+    Provide nice error messaging linked to a phase of the simulation.
+    `description` should describe the phase in gerund form.
+    If an exception of type `exception_type` is caught, it will be re-raised as-is.
+    If an exception is caught from the list of exception types in `reraises`,
+    the exception will be stringified and re-raised as `exception_type`.
+    All other exceptions will be labeled "unknown errors" with the given description.
+    """
+    try:
+        yield
+    except exception_type as e:
+        raise e
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        if any(isinstance(e, r) for r in reraises):
+            raise exception_type(str(e)) from e
+
+        msg = f"Unknown error {description}."
+        raise exception_type(msg) from e

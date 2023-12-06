@@ -1,15 +1,20 @@
-from __future__ import annotations
-
+"""
+A dynamic geo is capable of fetching data from arbitrary external data sources
+via the use of ADRIO implementations. It may fetch this data lazily, loading
+only the attributes needed by the simulation.
+"""
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
+from typing import Self
 
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.error import GeoValidationException
+from epymorph.error import AttributeException, GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
-from epymorph.geo.spec import LABEL, AttribDef, DynamicGeoSpec
+from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
+                               validate_geo_values)
 from epymorph.util import MemoDict
 
 
@@ -30,13 +35,8 @@ def _memoized_adrio_maker_library(lib: ADRIOMakerLibrary) -> MemoDict[str, ADRIO
 class DynamicGeo(Geo[DynamicGeoSpec]):
     """A Geo implementation which uses ADRIOs to dynamically fetch data from third-party data sources."""
 
-    @staticmethod
-    def load(spec_file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
-        """Load a DynamicGeo from a geo spec file."""
-        return DynamicGeoFileOps.load_from_file(spec_file, adrio_maker_library)
-
     @classmethod
-    def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
+    def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> Self:
         """Given an ADRIOMaker library, construct a DynamicGeo for the given spec."""
         makers = _memoized_adrio_maker_library(adrio_maker_library)
 
@@ -77,49 +77,48 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
 
     def __getitem__(self, name: str) -> NDArray:
         if name not in self._adrios:
-            raise KeyError(f"Attribute not found in geo: '{name}'")
+            raise AttributeException(f"Attribute not found in geo: '{name}'")
         return self._adrios[name].get_value()
 
     @property
     def labels(self) -> NDArray[np.str_]:
+        """The labels for every node in this geo."""
         # Since we've already accessed this adrio during construction,
         # the adrio should have already cached this value.
         return self._adrios[LABEL.name].get_value()
 
-    # TODO: can we implement a form of validation on dynamic geos short of fetching
-    # all of their data? Maybe not... but maybe if ADRIO had an AttribDef, we could at
-    # least check to see if the ADRIO *should* produce the expected type/shape.
-    # I'll have to think about whether or not this fulfills the purpose of `validate`...
+    def validate(self) -> None:
+        """
+        Validate this geo against its specification.
+        Raises GeoValidationException for any errors.
+        WARNING: this will fetch all data!
+        """
+        if self.spec.attribute_map.keys() != self._adrios.keys():
+            raise GeoValidationException('Geo values do not match the given spec.')
+        validate_geo_values(self.spec, self._fetch_all())
 
-    # def validate(self) -> None:
-    #     """
-    #     Validate this geo against its specification.
-    #     Raises GeoValidationException for any errors.
-    #     """
+    def _fetch_all(self) -> dict[str, NDArray]:
+        """For internal purposes: retrieves all Geo attributes using ADRIOs and returns a dict of the values."""
+        def fetch(key: str, adrio: ADRIO) -> tuple[str, NDArray]:
+            return (key, adrio.get_value())
 
-    def fetch_attribute(self, adrio: ADRIO) -> None:
-        """Gets a single Geo attribute from an ADRIO asynchronously using threads"""
-        print(f'Fetching {adrio.attrib}')
-        adrio.get_value()
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(fetch, key, adrio)
+                       for key, adrio in self._adrios.items()]
+            return dict(result.result() for result in wait(futures).done)
 
     def fetch_all(self) -> None:
         """Retrieves all Geo attributes from geospec object using ADRIOs"""
-
-        # TODO: loading from cache is currently disabled
-        # load Geo from compressed file if one exists
-        # if path.exists(geo_path(self.spec.id)) and not force:
-        #     return load_compressed_geo(geo_path(self.spec.id))
-        # build Geo using ADRIOs
-        # else:
-
         print('Fetching GEO data from ADRIOs...')
+
+        def fetch_attribute(adrio: ADRIO) -> NDArray:
+            print(f'Fetching {adrio.attrib}')
+            return adrio.get_value()
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
-            for key, adrio in self._adrios.items():
-                executor.submit(self.fetch_attribute, adrio)
-            # TODO: do we need to explicitly await these futures?
-
+            for adrio in self._adrios.values():
+                executor.submit(fetch_attribute, adrio)
         print('...done')
 
 
@@ -132,7 +131,7 @@ class DynamicGeoFileOps:
         return f"{geo_id}.geo"
 
     @staticmethod
-    def load_from_file(file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
+    def load_from_spec(file: os.PathLike, adrio_maker_library: ADRIOMakerLibrary) -> DynamicGeo:
         """Load a DynamicGeo from its spec file."""
         try:
             with open(file, mode='r', encoding='utf-8') as f:

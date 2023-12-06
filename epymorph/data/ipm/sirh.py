@@ -1,15 +1,17 @@
 # type: ignore
+"""Defines a compartmental IPM for a generic SIRH model."""
 from sympy import Max
 
+from epymorph.compartment_model import (CompartmentModel, compartment,
+                                        create_model, create_symbols, edge,
+                                        fork, param)
+from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.ipm.attribute import param
-from epymorph.ipm.compartment_ipm import CompartmentModelIpmBuilder
-from epymorph.ipm.compartment_model import (compartment, create_model,
-                                            create_symbols, edge, fork)
-from epymorph.ipm.ipm import IpmBuilder
 
 
-def load() -> IpmBuilder:
+@registry.ipm('sirh')
+def load() -> CompartmentModel:
+    """Load the 'sirh' IPM."""
     symbols = create_symbols(
         compartments=[
             compartment('S'),
@@ -33,7 +35,7 @@ def load() -> IpmBuilder:
     # the numerator must also be zero
     N = Max(1, S + I + R + H)
 
-    sirh = create_model(
+    return create_model(
         symbols=symbols,
         transitions=[
             edge(S, I, rate=β * S * I / N),
@@ -44,5 +46,3 @@ def load() -> IpmBuilder:
             edge(H, R, rate=H / h_dur),
             edge(R, S, rate=ξ * R),
         ])
-
-    return CompartmentModelIpmBuilder(sirh)

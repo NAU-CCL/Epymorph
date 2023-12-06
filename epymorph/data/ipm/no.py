@@ -1,36 +1,16 @@
-from __future__ import annotations
-
-import numpy as np
-
-from epymorph.clock import Tick
-from epymorph.context import Events, SimContext, SimDType
-from epymorph.ipm.ipm import Ipm, IpmBuilder
-from epymorph.movement.world import Location
+"""Defines a compartmental IPM with one compartment and no transitions."""
+from epymorph.compartment_model import (CompartmentModel, compartment,
+                                        create_model, create_symbols)
+from epymorph.data import registry
 
 
-def load() -> IpmBuilder:
-    return NoModelBuilder()
-
-
-class NoModelBuilder(IpmBuilder):
-    def __init__(self):
-        super().__init__(1, 0)
-
-    def verify(self, ctx: SimContext) -> None:
-        pass
-
-    def build(self, ctx: SimContext) -> Ipm:
-        return NoModel(ctx)
-
-
-class NoModel(Ipm):
-    """A 'null' model with only one compartment per population and no event transitions."""
-
-    def __init__(self, ctx: SimContext):
-        super().__init__(ctx)
-
-    def events(self, loc: Location, tick: Tick) -> Events:
-        return np.zeros(0, dtype=SimDType)
-
-    def apply_events(self, loc: Location, es: Events) -> None:
-        pass
+@registry.ipm('no')
+def load() -> CompartmentModel:
+    """Load the 'no' IPM."""
+    return create_model(
+        symbols=create_symbols(
+            compartments=[compartment('P')],
+            attributes=[]
+        ),
+        transitions=[]
+    )

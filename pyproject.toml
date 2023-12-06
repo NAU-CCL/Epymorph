@@ -61,6 +61,7 @@ epymorph = "epymorph.__main__:main"
 
 [tool.autopep8]
 max_line_length = 88
+ignore = ["E731"]
 
 [tool.pyright]
 exclude = [
