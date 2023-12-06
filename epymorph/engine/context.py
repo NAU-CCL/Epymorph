@@ -247,6 +247,9 @@ def _initialize(ctx: RumeContext) -> NDArray[SimDType]:
     except Exception as e:
         raise InitException('Initializer failed during execution.') from e
 
+    if np.min(result) < 0:
+        raise InitException(f"Initializer '{init_name}' returned values less than zero")
+
     try:
         _, N, C, _ = ctx.dim.TNCE
         check_ndarray(result, SimDType, (N, C))
