@@ -13,7 +13,7 @@
   "files.trimFinalNewlines": true,
 
   "editor.codeActionsOnSave": {
-    "source.organizeImports": true
+    "source.organizeImports": "explicit"
   },
   "editor.defaultFormatter": null,
   "editor.formatOnSave": true,
