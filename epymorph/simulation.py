@@ -13,8 +13,11 @@ import numpy as np
 from numpy.random import SeedSequence
 
 from epymorph.code import ImmutableNamespace, base_namespace
-from epymorph.util import (Event, pairwise_haversine, progress, row_normalize,
-                           subscriptions)
+from epymorph.util import (Event, mosquito_movement_probability,
+                           pairwise_haversine,
+                           powerlaw_distribution_probability, progress,
+                           row_normalize, subscriptions,
+                           weibull_distribution_prob)
 
 SimDType = np.int64
 """
@@ -218,6 +221,9 @@ def epymorph_namespace() -> dict[str, Any]:
         'SimDType': SimDType,
         # our utility functions
         'pairwise_haversine': pairwise_haversine,
+        'powerlaw_distribution_probability': powerlaw_distribution_probability,
+        'weibull_distribution_prob': weibull_distribution_prob,
+        'mosquito_movement_probability': mosquito_movement_probability,
         'row_normalize': row_normalize,
         # numpy namespace
         'np': ImmutableNamespace({

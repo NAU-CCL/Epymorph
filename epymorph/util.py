@@ -1,4 +1,6 @@
 """epymorph general utility functions and classes."""
+from __future__ import annotations
+
 from contextlib import contextmanager
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
                     OrderedDict, TypeVar)
@@ -164,6 +166,27 @@ def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DT
 
 
 RADIUS_MI = 3959.87433  # radius of earth in mi
+
+
+def weibull_distribution_prob(distance: NDArray[N], shape: float, scale: float) -> NDArray[np.float64]:
+    result = np.zeros_like(distance, dtype=np.float64)
+    result = ((shape / scale) * ((distance / scale) ** (shape - 1))
+              * (np.exp(-((distance / scale)**shape))))
+    return result  # type:ignore
+
+
+def powerlaw_distribution_probability(distance: NDArray[N], alpha: float) -> NDArray[np.float64]:
+    result = np.zeros_like(distance, dtype=np.float64)
+    result = (1 / (distance ** alpha))
+    return result  # type:ignore
+
+
+def mosquito_movement_probability(distance: NDArray[N], max_distance: float) -> NDArray[np.float64]:
+    result = np.zeros_like(distance, dtype=np.float64)
+    max_distance_mosquito = max_distance * 0.00062
+    result = ((max_distance_mosquito) - (distance)) / (max_distance_mosquito)
+    result = np.clip(result, 0, 1)
+    return result  # type:ignore
 
 
 def pairwise_haversine(longitudes: NDArray[np.float64], latitudes: NDArray[np.float64]) -> NDArray[np.float64]:

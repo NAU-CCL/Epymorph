@@ -1,0 +1,29 @@
+[move-steps: per-day=2; duration=[1/3,2/3]]
+
+[predef:  function=
+def long_range_birds_movement():
+   centroid = geo['centroid']
+   distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+   powerlaw_distribution = powerlaw_distribution_probability(distance, param['alpha'])
+   result_powerlaw = row_normalize(1/powerlaw_distribution)
+   weibull_distribution = weibull_distribution_prob(distance, param['shape'], param['scale'])
+   result_weibull = row_normalize(weibull_distribution)
+   return {'result_powerlaw' :result_powerlaw,
+   'result_weibull' : result_weibull
+   }
+]
+
+
+[mtype:days=all; leave=1; duration=0d; return = 2; function=
+def long_range_bird_commuters_source(t,src):
+    n_commuters = np.floor(geo['bird_population'][src]*0.1).astype(SimDType)
+    return np.multinomial(n_commuters,predef['result_powerlaw'][src])  
+
+]
+
+[mtype:days=all; leave=1; duration=0d; return = 2; function=
+def bird_commuters_source(t,src):
+    n_commuters = np.floor(geo['bird_population'][src]*0.1).astype(SimDType)
+    return np.multinomial(n_commuters,predef['result_weibull'][src])
+    
+]
