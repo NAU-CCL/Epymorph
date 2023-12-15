@@ -67,14 +67,14 @@ class Time(DataShape):
     """An array of at least size T (the number of simulation days)."""
 
     def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        if len(value.shape) == 1 and value.shape[0] >= dim.days:
+        if value.ndim == 1 and value.shape[0] >= dim.days:
             return True
         if allow_broadcast and value.shape == tuple():
             return True
         return False
 
     def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
-        if len(value.shape) == 1 and value.shape[0] >= dim.days:
+        if value.ndim == 1 and value.shape[0] >= dim.days:
             return value[:dim.days]
         if allow_broadcast and value.shape == tuple():
             return np.broadcast_to(value, shape=(dim.days,))
@@ -95,14 +95,14 @@ class Node(DataShape):
     """An array of size N (the number of simulation nodes)."""
 
     def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        if len(value.shape) == 1 and value.shape[0] == dim.nodes:
+        if value.ndim == 1 and value.shape[0] == dim.nodes:
             return True
         if allow_broadcast and value.shape == tuple():
             return True
         return False
 
     def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
-        if len(value.shape) == 1 and value.shape[0] == dim.nodes:
+        if value.ndim == 1 and value.shape[0] == dim.nodes:
             return value
         if allow_broadcast and value.shape == tuple():
             return np.broadcast_to(value, shape=(dim.nodes,))
@@ -152,26 +152,26 @@ class TimeAndNode(DataShape):
     """An array of size at-least-T by exactly-N."""
 
     def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        if len(value.shape) == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
+        if value.ndim == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
             return True
         if allow_broadcast:
             if value.shape == tuple():
                 return True
             if value.shape == (dim.nodes,):
                 return True
-            if len(value.shape) == 1 and value.shape[0] >= dim.days:
+            if value.ndim == 1 and value.shape[0] >= dim.days:
                 return True
         return False
 
     def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
-        if len(value.shape) == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
+        if value.ndim == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
             return value[:dim.days, :]
         if allow_broadcast:
             if value.shape == tuple():
                 return np.broadcast_to(value, shape=(dim.days, dim.nodes))
             if value.shape == (dim.nodes,):
                 return np.broadcast_to(value, shape=(dim.days, dim.nodes))
-            if len(value.shape) == 1 and value.shape[0] >= dim.days:
+            if value.ndim == 1 and value.shape[0] >= dim.days:
                 return np.broadcast_to(value[:dim.days, np.newaxis], shape=(dim.days, dim.nodes))
         return None
 
@@ -196,12 +196,12 @@ class Arbitrary(DataShape):
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
     def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        if len(value.shape) == 1 and value.shape[0] > self.index:
+        if value.ndim == 1 and value.shape[0] > self.index:
             return True
         return False
 
     def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
-        if len(value.shape) == 1 and value.shape[0] > self.index:
+        if value.ndim == 1 and value.shape[0] > self.index:
             return value
         return None
 
@@ -231,21 +231,19 @@ class TimeAndArbitrary(DataShape):
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
     def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        a = value.shape[-1]
-        if len(value.shape) == 2 and value.shape[0] >= dim.days and a > self.index:
+        if value.ndim == 2 and value.shape[0] >= dim.days and value.shape[1] > self.index:
             return True
         if allow_broadcast:
-            if len(value.shape) == 1 and a > self.index:
+            if value.ndim == 1 and value.shape[0] > self.index:
                 return True
         return False
 
     def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
-        a = value.shape[-1]
-        if len(value.shape) == 2 and value.shape[0] >= dim.days and a > self.index:
+        if value.ndim == 2 and value.shape[0] >= dim.days and value.shape[1] > self.index:
             return value[:dim.days, :]
         if allow_broadcast:
-            if len(value.shape) == 1 and a > self.index:
-                return np.broadcast_to(value, shape=(dim.days, a))
+            if value.ndim == 1 and value.shape[0] > self.index:
+                return np.broadcast_to(value, shape=(dim.days, value.shape[0]))
         return None
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
@@ -269,21 +267,19 @@ class NodeAndArbitrary(DataShape):
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
     def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        a = value.shape[-1]
-        if len(value.shape) == 2 and value.shape[0] == dim.nodes and a > self.index:
+        if value.ndim == 2 and value.shape[0] == dim.nodes and value.shape[1] > self.index:
             return True
         if allow_broadcast:
-            if len(value.shape) == 1 and a > self.index:
+            if value.ndim == 1 and value.shape[0] > self.index:
                 return True
         return False
 
     def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
-        a = value.shape[-1]
-        if len(value.shape) == 2 and value.shape[0] == dim.nodes and a > self.index:
+        if value.ndim == 2 and value.shape[0] == dim.nodes and value.shape[1] > self.index:
             return value
         if allow_broadcast:
-            if len(value.shape) == 1 and a > self.index:
-                return np.broadcast_to(value, shape=(dim.nodes, a))
+            if value.ndim == 1 and value.shape[0] > self.index:
+                return np.broadcast_to(value, shape=(dim.nodes, value.shape[0]))
         return None
 
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
@@ -307,28 +303,28 @@ class TimeAndNodeAndArbitrary(DataShape):
             raise ValueError("Arbitrary shape cannot specify negative indices.")
 
     def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        a = value.shape[-1]
-        if len(value.shape) == 3 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes and a > self.index:
+        if value.ndim == 3 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes and value.shape[2] > self.index:
             return True
-        if allow_broadcast:
-            if len(value.shape) == 1 and a > self.index:
+        if allow_broadcast and value.ndim > 0:
+            a = value.shape[-1]
+            if value.ndim == 1 and a > self.index:
                 return True
-            if len(value.shape) == 2 and value.shape[0] == dim.nodes and a > self.index:
+            if value.ndim == 2 and value.shape[0] == dim.nodes and a > self.index:
                 return True
-            if len(value.shape) == 2 and value.shape[0] >= dim.days and a > self.index:
+            if value.ndim == 2 and value.shape[0] >= dim.days and a > self.index:
                 return True
         return False
 
     def adapt(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> NDArray | None:
-        a = value.shape[-1]
-        if len(value.shape) == 3 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes and a > self.index:
+        if value.ndim == 3 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes and value.shape[2] > self.index:
             return value[:dim.days, :, :]
-        if allow_broadcast:
-            if len(value.shape) == 1 and a > self.index:
+        if allow_broadcast and value.ndim > 0:
+            a = value.shape[-1]
+            if value.ndim == 1 and a > self.index:
                 return np.broadcast_to(value, shape=(dim.days, dim.nodes, a))
-            if len(value.shape) == 2 and value.shape[0] == dim.nodes and a > self.index:
+            if value.ndim == 2 and value.shape[0] == dim.nodes and a > self.index:
                 return np.broadcast_to(value, shape=(dim.days, dim.nodes, a))
-            if len(value.shape) == 2 and value.shape[0] >= dim.days and a > self.index:
+            if value.ndim == 2 and value.shape[0] >= dim.days and a > self.index:
                 return np.broadcast_to(value[:dim.days, np.newaxis, :], shape=(dim.days, dim.nodes, a))
         return None
 
