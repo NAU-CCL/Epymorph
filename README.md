@@ -33,7 +33,11 @@ source .venv/bin/activate
 
 # then install the project in "editable" mode
 python -m pip install --editable .[dev]
+
+# for windows
+pip install -e .'[dev]'
 ```
+
 
 ## Running from the command line
 
