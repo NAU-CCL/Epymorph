@@ -12,8 +12,9 @@ from typing import (Any, Callable, Generator, NamedTuple, Protocol, Self,
 import numpy as np
 from numpy.random import SeedSequence
 
-from epymorph.util import (Event, ImmutableNamespace, pairwise_haversine,
-                           progress, row_normalize, subscriptions)
+from epymorph.code import ImmutableNamespace
+from epymorph.util import (Event, pairwise_haversine, progress, row_normalize,
+                           subscriptions)
 
 SimDType = np.int64
 """

@@ -8,6 +8,7 @@ from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.code import ImmutableNamespace, compile_function, parse_function
 from epymorph.error import AttributeException, MmCompileException, error_gate
 from epymorph.movement.movement_model import (DynamicTravelClause,
                                               MovementContext,
@@ -16,7 +17,6 @@ from epymorph.movement.movement_model import (DynamicTravelClause,
 from epymorph.movement.parser import (ALL_DAYS, DailyClause, MovementClause,
                                       MovementSpec)
 from epymorph.simulation import SimDType, Tick, TickDelta, base_namespace
-from epymorph.util import ImmutableNamespace, compile_function, parse_function
 
 
 def compile_spec(ctx: MovementContext, spec: MovementSpec) -> MovementModel:

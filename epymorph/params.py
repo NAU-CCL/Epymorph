@@ -5,11 +5,11 @@ from typing import Any, Callable, Mapping, Union
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
+from epymorph.code import (compile_function, has_function_structure,
+                           parse_function)
 from epymorph.error import CompilationException
 from epymorph.geo.geo import Geo
 from epymorph.simulation import base_namespace
-from epymorph.util import (compile_function, has_function_structure,
-                           parse_function)
 
 ParamBase = int | float | str
 ParamList = list[Union[ParamBase, 'ParamList']]
