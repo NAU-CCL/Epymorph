@@ -92,6 +92,12 @@ class TestScrubFunction(unittest.TestCase):
 
 class TestCompileFunction(unittest.TestCase):
 
+    def _compile_function(self, code: str, unsafe: bool) -> Any:
+        return compile_function(
+            parse_function(code, unsafe=unsafe),
+            global_namespace={}
+        )()
+
     def test_access_env(self):
         # Assume we have a juicy secret value defined as an environment variable.
         os.environ['TEST_SECRET_9812398712'] = '42'
@@ -164,12 +170,7 @@ class TestCompileFunction(unittest.TestCase):
                 return secret if secret is not None else '?'
         """)
 
-        def test(code: str, unsafe: bool) -> Any:
-            f = compile_function(
-                parse_function(code, unsafe=unsafe),
-                global_namespace={}
-            )
-            return f()
+        test = self._compile_function
 
         # If the function is run as-is, it can import os and get the secret.
         self.assertTrue(test(evil_function_string_1, unsafe=True), '42')
@@ -200,12 +201,7 @@ class TestCompileFunction(unittest.TestCase):
                 return secret if secret is not None else '?'
         """)
 
-        def test(code: str, unsafe: bool) -> Any:
-            f = compile_function(
-                parse_function(code, unsafe=unsafe),
-                global_namespace={}
-            )
-            return f()
+        test = self._compile_function
 
         # If the function is run as-is, it can import os and get the secret.
         self.assertTrue(test(evil_function_string_1, unsafe=True), '42')
@@ -228,17 +224,57 @@ class TestCompileFunction(unittest.TestCase):
                 return secret if secret is not None else '?'
         """)
 
-        def test(code: str, unsafe: bool) -> Any:
-            f = compile_function(
-                parse_function(code, unsafe=unsafe),
-                global_namespace={}
-            )
-            return f()
+        test = self._compile_function
 
         # If the function is run as-is, it can import os and get the secret.
         self.assertTrue(test(evil_function_string_1, unsafe=True), '42')
 
-        # But with __import__ detection, it will fail to compile.
+        # But with __builtins__ detection, it will fail to compile.
+        with self.assertRaises(CodeSecurityException):
+            test(evil_function_string_1, unsafe=False)
+
+    def test_use__class__(self):
+        # Test case inspired by https://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
+        # Assume we have a juicy secret value defined as an environment variable.
+        os.environ['TEST_SECRET_9812398712'] = '42'
+        self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
+
+        evil_function_string_1 = dedent("""
+            def stealing_secrets():
+                bins = next(c for c in ().__class__.__base__.__subclasses__()
+                            if c.__name__ == 'catch_warnings')()._module.__builtins__
+                secret = bins['__import__']('os').getenv('TEST_SECRET_9812398712')
+                # I might exfiltrate the secret over HTTP...
+                return secret if secret is not None else '?'
+        """)
+
+        test = self._compile_function
+
+        # If the function is run as-is, it can import os and get the secret.
+        self.assertTrue(test(evil_function_string_1, unsafe=True), '42')
+
+        # But with __class__ detection, it will fail to compile.
+        with self.assertRaises(CodeSecurityException):
+            test(evil_function_string_1, unsafe=False)
+
+    def test_use_fstrings(self):
+        # Assume we have a juicy secret value defined as an environment variable.
+        os.environ['TEST_SECRET_9812398712'] = '42'
+        self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
+
+        evil_function_string_1 = dedent("""
+            def stealing_secrets():
+                secret = f'''{eval("__builtins__['__import__']('os').getenv('TEST_SECRET_9812398712')")}'''
+                # I might exfiltrate the secret over HTTP...
+                return secret if secret is not None else '?'
+        """)
+
+        test = self._compile_function
+
+        # If the function is run as-is, it can import os and get the secret.
+        self.assertTrue(test(evil_function_string_1, unsafe=True), '42')
+
+        # But malicious code inside the fstring is still detected, so it will fail to compile.
         with self.assertRaises(CodeSecurityException):
             test(evil_function_string_1, unsafe=False)
 

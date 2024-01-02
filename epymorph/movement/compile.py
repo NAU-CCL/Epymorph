@@ -16,7 +16,7 @@ from epymorph.movement.movement_model import (DynamicTravelClause,
                                               TravelClause)
 from epymorph.movement.parser import (ALL_DAYS, DailyClause, MovementClause,
                                       MovementSpec)
-from epymorph.simulation import SimDType, Tick, TickDelta, base_namespace
+from epymorph.simulation import SimDType, Tick, TickDelta, epymorph_namespace
 
 
 def compile_spec(ctx: MovementContext, spec: MovementSpec) -> MovementModel:
@@ -68,7 +68,7 @@ def _movement_global_namespace(ctx: MovementContext) -> dict[str, Any]:
                 return result.astype(SimDType)
         return wrapped_func
 
-    global_namespace = base_namespace()
+    global_namespace = epymorph_namespace()
     # Add rng functions to np namespace.
     np_ns = ImmutableNamespace({
         **global_namespace['np'].to_dict_shallow(),

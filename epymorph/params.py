@@ -9,7 +9,7 @@ from epymorph.code import (compile_function, has_function_structure,
                            parse_function)
 from epymorph.error import CompilationException
 from epymorph.geo.geo import Geo
-from epymorph.simulation import base_namespace
+from epymorph.simulation import epymorph_namespace
 
 ParamBase = int | float | str
 ParamList = list[Union[ParamBase, 'ParamList']]
@@ -39,7 +39,7 @@ def normalize_params(raw_params: Params, geo: Geo, duration: int,
     def _get_dtype(name: str) -> DTypeLike | None:
         return None if dtypes is None else dtypes.get(name, None)
 
-    global_namespace = base_namespace() | {'geo': geo}
+    global_namespace = epymorph_namespace() | {'geo': geo}
 
     def _norm(name: str, raw: ParamValue) -> ParamNp:
         dtype = _get_dtype(name)

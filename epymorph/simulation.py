@@ -12,7 +12,7 @@ from typing import (Any, Callable, Generator, NamedTuple, Protocol, Self,
 import numpy as np
 from numpy.random import SeedSequence
 
-from epymorph.code import ImmutableNamespace
+from epymorph.code import ImmutableNamespace, base_namespace
 from epymorph.util import (Event, pairwise_haversine, progress, row_normalize,
                            subscriptions)
 
@@ -209,8 +209,11 @@ def enable_logging(filename: str = 'debug.log', movement: bool = True) -> None:
         logging.getLogger('movement').setLevel(logging.DEBUG)
 
 
-def base_namespace() -> dict[str, Any]:
-    """Make a safe namespace for user-defined functions."""
+def epymorph_namespace() -> dict[str, Any]:
+    """
+    Make a safe namespace for user-defined functions,
+    including utilities that functions might need in epymorph.
+    """
     return {
         'SimDType': SimDType,
         # our utility functions
@@ -248,22 +251,5 @@ def base_namespace() -> dict[str, Any]:
             'floor': np.floor,
             'ceil': np.ceil,
         }),
-        # Restricted names: this is a security bandaid.
-        # TODO: I think the only sensible security measure is to analyze the functions' ASTs to detect bad behavior.
-        'globals': None,
-        'locals': None,
-        'import': None,
-        'compile': None,
-        'eval': None,
-        'exec': None,
-        'object': None,
-        'print': None,
-        'open': None,
-        'quit': None,
-        'exit': None,
-        'copyright': None,
-        'credits': None,
-        'license': None,
-        'help': None,
-        'breakpoint': None,
+        **base_namespace(),
     }

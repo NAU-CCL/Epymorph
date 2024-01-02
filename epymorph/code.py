@@ -40,8 +40,19 @@ def parse_function(code_string: str, unsafe: bool = False) -> ast.FunctionDef:
     return functions[0] if unsafe else scrub_function(functions[0])
 
 
-class CodeSecurityException(Exception):
+class CodeCompileException(Exception):
+    """An exception raised when code cannot be compiled for some reason."""
+
+
+class CodeSecurityException(CodeCompileException):
     """An exception raised when code cannot be safely compiled due to security rules."""
+
+
+_FORBIDDEN_NAMES = frozenset({
+    'eval', 'exec', 'compile', 'object', 'print', 'open',
+    'quit', 'exit', 'globals', 'locals', 'help', 'breakpoint'
+})
+"""Names which should not exist in a user-defined function."""
 
 
 class SecureTransformer(ast.NodeTransformer):
@@ -56,9 +67,18 @@ class SecureTransformer(ast.NodeTransformer):
         return None
 
     def visit_Name(self, node: ast.Name) -> Any:
-        """No referencing sensitive names like eval or exec."""
-        if node.id in ['eval', 'exec', 'compile', 'object', 'print', 'open', 'quit', 'exit', '__import__', '__builtins__']:
+        """No referencing sensitive names like eval or exec, or anything starting with an underscore."""
+        if node.id.startswith('_'):
             raise CodeSecurityException(f"Illegal reference to `{node.id}`.")
+        if node.id in _FORBIDDEN_NAMES:
+            raise CodeSecurityException(f"Illegal reference to `{node.id}`.")
+        return super().generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> Any:
+        """Disallow accessing potentially sensitive attributes (any with a leading underscore)."""
+        if node.attr.startswith('_'):
+            msg = f"Illegal reference to attribute `{node.attr}`."
+            raise CodeSecurityException(msg)
         return super().generic_visit(node)
 
 
@@ -85,12 +105,22 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
     module = ast.Module(body=[function_def], type_ignores=[])
     code = compile(module, '<string>', mode='exec')
     if global_namespace is None:
-        global_namespace = {}
+        global_namespace = base_namespace()
     local_namespace = dict[str, Any]()
     exec(code, global_namespace, local_namespace)
-    # Now our function is defined in the local namespace, retrieve it
-    # TODO: it would be nice if this was typesafe in the signature of the returned function...
-    return local_namespace[function_def.name]
+    # Now our function is defined in the local namespace, retrieve it.
+    function = local_namespace[function_def.name]
+    if not isinstance(function, Callable):
+        msg = f"`{function_def.name}` did not compile to a callable function."
+        raise CodeCompileException(msg)
+    return function
+
+
+def base_namespace() -> dict[str, Any]:
+    """Make a safer namespace for user-defined functions."""
+    return {
+        '__builtins__': {},
+    }
 
 
 class ImmutableNamespace:
