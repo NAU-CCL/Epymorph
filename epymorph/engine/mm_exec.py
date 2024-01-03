@@ -9,8 +9,10 @@ from numpy.typing import NDArray
 
 from epymorph.engine.context import RumeContext
 from epymorph.engine.world import World
+from epymorph.error import AttributeException, MmCompileException
 from epymorph.movement.compile import compile_spec
-from epymorph.movement.movement_model import TravelClause
+from epymorph.movement.movement_model import (MovementModel, PredefParams,
+                                              TravelClause)
 from epymorph.movement.parser import MovementSpec
 from epymorph.simulation import SimDType, Tick
 from epymorph.util import row_normalize
@@ -38,27 +40,48 @@ class StandardMovementExecutor(MovementExecutor):
 
     _ctx: RumeContext
     _log: Logger
-    _clauses: list[TravelClause]
+    _model: MovementModel
     _clause_masks: dict[TravelClause, NDArray[np.bool_]]
+    _predef: PredefParams = {}
+    _predef_hash: int | None = None
 
     def __init__(self, ctx: RumeContext):
         # If we were given a MovementSpec, we need to compile it to get its clauses.
         if isinstance(ctx.mm, MovementSpec):
-            clauses = compile_spec(ctx, ctx.mm).clauses
+            self._model = compile_spec(ctx, ctx.mm)
         else:
-            clauses = ctx.mm.clauses
+            self._model = ctx.mm
 
         self._ctx = ctx
         self._log = getLogger('movement')
-        self._clauses = clauses
-        self._clause_masks = {c: c.mask(ctx) for c in clauses}
+        self._clause_masks = {c: c.mask(ctx) for c in self._model.clauses}
+        self._check_predef()
+
+    def _check_predef(self) -> None:
+        """Check if predef needs to be re-calc'd, and if so, do so."""
+        curr_hash = self._model.predef_context_hash(self._ctx)
+        if curr_hash != self._predef_hash:
+            try:
+                self._predef = self._model.predef(self._ctx)
+                self._predef_hash = curr_hash
+            except KeyError as e:
+                # NOTE: catching KeyError here will be necessary (to get nice error messages)
+                # until we can properly validate the MM clauses.
+                msg = f"Missing attribute {e} required by movement model predef."
+                raise AttributeException(msg) from None
+
+            if not isinstance(self._predef, dict):
+                msg = f"Movement predef: did not return a dictionary result (got: {type(self._predef)})"
+                raise MmCompileException(msg)
 
     def apply(self, world: World, tick: Tick) -> None:
         """Applies movement for this tick, mutating the world state."""
         self._log.debug('Processing movement for day %s, step %s', tick.day, tick.step)
 
+        self._check_predef()
+
         # Process travel clauses.
-        for clause in self._clauses:
+        for clause in self._model.clauses:
             if not clause.predicate(self._ctx, tick):
                 continue
             local_array = world.get_local_array()
@@ -81,7 +104,7 @@ class StandardMovementExecutor(MovementExecutor):
         clause_log = self._log.getChild(clause.name)
         _, N, C, _ = self._ctx.dim.TNCE
 
-        requested_movers = clause.requested(self._ctx, tick)
+        requested_movers = clause.requested(self._ctx, self._predef, tick)
         np.fill_diagonal(requested_movers, 0)
         requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
 

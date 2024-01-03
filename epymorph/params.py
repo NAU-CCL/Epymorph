@@ -12,7 +12,7 @@ from epymorph.geo.geo import Geo
 from epymorph.simulation import epymorph_namespace
 
 ParamBase = int | float | str
-ParamList = list[Union[ParamBase, 'ParamList']]
+ParamList = list[Union[ParamBase, 'ParamList']]  # (recursively-nested lists)
 ParamPy = ParamBase | ParamList
 ParamNp = NDArray[np.int64 | np.float64 | np.str_]
 ParamFunction = Callable[[int, int], ParamPy | ParamNp]

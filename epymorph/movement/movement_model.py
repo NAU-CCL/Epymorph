@@ -25,6 +25,11 @@ class MovementContext(Protocol):
     ipm: CompartmentModel
     params: ContextParams
     rng: np.random.Generator
+    version: int
+
+
+PredefParams = ContextParams
+PredefClause = Callable[[MovementContext], PredefParams]
 
 
 class TravelClause(ABC):
@@ -41,7 +46,7 @@ class TravelClause(ABC):
         """Should this clause apply this tick?"""
 
     @abstractmethod
-    def requested(self, ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
+    def requested(self, ctx: MovementContext, predef: PredefParams, tick: Tick) -> NDArray[SimDType]:
         """Evaluate this clause for the given tick, returning a requested movers array (N,N)."""
 
     @abstractmethod
@@ -58,7 +63,7 @@ should this compartment be subject to movement by this clause?
 MovementPredicate = Callable[[MovementContext, Tick], bool]
 """A predicate which decides if a clause should fire this tick."""
 
-MovementFunction = Callable[[MovementContext, Tick], NDArray[SimDType]]
+MovementFunction = Callable[[MovementContext, PredefParams, Tick], NDArray[SimDType]]
 """
 A function which calculates the requested number of individuals to move due to this clause this tick.
 Returns an (N,N) array of integers.
@@ -99,9 +104,9 @@ class DynamicTravelClause(TravelClause):
     def predicate(self, ctx: MovementContext, tick: Tick) -> bool:
         return self._move(ctx, tick)
 
-    def requested(self, ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
+    def requested(self, ctx: MovementContext, predef: PredefParams, tick: Tick) -> NDArray[SimDType]:
         try:
-            return self._requested(ctx, tick)
+            return self._requested(ctx, predef, tick)
         except KeyError as e:
             # NOTE: catching KeyError here will be necessary (to get nice error messages)
             # until we can properly validate the MM clauses.
@@ -123,5 +128,14 @@ class MovementModel:
 
     tau_steps: list[float]
     """The tau steps for the simulation."""
+
+    predef: PredefClause
+    """The predef clause for this movement model."""
+    predef_context_hash: Callable[[MovementContext], int]
+    """
+    A hash function which determines if the given MovementContext has changed in a way that would
+    necessitate the predef be re-calculated.
+    """
+
     clauses: list[TravelClause]
     """The clauses which express the movement model"""

@@ -4,7 +4,7 @@
 def sparsemod_predef():
     centroid = geo['centroid']
     distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
-    dispersal_kernel = row_normalize(1 / np.exp(distance / param['phi']))
+    dispersal_kernel = row_normalize(1 / np.exp(distance / params['phi']))
     return {
         'commuters_by_node': np.sum(geo['commuters'], axis=1),
         'dispersal_kernel': dispersal_kernel

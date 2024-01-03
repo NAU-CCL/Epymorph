@@ -55,6 +55,11 @@ class RumeContext:
     time_frame: TimeFrame
     initializer: Initializer
     rng: np.random.Generator
+    version: int = field(init=False, default=0)
+    """
+    `version` indicates when changes have been made to the context.
+    If `version` hasn't changed, no other changes have been made.
+    """
 
     _attribute_getters: MemoDict[AttributeDef, AttributeGetter] = field(init=False)
 
@@ -124,6 +129,7 @@ class RumeContext:
         attrs = [a for a in self._attribute_getters if a.name == name]
         for a in attrs:
             del self._attribute_getters[a]
+        self.version += 1
 
     def _get_attribute_value(self, attr: AttributeDef) -> NDArray:
         """Retrieve the value associated with the given attribute."""
