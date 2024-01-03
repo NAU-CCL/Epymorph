@@ -47,9 +47,9 @@ class SimulateTest(unittest.TestCase):
                            "R prevalence should be greater than zero at some point in the sim.")
         self.assertGreater(out1.incidence[:, :, 0].max(), 0,
                            "S-to-I incidence should be greater than zero at some point in the sim.")
-        self.assertGreater(out1.incidence[:, :, 0].max(), 0,
+        self.assertGreater(out1.incidence[:, :, 1].max(), 0,
                            "I-to-R incidence should be greater than zero at some point in the sim.")
-        self.assertGreater(out1.incidence[:, :, 0].max(), 0,
+        self.assertGreater(out1.incidence[:, :, 2].max(), 0,
                            "R-to-S incidence should be greater than zero at some point in the sim.")
 
         self.assertGreaterEqual(out1.prevalence.min(), 0,
