@@ -1,4 +1,3 @@
-# type: ignore
 """Defines a copmartmental IPM mirroring the SPARSEMOD COVID model."""
 from sympy import Max
 

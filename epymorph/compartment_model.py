@@ -7,11 +7,12 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Iterable, Iterator
 
+from sympy import Expr, Float, Integer, Symbol
+
 from epymorph.attribute import AttributeDef, AttributeType
 from epymorph.data_shape import DataShape, Shapes
 from epymorph.error import IpmValidationException
-from epymorph.sympy_shim import (Expr, Float, Integer, Symbol, simplify,
-                                 simplify_sum, to_symbol)
+from epymorph.sympy_shim import simplify, simplify_sum, to_symbol
 from epymorph.util import iterator_length
 
 ############################################################

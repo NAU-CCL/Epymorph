@@ -1,4 +1,3 @@
-# type: ignore
 """Defines a compartmental IPM for a generic SIRH model."""
 from sympy import Max
 

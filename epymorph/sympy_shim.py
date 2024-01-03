@@ -2,33 +2,32 @@
 
 from typing import Any, Callable, cast
 
-import sympy
-from sympy import Expr, Float, Integer, Symbol
+import sympy as sy
 
 
-def to_symbol(name: str) -> Symbol:
+def to_symbol(name: str) -> sy.Symbol:
     """
     Create a symbol from the given string. To be consistent with the typing given,
     only include a single symbol. (But this is not checked.)
     """
-    return cast(Symbol, sympy.symbols(name))
+    return cast(sy.Symbol, sy.symbols(name))
 
 
-def simplify(expr: Expr) -> Expr:
+def simplify(expr: sy.Expr) -> sy.Expr:
     """Simplify the given expression."""
-    return cast(Expr, sympy.simplify(expr))
+    return cast(sy.Expr, sy.simplify(expr))
 
 
-def simplify_sum(exprs: list[Expr]) -> Expr:
+def simplify_sum(exprs: list[sy.Expr]) -> sy.Expr:
     """Simplify the sum of the given expressions."""
-    return cast(Expr, sympy.simplify(sympy.Add(*exprs)))
+    return cast(sy.Expr, sy.simplify(sy.Add(*exprs)))
 
 
 SympyLambda = Callable[[list[Any]], Any]
 """(Vaguely) describes the result of lambdifying an expression."""
 
 
-def lambdify(params: list[Any], expr: Expr) -> SympyLambda:
+def lambdify(params: list[Any], expr: sy.Expr) -> SympyLambda:
     """
     Create a lambda function from the given expression,
     taking the given parameters and returning a single result.
@@ -37,26 +36,12 @@ def lambdify(params: list[Any], expr: Expr) -> SympyLambda:
     # (rather than having to spread the list)
     # i.e., f([1,2,3]) rather than f(*[1,2,3])
     # This is better because we have to construct the arguments at run-time as lists.
-    return cast(SympyLambda, sympy.lambdify([params], expr))
+    return cast(SympyLambda, sy.lambdify([params], expr))
 
 
-def lambdify_list(params: list[Any], exprs: list[Expr]) -> SympyLambda:
+def lambdify_list(params: list[Any], exprs: list[sy.Expr]) -> SympyLambda:
     """
     Create a lambda function from the given expressions,
     taking the given parameters and returning a list of results.
     """
-    return cast(SympyLambda, sympy.lambdify([params], exprs))
-
-
-__all__ = [
-    'Expr',
-    'Integer',
-    'Float',
-    'Symbol',
-    'to_symbol',
-    'simplify',
-    'simplify_sum',
-    'SympyLambda',
-    'lambdify',
-    'lambdify_list',
-]
+    return cast(SympyLambda, sy.lambdify([params], exprs))

@@ -3,7 +3,7 @@ import ast
 import re
 from contextlib import contextmanager
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
-                    OrderedDict, TypeGuard, TypeVar)
+                    OrderedDict, TypeVar)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -224,13 +224,6 @@ class NumpyTypeError(Exception):
     """Describes an error checking the type or shape of a numpy array."""
 
 
-DT = TypeVar('DT', bound=np.generic)
-"""A numpy dtype."""
-
-DTLike = type[DT]
-"""(Some) of the things that can be coerced as a numpy dtype."""
-
-
 def dtype_name(d: np.dtype) -> str:
     """Tries to return the most-human-readable name for a numpy dtype."""
     return d.name if d.isbuiltin else str(d)
@@ -238,14 +231,14 @@ def dtype_name(d: np.dtype) -> str:
 
 def check_ndarray(
     value: Any,
-    dtype: DTLike[DT] | list[DTLike[DT]] | None = None,
+    dtype: DTypeLike | list[DTypeLike] | None = None,
     shape: tuple[int, ...] | list[tuple[int, ...]] | None = None,
     dimensions: int | list[int] | None = None,
-) -> TypeGuard[NDArray[DT]]:
+) -> None:
     """
     Checks that a value is a numpy array of the given dtype and shape.
     (If you pass a list of dtypes or shapes, they will be matched as though combined with an "or".)
-    Type-guards if true, raises a NumpyTypeError if false.
+    Raises a NumpyTypeError if check doesn't pass.
     """
     if value is None:
         raise NumpyTypeError('Value is None.')
@@ -271,7 +264,6 @@ def check_ndarray(
         if not len(value.shape) in dimensions:
             msg = f"Not a numpy dimensional match: got {len(value.shape)} dimensions, expected {dimensions}"
             raise NumpyTypeError(msg)
-    return True
 
 
 # console decorations

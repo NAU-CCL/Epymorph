@@ -1,6 +1,5 @@
-# type: ignore (this is to silence spurious Sympy type warnings re: operators)
 """Defines a compartmental IPM mirroring the Pei paper's beta treatment."""
-from sympy import Max, parse_expr
+from sympy import Max, exp, log
 
 from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge,
@@ -27,12 +26,7 @@ def load() -> CompartmentModel:
     [S, I, R] = symbols.compartment_symbols
     [D, L, H] = symbols.attribute_symbols
 
-    # BUG: TYPE-CHECKING THIS LINE IS SUPER SLOW
-    # see: https://github.com/microsoft/pylance-release/issues/946 (similar?)
-    # beta = (exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D
-
-    # as a workaround we can just parse the expression from a string :(
-    beta = parse_expr("(exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D")
+    beta = (exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D
 
     # formulate N so as to avoid dividing by zero;
     # this is safe in this instance because if the denominator is zero,

@@ -1,4 +1,3 @@
-# type: ignore
 from sympy import Max
 
 from epymorph.compartment_model import (CompartmentModel, compartment,

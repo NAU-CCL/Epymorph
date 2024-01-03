@@ -12,20 +12,20 @@ from typing import NamedTuple, Self, cast
 
 import jsonpickle
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 
 from epymorph.data_shape import DataShape, Shapes
 from epymorph.error import GeoValidationException
-from epymorph.util import DTLike, NumpyTypeError, check_ndarray
+from epymorph.util import NumpyTypeError, check_ndarray
 
-CentroidDType = np.dtype([('longitude', np.float64), ('latitude', np.float64)])
+CentroidDType = [('longitude', np.float64), ('latitude', np.float64)]
 """Structured numpy dtype for long/lat coordinates."""
 
 
 class AttribDef(NamedTuple):
     """Metadata about a Geo attribute."""
     name: str
-    dtype: DTLike
+    dtype: DTypeLike
     shape: DataShape
 
 

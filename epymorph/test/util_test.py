@@ -1,8 +1,9 @@
+# pylint: disable=missing-docstring
 import unittest
 
 import numpy as np
 
-import epymorph.util as util
+from epymorph import util
 
 
 class TestUtil(unittest.TestCase):
@@ -42,19 +43,19 @@ class TestUtil(unittest.TestCase):
         self.assertListEqual(act, exp)
 
     def test_check_ndarray_01(self):
+        # Test is just to make sure none of these raise NumpyTypeError
         arr = np.array([1, 2, 3], dtype=np.int64)
-        self.assertTrue(util.check_ndarray(arr))
-        self.assertTrue(util.check_ndarray(arr, dtype=np.int64))
-        self.assertTrue(util.check_ndarray(arr, shape=(3,)))
-        self.assertTrue(util.check_ndarray(arr, np.int64, (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.int64], (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.int64, np.float64], (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.float64, np.int64], (3,)))
-        self.assertTrue(util.check_ndarray(arr, [np.int64, np.float64], [(3,)]))
-        self.assertTrue(util.check_ndarray(
-            arr, [np.int64, np.float64], [(3, 1), (1, 3), (3,)]))
-        self.assertTrue(util.check_ndarray(arr, dimensions=1))
-        self.assertTrue(util.check_ndarray(arr, dimensions=[1, 2, 3]))
+        util.check_ndarray(arr)
+        util.check_ndarray(arr, dtype=np.int64)
+        util.check_ndarray(arr, shape=(3,))
+        util.check_ndarray(arr, np.int64, (3,))
+        util.check_ndarray(arr, [np.int64], (3,))
+        util.check_ndarray(arr, [np.int64, np.float64], (3,))
+        util.check_ndarray(arr, [np.float64, np.int64], (3,))
+        util.check_ndarray(arr, [np.int64, np.float64], [(3,)])
+        util.check_ndarray(arr, [np.int64, np.float64], [(3, 1), (1, 3), (3,)])
+        util.check_ndarray(arr, dimensions=1)
+        util.check_ndarray(arr, dimensions=[1, 2, 3])
 
     def test_check_ndarray_02(self):
         with self.assertRaises(util.NumpyTypeError):
@@ -68,8 +69,10 @@ class TestUtil(unittest.TestCase):
 
     def test_check_ndarray_03(self):
         arr = np.arange(12).reshape((3, 4))
-        self.assertTrue(util.check_ndarray(arr, shape=(3, 4)))
-        self.assertTrue(util.check_ndarray(arr, shape=(3, 4), dimensions=2))
+        # Doesn't raise...
+        util.check_ndarray(arr, shape=(3, 4))
+        util.check_ndarray(arr, shape=(3, 4), dimensions=2)
+        # Does raise...
         with self.assertRaises(util.NumpyTypeError):
             util.check_ndarray(arr, shape=(4, 3))
         with self.assertRaises(util.NumpyTypeError):

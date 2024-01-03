@@ -247,7 +247,11 @@ def _initialize(ctx: RumeContext) -> NDArray[SimDType]:
     except Exception as e:
         raise InitException('Initializer failed during execution.') from e
 
-    if np.min(result) < 0:
+    # NOTE: I'm boxing the np.min result as an int to convince Pylance/Pyright that the < operator
+    # works. For some reason, it seems to be having trouble discovering operators in library code.
+    # I'm not able to duplicate this in a sandbox environment, so it must be an obscure peculiarity
+    # of our project. For now, better to work around it; this isn't in a performance-critical code path.
+    if int(np.min(result)) < 0:
         raise InitException(f"Initializer '{init_name}' returned values less than zero")
 
     try:
