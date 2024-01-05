@@ -250,6 +250,7 @@ def epymorph_namespace() -> dict[str, Any]:
             'absolute': np.absolute,
             'floor': np.floor,
             'ceil': np.ceil,
+            'pi': np.pi,
         }),
         **base_namespace(),
     }
