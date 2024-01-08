@@ -2,32 +2,71 @@
 import ast
 import os
 import unittest
-from textwrap import dedent
 from typing import Any
 
 from epymorph.code import (CodeSecurityException, compile_function,
-                           parse_function, scrub_function)
+                           has_function_structure, parse_function,
+                           scrub_function)
+
+
+class TestHasFunctionStructure(unittest.TestCase):
+
+    def test_valid_function_01(self):
+        self.assertTrue(has_function_structure("""
+            def my_function():
+                return 42
+        """))
+
+    def test_valid_function_02(self):
+        self.assertTrue(has_function_structure("""
+            def my_function_one():
+                return 42
+            
+            def my_function_two():
+                return 84
+        """))
+
+    def test_valid_function_03(self):
+        self.assertTrue(has_function_structure("""
+            from something import that_thing
+            
+            xyz = 999
+                                               
+            def this_nifty_function (a: str, b: int, /, some_other_thing):
+                return 42
+                                               
+            abc = 111
+        """))
+
+    def test_valid_function_04(self):
+        self.assertTrue(has_function_structure("def f():\n    return 'hello world'"))
+
+    def test_invalid_function_01(self):
+        self.assertFalse(has_function_structure("42"))
+
+    def test_invalid_function_02(self):
+        self.assertFalse(has_function_structure("thisdef is (you): so yeah"))
 
 
 class TestParseFunction(unittest.TestCase):
 
     def test_valid_function(self):
-        code_string = dedent("""
+        code_string = """
             def my_function():
                 return 42
-        """)
+        """
         result = parse_function(code_string)
         self.assertIsInstance(result, ast.FunctionDef)
         self.assertEqual(result.name, 'my_function')
 
     def test_invalid_function_count(self):
-        code_string = dedent("""
+        code_string = """
             def function_one():
                 return 1
 
             def function_two():
                 return 2
-        """)
+        """
         with self.assertRaises(ValueError):
             parse_function(code_string)
 
@@ -104,7 +143,7 @@ class TestCompileFunction(unittest.TestCase):
         self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
 
         # This function tries to grab that secret and do something with it.
-        evil_function_string = dedent("""
+        evil_function_string = """
             def steal_your_secrets():
                 import os
                 secret = os.getenv('TEST_SECRET_9812398712')
@@ -113,7 +152,7 @@ class TestCompileFunction(unittest.TestCase):
                     return secret
                 else:
                     return '?'
-        """)
+        """
 
         # If the function is run as-is, it can import os and get the secret.
         bad_func_1 = compile_function(parse_function(
@@ -137,7 +176,7 @@ class TestCompileFunction(unittest.TestCase):
         self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
 
         # If we have eval or exec we can use that to load 'os', and then the secret.
-        evil_function_string_1 = dedent("""
+        evil_function_string_1 = """
             def steal_your_secrets():
                 glo = dict()
                 loc = dict()
@@ -145,10 +184,10 @@ class TestCompileFunction(unittest.TestCase):
                 secret = loc['secret']
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """)
+        """
 
         # Even if I'm crafty by renaming 'exec' before I call it.
-        evil_function_string_2 = dedent("""
+        evil_function_string_2 = """
             def steal_your_secrets():
                 glo = dict()
                 loc = dict()
@@ -157,10 +196,10 @@ class TestCompileFunction(unittest.TestCase):
                 secret = loc['secret']
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """)
+        """
 
         # Even if I use eval to run exec.
-        evil_function_string_3 = dedent("""
+        evil_function_string_3 = """
             def steal_your_secrets():
                 glo = dict()
                 loc = dict()
@@ -168,7 +207,7 @@ class TestCompileFunction(unittest.TestCase):
                 secret = loc['secret']
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """)
+        """
 
         test = self._compile_function
 
@@ -193,13 +232,13 @@ class TestCompileFunction(unittest.TestCase):
         self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
 
         # If we have __import__ we can use that to load 'os', and then the secret.
-        evil_function_string_1 = dedent("""
+        evil_function_string_1 = """
             def steal_your_secrets():
                 madule_get_it_its_like_module_but_mad = __import__('os')
                 secret = madule_get_it_its_like_module_but_mad.getenv('TEST_SECRET_9812398712')
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """)
+        """
 
         test = self._compile_function
 
@@ -216,13 +255,13 @@ class TestCompileFunction(unittest.TestCase):
         self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
 
         # In America, first you get the __builtins__, then you get the __import__, then you get os.
-        evil_function_string_1 = dedent("""
+        evil_function_string_1 = """
             def steal_your_secrets():
                 badule = __builtins__['__import__']('os')
                 secret = badule.getenv('TEST_SECRET_9812398712')
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """)
+        """
 
         test = self._compile_function
 
@@ -239,14 +278,14 @@ class TestCompileFunction(unittest.TestCase):
         os.environ['TEST_SECRET_9812398712'] = '42'
         self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
 
-        evil_function_string_1 = dedent("""
+        evil_function_string_1 = """
             def stealing_secrets():
                 bins = next(c for c in ().__class__.__base__.__subclasses__()
                             if c.__name__ == 'catch_warnings')()._module.__builtins__
                 secret = bins['__import__']('os').getenv('TEST_SECRET_9812398712')
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """)
+        """
 
         test = self._compile_function
 
@@ -262,12 +301,12 @@ class TestCompileFunction(unittest.TestCase):
         os.environ['TEST_SECRET_9812398712'] = '42'
         self.assertEqual(os.getenv('TEST_SECRET_9812398712'), '42')
 
-        evil_function_string_1 = dedent("""
+        evil_function_string_1 = """
             def stealing_secrets():
                 secret = f'''{eval("__builtins__['__import__']('os').getenv('TEST_SECRET_9812398712')")}'''
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """)
+        """
 
         test = self._compile_function
 

@@ -1,5 +1,4 @@
 # pylint: disable=missing-docstring
-import textwrap
 import unittest
 from unittest.mock import MagicMock
 
@@ -12,10 +11,10 @@ from epymorph.movement.movement_model import MovementContext, PredefParams
 class TestMovementClauseTransformer(unittest.TestCase):
 
     def test_transform_clause(self):
-        source = textwrap.dedent("""
+        source = """
             def foo(t, src, dst):
                 return t * src * dst
-        """)
+        """
 
         ast1 = parse_function(source)
         f1 = compile_function(ast1, {})
@@ -35,10 +34,10 @@ class TestMovementClauseTransformer(unittest.TestCase):
             f2(3, 5, 7)
 
     def test_transform_predef(self):
-        source = textwrap.dedent("""
+        source = """
             def my_predef():
                 return {'foo': 42}
-        """)
+        """
 
         ast1 = parse_function(source)
         f1 = compile_function(ast1, {})

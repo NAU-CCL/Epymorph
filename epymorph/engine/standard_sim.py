@@ -20,7 +20,7 @@ from epymorph.geo.geo import Geo
 from epymorph.initializer import DEFAULT_INITIALIZER, Initializer
 from epymorph.movement.movement_model import MovementModel
 from epymorph.movement.parser import MovementSpec
-from epymorph.params import Params
+from epymorph.params import ContextParams, Params
 from epymorph.simulation import (OnStart, SimDimensions, SimDType, SimTick,
                                  SimulationEvents, TimeFrame)
 from epymorph.util import Event
@@ -92,6 +92,7 @@ class StandardSimulation(SimulationEvents):
     """Runs singular simulation passes, producing time-series output."""
 
     _config: RumeConfig
+    _params: ContextParams | None = None
     on_tick: Event[SimTick]  # this class supports on_tick; so narrow the type def
 
     def __init__(self,
@@ -122,6 +123,22 @@ class StandardSimulation(SimulationEvents):
             # ctx.validate_mm()
             ctx.validate_ipm()
             # ctx.validate_init()
+
+    @property
+    def params(self) -> ContextParams:
+        """Simulation parameters as used by this simulation."""
+        # Here we lazily-evaluate and then cache params from the context.
+        # Why not just cache the whole context when StandardSim is constructed? The problem is mutability.
+        # Params is a dictionary, which allow mutation, and many of its values are
+        # numpy arrays, which also allow mutation.
+        # We can't really guarantee immutability in userland code or even our simulation code
+        # so it's safest to reconstruct a fresh copy of the context every time we need it.
+        # Of course, the user can still muck with this cached version of params, but the blast radius
+        # for doing so is sufficiently contained by this approach because sim runs use a fresh context.
+        # It would be nice to be able to deep-freeze the entire context object tree, but alas...
+        if self._params is None:
+            self._params = RumeContext.from_config(self._config).params
+        return self._params
 
     def run(self) -> Output:
         """

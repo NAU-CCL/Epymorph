@@ -6,22 +6,13 @@ the execution of malicious code.
 """
 import ast
 import re
+import textwrap
 from typing import Any, Callable
 
 
-def has_function_structure(s: str) -> bool:
-    """
-    Check if a string has the structure of a function definition.
-
-    Args:
-        s: The string to check.
-
-    Returns:
-        True if the string has the structure of a function definition, False otherwise.
-    """
-    pattern = r"def\s+\w+\s*\([^)]*\):"
-    match = re.search(pattern, s)
-    return match is not None
+def has_function_structure(string: str) -> bool:
+    """Check if a string seems to have the structure of a function definition."""
+    return re.search(r"^\s*def\s+\w+\s*\(.*?\):", string, flags=re.MULTILINE) is not None
 
 
 def parse_function(code_string: str, unsafe: bool = False) -> ast.FunctionDef:
@@ -31,7 +22,7 @@ def parse_function(code_string: str, unsafe: bool = False) -> ast.FunctionDef:
     The string must contain a single top-level Python function definition,
     or else ValueError is raised. Raises SyntaxError if the function is not valid Python. 
     """
-    tree = ast.parse(code_string, '<string>', mode='exec')
+    tree = ast.parse(textwrap.dedent(code_string), '<string>', mode='exec')
     functions = [statement for statement in tree.body
                  if isinstance(statement, ast.FunctionDef)]
     if (n := len(functions)) != 1:
@@ -118,9 +109,7 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
 
 def base_namespace() -> dict[str, Any]:
     """Make a safer namespace for user-defined functions."""
-    return {
-        '__builtins__': {},
-    }
+    return {'__builtins__': {}}
 
 
 class ImmutableNamespace:
