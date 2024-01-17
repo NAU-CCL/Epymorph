@@ -3,7 +3,6 @@ A dynamic geo is capable of fetching data from arbitrary external data sources
 via the use of ADRIO implementations. It may fetch this data lazily, loading
 only the attributes needed by the simulation.
 """
-import dataclasses
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Self
@@ -14,10 +13,10 @@ from numpy.typing import NDArray
 from epymorph.error import AttributeException, GeoValidationException
 from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
+from epymorph.geo.adrio.file.adrio_file import ADRIOMakerFile
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import LABEL, DynamicGeoSpec, validate_geo_values
-from epymorph.simulation import AttributeArray
-from epymorph.sympy_shim import to_symbol
+from epymorph.simulation import AttributeArray, geo_attrib
 from epymorph.util import Event, MemoDict
 
 
@@ -51,23 +50,44 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 msg = f"Missing source for attribute: {attr.name}."
                 raise GeoValidationException(msg)
 
-            # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
-            # the geo wants to use a different name than the one the maker uses;
-            # no problem, just provide a modified AttributeDef to the maker.
             maker_name = source
             adrio_attrib = attr
-            if ":" in source:
-                maker_name, adrio_attrib_name = source.split(":")[0:2]
-                adrio_attrib = dataclasses.replace(
-                    attr, name=adrio_attrib_name, symbol=to_symbol(adrio_attrib_name))
 
-            # Make and store adrio.
-            adrio = makers[maker_name].make_adrio(
-                adrio_attrib,
-                spec.scope,
-                spec.time_period
-            )
-            adrios[attr.name] = adrio
+            if source != "File":
+                # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
+                # the geo wants to use a different name than the one the maker uses;
+                # no problem, just provide a modified AttribDef to the maker.
+                if ":" in source:
+                    maker_name, adrio_attrib_name = source.split(":")[0:2]
+                    adrio_attrib = geo_attrib(
+                        adrio_attrib_name, attr.dtype, attr.shape)
+
+                # Make and store adrio.
+                adrio = makers[maker_name].make_adrio(
+                    adrio_attrib,
+                    spec.geography,
+                    spec.time_period
+                )
+                adrios[attr.name] = adrio
+
+            else:
+                if source.count(':') != 2:
+                    msg = "File source requires a file path and column name or dictionary key for each attribute."
+                    raise GeoValidationException(msg)
+                else:
+                    maker_name, file_path, key = source.split(":")
+                    adrio_attrib = geo_attrib(
+                        adrio_attrib.name, attr.dtype, attr.shape)
+
+                maker = makers[maker_name]
+                if type(maker) is ADRIOMakerFile:
+                    adrio = maker.make_adrio(
+                        adrio_attrib,
+                        spec.geography,
+                        spec.time_period,
+                        file_path,
+                        key
+                    )
 
         return cls(spec, adrios)
 
