@@ -1,10 +1,12 @@
 """Logic for saving to, loading from, and managing a cache of geos on the user's hard disk."""
 import os
+from pathlib import Path
 
 from platformdirs import user_cache_path
 
-from epymorph.data import geo_library_dynamic
+from epymorph.data import adrio_maker_library, geo_library_dynamic
 from epymorph.geo.dynamic import DynamicGeo
+from epymorph.geo.dynamic import DynamicGeoFileOps as DF
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
@@ -17,17 +19,25 @@ class GeoCacheException(Exception):
     """An exception raised when a geo cache operation fails."""
 
 
-def fetch(geo_name: str) -> None:
+def fetch(geo_name: str, geo_path=None) -> None:
     """
-    Caches all attribute data for a dynamic geo from the library.
+    Caches all attribute data for a dynamic geo from the library or spec file at a given path.
     Raises GeoCacheException if spec not found.
     """
     file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     geo_load = geo_library_dynamic.get(geo_name)
+    if geo_path is not None:
+        geo_path = Path(geo_path)
+    # checks for geo in library
     if geo_load is not None:
         geo = geo_load()
         static_geo = convert_to_static_geo(geo)
-        F.save_as_archive(static_geo, file_path)
+        static_geo.save(file_path)
+    # checks for geo spec at given path
+    elif geo_path is not None and os.path.exists(geo_path):
+        geo = DF.load_from_spec(geo_path, adrio_maker_library)
+        static_geo = convert_to_static_geo(geo)
+        static_geo.save(file_path)
     else:
         raise GeoCacheException(f'spec file for {geo_name} not found.')
 

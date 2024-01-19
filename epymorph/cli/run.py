@@ -18,8 +18,11 @@ from epymorph.compartment_model import CompartmentModel
 from epymorph.data import Library, geo_library, ipm_library, mm_library
 from epymorph.engine.standard_sim import Output, StandardSimulation
 from epymorph.error import UnknownModel
+from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.cache import load_from_cache
+from epymorph.geo.dynamic import DynamicGeoFileOps
 from epymorph.geo.geo import Geo
+from epymorph.geo.static import StaticGeoFileOps
 from epymorph.initializer import initializer_library, normalize_init_params
 from epymorph.movement.parser import MovementSpec, parse_movement_spec
 from epymorph.simulation import (TimeFrame, default_rng, enable_logging,
@@ -48,6 +51,7 @@ def define_argparser(command_parser: _SubParsersAction):
         help='(optional) include this flag to run in profiling mode')
     p.add_argument(
         '-i', '--ignore_cache',
+        action='store_true',
         help='(optional) include this flag to run the simulation without utilizing the Geo cache.'
     )
     p.set_defaults(handler=lambda args: run(
@@ -232,17 +236,24 @@ def load_messaging(description: str):
 
 
 @load_messaging("GEO")
-def load_model_geo(name: str, ignore_cache: bool) -> Geo:
+def load_model_geo(name_or_path: str, ignore_cache: bool) -> Geo:
     """Loads a geo by name."""
     if not ignore_cache:
-        cached = load_from_cache(name)
+        cached = load_from_cache(name_or_path)
         if cached is not None:
             return cached
 
-    if name not in geo_library:
-        raise UnknownModel('GEO', name)
+    if name_or_path in geo_library:
+        return geo_library[name_or_path]()
 
-    return geo_library[name]()
+    path = Path(name_or_path)
+    if not path.exists():
+        raise UnknownModel('GEO', name_or_path)
+
+    if path.suffix == ".geo":
+        return DynamicGeoFileOps.load_from_spec(path, adrio_maker_library)
+    else:
+        return StaticGeoFileOps.load_from_archive(path)
 
 
 @load_messaging("IPM")

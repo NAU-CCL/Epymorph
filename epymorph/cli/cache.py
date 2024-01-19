@@ -28,13 +28,18 @@ def define_argparser(command_parser: _SubParsersAction):
     fetch_command.add_argument(
         'geo',
         type=str,
-        help='the name of a geo from the library')
+        help='the name of the geo to fetch; must include a geo path if not already in the library')
+    fetch_command.add_argument(
+        '-p', '--path',
+        help='(optional) the path to a geo spec file not in the library'
+    )
     fetch_command.add_argument(
         '-f', '--force',
         action='store_true',
         help='(optional) include this flag to force an override of previously cached data')
     fetch_command.set_defaults(handler=lambda args: fetch(
         geo_name=args.geo,
+        geo_path=args.path,
         force=args.force
     ))
 
@@ -66,7 +71,7 @@ def define_argparser(command_parser: _SubParsersAction):
 # - 2 empty cache
 
 
-def fetch(geo_name: str, force: bool) -> int:
+def fetch(geo_name: str, force: bool, geo_path=None) -> int:
     """CLI command handler: cache dynamic geo data."""
     # cache specified geo
     filepath = cache.CACHE_PATH / F.to_archive_filename(geo_name)
@@ -75,7 +80,7 @@ def fetch(geo_name: str, force: bool) -> int:
         choice = input(f'{geo_name} is already cached, overwrite? [y/n] ')
     if force or choice == 'y':
         try:
-            cache.fetch(geo_name)
+            cache.fetch(geo_name, geo_path)
             print('geo sucessfully cached.')
         except cache.GeoCacheException as e:
             print(e)
