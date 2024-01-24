@@ -26,7 +26,7 @@ def pei_movement():
 [mtype: days=all; leave=1; duration=0d; return=2; function=
 def commuters(t):
     typical = predef['commuters_by_node']
-    actual = np.binomial(typical, param['move_control'])
+    actual = np.binomial(typical, params['move_control'])
     return np.multinomial(actual, predef['commuting_probability'])
 ]
 
@@ -35,11 +35,11 @@ def commuters(t):
 #[mtype: days=all; leave=1; duration=0d; return=2; function=
 #def dispersers(t, src, dst):
 #    avg = predef['commuters_average'][src, dst]
-#    return poisson(avg * param['theta'])
+#    return poisson(avg * params['theta'])
 #]
 
 [mtype: days=all; leave=1; duration=0d; return=2; function=
 def dispersers(t):
     avg = predef['commuters_average']
-    return np.poisson(avg * param['theta'])
+    return np.poisson(avg * params['theta'])
 ]

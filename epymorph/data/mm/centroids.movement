@@ -4,7 +4,7 @@
 def centroids_movement():
     centroid = geo['centroid']
     distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
-    dispersal_kernel = row_normalize(1 / np.exp(distance / param['phi']))
+    dispersal_kernel = row_normalize(1 / np.exp(distance / params['phi']))
     return { 'dispersal_kernel': dispersal_kernel }
 ]
 

@@ -16,7 +16,6 @@ from epymorph.attribute import AttributeDef, AttributeTypeNp
 from epymorph.compartment_model import CompartmentModel
 from epymorph.error import (AttributeException, InitException,
                             IpmValidationException)
-from epymorph.geo.abstract import proxy_geo
 from epymorph.geo.geo import Geo
 from epymorph.initializer import (InitContext, Initializer,
                                   normalize_init_params)
@@ -55,6 +54,11 @@ class RumeContext:
     time_frame: TimeFrame
     initializer: Initializer
     rng: np.random.Generator
+    version: int = field(init=False, default=0)
+    """
+    `version` indicates when changes have been made to the context.
+    If `version` hasn't changed, no other changes have been made.
+    """
 
     _attribute_getters: MemoDict[AttributeDef, AttributeGetter] = field(init=False)
 
@@ -83,15 +87,12 @@ class RumeContext:
             for a in config.ipm.attributes
         }
 
-        with proxy_geo(config.geo):
-            # Parameters might be functions reference the proxy geo,
-            # so to evaluate them we must be in the `proxy_geo` context.
-            ctx_params = normalize_params(
-                config.params,
-                config.geo,
-                config.time_frame.duration_days,
-                attr_dtypes
-            )
+        ctx_params = normalize_params(
+            config.params,
+            config.geo,
+            dim,
+            attr_dtypes
+        )
 
         return cls(dim, config.geo, config.ipm, config.mm,
                    ctx_params, config.params, config.time_frame,
@@ -124,6 +125,7 @@ class RumeContext:
         attrs = [a for a in self._attribute_getters if a.name == name]
         for a in attrs:
             del self._attribute_getters[a]
+        self.version += 1
 
     def _get_attribute_value(self, attr: AttributeDef) -> NDArray:
         """Retrieve the value associated with the given attribute."""
