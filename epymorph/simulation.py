@@ -6,31 +6,18 @@ from datetime import date, timedelta
 from functools import partial
 from importlib import reload
 from time import perf_counter
-from typing import (
-    Any,
-    Callable,
-    Generator,
-    NamedTuple,
-    Protocol,
-    Self,
-    Sequence,
-    runtime_checkable,
-)
+from typing import (Any, Callable, Generator, NamedTuple, Protocol, Self,
+                    Sequence, runtime_checkable)
 
 import numpy as np
 from numpy.random import SeedSequence
 
 from epymorph.code import ImmutableNamespace, base_namespace
-from epymorph.util import (
-    Event,
-    mosquito_movement_probability,
-    pairwise_haversine,
-    powerlaw_distribution_probability,
-    progress,
-    row_normalize,
-    subscriptions,
-    weibull_distribution_prob,
-)
+from epymorph.util import (Event, mosquito_movement_probability,
+                           pairwise_haversine,
+                           powerlaw_distribution_probability, progress,
+                           row_normalize, subscriptions,
+                           weibull_distribution_prob)
 
 SimDType = np.int64
 """

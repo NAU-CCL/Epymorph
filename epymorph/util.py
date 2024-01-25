@@ -2,16 +2,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import (
-    Any,
-    Callable,
-    Generator,
-    Generic,
-    Iterable,
-    Literal,
-    OrderedDict,
-    TypeVar,
-)
+from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
+                    OrderedDict, TypeVar)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
