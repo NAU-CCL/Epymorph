@@ -10,6 +10,7 @@ from epymorph.geo.dynamic import DynamicGeo
 =======
 >>>>>>> 02fcd27 (Added ability to input a path to geo files)
 from epymorph.geo.dynamic import DynamicGeoFileOps as DF
+from epymorph.geo.dynamic import dynamic_geo_messaging
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
@@ -51,7 +52,8 @@ def fetch(geo_name: str, geo_path=None) -> None:
     # checks for geo in library
     if geo_load is not None:
         geo = geo_load()
-        static_geo = convert_to_static_geo(geo)
+        with dynamic_geo_messaging(geo):
+            static_geo = convert_to_static_geo(geo)
         static_geo.save(filepath)
     # checks for geo spec at given path
     elif geo_path is not None and os.path.exists(geo_path):
