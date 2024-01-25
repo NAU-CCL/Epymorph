@@ -270,11 +270,11 @@ def bottom_locations(ctx: InitContext, attribute: str, num_locations: int, seed_
     return indexed_locations(ctx, selection, seed_size)
 
 def bird_movement_initializer(ctx: InitContext)->NDArray[SimDType]:
-    result = ctx.geo['bird_population'].reshape((ctx.nodes, ctx.compartments)) # type: ignore
+    result = ctx.geo['bird_population'].reshape((ctx.dim.nodes, ctx.dim.compartments)) # type: ignore
     return result.astype(SimDType)
 
 def mosquito_movement_initializer(ctx: InitContext)->NDArray[SimDType]:
-    result = ctx.geo['bird_population'].reshape((ctx.nodes, ctx.compartments)) # type: ignore
+    result = ctx.geo['bird_population'].reshape((ctx.dim.nodes, ctx.dim.compartments)) # type: ignore
     return result.astype(SimDType)
 
 DEFAULT_INITIALIZER = single_location
