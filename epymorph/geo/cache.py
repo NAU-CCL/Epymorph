@@ -19,11 +19,12 @@ class GeoCacheException(Exception):
     """An exception raised when a geo cache operation fails."""
 
 
-def fetch(geo_name: str, geo_path=None) -> None:
+def fetch(geo_name_or_path: str) -> None:
     """
     Caches all attribute data for a dynamic geo from the library or spec file at a given path.
     Raises GeoCacheException if spec not found.
     """
+<<<<<<< HEAD
     file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     geo_load = geo_library_dynamic.get(geo_name)
     if geo_path is not None:
@@ -38,8 +39,29 @@ def fetch(geo_name: str, geo_path=None) -> None:
         geo = DF.load_from_spec(geo_path, adrio_maker_library)
         static_geo = convert_to_static_geo(geo)
         static_geo.save(file_path)
+=======
+
+    # checks for geo in the library (name passed)
+    if geo_name_or_path in geo_library_dynamic:
+        filepath = CACHE_PATH / F.to_archive_filename(geo_name_or_path)
+        geo_load = geo_library_dynamic.get(geo_name_or_path)
+        if geo_load is not None:
+            geo = geo_load()
+            static_geo = convert_to_static_geo(geo)
+            static_geo.save(filepath)
+
+    # checks for geo spec at given path (path passed)
+>>>>>>> ebf69a8 (Code cleanup and additional error handling)
     else:
-        raise GeoCacheException(f'spec file for {geo_name} not found.')
+        geo_path = Path(geo_name_or_path)
+        if os.path.exists(geo_path):
+            geo_name = geo_path.name.split('.')[0]
+            filepath = CACHE_PATH / F.to_archive_filename(geo_name)
+            geo = DF.load_from_spec(geo_path, adrio_maker_library)
+            static_geo = convert_to_static_geo(geo)
+            static_geo.save(filepath)
+        else:
+            raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')
 
 
 def remove(geo_name: str) -> None:

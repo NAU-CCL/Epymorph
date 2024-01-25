@@ -250,6 +250,11 @@ def load_model_geo(name_or_path: str, ignore_cache: bool) -> Geo:
     if not path.exists():
         raise UnknownModel('GEO', name_or_path)
 
+    # check for non-library geo cached
+    cached = load_from_cache(path.name.split('.')[0])
+    if cached is not None:
+        return cached
+
     if path.suffix == ".geo":
         return DynamicGeoFileOps.load_from_spec(path, adrio_maker_library)
     else:
