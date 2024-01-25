@@ -269,11 +269,11 @@ def bottom_locations(ctx: InitContext, attribute: str, num_locations: int, seed_
     selection = np.argpartition(arr, num_locations)[:num_locations]
     return indexed_locations(ctx, selection, seed_size)
 
-def bird_movement_initializer(ctx: SimContext)->NDArray[SimDType]:
+def bird_movement_initializer(ctx: InitContext)->NDArray[SimDType]:
     result = ctx.geo['bird_population'].reshape((ctx.nodes, ctx.compartments)) # type: ignore
     return result.astype(SimDType)
 
-def mosquito_movement_initializer(ctx: SimContext)->NDArray[SimDType]:
+def mosquito_movement_initializer(ctx: InitContext)->NDArray[SimDType]:
     result = ctx.geo['bird_population'].reshape((ctx.nodes, ctx.compartments)) # type: ignore
     return result.astype(SimDType)
 
