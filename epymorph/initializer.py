@@ -269,13 +269,18 @@ def bottom_locations(ctx: InitContext, attribute: str, num_locations: int, seed_
     selection = np.argpartition(arr, num_locations)[:num_locations]
     return indexed_locations(ctx, selection, seed_size)
 
-def bird_movement_initializer(ctx:  InitContext)->NDArray[SimDType]:
-    result = ctx.geo['bird_population'].reshape((ctx.dim.nodes, ctx.dim.compartments)) # type: ignore
+
+def bird_movement_initializer(ctx: InitContext) -> NDArray[SimDType]:
+    result = ctx.geo['bird_population'].reshape(
+        (ctx.dim.nodes, ctx.dim.compartments))  # type: ignore
     return result.astype(SimDType)
 
-def mosquito_movement_initializer(ctx: InitContext)->NDArray[SimDType]:
-    result = ctx.geo['bird_population'].reshape((ctx.dim.nodes, ctx.dim.compartments)) # type: ignore
+
+def mosquito_movement_initializer(ctx: InitContext) -> NDArray[SimDType]:
+    result = ctx.geo['bird_population'].reshape(
+        (ctx.dim.nodes, ctx.dim.compartments))  # type: ignore
     return result.astype(SimDType)
+
 
 DEFAULT_INITIALIZER = single_location
 
@@ -288,8 +293,8 @@ initializer_library: dict[str, Initializer] = {
     'random_locations': random_locations,
     'top_locations': top_locations,
     'bottom_locations': bottom_locations,
-    'bird_movement_intializer' : bird_movement_initializer,
-    'mosquito_movement_initializer' : mosquito_movement_initializer
+    'bird_movement_intializer': bird_movement_initializer,
+    'mosquito_movement_initializer': mosquito_movement_initializer
 }
 """A library for the built-in initializer functions."""
 

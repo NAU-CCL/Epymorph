@@ -2,8 +2,16 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
-                    OrderedDict, TypeVar)
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Generic,
+    Iterable,
+    Literal,
+    OrderedDict,
+    TypeVar,
+)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -177,7 +185,7 @@ def weibull_distribution_prob(distance: NDArray[N], shape: float, scale: float) 
 
 def powerlaw_distribution_probability(distance: NDArray[N], alpha: float) -> NDArray[np.float64]:
     result = np.zeros_like(distance, dtype=np.float64)
-    result = (1 / (distance ** alpha))
+    result = (1 / (distance ** alpha))  # type: ignore
     return result  # type:ignore
 
 
