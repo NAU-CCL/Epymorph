@@ -85,7 +85,8 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
     def __getitem__(self, name: str) -> NDArray:
         if name not in self._adrios:
             raise AttributeException(f"Attribute not found in geo: '{name}'")
-        self.ADRIO_start.publish(ADRIO_Start(name))
+        if self._adrios[name]._cached_value is None:
+            self.ADRIO_start.publish(ADRIO_Start(name))
         return self._adrios[name].get_value()
 
     @property
@@ -117,17 +118,14 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
 
     def fetch_all(self) -> None:
         """Retrieves all Geo attributes from geospec object using ADRIOs"""
-        print('Fetching GEO data from ADRIOs...')
-
         def fetch_attribute(adrio: ADRIO) -> NDArray:
-            print(f'Fetching {adrio.attrib}')
+            self.ADRIO_start.publish(ADRIO_Start(adrio.attrib))
             return adrio.get_value()
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
             for adrio in self._adrios.values():
                 executor.submit(fetch_attribute, adrio)
-        print('...done')
 
 
 class DynamicGeoFileOps:
@@ -182,6 +180,23 @@ class DynamicGeoEvents(Protocol):
 
 
 @contextmanager
+def dynamic_geo_messaging_sim(dyn: Event) -> Generator[None, None, None]:
+    """
+    Attach messaging to dynamic geo operations during a simulation run to inform user when
+    simulation halts to actively fetch data.
+    Creates subscription to ADRIO_Start event
+    """
+    print("Geo not found in cache; geo attributes will be lazily loaded during simulation run.")
+
+    def adrio_start(adrio: ADRIO_Start) -> None:
+        print(f"Uncached geo attribute found: {adrio.attribute}. Retreiving now...")
+
+    with subscriptions() as subs:
+        subs.subscribe(dyn, adrio_start)
+        yield
+
+
+@contextmanager
 def dynamic_geo_messaging(dyn: DynamicGeoEvents) -> Generator[None, None, None]:
     """
     Attach progress messaging to a DynamicGeo for verbose printing of data retreival progress.
@@ -196,7 +211,7 @@ def dynamic_geo_messaging(dyn: DynamicGeoEvents) -> Generator[None, None, None]:
         nonlocal num_adrios
         num_adrios = length.adrio_len
 
-        print("Dynamically fetching geo data")
+        print("Fetching dynamic geo data")
         print(f"• {num_adrios} attributes")
 
         nonlocal start_time

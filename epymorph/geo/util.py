@@ -13,6 +13,7 @@ def convert_to_static_geo(geo: DynamicGeo) -> StaticGeo:
         time_period=geo.spec.time_period,
     )
     geo.fetch_start.publish(FetchStart(len(geo._adrios)))
+    geo.fetch_all()
     values = {
         attr.name: geo[attr.name]
         for attr in geo.spec.attributes

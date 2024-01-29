@@ -20,7 +20,8 @@ from epymorph.engine.standard_sim import Output, StandardSimulation
 from epymorph.error import UnknownModel
 from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.cache import load_from_cache
-from epymorph.geo.dynamic import DynamicGeoFileOps
+from epymorph.geo.dynamic import (DynamicGeo, DynamicGeoFileOps,
+                                  dynamic_geo_messaging_sim)
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeoFileOps
 from epymorph.initializer import initializer_library, normalize_init_params
@@ -52,14 +53,19 @@ def define_argparser(command_parser: _SubParsersAction):
     p.add_argument(
         '-i', '--ignore_cache',
         action='store_true',
-        help='(optional) include this flag to run the simulation without utilizing the Geo cache.'
-    )
+        help='(optional) include this flag to run the simulation without utilizing the Geo cache.')
+    p.add_argument(
+        '-g', '--mute_geo',
+        action='store_false',
+        help='(optional) include this flag to silence geo data retreival messaging.')
+
     p.set_defaults(handler=lambda args: run(
         input_path=args.input,
         out_path=args.out,
         chart=args.chart,
         profiling=args.profile,
-        ignore_cache=args.ignore_cache
+        ignore_cache=args.ignore_cache,
+        geo_messaging=args.mute_geo
     ))
 
 
@@ -79,7 +85,8 @@ def run(input_path: str,
         out_path: str | None,
         chart: str | None,
         profiling: bool,
-        ignore_cache: bool) -> int:
+        ignore_cache: bool,
+        geo_messaging: bool) -> int:
     """CLI command handler: run a simulation."""
 
     # Exit codes:
@@ -150,8 +157,14 @@ def run(input_path: str,
     if not profiling:
         enable_logging()
 
+    # Run simulation with appropriate messaging contexts
+
     with sim_messaging(sim):
-        out = sim.run()
+        if geo_messaging and isinstance(geo, DynamicGeo):
+            with dynamic_geo_messaging_sim(geo.ADRIO_start):
+                out = sim.run()
+        else:
+            out = sim.run()
 
     # Draw charts (if specified).
     # NOTE: this method of chart handling is a placeholder implementation
