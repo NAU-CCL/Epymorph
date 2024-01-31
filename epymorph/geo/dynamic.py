@@ -118,6 +118,8 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
 
     def fetch_all(self) -> None:
         """Retrieves all Geo attributes from geospec object using ADRIOs"""
+        self.fetch_start.publish(FetchStart(len(self._adrios)))
+
         def fetch_attribute(adrio: ADRIO) -> NDArray:
             self.ADRIO_start.publish(ADRIO_Start(adrio.attrib))
             return adrio.get_value()
@@ -126,6 +128,8 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
         with ThreadPoolExecutor(max_workers=5) as executor:
             for adrio in self._adrios.values():
                 executor.submit(fetch_attribute, adrio)
+
+        self.fetch_end.publish(None)
 
 
 class DynamicGeoFileOps:
