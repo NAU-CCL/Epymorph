@@ -53,9 +53,9 @@ def fetch(geo_name_or_path: str) -> None:
     # checks for geo spec at given path (path passed)
 >>>>>>> ebf69a8 (Code cleanup and additional error handling)
     else:
-        geo_path = Path(geo_name_or_path)
+        geo_path = Path(geo_name_or_path).expanduser()
         if os.path.exists(geo_path):
-            geo_name = geo_path.name.split('.')[0]
+            geo_name = geo_path.stem
             filepath = CACHE_PATH / F.to_archive_filename(geo_name)
             geo = DF.load_from_spec(geo_path, adrio_maker_library)
             static_geo = convert_to_static_geo(geo)

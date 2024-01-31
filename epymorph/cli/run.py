@@ -246,19 +246,23 @@ def load_model_geo(name_or_path: str, ignore_cache: bool) -> Geo:
     if name_or_path in geo_library:
         return geo_library[name_or_path]()
 
-    path = Path(name_or_path)
+    path = Path(name_or_path).expanduser()
     if not path.exists():
         raise UnknownModel('GEO', name_or_path)
 
     # check for non-library geo cached
-    cached = load_from_cache(path.name.split('.')[0])
-    if cached is not None:
-        return cached
+    if not ignore_cache:
+        cached = load_from_cache(path.stem)
+        if cached is not None:
+            return cached
 
     if path.suffix == ".geo":
         return DynamicGeoFileOps.load_from_spec(path, adrio_maker_library)
-    else:
+    elif path.suffix == ".tar":
         return StaticGeoFileOps.load_from_archive(path)
+    else:
+        msg = "Invalid file type. A geo can only be loaded from a .geo or .geo.tar file."
+        raise Exception(msg)
 
 
 @load_messaging("IPM")

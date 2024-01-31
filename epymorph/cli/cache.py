@@ -32,10 +32,6 @@ def define_argparser(command_parser: _SubParsersAction):
         type=str,
         help='the name of the geo to fetch; must include a geo path if not already in the library')
     fetch_command.add_argument(
-        '-p', '--path',
-        help='(optional) the path to a geo spec file not in the library'
-    )
-    fetch_command.add_argument(
         '-f', '--force',
         action='store_true',
         help='(optional) include this flag to force an override of previously cached data')
@@ -79,11 +75,11 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
     if geo_name_or_path in geo_library_dynamic:
         geo_name = geo_name_or_path
         geo_path = None
-    elif os.path.exists(Path(geo_name_or_path)):
-        geo_path = Path(geo_name_or_path)
-        geo_name = geo_path.name.split('.')[0]
+    elif os.path.exists(Path(geo_name_or_path).expanduser()):
+        geo_path = Path(geo_name_or_path).expanduser()
+        geo_name = geo_path.stem
     else:
-        return 1  # exit code: geo not found
+        raise cache.GeoCacheException("Specified geo not found.")
 
     # cache geo according to information passed
     filepath = cache.CACHE_PATH / F.to_archive_filename(geo_name)
