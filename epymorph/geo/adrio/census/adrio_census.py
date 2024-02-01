@@ -228,13 +228,10 @@ class ADRIOMakerCensus(ADRIOMaker):
             sort_param = ['state']
 
         elif granularity == Granularity.COUNTY.value:
-            if state_fips is not None and state_fips[0] != '*':
-                data_df = GeoDataFrame(concat([
-                    counties(state=s, year=year)
-                    for s in state_fips
-                ]))
-            else:
+            if state_fips is None or '*' in state_fips:
                 data_df = counties(year=year)
+            else:
+                data_df = counties(state=state_fips, year=year)
             data_df = data_df.rename(columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
 
             if county_fips is not None and county_fips[0] != '*':
