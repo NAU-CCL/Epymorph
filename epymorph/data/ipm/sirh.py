@@ -22,12 +22,12 @@ def load() -> CompartmentModel:
             param('beta', shape=Shapes.TxN),
             param('gamma', shape=Shapes.TxN),
             param('xi', shape=Shapes.TxN),
-            param('hospitalization_rate', shape=Shapes.TxN),
+            param('hospitalization_prob', shape=Shapes.TxN),
             param('hospitalization_duration', shape=Shapes.TxN)
         ])
 
     [S, I, R, H] = symbols.compartment_symbols
-    [β, γ, ξ, h_rate, h_dur] = symbols.attribute_symbols
+    [β, γ, ξ, h_prob, h_dur] = symbols.attribute_symbols
 
     # formulate N so as to avoid dividing by zero;
     # this is safe in this instance because if the denominator is zero,
@@ -39,8 +39,8 @@ def load() -> CompartmentModel:
         transitions=[
             edge(S, I, rate=β * S * I / N),
             fork(
-                edge(I, H, rate=γ * I * h_rate),
-                edge(I, R, rate=γ * I * (1 - h_rate)),
+                edge(I, H, rate=γ * I * h_prob),
+                edge(I, R, rate=γ * I * (1 - h_prob)),
             ),
             edge(H, R, rate=H / h_dur),
             edge(R, S, rate=ξ * R),

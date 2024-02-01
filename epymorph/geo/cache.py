@@ -4,7 +4,9 @@ import os
 from platformdirs import user_cache_path
 
 from epymorph.data import geo_library_dynamic
+from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.geo import Geo
+from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
 
@@ -20,12 +22,12 @@ def fetch(geo_name: str) -> None:
     Caches all attribute data for a dynamic geo from the library.
     Raises GeoCacheException if spec not found.
     """
-    filepath = CACHE_PATH / F.to_archive_filename(geo_name)
+    file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     geo_load = geo_library_dynamic.get(geo_name)
     if geo_load is not None:
         geo = geo_load()
         static_geo = convert_to_static_geo(geo)
-        static_geo.save(filepath)
+        F.save_as_archive(static_geo, file_path)
     else:
         raise GeoCacheException(f'spec file for {geo_name} not found.')
 
@@ -35,9 +37,9 @@ def remove(geo_name: str) -> None:
     Removes a geo's data from the cache.
     Raises GeoCacheException if geo not found in cache.
     """
-    filepath = CACHE_PATH / F.to_archive_filename(geo_name)
-    if os.path.exists(filepath):
-        os.remove(filepath)
+    file_path = CACHE_PATH / F.to_archive_filename(geo_name)
+    if os.path.exists(file_path):
+        os.remove(file_path)
     else:
         msg = f'{geo_name} not found in cache, check your spelling or use the list subcommand to view all currently cached geos'
         raise GeoCacheException(msg)
@@ -53,6 +55,19 @@ def clear():
     """Clears the cache of all geo data."""
     for file in F.iterate_dir_path(CACHE_PATH):
         os.remove(CACHE_PATH / file[0])
+
+
+def save_to_cache(geo: Geo, geo_name: str) -> None:
+    """Save a Geo to the cache (if you happen to already have it as a Geo object)."""
+    match geo:
+        case DynamicGeo():
+            static_geo = convert_to_static_geo(geo)
+        case StaticGeo():
+            static_geo = geo
+        case _:
+            raise GeoCacheException('Unable to cache given geo.')
+    file_path = CACHE_PATH / F.to_archive_filename(geo_name)
+    F.save_as_archive(static_geo, file_path)
 
 
 def load_from_cache(geo_name: str) -> Geo | None:

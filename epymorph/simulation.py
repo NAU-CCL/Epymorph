@@ -225,7 +225,11 @@ def epymorph_namespace() -> dict[str, Any]:
             'array': partial(np.array, dtype=SimDType),
             'zeros': partial(np.zeros, dtype=SimDType),
             'zeros_like': partial(np.zeros_like, dtype=SimDType),
+            'ones': partial(np.ones, dtype=SimDType),
+            'ones_like': partial(np.ones_like, dtype=SimDType),
             'full': partial(np.full, dtype=SimDType),
+            'arange': partial(np.arange, dtype=SimDType),
+            'concatenate': partial(np.concatenate, dtype=SimDType),
             'sum': partial(np.sum, dtype=SimDType),
             'newaxis': np.newaxis,
             # numpy math functions
