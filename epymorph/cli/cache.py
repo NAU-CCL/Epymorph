@@ -82,12 +82,12 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
         raise cache.GeoCacheException("Specified geo not found.")
 
     # cache geo according to information passed
-    filepath = cache.CACHE_PATH / F.to_archive_filename(geo_name)
+    file_path = cache.CACHE_PATH / F.to_archive_filename(geo_name)
     if geo_path is not None and geo_name in geo_library:
         msg = f"A geo named {geo_name} is already present in the library. Please use the existing geo or change the file name."
         raise cache.GeoCacheException(msg)
     choice = 'y'
-    if os.path.exists(filepath) and not force:
+    if os.path.exists(file_path) and not force:
         choice = input(f'{geo_name} is already cached, overwrite? [y/n] ')
     if force or choice == 'y':
         try:

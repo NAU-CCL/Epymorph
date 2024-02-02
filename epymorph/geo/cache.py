@@ -24,42 +24,25 @@ def fetch(geo_name_or_path: str) -> None:
     Caches all attribute data for a dynamic geo from the library or spec file at a given path.
     Raises GeoCacheException if spec not found.
     """
-<<<<<<< HEAD
-    file_path = CACHE_PATH / F.to_archive_filename(geo_name)
-    geo_load = geo_library_dynamic.get(geo_name)
-    if geo_path is not None:
-        geo_path = Path(geo_path)
-    # checks for geo in library
-    if geo_load is not None:
-        geo = geo_load()
-        static_geo = convert_to_static_geo(geo)
-        static_geo.save(file_path)
-    # checks for geo spec at given path
-    elif geo_path is not None and os.path.exists(geo_path):
-        geo = DF.load_from_spec(geo_path, adrio_maker_library)
-        static_geo = convert_to_static_geo(geo)
-        static_geo.save(file_path)
-=======
 
     # checks for geo in the library (name passed)
     if geo_name_or_path in geo_library_dynamic:
-        filepath = CACHE_PATH / F.to_archive_filename(geo_name_or_path)
+        file_path = CACHE_PATH / F.to_archive_filename(geo_name_or_path)
         geo_load = geo_library_dynamic.get(geo_name_or_path)
         if geo_load is not None:
             geo = geo_load()
             static_geo = convert_to_static_geo(geo)
-            static_geo.save(filepath)
+            static_geo.save(file_path)
 
     # checks for geo spec at given path (path passed)
->>>>>>> ebf69a8 (Code cleanup and additional error handling)
     else:
         geo_path = Path(geo_name_or_path).expanduser()
         if os.path.exists(geo_path):
             geo_name = geo_path.stem
-            filepath = CACHE_PATH / F.to_archive_filename(geo_name)
+            file_path = CACHE_PATH / F.to_archive_filename(geo_name)
             geo = DF.load_from_spec(geo_path, adrio_maker_library)
             static_geo = convert_to_static_geo(geo)
-            static_geo.save(filepath)
+            static_geo.save(file_path)
         else:
             raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')
 
