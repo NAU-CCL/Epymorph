@@ -5,7 +5,7 @@
 def long_range_birds_movement():
    centroid = geo['centroid']
    distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
-   powerlaw_distribution = powerlaw_distribution_probability(distance, param['alpha'])
+   powerlaw_distribution = powerlaw_distribution_probability(distance, params['alpha'])
    result = row_normalize(1/powerlaw_distribution)
    return {'result' : result}
 ]

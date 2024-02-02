@@ -6,7 +6,7 @@ def long_range_birds_movement():
    distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
    powerlaw_distribution = powerlaw_distribution_probability(distance, param['alpha'])
    result_powerlaw = row_normalize(1/powerlaw_distribution)
-   weibull_distribution = weibull_distribution_prob(distance, param['shape'], param['scale'])
+   weibull_distribution = weibull_distribution_prob(distance, params['shape'], params['scale'])
    result_weibull = row_normalize(weibull_distribution)
    return {'result_powerlaw' :result_powerlaw,
    'result_weibull' : result_weibull

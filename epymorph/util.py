@@ -177,7 +177,10 @@ def weibull_distribution_prob(distance: NDArray[N], shape: float, scale: float) 
 
 def powerlaw_distribution_probability(distance: NDArray[N], alpha: float) -> NDArray[np.float64]:
     result = np.zeros_like(distance, dtype=np.float64)
-    result = (1 / (distance ** alpha))  # type: ignore
+    min_distance = 22530 * 0.00062
+    normalize_distance = distance / min_distance
+    result = ((alpha - 1) / min_distance) * \
+        ((normalize_distance / min_distance)**-alpha)  # type: ignore
     return result  # type:ignore
 
 
@@ -185,8 +188,15 @@ def mosquito_movement_probability(distance: NDArray[N], max_distance: float) -> 
     result = np.zeros_like(distance, dtype=np.float64)
     max_distance_mosquito = max_distance * 0.00062
     result = ((max_distance_mosquito) - (distance)) / (max_distance_mosquito)
-    result = np.clip(result, 0, 1)
+    result = np.maximum(result, 0)
     return result  # type:ignore
+
+
+def long_range_von_mises_distribution(sij: float, phiij: float, deltaij: float, tau: NDArray[np.float64]) -> NDArray[np.float64]:
+    exponent_term = np.exp(np.cos(tau - phiij) - 1)
+    tij = sij * (exponent_term / deltaij**2)
+    tij /= np.max(tij)
+    return tij
 
 
 def pairwise_haversine(longitudes: NDArray[np.float64], latitudes: NDArray[np.float64]) -> NDArray[np.float64]:

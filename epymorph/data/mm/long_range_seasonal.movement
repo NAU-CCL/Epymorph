@@ -1,0 +1,14 @@
+[move-steps : per-day=2; duration =[1/3,2/3]]
+
+
+[predef:  function=
+def long_range_birds_movement():
+   tau = np.array([np.pi/2, np.pi,3*np.pi/2,2*np.pi])
+   vonmises_distribution = long_range_von_mises_distribution(params['sij'], params['phiij'], params['deltaij'], tau)
+   return {'vonmises_distribution' :vonmises_distribution}
+]
+[mtype:days=all; leave=1; duration=0d; return = 2; function=
+def long_range_bird_commuters_source(t,src):
+    n_commuters = np.floor(geo['bird_population']*0.1).astype(SimDType)
+    return np.multinomial(n_commuters,predef['vonmises_distribution'][src])  
+]
