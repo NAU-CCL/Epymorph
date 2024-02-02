@@ -48,7 +48,7 @@ def define_argparser(command_parser: _SubParsersAction):
         type=str,
         help='the name of a geo from the library')
     remove_command.set_defaults(handler=lambda args: remove(
-        geo_name_or_path=args.geo
+        geo_name=args.geo
     ))
 
     list_command = sp.add_parser(
@@ -99,11 +99,11 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
     return 0  # exit code: success
 
 
-def remove(geo_name_or_path: str) -> int:
+def remove(geo_name: str) -> int:
     """CLI command handler: remove geo from cache"""
     try:
-        cache.remove(geo_name_or_path)
-        print(f'{geo_name_or_path} removed from cache.')
+        cache.remove(geo_name)
+        print(f'{geo_name} removed from cache.')
         return 0  # exit code: success
     except cache.GeoCacheException as e:
         print(e)
