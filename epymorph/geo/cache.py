@@ -1,10 +1,12 @@
 """Logic for saving to, loading from, and managing a cache of geos on the user's hard disk."""
 import os
+from pathlib import Path
 
 from platformdirs import user_cache_path
 
-from epymorph.data import geo_library_dynamic
+from epymorph.data import adrio_maker_library, geo_library_dynamic
 from epymorph.geo.dynamic import DynamicGeo
+from epymorph.geo.dynamic import DynamicGeoFileOps as DF
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
@@ -17,19 +19,32 @@ class GeoCacheException(Exception):
     """An exception raised when a geo cache operation fails."""
 
 
-def fetch(geo_name: str) -> None:
+def fetch(geo_name_or_path: str) -> None:
     """
-    Caches all attribute data for a dynamic geo from the library.
+    Caches all attribute data for a dynamic geo from the library or spec file at a given path.
     Raises GeoCacheException if spec not found.
     """
-    file_path = CACHE_PATH / F.to_archive_filename(geo_name)
-    geo_load = geo_library_dynamic.get(geo_name)
-    if geo_load is not None:
-        geo = geo_load()
-        static_geo = convert_to_static_geo(geo)
-        F.save_as_archive(static_geo, file_path)
+
+    # checks for geo in the library (name passed)
+    if geo_name_or_path in geo_library_dynamic:
+        file_path = CACHE_PATH / F.to_archive_filename(geo_name_or_path)
+        geo_load = geo_library_dynamic.get(geo_name_or_path)
+        if geo_load is not None:
+            geo = geo_load()
+            static_geo = convert_to_static_geo(geo)
+            static_geo.save(file_path)
+
+    # checks for geo spec at given path (path passed)
     else:
-        raise GeoCacheException(f'spec file for {geo_name} not found.')
+        geo_path = Path(geo_name_or_path).expanduser()
+        if os.path.exists(geo_path):
+            geo_name = geo_path.stem
+            file_path = CACHE_PATH / F.to_archive_filename(geo_name)
+            geo = DF.load_from_spec(geo_path, adrio_maker_library)
+            static_geo = convert_to_static_geo(geo)
+            static_geo.save(file_path)
+        else:
+            raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')
 
 
 def remove(geo_name: str) -> None:

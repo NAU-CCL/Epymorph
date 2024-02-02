@@ -139,4 +139,5 @@ class DynamicGeoFileOps:
             spec = DynamicGeoSpec.deserialize(spec_json)
             return DynamicGeo.from_library(spec, adrio_maker_library)
         except Exception as e:
-            raise GeoValidationException(f"Unable to load '{file}' as a geo.") from e
+            msg = f"Unable to load '{file}' as a geo: {e}"
+            raise GeoValidationException(msg) from e
