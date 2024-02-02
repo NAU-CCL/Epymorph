@@ -5,10 +5,7 @@ from pathlib import Path
 from platformdirs import user_cache_path
 
 from epymorph.data import adrio_maker_library, geo_library_dynamic
-<<<<<<< HEAD
 from epymorph.geo.dynamic import DynamicGeo
-=======
->>>>>>> 02fcd27 (Added ability to input a path to geo files)
 from epymorph.geo.dynamic import DynamicGeoFileOps as DF
 from epymorph.geo.dynamic import dynamic_geo_messaging
 from epymorph.geo.geo import Geo
@@ -23,16 +20,11 @@ class GeoCacheException(Exception):
     """An exception raised when a geo cache operation fails."""
 
 
-<<<<<<< HEAD
 def fetch(geo_name_or_path: str) -> None:
-=======
-def fetch(geo_name: str, geo_path=None) -> None:
->>>>>>> 02fcd27 (Added ability to input a path to geo files)
     """
     Caches all attribute data for a dynamic geo from the library or spec file at a given path.
     Raises GeoCacheException if spec not found.
     """
-<<<<<<< HEAD
 
     # checks for geo in the library (name passed)
     if geo_name_or_path in geo_library_dynamic:
@@ -40,34 +32,19 @@ def fetch(geo_name: str, geo_path=None) -> None:
         geo_load = geo_library_dynamic.get(geo_name_or_path)
         if geo_load is not None:
             geo = geo_load()
-            static_geo = convert_to_static_geo(geo)
+            with dynamic_geo_messaging(geo):
+                static_geo = convert_to_static_geo(geo)
             static_geo.save(file_path)
 
     # checks for geo spec at given path (path passed)
-=======
-    filepath = CACHE_PATH / F.to_archive_filename(geo_name)
-    geo_load = geo_library_dynamic.get(geo_name)
-    if geo_path is not None:
-        geo_path = Path(geo_path)
-    # checks for geo in library
-    if geo_load is not None:
-        geo = geo_load()
-        with dynamic_geo_messaging(geo):
-            static_geo = convert_to_static_geo(geo)
-        static_geo.save(filepath)
-    # checks for geo spec at given path
-    elif geo_path is not None and os.path.exists(geo_path):
-        geo = DF.load_from_spec(geo_path, adrio_maker_library)
-        static_geo = convert_to_static_geo(geo)
-        static_geo.save(filepath)
->>>>>>> 02fcd27 (Added ability to input a path to geo files)
     else:
         geo_path = Path(geo_name_or_path).expanduser()
         if os.path.exists(geo_path):
             geo_name = geo_path.stem
             file_path = CACHE_PATH / F.to_archive_filename(geo_name)
             geo = DF.load_from_spec(geo_path, adrio_maker_library)
-            static_geo = convert_to_static_geo(geo)
+            with dynamic_geo_messaging(geo):
+                static_geo = convert_to_static_geo(geo)
             static_geo.save(file_path)
         else:
             raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')

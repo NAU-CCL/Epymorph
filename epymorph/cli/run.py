@@ -55,7 +55,7 @@ def define_argparser(command_parser: _SubParsersAction):
         action='store_true',
         help='(optional) include this flag to run the simulation without utilizing the Geo cache.')
     p.add_argument(
-        '-g', '--mute_geo',
+        '-m', '--mute_geo',
         action='store_false',
         help='(optional) include this flag to silence geo data retreival messaging.')
 
@@ -259,7 +259,6 @@ def load_model_geo(name_or_path: str, ignore_cache: bool) -> Geo:
     if name_or_path in geo_library:
         return geo_library[name_or_path]()
 
-<<<<<<< HEAD
     path = Path(name_or_path).expanduser()
     if not path.exists():
         raise UnknownModel('GEO', name_or_path)
@@ -277,16 +276,6 @@ def load_model_geo(name_or_path: str, ignore_cache: bool) -> Geo:
     else:
         msg = "Invalid file type. A geo can only be loaded from a .geo or .geo.tar file."
         raise Exception(msg)
-=======
-    path = Path(name_or_path)
-    if not path.exists():
-        raise UnknownModel('GEO', name_or_path)
-
-    if path.suffix == ".geo":
-        return DynamicGeoFileOps.load_from_spec(path, adrio_maker_library)
-    else:
-        return StaticGeoFileOps.load_from_archive(path)
->>>>>>> 02fcd27 (Added ability to input a path to geo files)
 
 
 @load_messaging("IPM")
