@@ -20,22 +20,12 @@ from typing_extensions import override
 import epymorph.geography.us_tiger as tiger
 from epymorph.error import GeographyError
 from epymorph.geography.custom import CustomScope
-from epymorph.geography.scope import (
-    GeoGroup,
-    GeoGrouping,
-    GeoScope,
-    GeoSelection,
-    GeoSelector,
-    GeoStrategy,
-    strategy_to_scope,
-)
-from epymorph.geography.us_geography import (
-    COUNTY,
-    STATE,
-    TRACT,
-    CensusGranularity,
-    CensusGranularityName,
-)
+from epymorph.geography.scope import (GeoGroup, GeoGrouping, GeoScope,
+                                      GeoSelection, GeoSelector, GeoStrategy,
+                                      strategy_to_scope)
+from epymorph.geography.us_geography import (COUNTY, STATE, TRACT,
+                                             CensusGranularity,
+                                             CensusGranularityName)
 from epymorph.util import filter_unique, mask
 
 
