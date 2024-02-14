@@ -33,6 +33,13 @@ def call_all(*fs: Callable[[], Any]) -> None:
         f()
 
 
+def or_raise(value: T | None, message: str) -> T:
+    """Enforce that the given value is not None, or else raise an exception."""
+    if value is None:
+        raise Exception(message)
+    return value
+
+
 # collection utilities
 
 
