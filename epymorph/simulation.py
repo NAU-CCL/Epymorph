@@ -232,6 +232,7 @@ def epymorph_namespace() -> dict[str, Any]:
             'concatenate': partial(np.concatenate, dtype=SimDType),
             'sum': partial(np.sum, dtype=SimDType),
             'newaxis': np.newaxis,
+            'fill_diagonal': np.fill_diagonal,
             # numpy math functions
             'radians': np.radians,
             'degrees': np.degrees,

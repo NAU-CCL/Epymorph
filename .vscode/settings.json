@@ -11,12 +11,15 @@
   },
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
-
+  
+  "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit"
   },
-  "editor.defaultFormatter": null,
-  "editor.formatOnSave": true,
+  "notebook.formatOnSave.enabled": true,
+  "notebook.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
   
   "autopep8.importStrategy": "fromEnvironment",
   "isort.importStrategy": "fromEnvironment",
@@ -36,6 +39,7 @@
     "*_test.py"
   ],
 
+  "editor.defaultFormatter": null,
   "[python]": {
     "editor.detectIndentation": false,
     "editor.insertSpaces": true,
