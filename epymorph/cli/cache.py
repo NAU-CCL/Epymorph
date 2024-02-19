@@ -65,6 +65,31 @@ def define_argparser(command_parser: _SubParsersAction):
         help='clear the cache')
     clear_command.set_defaults(handler=lambda args: clear())
 
+    export_command = sp.add_parser(
+        'export',
+        help='export geo as a .geo.tar file')
+    export_command.add_argument(
+        'geo',
+        type=str,
+        help='the name of a geo or the path to a geo spec file')
+    export_command.add_argument(
+        '-o', '--out',
+        type=str,
+        help='(optional) the directory in which to write the file')
+    export_command.add_argument(
+        '-r', '--rename',
+        type=str,
+        help='(optional) an override for the name of the file')
+    export_command.add_argument(
+        '-i', '--ignore_cache',
+        action='store_true',
+        help='(optional) do not add this geo to the local cache')
+    export_command.set_defaults(handler=lambda args: export(
+        geo_name_or_path=args.geo,
+        out=args.out,
+        rename=args.rename,
+        ignore_cache=args.ignore_cache
+    ))
 
 # Exit codes:
 # - 0 success
@@ -100,6 +125,24 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
         except cache.GeoCacheException as e:
             print(e)
             return 1  # exit code: geo not found
+    return 0  # exit code: success
+
+
+def export(geo_name_or_path: str, out: str | None, rename: str | None, ignore_cache: bool) -> int:
+    # split geo name and path
+    if geo_name_or_path in geo_library_dynamic or os.path.exists(cache.CACHE_PATH / F.to_archive_filename(geo_name_or_path)):
+        geo_name = geo_name_or_path
+        geo_path = cache.CACHE_PATH / F.to_archive_filename(geo_name)
+    elif os.path.exists(Path(geo_name_or_path).expanduser()):
+        geo_path = Path(geo_name_or_path).expanduser()
+        geo_name = geo_path.stem
+    else:
+        raise cache.GeoCacheException("Specified geo not found.")
+
+    cache.export(geo_name, geo_path, out, rename, ignore_cache)
+
+    print("Geo successfully exported.")
+
     return 0  # exit code: success
 
 

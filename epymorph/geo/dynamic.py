@@ -12,7 +12,6 @@ from numpy.typing import NDArray
 
 from epymorph.error import AttributeException, GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
-from epymorph.geo.adrio.file.adrio_file import ADRIOMakerFile
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
                                validate_geo_values)
@@ -50,44 +49,22 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 msg = f"Missing source for attribute: {attrib.name}."
                 raise GeoValidationException(msg)
 
+            # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
+            # the geo wants to use a different name than the one the maker uses;
+            # no problem, just provide a modified AttribDef to the maker.
             maker_name = source
             adrio_attrib = attrib
+            if ":" in source:
+                maker_name, adrio_attrib_name = source.split(":")[0:2]
+                adrio_attrib = AttribDef(adrio_attrib_name, attrib.dtype, attrib.shape)
 
-            if source != "File":
-                # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
-                # the geo wants to use a different name than the one the maker uses;
-                # no problem, just provide a modified AttribDef to the maker.
-                if ":" in source:
-                    maker_name, adrio_attrib_name = source.split(":")[0:2]
-                    adrio_attrib = AttribDef(
-                        adrio_attrib_name, attrib.dtype, attrib.shape)
-
-                # Make and store adrio.
-                adrio = makers[maker_name].make_adrio(
-                    adrio_attrib,
-                    spec.geography,
-                    spec.time_period
-                )
-                adrios[attrib.name] = adrio
-
-            else:
-                if source.count(':') != 2:
-                    msg = "File source requires a file path and column name or dictionary key for each attribute."
-                    raise GeoValidationException(msg)
-                else:
-                    maker_name, file_path, key = source.split(":")
-                    adrio_attrib = AttribDef(
-                        adrio_attrib.name, attrib.dtype, attrib.shape)
-
-                maker = makers[maker_name]
-                if type(maker) is ADRIOMakerFile:
-                    adrio = maker.make_adrio(
-                        adrio_attrib,
-                        spec.geography,
-                        spec.time_period,
-                        file_path,
-                        key
-                    )
+            # Make and store adrio.
+            adrio = makers[maker_name].make_adrio(
+                adrio_attrib,
+                spec.geography,
+                spec.time_period
+            )
+            adrios[attrib.name] = adrio
 
         return cls(spec, adrios)
 

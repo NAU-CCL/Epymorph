@@ -50,6 +50,53 @@ def fetch(geo_name_or_path: str) -> None:
             raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')
 
 
+def export(geo_name: str, geo_path: Path, out: str | None, rename: str | None, ignore_cache: bool) -> None:
+    # check for out path specified
+    if out is not None:
+        if not os.path.exists(out):
+            raise GeoCacheException(f'specified output directory {out} not found.')
+        else:
+            out_dir = Path(out)
+    else:
+        out_dir = Path(os.getcwd())
+
+    # check for geo name specified
+    if rename is not None:
+        geo_exp_name = rename
+    else:
+        geo_exp_name = geo_name
+
+    out_path = out_dir / F.to_archive_filename(geo_exp_name)
+    cache_file_path = CACHE_PATH / F.to_archive_filename(geo_name)
+    cache_out_file_path = CACHE_PATH / F.to_archive_filename(geo_exp_name)
+
+    # if cached, copy cached file
+    if os.path.exists(cache_file_path):
+        geo = load_from_cache(geo_name)
+        if geo is not None:
+            geo.save(out_path)
+
+    # if uncached, fetch and export
+    elif geo_name in geo_library_dynamic:
+        geo = geo_library_dynamic.get(geo_name)
+        if geo is not None:
+            static_geo = convert_to_static_geo(geo())
+            if not ignore_cache:
+                static_geo.save(cache_out_file_path)
+            static_geo.save(out_path)
+
+    # if spec file passed, load from spec, fetch, and export
+    elif os.path.exists(geo_path):
+        geo = DF.load_from_spec(geo_path, adrio_maker_library)
+        static_geo = convert_to_static_geo(geo)
+        if not ignore_cache:
+            static_geo.save(cache_out_file_path)
+        static_geo.save(out_path)
+
+    else:
+        raise GeoCacheException("Geo to export not found.")
+
+
 def remove(geo_name: str) -> None:
     """
     Removes a geo's data from the cache.
@@ -88,7 +135,7 @@ def save_to_cache(geo: Geo, geo_name: str) -> None:
     F.save_as_archive(static_geo, file_path)
 
 
-def load_from_cache(geo_name: str) -> Geo | None:
+def load_from_cache(geo_name: str) -> StaticGeo | None:
     """Checks whether a dynamic geo has already been cached and returns it if so."""
     file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     if not os.path.exists(file_path):
