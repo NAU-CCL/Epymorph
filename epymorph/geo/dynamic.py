@@ -5,9 +5,7 @@ only the attributes needed by the simulation.
 """
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
-from contextlib import contextmanager
-from time import perf_counter
-from typing import Generator, NamedTuple, Protocol, Self, runtime_checkable
+from typing import Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,7 +15,8 @@ from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
                                validate_geo_values)
-from epymorph.util import Event, MemoDict, subscriptions
+from epymorph.simulation import AdrioStart, FetchStart
+from epymorph.util import Event, MemoDict
 
 
 def _memoized_adrio_maker_library(lib: ADRIOMakerLibrary) -> MemoDict[str, ADRIOMaker]:
@@ -79,14 +78,14 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
 
         # events
         self.fetch_start = Event()
-        self.ADRIO_start = Event()
+        self.adrio_start = Event()
         self.fetch_end = Event()
 
     def __getitem__(self, name: str) -> NDArray:
         if name not in self._adrios:
             raise AttributeException(f"Attribute not found in geo: '{name}'")
         if self._adrios[name]._cached_value is None:
-            self.ADRIO_start.publish(ADRIO_Start(name))
+            self.adrio_start.publish(AdrioStart(name, None))
         return self._adrios[name].get_value()
 
     @property
@@ -120,14 +119,16 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
         """Retrieves all Geo attributes from geospec object using ADRIOs"""
         self.fetch_start.publish(FetchStart(len(self._adrios)))
 
-        def fetch_attribute(adrio: ADRIO) -> NDArray:
-            self.ADRIO_start.publish(ADRIO_Start(adrio.attrib))
+        def fetch_attribute(adrio: ADRIO, index: int) -> NDArray:
+            self.adrio_start.publish(AdrioStart(adrio.attrib, index))
             return adrio.get_value()
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
+            index = 1
             for adrio in self._adrios.values():
-                executor.submit(fetch_attribute, adrio)
+                executor.submit(fetch_attribute, adrio, index)
+                index += 1
 
         self.fetch_end.publish(None)
 
@@ -151,88 +152,3 @@ class DynamicGeoFileOps:
         except Exception as e:
             msg = f"Unable to load '{file}' as a geo: {e}"
             raise GeoValidationException(msg) from e
-
-
-class FetchStart(NamedTuple):
-    """The payload of a DynamicGeo fetch_start event."""
-    adrio_len: int
-
-
-class ADRIO_Start(NamedTuple):
-    """The payload of a DynamicGeo adrio_start event."""
-    attribute: str
-
-
-@runtime_checkable
-class DynamicGeoEvents(Protocol):
-    """Protocol for DynamicGeos that support lifecycle events."""
-
-    fetch_start: Event[FetchStart]
-    """
-    Event that fires when geo begins fetching attributes. Payload is the number of ADRIOs.
-    """
-
-    ADRIO_start: Event[ADRIO_Start]
-    """
-    Event that fires when an individual ADRIO begins data retreival. Payload is the current attribute name.
-    """
-
-    fetch_end: Event[None]
-    """
-    Event that fires when data retreival is complete.
-    """
-
-
-@contextmanager
-def dynamic_geo_messaging_sim(dyn: Event) -> Generator[None, None, None]:
-    """
-    Attach messaging to dynamic geo operations during a simulation run to inform user when
-    simulation halts to actively fetch data.
-    Creates subscription to ADRIO_Start event
-    """
-    print("Geo not found in cache; geo attributes will be lazily loaded during simulation run.")
-
-    def adrio_start(adrio: ADRIO_Start) -> None:
-        print(f"Uncached geo attribute found: {adrio.attribute}. Retreiving now...")
-
-    with subscriptions() as subs:
-        subs.subscribe(dyn, adrio_start)
-        yield
-
-
-@contextmanager
-def dynamic_geo_messaging(dyn: DynamicGeoEvents) -> Generator[None, None, None]:
-    """
-    Attach progress messaging to a DynamicGeo for verbose printing of data retreival progress.
-    Creates subscriptions on the Geo's events.
-    """
-
-    start_time = 0.0
-    num_adrios = 0
-    adrio_index = 1
-
-    def fetch_start(length: FetchStart) -> None:
-        nonlocal num_adrios
-        num_adrios = length.adrio_len
-
-        print("Fetching dynamic geo data")
-        print(f"• {num_adrios} attributes")
-
-        nonlocal start_time
-        start_time = perf_counter()
-
-    def adrio_start(adrio: ADRIO_Start) -> None:
-        nonlocal adrio_index
-        print(f"Fetching {adrio.attribute}...[{adrio_index}/{num_adrios}]")
-        adrio_index += 1
-
-    def fetch_end(_: None) -> None:
-        print("Complete.")
-        end_time = perf_counter()
-        print(f"Total fetch time: {(end_time - start_time):.3f}s")
-
-    with subscriptions() as subs:
-        subs.subscribe(dyn.fetch_start, fetch_start)
-        subs.subscribe(dyn.ADRIO_start, adrio_start)
-        subs.subscribe(dyn.fetch_end, fetch_end)
-        yield

@@ -1,20 +1,17 @@
 """General simulation data types, events, and utility functions."""
 import logging
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import partial
 from importlib import reload
-from time import perf_counter
-from typing import (Any, Callable, Generator, NamedTuple, Protocol, Self,
-                    Sequence, runtime_checkable)
+from typing import (Any, Callable, NamedTuple, Protocol, Self, Sequence,
+                    runtime_checkable)
 
 import numpy as np
 from numpy.random import SeedSequence
 
 from epymorph.code import ImmutableNamespace, base_namespace
-from epymorph.util import (Event, pairwise_haversine, progress, row_normalize,
-                           subscriptions)
+from epymorph.util import Event, pairwise_haversine, row_normalize
 
 SimDType = np.int64
 """
@@ -131,6 +128,17 @@ class SimTick(NamedTuple):
     percent_complete: float
 
 
+class FetchStart(NamedTuple):
+    """The payload of a DynamicGeo fetch_start event."""
+    adrio_len: int
+
+
+class AdrioStart(NamedTuple):
+    """The payload of a DynamicGeo adrio_start event."""
+    attribute: str
+    index: int | None
+
+
 @runtime_checkable
 class SimulationEvents(Protocol):
     """Protocol for Simulations that support lifecycle events."""
@@ -147,58 +155,35 @@ class SimulationEvents(Protocol):
     and the percentage complete (a float).
     """
 
+    adrio_start: Event[AdrioStart]
+    """
+    Event that fires when an individual ADRIO begins data retreival. Payload is the attribute name.
+    """
+
     on_end: Event[None]
     """
     Event fires after a simulation run is complete.
     """
 
 
-@contextmanager
-def sim_messaging(sim: SimulationEvents) -> Generator[None, None, None]:
+@runtime_checkable
+class DynamicGeoEvents(Protocol):
+    """Protocol for DynamicGeos that support lifecycle events."""
+
+    fetch_start: Event[FetchStart]
     """
-    Attach fancy console messaging to a Simulation, e.g., a progress bar.
-    This creates subscriptions on `sim`'s events, so you only need to do it once
-    per sim. Returns `sim` as a convenience.
+    Event that fires when geo begins fetching attributes. Payload is the number of ADRIOs.
     """
 
-    start_time = 0.0
-    use_progress_bar = sim.on_tick is not None
+    adrio_start: Event[AdrioStart]
+    """
+    Event that fires when an individual ADRIO begins data retreival. Payload is the attribute name and index.
+    """
 
-    def on_start(ctx: OnStart) -> None:
-        start_date = ctx.time_frame.start_date
-        duration_days = ctx.time_frame.duration_days
-        end_date = ctx.time_frame.end_date
-
-        print(f"Running simulation ({sim.__class__.__name__}):")
-        print(f"• {start_date} to {end_date} ({duration_days} days)")
-        print(f"• {ctx.dim.nodes} geo nodes")
-        if use_progress_bar:
-            print(progress(0.0), end='\r')
-        else:
-            print('Running...')
-
-        nonlocal start_time
-        start_time = perf_counter()
-
-    def on_tick(tick: SimTick) -> None:
-        print(progress(tick.percent_complete), end='\r')
-
-    def on_end(_: None) -> None:
-        end_time = perf_counter()
-        if use_progress_bar:
-            print(progress(1.0))
-        else:
-            print('Complete.')
-        print(f"Runtime: {(end_time - start_time):.3f}s")
-
-    # Set up a subscriptions context, subscribe our handlers,
-    # then yield to the outer context (ostensibly where the sim will be run).
-    with subscriptions() as subs:
-        subs.subscribe(sim.on_start, on_start)
-        if sim.on_tick is not None:
-            subs.subscribe(sim.on_tick, on_tick)
-        subs.subscribe(sim.on_end, on_end)
-        yield
+    fetch_end: Event[None]
+    """
+    Event that fires when data retreival is complete.
+    """
 
 
 def enable_logging(filename: str = 'debug.log', movement: bool = True) -> None:

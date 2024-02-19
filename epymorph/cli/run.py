@@ -20,14 +20,13 @@ from epymorph.engine.standard_sim import Output, StandardSimulation
 from epymorph.error import UnknownModel
 from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.cache import load_from_cache
-from epymorph.geo.dynamic import (DynamicGeo, DynamicGeoFileOps,
-                                  dynamic_geo_messaging_sim)
+from epymorph.geo.dynamic import DynamicGeo, DynamicGeoFileOps
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeoFileOps
 from epymorph.initializer import initializer_library, normalize_init_params
+from epymorph.logging.messaging import sim_messaging
 from epymorph.movement.parser import MovementSpec, parse_movement_spec
-from epymorph.simulation import (TimeFrame, default_rng, enable_logging,
-                                 sim_messaging)
+from epymorph.simulation import TimeFrame, default_rng, enable_logging
 
 
 def define_argparser(command_parser: _SubParsersAction):
@@ -159,12 +158,11 @@ def run(input_path: str,
 
     # Run simulation with appropriate messaging contexts
 
-    with sim_messaging(sim):
-        if geo_messaging and isinstance(geo, DynamicGeo):
-            with dynamic_geo_messaging_sim(geo.ADRIO_start):
-                out = sim.run()
-        else:
-            out = sim.run()
+    if not (geo_messaging and type(geo) is DynamicGeo):
+        geo_messaging = False
+
+    with sim_messaging(sim, geo_messaging):
+        out = sim.run()
 
     # Draw charts (if specified).
     # NOTE: this method of chart handling is a placeholder implementation

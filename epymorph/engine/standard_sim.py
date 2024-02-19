@@ -16,6 +16,7 @@ from epymorph.engine.world_list import ListWorld
 from epymorph.error import (AttributeException, CompilationException,
                             InitException, IpmSimException, MmSimException,
                             ValidationException, error_gate)
+from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.geo import Geo
 from epymorph.initializer import DEFAULT_INITIALIZER, Initializer
 from epymorph.movement.movement_model import MovementModel
@@ -113,6 +114,8 @@ class StandardSimulation(SimulationEvents):
         # events
         self.on_start = Event()
         self.on_tick = Event()
+        if type(geo) is DynamicGeo:
+            self.adrio_start = geo.adrio_start
         self.on_end = Event()
 
     def validate(self) -> None:
