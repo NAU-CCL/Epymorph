@@ -41,7 +41,7 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
         print(progress(tick.percent_complete), end='\r')
 
     def adrio_start(adrio: AdrioStart) -> None:
-        print(f"Uncached geo attribute found: {adrio.attribute}. Retreiving now...")
+        print(f"Uncached geo attribute requested: {adrio.attribute}. Retreiving now...")
 
     def on_end(_: None) -> None:
         end_time = perf_counter()

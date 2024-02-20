@@ -125,10 +125,8 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
-            index = 1
-            for adrio in self._adrios.values():
+            for index, adrio in enumerate(self._adrios.values()):
                 executor.submit(fetch_attribute, adrio, index)
-                index += 1
 
         self.fetch_end.publish(None)
 
