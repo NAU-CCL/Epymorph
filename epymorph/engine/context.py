@@ -104,7 +104,7 @@ class RumeContext:
             data_raw = self._get_attribute_value(attr)
             data = attr.shape.adapt(self.dim, data_raw, True)
             if data is None:
-                msg = f"Attribute '{attr.name}' could not be adpated to the required shape."
+                msg = f"Attribute '{attr.name}' could not be adapted to the required shape."
                 raise AttributeException(msg)
             return attr.shape.accessor(data)
 

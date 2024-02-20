@@ -70,7 +70,7 @@ def _default_compartments(ctx: InitContext) -> NDArray[SimDType]:
 
 def _check_population(ctx: InitContext) -> None:
     try:
-        check_ndarray(ctx.geo['population'], dtype=np.integer, shape=(ctx.dim.nodes,))
+        check_ndarray(ctx.geo['population'], dtype=[np.int64], shape=(ctx.dim.nodes,))
     except KeyError as e:
         raise InitException.for_arg('population', 'No such value in the geo.') from e
     except NumpyTypeError as e:
@@ -95,7 +95,7 @@ def explicit(ctx: InitContext, initials: NDArray[SimDType]) -> NDArray[SimDType]
     return initials.copy()
 
 
-def proportional(ctx: InitContext, ratios: NDArray[np.integer | np.floating]) -> NDArray[SimDType]:
+def proportional(ctx: InitContext, ratios: NDArray[np.int64 | np.float64]) -> NDArray[SimDType]:
     """
     Set all compartments as a proportion of their population according to the geo.
     The parameter array provided to this initializer will be normalized, then multiplied
@@ -107,7 +107,7 @@ def proportional(ctx: InitContext, ratios: NDArray[np.integer | np.floating]) ->
 
     _, N, C, _ = ctx.dim.TNCE
     try:
-        check_ndarray(ratios, dtype=[np.integer, np.floating], shape=[(C,), (N, C)])
+        check_ndarray(ratios, dtype=[np.int64, np.float64], shape=[(C,), (N, C)])
     except NumpyTypeError as e:
         raise InitException.for_arg('ratios') from e
 

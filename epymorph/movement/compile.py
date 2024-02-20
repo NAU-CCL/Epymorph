@@ -134,6 +134,18 @@ class MovementFunctionTransformer(ast.NodeTransformer):
                 return node
         return self.generic_visit(node)
 
+    def visit_Attribute(self, node: ast.Attribute) -> Any:
+        """Modify references to objects that should be in context."""
+        if isinstance(node.value, ast.Name):
+            if node.value.id in ['dim']:
+                node.value = ast.Attribute(
+                    value=ast.Name(id='ctx', ctx=ast.Load()),
+                    attr=node.value.id,
+                    ctx=ast.Load(),
+                )
+                return node
+        return self.generic_visit(node)
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
         """Modify function parameters."""
         new_node = self.generic_visit(node)
