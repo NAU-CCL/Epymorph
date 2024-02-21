@@ -20,7 +20,7 @@ from epymorph.engine.standard_sim import Output, StandardSimulation
 from epymorph.error import UnknownModel
 from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.cache import load_from_cache
-from epymorph.geo.dynamic import DynamicGeo, DynamicGeoFileOps
+from epymorph.geo.dynamic import DynamicGeoFileOps
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeoFileOps
 from epymorph.initializer import initializer_library, normalize_init_params
@@ -157,9 +157,6 @@ def run(input_path: str,
         enable_logging()
 
     # Run simulation with appropriate messaging contexts
-
-    if not (geo_messaging and type(geo) is DynamicGeo):
-        geo_messaging = False
 
     with sim_messaging(sim, geo_messaging):
         out = sim.run()

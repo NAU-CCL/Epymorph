@@ -13,13 +13,25 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
     Attach fancy console messaging to a Simulation, e.g., a progress bar.
     This creates subscriptions on `sim`'s events, so you only need to do it once
     per sim. Returns `sim` as a convenience.
+    If `geo_messaging` is true, provide verbose messaging about geo operations
+    (if applicable, e.g., when fetching external data).
     """
 
     start_time: float | None = None
     use_progress_bar = sim.on_tick is not None
 
-    if geo_messaging:
-        print("Geo not found in cache; geo attributes will be lazily loaded during simulation run.")
+    # If geo_messaging is true, the user has requested verbose messaging re: geo operations.
+    # However we don't want to make a strong assertion that a sim has a geo, nor what type that geo is.
+    # So we'll do this dynamically!
+    # - if we have a geo, and
+    # - if it's an instance of DynamicGeoEvents, and
+    # - if the user has enabled geo messaging, then and only then will we subscribe to its adrio_start event
+    sim_geo = None
+    if hasattr(sim, 'geo'):
+        sim_geo = getattr(sim, 'geo')
+
+    if geo_messaging and isinstance(sim_geo, DynamicGeoEvents):
+        print("Geo not loaded from cache; attributes will be lazily loaded during simulation run.")
 
     def on_start(ctx: OnStart) -> None:
         start_date = ctx.time_frame.start_date
@@ -58,10 +70,10 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
         subs.subscribe(sim.on_start, on_start)
         if sim.on_tick is not None:
             subs.subscribe(sim.on_tick, on_tick)
-        if geo_messaging:
-            subs.subscribe(sim.adrio_start, adrio_start)
+        if geo_messaging and isinstance(sim_geo, DynamicGeoEvents):
+            subs.subscribe(sim_geo.adrio_start, adrio_start)
         subs.subscribe(sim.on_end, on_end)
-        yield
+        yield  # to outer context
 
 
 @contextmanager
@@ -93,4 +105,4 @@ def dynamic_geo_messaging(dyn: DynamicGeoEvents) -> Generator[None, None, None]:
         subs.subscribe(dyn.fetch_start, fetch_start)
         subs.subscribe(dyn.adrio_start, adrio_start)
         subs.subscribe(dyn.fetch_end, fetch_end)
-        yield
+        yield  # to outer context

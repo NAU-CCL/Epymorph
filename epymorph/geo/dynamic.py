@@ -15,7 +15,7 @@ from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
                                validate_geo_values)
-from epymorph.simulation import AdrioStart, FetchStart
+from epymorph.simulation import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.util import Event, MemoDict
 
 
@@ -33,7 +33,7 @@ def _memoized_adrio_maker_library(lib: ADRIOMakerLibrary) -> MemoDict[str, ADRIO
     return MemoDict[str, ADRIOMaker](load_maker)
 
 
-class DynamicGeo(Geo[DynamicGeoSpec]):
+class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
     """A Geo implementation which uses ADRIOs to dynamically fetch data from third-party data sources."""
 
     @classmethod

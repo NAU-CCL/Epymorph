@@ -162,11 +162,6 @@ class SimulationEvents(Protocol):
     and the percentage complete (a float).
     """
 
-    adrio_start: Event[AdrioStart]
-    """
-    Event that fires when an individual ADRIO begins data retreival. Payload is the attribute name.
-    """
-
     on_end: Event[None]
     """
     Event fires after a simulation run is complete.
