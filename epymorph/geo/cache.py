@@ -51,6 +51,12 @@ def fetch(geo_name_or_path: str) -> None:
 
 
 def export(geo_name: str, geo_path: Path, out: str | None, rename: str | None, ignore_cache: bool) -> None:
+    """
+    Exports a geo as a .geo.tar file to a location outside the cache.
+    If uncached, geo to export is also cached.
+    User can specify a destination path and new name for exported geo.
+    Raises a GeoCacheException if geo not found.
+    """
     # check for out path specified
     if out is not None:
         if not os.path.exists(out):

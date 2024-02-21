@@ -129,6 +129,7 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
 
 
 def export(geo_name_or_path: str, out: str | None, rename: str | None, ignore_cache: bool) -> int:
+    """CLI command handler: export compressed geo to a location outside the cache."""
     # split geo name and path
     if geo_name_or_path in geo_library_dynamic or os.path.exists(cache.CACHE_PATH / F.to_archive_filename(geo_name_or_path)):
         geo_name = geo_name_or_path
