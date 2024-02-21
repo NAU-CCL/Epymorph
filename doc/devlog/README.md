@@ -41,6 +41,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2023-11-22-ipm-probs.ipynb | Tyler | | Analyzing statistical correctness of our IPM processing algorithms. |
 | 2023-12-05.ipynb | Tyler | | A brief tour of changes to epymorph due to the refactor effort. |
 | 2024-01-08.ipynb | Tyler | | Another functional parameters demonstration, revisiting the Bonus Example from 2023-10-10. |
+| 2024-02-06-adrio-demo.ipynb | Trevor | | Demonstrates the ADRIO system using code updated for latest changes. |
 | 2024-02-06.ipynb | Tyler | | Revisiting age-class IPMs, and thinking about modularity of approach. |
 | 2024-02-12.ipynb | Tyler | | Continued age-class IPM work, this time in more than one geo node. |
 

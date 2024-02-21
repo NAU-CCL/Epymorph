@@ -32,6 +32,10 @@ def define_argparser(command_parser: _SubParsersAction):
         type=str,
         help='the name of the geo to fetch; must include a geo path if not already in the library')
     fetch_command.add_argument(
+        '-p', '--path',
+        help='(optional) the path to a geo spec file not in the library'
+    )
+    fetch_command.add_argument(
         '-f', '--force',
         action='store_true',
         help='(optional) include this flag to force an override of previously cached data')

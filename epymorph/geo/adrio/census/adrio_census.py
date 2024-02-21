@@ -7,7 +7,7 @@ import numpy as np
 from census import Census
 from geopandas import GeoDataFrame
 from numpy.typing import NDArray
-from pandas import DataFrame, concat, read_excel
+from pandas import DataFrame, read_excel
 from pygris import block_groups, counties, states, tracts
 
 from epymorph.data_shape import Shapes
@@ -369,10 +369,6 @@ class ADRIOMakerCensus(ADRIOMaker):
                 data = data.loc[data['res_state_code'] != '11']
                 data = data.loc[data['wrk_state_code'] < '057']
                 data = data.loc[data['wrk_state_code'] != '011']
-
-            # filter out non-county locations
-            data = data.loc[data['res_county_code'] < '508']
-            data = data.loc[data['wrk_county_code'] < '508']
 
         if granularity == Granularity.COUNTY.value:
             if counties is not None and counties[0] != '*':

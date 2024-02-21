@@ -24,9 +24,9 @@ from epymorph.geo.dynamic import DynamicGeoFileOps
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeoFileOps
 from epymorph.initializer import initializer_library, normalize_init_params
+from epymorph.logging.messaging import sim_messaging
 from epymorph.movement.parser import MovementSpec, parse_movement_spec
-from epymorph.simulation import (TimeFrame, default_rng, enable_logging,
-                                 sim_messaging)
+from epymorph.simulation import TimeFrame, default_rng, enable_logging
 
 
 def define_argparser(command_parser: _SubParsersAction):
@@ -52,14 +52,19 @@ def define_argparser(command_parser: _SubParsersAction):
     p.add_argument(
         '-i', '--ignore_cache',
         action='store_true',
-        help='(optional) include this flag to run the simulation without utilizing the Geo cache.'
-    )
+        help='(optional) include this flag to run the simulation without utilizing the Geo cache.')
+    p.add_argument(
+        '-m', '--mute_geo',
+        action='store_false',
+        help='(optional) include this flag to silence geo data retreival messaging.')
+
     p.set_defaults(handler=lambda args: run(
         input_path=args.input,
         out_path=args.out,
         chart=args.chart,
         profiling=args.profile,
-        ignore_cache=args.ignore_cache
+        ignore_cache=args.ignore_cache,
+        geo_messaging=args.mute_geo
     ))
 
 
@@ -79,7 +84,8 @@ def run(input_path: str,
         out_path: str | None,
         chart: str | None,
         profiling: bool,
-        ignore_cache: bool) -> int:
+        ignore_cache: bool,
+        geo_messaging: bool) -> int:
     """CLI command handler: run a simulation."""
 
     # Exit codes:
@@ -150,7 +156,9 @@ def run(input_path: str,
     if not profiling:
         enable_logging()
 
-    with sim_messaging(sim):
+    # Run simulation with appropriate messaging contexts
+
+    with sim_messaging(sim, geo_messaging):
         out = sim.run()
 
     # Draw charts (if specified).

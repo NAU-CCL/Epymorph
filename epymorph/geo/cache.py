@@ -11,6 +11,7 @@ from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
+from epymorph.logging.messaging import dynamic_geo_messaging
 
 CACHE_PATH = user_cache_path(appname='epymorph', ensure_exists=True)
 
@@ -31,7 +32,8 @@ def fetch(geo_name_or_path: str) -> None:
         geo_load = geo_library_dynamic.get(geo_name_or_path)
         if geo_load is not None:
             geo = geo_load()
-            static_geo = convert_to_static_geo(geo)
+            with dynamic_geo_messaging(geo):
+                static_geo = convert_to_static_geo(geo)
             static_geo.save(file_path)
 
     # checks for geo spec at given path (path passed)
@@ -41,7 +43,8 @@ def fetch(geo_name_or_path: str) -> None:
             geo_name = geo_path.stem
             file_path = CACHE_PATH / F.to_archive_filename(geo_name)
             geo = DF.load_from_spec(geo_path, adrio_maker_library)
-            static_geo = convert_to_static_geo(geo)
+            with dynamic_geo_messaging(geo):
+                static_geo = convert_to_static_geo(geo)
             static_geo.save(file_path)
         else:
             raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')

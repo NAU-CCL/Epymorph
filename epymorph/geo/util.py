@@ -12,6 +12,7 @@ def convert_to_static_geo(geo: DynamicGeo) -> StaticGeo:
         attributes=geo.spec.attributes,
         time_period=geo.spec.time_period,
     )
+    geo.fetch_all()
     values = {
         attr.name: geo[attr.name]
         for attr in geo.spec.attributes

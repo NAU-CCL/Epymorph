@@ -93,6 +93,7 @@ class StandardSimulation(SimulationEvents):
 
     _config: RumeConfig
     _params: ContextParams | None = None
+    geo: Geo
     on_tick: Event[SimTick]  # this class supports on_tick; so narrow the type def
 
     def __init__(self,
@@ -103,6 +104,7 @@ class StandardSimulation(SimulationEvents):
                  time_frame: TimeFrame,
                  initializer: Initializer | None = None,
                  rng: Callable[[], np.random.Generator] | None = None):
+        self.geo = geo
         if initializer is None:
             initializer = DEFAULT_INITIALIZER
         if rng is None:

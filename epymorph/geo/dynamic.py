@@ -15,7 +15,8 @@ from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
                                validate_geo_values)
-from epymorph.util import MemoDict
+from epymorph.simulation import AdrioStart, DynamicGeoEvents, FetchStart
+from epymorph.util import Event, MemoDict
 
 
 def _memoized_adrio_maker_library(lib: ADRIOMakerLibrary) -> MemoDict[str, ADRIOMaker]:
@@ -32,7 +33,7 @@ def _memoized_adrio_maker_library(lib: ADRIOMakerLibrary) -> MemoDict[str, ADRIO
     return MemoDict[str, ADRIOMaker](load_maker)
 
 
-class DynamicGeo(Geo[DynamicGeoSpec]):
+class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
     """A Geo implementation which uses ADRIOs to dynamically fetch data from third-party data sources."""
 
     @classmethod
@@ -75,9 +76,16 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
         labels = self._adrios[LABEL.name].get_value()
         super().__init__(spec, len(labels))
 
+        # events
+        self.fetch_start = Event()
+        self.adrio_start = Event()
+        self.fetch_end = Event()
+
     def __getitem__(self, name: str) -> NDArray:
         if name not in self._adrios:
             raise AttributeException(f"Attribute not found in geo: '{name}'")
+        if self._adrios[name]._cached_value is None:
+            self.adrio_start.publish(AdrioStart(name, None, None))
         return self._adrios[name].get_value()
 
     @property
@@ -109,17 +117,19 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
 
     def fetch_all(self) -> None:
         """Retrieves all Geo attributes from geospec object using ADRIOs"""
-        print('Fetching GEO data from ADRIOs...')
+        num_adrios = len(self._adrios)
+        self.fetch_start.publish(FetchStart(num_adrios))
 
-        def fetch_attribute(adrio: ADRIO) -> NDArray:
-            print(f'Fetching {adrio.attrib}')
+        def fetch_attribute(adrio: ADRIO, index: int) -> NDArray:
+            self.adrio_start.publish(AdrioStart(adrio.attrib, index, num_adrios))
             return adrio.get_value()
 
         # initialize threads
         with ThreadPoolExecutor(max_workers=5) as executor:
-            for adrio in self._adrios.values():
-                executor.submit(fetch_attribute, adrio)
-        print('...done')
+            for index, adrio in enumerate(self._adrios.values()):
+                executor.submit(fetch_attribute, adrio, index)
+
+        self.fetch_end.publish(None)
 
 
 class DynamicGeoFileOps:
