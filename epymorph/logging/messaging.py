@@ -15,7 +15,7 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
     per sim. Returns `sim` as a convenience.
     """
 
-    start_time = 0.0
+    start_time: float | None = None
     use_progress_bar = sim.on_tick is not None
 
     if geo_messaging:
@@ -49,7 +49,8 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
             print(progress(1.0))
         else:
             print('Complete.')
-        print(f"Runtime: {(end_time - start_time):.3f}s")
+        if start_time is not None:
+            print(f"Runtime: {(end_time - start_time):.3f}s")
 
     # Set up a subscriptions context, subscribe our handlers,
     # then yield to the outer context (ostensibly where the sim will be run).
@@ -70,26 +71,23 @@ def dynamic_geo_messaging(dyn: DynamicGeoEvents) -> Generator[None, None, None]:
     Creates subscriptions on the Geo's events.
     """
 
-    start_time = 0.0
-    num_adrios = 0
+    start_time: float | None = None
 
-    def fetch_start(length: FetchStart) -> None:
-        nonlocal num_adrios
-        num_adrios = length.adrio_len
-
+    def fetch_start(event: FetchStart) -> None:
         print("Fetching dynamic geo data")
-        print(f"• {num_adrios} attributes")
+        print(f"• {event.adrio_len} attributes")
 
         nonlocal start_time
         start_time = perf_counter()
 
-    def adrio_start(adrio: AdrioStart) -> None:
-        print(f"Fetching {adrio.attribute}...[{adrio.index}/{num_adrios}]")
+    def adrio_start(event: AdrioStart) -> None:
+        print(f"Fetching {event.attribute}...[{event.index}/{event.adrio_len}]")
 
     def fetch_end(_: None) -> None:
         print("Complete.")
         end_time = perf_counter()
-        print(f"Total fetch time: {(end_time - start_time):.3f}s")
+        if start_time is not None:
+            print(f"Total fetch time: {(end_time - start_time):.3f}s")
 
     with subscriptions() as subs:
         subs.subscribe(dyn.fetch_start, fetch_start)

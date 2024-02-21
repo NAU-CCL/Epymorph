@@ -137,11 +137,18 @@ class AdrioStart(NamedTuple):
     """The payload of a DynamicGeo adrio_start event."""
     attribute: str
     index: int | None
+    """An index assigned to this ADRIO if fetching ADRIOs as a batch."""
+    adrio_len: int | None
+    """The total number of ADRIOs being fetched if fetching ADRIOs as a batch."""
 
 
 @runtime_checkable
 class SimulationEvents(Protocol):
-    """Protocol for Simulations that support lifecycle events."""
+    """
+    Protocol for Simulations that support lifecycle events.
+    For correct operation, ensure that `on_start` is fired first,
+    then `on_tick` at least once, then finally `on_end`.
+    """
 
     on_start: Event[OnStart]
     """
@@ -168,7 +175,11 @@ class SimulationEvents(Protocol):
 
 @runtime_checkable
 class DynamicGeoEvents(Protocol):
-    """Protocol for DynamicGeos that support lifecycle events."""
+    """
+    Protocol for DynamicGeos that support lifecycle events.
+    For correct operation, ensure that `fetch_start` is fired first,
+    then `adrio_start` any number of times, then finally `fetch_end`.
+    """
 
     fetch_start: Event[FetchStart]
     """

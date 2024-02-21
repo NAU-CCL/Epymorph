@@ -85,7 +85,7 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
         if name not in self._adrios:
             raise AttributeException(f"Attribute not found in geo: '{name}'")
         if self._adrios[name]._cached_value is None:
-            self.adrio_start.publish(AdrioStart(name, None))
+            self.adrio_start.publish(AdrioStart(name, None, None))
         return self._adrios[name].get_value()
 
     @property
@@ -117,10 +117,11 @@ class DynamicGeo(Geo[DynamicGeoSpec]):
 
     def fetch_all(self) -> None:
         """Retrieves all Geo attributes from geospec object using ADRIOs"""
-        self.fetch_start.publish(FetchStart(len(self._adrios)))
+        num_adrios = len(self._adrios)
+        self.fetch_start.publish(FetchStart(num_adrios))
 
         def fetch_attribute(adrio: ADRIO, index: int) -> NDArray:
-            self.adrio_start.publish(AdrioStart(adrio.attrib, index))
+            self.adrio_start.publish(AdrioStart(adrio.attrib, index, num_adrios))
             return adrio.get_value()
 
         # initialize threads
