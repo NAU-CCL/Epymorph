@@ -93,7 +93,10 @@ def dynamic_geo_messaging(dyn: DynamicGeoEvents) -> Generator[None, None, None]:
         start_time = perf_counter()
 
     def adrio_start(event: AdrioStart) -> None:
-        print(f"Fetching {event.attribute}...[{event.index}/{event.adrio_len}]")
+        msg = f"Fetching {event.attribute}..."
+        if event.index is not None and event.adrio_len is not None:
+            msg = f"{msg} [{event.index + 1}/{event.adrio_len}]"
+        print(msg)
 
     def fetch_end(_: None) -> None:
         print("Complete.")
