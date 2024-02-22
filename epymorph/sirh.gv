@@ -1,0 +1,10 @@
+// sirh
+strict digraph {
+	rankdir=LR
+	node [shape=square]
+	S -> I [label="I*S*beta/Max(1, H + I + R + S)"]
+	H -> R [label="H/hospitalization_duration"]
+	R -> S [label="R*xi"]
+	I -> H [label="I*gamma*hospitalization_prob"]
+	I -> R [label="I*gamma*(1 - hospitalization_prob)"]
+}

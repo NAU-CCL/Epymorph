@@ -1,0 +1,10 @@
+// viztest
+strict digraph {
+	rankdir=LR
+	node [shape=square]
+	edge [minlen=2.0]
+	S -> I [label="I*S*(1.3 + 0.7*exp(-180*H))/(D*Max(1, I + R + S))"]
+	I -> R [label="I/D"]
+	I -> R [label="I/D+ I/L"]
+	R -> S [label="R/L"]
+}
