@@ -3,8 +3,8 @@ strict digraph {
 	rankdir=LR
 	node [shape=square]
 	edge [minlen=2.0]
-	S -> I [label="I*S*(1.3 + 0.7*exp(-180*H))/(D*Max(1, I + R + S))"]
-	I -> R [label="I/D"]
-	I -> R [label="I/D+ I/L"]
-	R -> S [label="R/L"]
+	S -> I [label=<<TABLE border="0"><TR><TD><IMG SRC="viz_temp_pngs/StoI.png"/></TD></TR></TABLE>>]
+	I -> R [label=<<TABLE border="0"><TR><TD><IMG SRC="viz_temp_pngs/ItoR.png"/></TD></TR></TABLE>>]
+	I -> R [label=<<TABLE border="0"><TR><TD><IMG SRC="viz_temp_pngs/ItoR.png"/></TD></TR></TABLE>>]
+	R -> S [label=<<TABLE border="0"><TR><TD><IMG SRC="viz_temp_pngs/RtoS.png"/></TD></TR></TABLE>>]
 }
