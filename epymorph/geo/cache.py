@@ -82,19 +82,16 @@ def export(geo_name: str, geo_path: Path, out: str | None, rename: str | None, i
         if geo is not None:
             geo.save(out_path)
 
-    # if uncached, fetch and export
-    elif geo_name in geo_library_dynamic:
-        geo = geo_library_dynamic.get(geo_name)
-        if geo is not None:
-            static_geo = convert_to_static_geo(geo())
-            if not ignore_cache:
-                static_geo.save(cache_out_file_path)
-            static_geo.save(out_path)
-
-    # if spec file passed, load from spec, fetch, and export
-    elif os.path.exists(geo_path):
-        geo = DF.load_from_spec(geo_path, adrio_maker_library)
-        static_geo = convert_to_static_geo(geo)
+    # if geo uncached or spec file passed, fetch and export
+    elif geo_name in geo_library_dynamic or os.path.exists(geo_path):
+        if geo_name in geo_library_dynamic:
+            geo_load = geo_library_dynamic.get(geo_name)
+            if geo_load is not None:
+                geo = geo_load()
+        else:
+            geo = DF.load_from_spec(geo_path, adrio_maker_library)
+        with dynamic_geo_messaging(geo):
+            static_geo = convert_to_static_geo(geo)
         if not ignore_cache:
             static_geo.save(cache_out_file_path)
         static_geo.save(out_path)
