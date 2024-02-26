@@ -11,7 +11,7 @@ from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
-from epymorph.logging.messaging import dynamic_geo_messaging
+from epymorph.log.messaging import dynamic_geo_messaging
 
 CACHE_PATH = user_cache_path(appname='epymorph', ensure_exists=True)
 
