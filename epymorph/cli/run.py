@@ -24,7 +24,7 @@ from epymorph.geo.dynamic import DynamicGeoFileOps
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeoFileOps
 from epymorph.initializer import initializer_library, normalize_init_params
-from epymorph.logging.messaging import sim_messaging
+from epymorph.log.messaging import sim_messaging
 from epymorph.movement.parser import MovementSpec, parse_movement_spec
 from epymorph.simulation import TimeFrame, default_rng, enable_logging
 

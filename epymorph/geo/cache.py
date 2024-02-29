@@ -11,7 +11,7 @@ from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
-from epymorph.logging.messaging import dynamic_geo_messaging
+from epymorph.log.messaging import dynamic_geo_messaging
 
 CACHE_PATH = user_cache_path(appname='epymorph', ensure_exists=True)
 
@@ -48,6 +48,56 @@ def fetch(geo_name_or_path: str) -> None:
             static_geo.save(file_path)
         else:
             raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')
+
+
+def export(geo_name: str, geo_path: Path, out: str | None, rename: str | None, ignore_cache: bool) -> None:
+    """
+    Exports a geo as a .geo.tar file to a location outside the cache.
+    If uncached, geo to export is also cached.
+    User can specify a destination path and new name for exported geo.
+    Raises a GeoCacheException if geo not found.
+    """
+    # check for out path specified
+    if out is not None:
+        if not os.path.exists(out):
+            raise GeoCacheException(f'specified output directory {out} not found.')
+        else:
+            out_dir = Path(out)
+    else:
+        out_dir = Path(os.getcwd())
+
+    # check for geo name specified
+    if rename is not None:
+        geo_exp_name = rename
+    else:
+        geo_exp_name = geo_name
+
+    out_path = out_dir / F.to_archive_filename(geo_exp_name)
+    cache_file_path = CACHE_PATH / F.to_archive_filename(geo_name)
+    cache_out_file_path = CACHE_PATH / F.to_archive_filename(geo_exp_name)
+
+    # if cached, copy cached file
+    if os.path.exists(cache_file_path):
+        geo = load_from_cache(geo_name)
+        if geo is not None:
+            geo.save(out_path)
+
+    # if geo uncached or spec file passed, fetch and export
+    elif geo_name in geo_library_dynamic or os.path.exists(geo_path):
+        if geo_name in geo_library_dynamic:
+            geo_load = geo_library_dynamic.get(geo_name)
+            if geo_load is not None:
+                geo = geo_load()
+        else:
+            geo = DF.load_from_spec(geo_path, adrio_maker_library)
+        with dynamic_geo_messaging(geo):
+            static_geo = convert_to_static_geo(geo)
+        if not ignore_cache:
+            static_geo.save(cache_out_file_path)
+        static_geo.save(out_path)
+
+    else:
+        raise GeoCacheException("Geo to export not found.")
 
 
 def remove(geo_name: str) -> None:
@@ -88,7 +138,7 @@ def save_to_cache(geo: Geo, geo_name: str) -> None:
     F.save_as_archive(static_geo, file_path)
 
 
-def load_from_cache(geo_name: str) -> Geo | None:
+def load_from_cache(geo_name: str) -> StaticGeo | None:
     """Checks whether a dynamic geo has already been cached and returns it if so."""
     file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     if not os.path.exists(file_path):
