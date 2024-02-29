@@ -1,15 +1,13 @@
 from graphviz import Digraph
 from sympy import Expr, Symbol, init_printing, preview
 from epymorph import ipm_library
-from epymorph.compartment_model import EdgeDef, ForkDef
+from epymorph.compartment_model import EdgeDef, ForkDef, CompartmentModel 
 from typing import List, Union
-from shutil import rmtree
-from os import mkdir
-
-""" define constants """
-
-# constant for directory in which edge label temp pngs will reside
-TEMP_PNG_DIR = 'viz_temp_pngs'
+from tempfile import NamedTemporaryFile
+from matplotlib.image import imread
+from os import path, makedirs
+from shutil import copy
+import matplotlib.pyplot as plt
 
 """ class for keeping track of the edges added to the visualization """
 class EdgeTracker():
@@ -48,86 +46,112 @@ class EdgeTracker():
         # not in list, return empty expression
         return None
 
+    """ clears all tracked edges """
+    def clear(self):
+        self.edge_dict.clear()
+
 
 
 """
 primary function for creating a model visualization, given an ipm label that 
 exists within the ipm library
 """
-def render_model(ipm_name: str) -> None:
+def render_model(ipm: CompartmentModel, save: bool = False, 
+                                                   filename: str = "") -> None:
 
-    # fetch ipm transition data
-    ipm_transitions = ipm_library[ipm_name]().transitions 
-    
-    # init graph for model visualization to save to png, strict flag makes it
-    # so repeated edges are merged
-    model_viz = Digraph(comment = ipm_name, format = 'png', strict=True)
+    # render model as a temp file
+    with NamedTemporaryFile(suffix = '.gv', delete=False) as temp_gv:
 
-    # set graph type to left-to-right
-    model_viz.attr(rankdir = 'LR')
+        # init a tracker to be used for tacking edges and edge labels
+        tracker = EdgeTracker()
 
-    # set node shape to square
-    model_viz.attr('node', shape='square')
-
-    # set a minimum edge length
-    model_viz.attr('edge', minlen='2.0')
-
-    # init directory for temp ledge label png files
-    mkdir(TEMP_PNG_DIR)
-
-    # add ipm edges to graph
-    add_ipm_edges(model_viz, ipm_transitions)
-
-    # render png of graph
-    model_viz.render(f"{ipm_name}.gv")
-
-    # clear temp png directory file
-    rmtree(TEMP_PNG_DIR)
-
-
-"""
-given a graphviz graph and a set of ipm transitions, maps transitions to graph
-"""
-def add_ipm_edges(graph: Digraph, 
-                           transitions: List[Union[EdgeDef, ForkDef]]) -> None:
-
-    # enable printing for LaTeX labels
-    init_printing(use_latex = True)
-
-    # init tracker to keep track of edge data
-    tracker = EdgeTracker()
-
-    # iterate through transition list
-    for transition in transitions:
+        # fetch ipm transition data
+        ipm_transitions = ipm.transitions
         
-        # handle a fork
-        if (type(transition) == ForkDef):
+        # init graph for model visualization to save to png, strict flag makes
+        # it so repeated edges are merged
+        model_viz = Digraph(format = 'png', strict=True,
+                            graph_attr = {'rankdir': 'LR'},
+                            node_attr = {'shape': 'square',
+                                         'width': '.9',
+                                         'height': '.8'},
+                            edge_attr = {'minlen': '2.0'})
 
-            # add fork edges to list
-            transitions += transition.edges
+        # clear graph so repeated calls of render model do not repeat edges
+        model_viz.clear(keep_attrs=True)
 
-        # transition is a normal edge
-        else:
+        # clear tracker, see above
+        tracker.clear()
 
-            # get current edge head and tail
-            curr_head = str(transition.compartment_from)
-            curr_tail = str(transition.compartment_to)
 
-            # add edge to tracker
-            tracker.track_edge(curr_head, curr_tail, transition.rate)
+        # render edges
+        for transition in ipm_transitions:
 
-            # get the sanitized label expression from the tracker
-            label_expr = tracker.get_edge_label(curr_head, curr_tail)
+            # check for fork
+            if isinstance(transition, ForkDef):
 
-            # form file path to save label into
-            label_path = f'{TEMP_PNG_DIR}/{curr_head}to{curr_tail}.png'
+                # add fork transitions to list
+                ipm_transitions += transition.edges
 
-            # save label as a LaTeX png
-            preview(label_expr, viewer='file', filename=label_path,
+            # transition is an edge
+            else:
+
+                # get the current head and tail of the edge
+                curr_head, curr_tail = str(transition.compartment_from), \
+                                                 str(transition.compartment_to)
+                
+                # add edge to tracker, using the rate as the label
+                tracker.track_edge(curr_head, curr_tail, transition.rate)
+
+                # get santized edge label from newly tracked edge
+                label_expr = tracker.get_edge_label(curr_head, curr_tail)
+
+                # create a temporary png file to render LaTeX edge label
+                with NamedTemporaryFile(suffix='.png', 
+                                                     delete=False) as temp_png:
+
+                    # load label as LaTeX png into temp file
+                    preview(label_expr, viewer='file', filename=temp_png.name, 
                                                                    euler=False)
 
-            # add edge to graphviz graph with label from tracker
-            graph.edge(curr_head, curr_tail, png_to_label(label_path))
+                    # render edge
+                    model_viz.edge(curr_head, curr_tail, 
+                                             label=png_to_label(temp_png.name))
+
+        # render png of graph
+        model_viz.render(temp_gv.name)
+
+        # get the optimal size for the rendered graph
+        plt.figure(dpi=find_optimal_dpi(f'{temp_gv.name}.png'))
+
+
+        # show the png 
+        ipm_png = imread(f'{temp_gv.name}.png')
+        plt.imshow(ipm_png)
+        plt.axis('off')
+        plt.show()
+
+        # check if image should be saved
+        if save:
+            
+            # ensure filename not empty
+            if filename:
+
+                # create visualization directory if it doesn't exist
+                if not path.exists('model_pngs'):
+
+                    # doesn't exist, create the directory
+                    makedirs('model_pngs')
+
+                # copy temp file to png directory to save it
+                copy(f'{temp_gv.name}.png', f'model_pngs/{filename}.png')
+
+            # file name is empty, print err message
+            else:
+
+                print("ERR: no file name provided, could not save model")
+
+
 
 """
 helper function for displaying an image label using graphvz, requires the image
@@ -139,4 +163,26 @@ def png_to_label(png_filepath: str) -> str:
                                                           '</TD></TR></TABLE>>'
     )
 
-render_model('viztest')
+"""
+helper function for determining the best dpi (which determines size) for 
+displaying the given ipm model .png using motplotlib
+"""
+def find_optimal_dpi(ipm_png_filename: str) -> int:
+    # init dpi to start at 100
+    opt_dpi = 100
+
+    # get the size of the png file
+    png_size = path.getsize(ipm_png_filename)
+
+    # for every 10k bytes, increase the dpi
+    while (png_size > 10000):
+
+        # increase the dpi by 50
+        opt_dpi += 50
+
+        # remove 10 kbytes from the size for loop control
+        png_size -= 10000
+
+    # return the determined dpi
+    return opt_dpi
+
