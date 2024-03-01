@@ -3,9 +3,10 @@ The basis of the intra-population model (disease mechanics) system in epymorph.
 This represents disease mechanics using a compartmental model for tracking
 populations as groupings of integer-numbered individuals.
 """
+import re
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Sequence
 
 from sympy import Expr, Float, Integer, Symbol
 
@@ -244,6 +245,46 @@ class CompartmentModel:
         """The names of all events in the order they were declared."""
         return [f"{e.compartment_from} → {e.compartment_to}"
                 for e in self.events]
+
+    @cached_property
+    def event_src_dst(self) -> Sequence[tuple[str, str]]:
+        """All events represented as a tuple of the source compartment and destination compartment."""
+        return [(str(e.compartment_from), str(e.compartment_to)) for e in self.events]
+
+    def _compile_pattern(self, pattern: str) -> re.Pattern:
+        """Turn a pattern string (which is custom syntax) into a regular expression."""
+        # We're not interpreting pattern as a regex directly, so escape any special characters.
+        # Then replace '*' with the necessary regex.
+        escaped_pattern = re.escape(pattern).replace(r'\*', '[^_]+')
+        # Compile with anchors so it matches the entire string.
+        return re.compile(f"^{escaped_pattern}$")
+
+    def events_by_src(self, pattern: str) -> tuple[int, ...]:
+        """
+        Get the indices of IPM events by the source compartment.
+        The `pattern` argument supports using asterisk as a wildcard character,
+        matching anything besides underscores.
+        """
+        regex = self._compile_pattern(pattern)
+        return tuple((i for i, (src, _) in enumerate(self.event_src_dst) if regex.match(src)))
+
+    def events_by_dst(self, pattern: str) -> tuple[int, ...]:
+        """
+        Get the indices of IPM events by the destination compartment.
+        The `pattern` argument supports using asterisk as a wildcard character,
+        matching anything besides underscores.
+        """
+        regex = self._compile_pattern(pattern)
+        return tuple((i for i, (_, dst) in enumerate(self.event_src_dst) if regex.match(dst)))
+
+    def compartments_by(self, pattern: str) -> tuple[int, ...]:
+        """
+        Get the indices of IPM compartments.
+        The `pattern` argument supports using asterisk as a wildcard character,
+        matching anything besides underscores.
+        """
+        regex = self._compile_pattern(pattern)
+        return tuple((i for i, e in enumerate(self.compartment_names) if regex.match(e)))
 
 
 def create_model(symbols: CompartmentSymbols, transitions: Iterable[TransitionDef]) -> CompartmentModel:
