@@ -15,6 +15,7 @@ class ipmDraw():
 
     def jupyter(graph: Digraph):
         """draws the graph in a jupyter notebook"""
+
         display.display_png(graph)
 
     def console(graph: Digraph):
@@ -40,9 +41,13 @@ class ipmDraw():
 
 class EdgeTracker():
     """ class for keeping track of the edges added to the visualization """
-
-    edge_dict = {}
-    """ dictionary for tracking edges, key = (head, tail) value = edge label"""
+    
+    def __init__(self):
+        self.edge_dict = {}
+        """
+        dictionary for tracking edges, key = (head, tail) 
+        value = edge label
+        """
 
     def track_edge(self, head: str, tail: str, label: Expr) -> None:
         """ 
@@ -75,14 +80,8 @@ class EdgeTracker():
         # not in list, return empty expression
         return None
 
-    def clear(self):
-        """ clears all tracked edges """
-
-        self.edge_dict.clear()
-
 
 def build_ipm_graph(ipm: CompartmentModel) -> Digraph:
-        
     """
     primary function for creating a model visualization, given an ipm label 
     that exists within the ipm library
@@ -90,8 +89,8 @@ def build_ipm_graph(ipm: CompartmentModel) -> Digraph:
     # init a tracker to be used for tacking edges and edge labels
     tracker = EdgeTracker()
 
-    # fetch ipm transition data
-    ipm_transitions = ipm.transitions
+    # fetch ipm event data
+    ipm_events = ipm.events
     
     # init graph for model visualization to save to png, strict flag makes
     # it so repeated edges are merged
@@ -102,45 +101,30 @@ def build_ipm_graph(ipm: CompartmentModel) -> Digraph:
                                      'height': '.8'},
                         edge_attr = {'minlen': '2.0'})
 
-    # clear graph so repeated calls of render model do not repeat edges
-    model_viz.clear(keep_attrs=True)
-
-    # clear tracker, see above
-    tracker.clear()
-
     # render edges
-    for transition in ipm_transitions:
+    for event in ipm_events:
 
-        # check for fork
-        if isinstance(transition, ForkDef):
+        # get the current head and tail of the edge
+        curr_head, curr_tail = str(event.compartment_from), \
+                                         str(event.compartment_to)
+        
+        # add edge to tracker, using the rate as the label
+        tracker.track_edge(curr_head, curr_tail, event.rate)
 
-            # add fork transitions to list
-            ipm_transitions += transition.edges
+        # get santized edge label from newly tracked edge
+        label_expr = tracker.get_edge_label(curr_head, curr_tail)
 
-        # transition is an edge
-        else:
+        # create a temporary png file to render LaTeX edge label
+        with NamedTemporaryFile(suffix='.png', 
+                                             delete=False) as temp_png:
 
-            # get the current head and tail of the edge
-            curr_head, curr_tail = str(transition.compartment_from), \
-                                             str(transition.compartment_to)
-            
-            # add edge to tracker, using the rate as the label
-            tracker.track_edge(curr_head, curr_tail, transition.rate)
+            # load label as LaTeX png into temp file
+            preview(label_expr, viewer='file', filename=temp_png.name, 
+                                                           euler=False)
 
-            # get santized edge label from newly tracked edge
-            label_expr = tracker.get_edge_label(curr_head, curr_tail)
-
-            # create a temporary png file to render LaTeX edge label
-            with NamedTemporaryFile(suffix='.png', 
-                                                 delete=False) as temp_png:
-
-                # load label as LaTeX png into temp file
-                preview(label_expr, viewer='file', filename=temp_png.name, 
-                                                               euler=False)
-
-                # render edge
-                model_viz.edge(curr_head, curr_tail, 
-                                         label=png_to_label(temp_png.name))
+            # render edge
+            model_viz.edge(curr_head, curr_tail, 
+                                     label=png_to_label(temp_png.name))
 
     # return created visualization graph
     return model_viz
@@ -200,4 +184,4 @@ def png_to_label(png_filepath: str) -> str:
         f'<<TABLE border="0"><TR><TD><IMG SRC="{png_filepath}"/>' +
                                                           '</TD></TR></TABLE>>'
     )
-
+render(ipm_library['pei'](), console=True)
