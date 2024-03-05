@@ -184,4 +184,3 @@ def png_to_label(png_filepath: str) -> str:
         f'<<TABLE border="0"><TR><TD><IMG SRC="{png_filepath}"/>' +
                                                           '</TD></TR></TABLE>>'
     )
-render(ipm_library['pei'](), console=True)
