@@ -72,6 +72,8 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
     _adrios: dict[str, ADRIO]
 
     def __init__(self, spec: DynamicGeoSpec, adrios: dict[str, ADRIO]):
+        if not LABEL.name in adrios:
+            raise ValueError("Geo must contain an attribute called 'label'.")
         self._adrios = adrios
         labels = self._adrios[LABEL.name].get_value()
         super().__init__(spec, len(labels))

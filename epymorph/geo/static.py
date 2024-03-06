@@ -28,6 +28,9 @@ class StaticGeo(Geo[StaticGeoSpec]):
     values: dict[str, NDArray]
 
     def __init__(self, spec: StaticGeoSpec, values: dict[str, NDArray]):
+        if not LABEL.name in values or not np.issubdtype(values[LABEL.name].dtype, np.str_):
+            msg = "Geo must contain an attribute called 'label' of type string."
+            raise ValueError(msg)
         self.values = values
         super().__init__(spec, len(values[LABEL.name]))
 
@@ -39,7 +42,7 @@ class StaticGeo(Geo[StaticGeoSpec]):
     @property
     def labels(self) -> NDArray[np.str_]:
         """The labels for every node in this geo."""
-        return self.values[LABEL.name]
+        return self.values[LABEL.name]  # type: ignore (constructor check should be sufficient)
 
     def validate(self) -> None:
         """
