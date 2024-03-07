@@ -19,14 +19,16 @@ from epymorph.error import AttributeException, GeoValidationException
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, StaticGeoSpec,
                                validate_geo_values)
+from epymorph.simulation import AttributeArray
 from epymorph.util import NDIndices, as_sorted_dict
 
 
 class StaticGeo(Geo[StaticGeoSpec]):
     """A Geo implementation which contains all of data pre-fetched and in-memory."""
 
-    values: dict[str, NDArray]
+    values: dict[str, AttributeArray]
 
+    # def __init__(self, spec: StaticGeoSpec, values: dict[str, AttributeArray]):
     def __init__(self, spec: StaticGeoSpec, values: dict[str, NDArray]):
         if not LABEL.name in values or not np.issubdtype(values[LABEL.name].dtype, np.str_):
             msg = "Geo must contain an attribute called 'label' of type string."
@@ -34,10 +36,13 @@ class StaticGeo(Geo[StaticGeoSpec]):
         self.values = values
         super().__init__(spec, len(values[LABEL.name]))
 
-    def __getitem__(self, name: str) -> NDArray:
+    def __getitem__(self, name: str, /) -> AttributeArray:
         if name not in self.values:
             raise AttributeException(f"Attribute not found in geo: '{name}'")
         return self.values[name]
+
+    def __contains__(self, name: str, /) -> bool:
+        return name in self.values
 
     @property
     def labels(self) -> NDArray[np.str_]:

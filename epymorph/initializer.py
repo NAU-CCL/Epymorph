@@ -225,7 +225,7 @@ def top_locations(ctx: InitContext, attribute: str, num_locations: int, seed_siz
     selecting the top locations as measured by a given geo attribute.
     """
     N = ctx.dim.nodes
-    if not isinstance(attribute, str) or not attribute in ctx.geo.spec.attribute_map:
+    if not isinstance(attribute, str) or not attribute in ctx.geo:
         raise InitException.for_arg(
             'attribute', 'Must name an existing attribute in the geo.')
     if not isinstance(num_locations, int) or not 0 < num_locations <= N:
@@ -250,7 +250,7 @@ def bottom_locations(ctx: InitContext, attribute: str, num_locations: int, seed_
     selecting the bottom locations as measured by a given geo attribute.
     """
     N = ctx.dim.nodes
-    if not isinstance(attribute, str) or not attribute in ctx.geo.spec.attribute_map:
+    if not isinstance(attribute, str) or not attribute in ctx.geo:
         raise InitException.for_arg(
             'attribute', 'Must name an existing attribute in the geo.')
     if not isinstance(num_locations, int) or not 0 < num_locations <= N:

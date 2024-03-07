@@ -1,5 +1,6 @@
 """General simulation data types, events, and utility functions."""
 import logging
+from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import partial
@@ -9,6 +10,7 @@ from typing import (Any, Callable, NamedTuple, Protocol, Self, Sequence,
 
 import numpy as np
 from numpy.random import SeedSequence
+from numpy.typing import NDArray
 
 from epymorph.code import ImmutableNamespace, base_namespace
 from epymorph.util import Event, pairwise_haversine, row_normalize
@@ -19,8 +21,22 @@ This is the numpy datatype that should be used to represent internal simulation 
 Where segments of the application maintain compartment and/or event counts,
 they should take pains to use this type at all times (if possible).
 """
-
 # SimDType being centrally-located means we can change it reliably.
+
+
+AttributeArray = NDArray[np.int64 | np.float64 | np.str_]
+
+
+class DataSource(Protocol):
+    """A generic simulation data source."""
+
+    @abstractmethod
+    def __getitem__(self, name: str, /) -> AttributeArray:
+        raise NotImplementedError
+
+    @abstractmethod
+    def __contains__(self, name: str, /) -> bool:
+        raise NotImplementedError
 
 
 def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:

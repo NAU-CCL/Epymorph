@@ -9,6 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.geo.spec import GeoSpec
+from epymorph.simulation import AttributeArray
 
 SpecT = TypeVar('SpecT', bound=GeoSpec)
 
@@ -32,6 +33,12 @@ class Geo(Generic[SpecT], ABC):
         self.spec = spec
         self.nodes = nodes
 
+    # Implement DataSource protocol
+
     @abstractmethod
-    def __getitem__(self, name: str) -> NDArray:
+    def __getitem__(self, name: str, /) -> AttributeArray:
+        pass
+
+    @abstractmethod
+    def __contains__(self, name: str, /) -> bool:
         pass

@@ -48,7 +48,7 @@ class StandardMovementExecutor(MovementExecutor):
     def __init__(self, ctx: RumeContext):
         # If we were given a MovementSpec, we need to compile it to get its clauses.
         if isinstance(ctx.mm, MovementSpec):
-            self._model = compile_spec(ctx, ctx.mm)
+            self._model = compile_spec(ctx.mm, ctx.rng)
         else:
             self._model = ctx.mm
 

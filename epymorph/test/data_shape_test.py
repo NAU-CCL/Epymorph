@@ -428,6 +428,7 @@ class TestParseShape(unittest.TestCase):
         eq(parse_shape('T'), Shapes.T)
         eq(parse_shape('Tx9'), Shapes.TxA(9))
         eq(parse_shape('N'), Shapes.N)
+        eq(parse_shape('NxN'), Shapes.NxN)
         eq(parse_shape('Nx20'), Shapes.NxA(20))
         eq(parse_shape('TxN'), Shapes.TxN)
         eq(parse_shape('TxNx2'), Shapes.TxNxA(2))
@@ -441,7 +442,6 @@ class TestParseShape(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_shape(s)
 
-        test('NxN')
         test('NxNx32')
         test('TxNxN')
         test('TxNxNx4')

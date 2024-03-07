@@ -18,7 +18,7 @@ from epymorph.error import (AttributeException, CompilationException,
                             ValidationException, error_gate)
 from epymorph.geo.geo import Geo
 from epymorph.initializer import DEFAULT_INITIALIZER, Initializer
-from epymorph.movement.movement_model import MovementModel
+from epymorph.movement.movement_model import MovementModel, validate_mm
 from epymorph.movement.parser import MovementSpec
 from epymorph.params import ContextParams, Params
 from epymorph.simulation import (OnStart, SimDimensions, SimDType, SimTick,
@@ -121,8 +121,9 @@ class StandardSimulation(SimulationEvents):
         """Validate the simulation."""
         with error_gate("validating the simulation", ValidationException, CompilationException):
             ctx = RumeContext.from_config(self._config)
+            check_attribute_declarations(ctx.ipm, ctx.mm)
             # ctx.validate_geo() # validate only the required geo parameters?
-            # ctx.validate_mm()
+            validate_mm(ctx.mm.attributes, ctx.dim, ctx.geo, ctx.params)
             ctx.validate_ipm()
             # ctx.validate_init()
 
@@ -176,3 +177,26 @@ class StandardSimulation(SimulationEvents):
 
         self.on_end.publish(None)
         return out
+
+
+def check_attribute_declarations(ipm: CompartmentModel, mm: MovementModel | MovementSpec) -> None:
+    """
+    Check that the IPM's and MM's declared attributes are compatible.
+    Raises ValidationException on any incompatibility.
+    """
+    # NOTE: for now, any overlapping declarations must be strictly equal,
+    # but this should be relaxed when MMs support shape polymorphism.
+    ipm_attrs = {a.name: a for a in ipm.attributes}
+    mm_attrs = {a.name: a for a in mm.attributes}
+    for name in set(ipm_attrs.keys()).intersection(mm_attrs.keys()):
+        a1 = ipm_attrs[name]
+        a2 = mm_attrs[name]
+        if not a1.source == a2.source:
+            msg = f"Both the IPM and MM declare attribute '{name}', but they are not from the same source ({a1.source} vs {a2.source})."
+            raise ValidationException(msg)
+        if not np.issubdtype(a1.dtype_as_np, a2.dtype):
+            msg = f"Both the IPM and MM declare attribute '{name}', but they are not a type match ({a1.dtype_as_np} vs {np.dtype(a2.dtype)})."
+            raise ValidationException(msg)
+        if not a1.shape == a2.shape:
+            msg = f"Both the IPM and MM declare attribute '{name}', but they are not a shape match ({a1.shape} vs {a2.shape})."
+            raise ValidationException(msg)

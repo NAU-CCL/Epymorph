@@ -5,7 +5,9 @@ import os
 from argparse import _SubParsersAction
 from datetime import date
 
+import numpy as np
 import tomli_w
+from numpy.typing import DTypeLike
 
 from epymorph.cli.run import RunInput, interactive_select
 from epymorph.data import geo_library, ipm_library, mm_library
@@ -41,6 +43,15 @@ def define_argparser(command_parser: _SubParsersAction):
     ))
 
 
+def _placeholder_value(dtype: DTypeLike):
+    if np.issubdtype(dtype, np.int64):
+        return 1
+    elif np.issubdtype(dtype, np.float64):
+        return 1.0
+    elif np.issubdtype(dtype, np.str_):
+        return "placeholder"
+
+
 def prepare_run_toml(out_path: str,
                      ipm_name: str | None,
                      mm_name: str | None,
@@ -67,6 +78,19 @@ def prepare_run_toml(out_path: str,
     if geo_name is None:
         geo_name = interactive_select("GEO", geo_library)
 
+    ipm = ipm_library[ipm_name]()
+    mm = mm_library[mm_name]()
+
+    attributes = {
+        attrib.name: _placeholder_value(attrib.dtype_as_np)
+        for attrib in ipm.attributes
+        if attrib.source == 'params'
+    } | {
+        attrib.name: _placeholder_value(attrib.dtype)
+        for attrib in mm.attributes
+        if attrib.source == 'params'
+    }
+
     document = RunInput(
         ipm=ipm_name,
         mm=mm_name,
@@ -79,12 +103,7 @@ def prepare_run_toml(out_path: str,
             'location': 0,
             'seed_size': 10_000,
         },
-        params={
-            # TODO: would like to inspect IPM/MM to figure
-            # out which params are needed and list them here
-            # But for now, just a placeholder...
-            "example_parameter": 0.5,
-        }
+        params=attributes,
     )
 
     try:

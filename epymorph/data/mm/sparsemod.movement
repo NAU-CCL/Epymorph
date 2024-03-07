@@ -1,4 +1,17 @@
+# Modeled after the SPARSEMOD COVID-19 paper, this model simulates
+# movement using a distance kernel parameterized by phi, and using a commuters
+# matrix to determine the total expected number of commuters.
+
 [move-steps: per-day=2; duration=[1/3, 2/3]]
+
+[attrib: source=geo; name=centroid; shape=N; dtype=[(longitude, float), (latitude, float)];
+    description="The centroids for each node as (longitude, latitude) tuples."]
+
+[attrib: source=geo; name=commuters; shape=NxN; dtype=int;
+    description="A node-to-node commuters matrix."]
+
+[attrib: source=params; name=phi; shape=S; dtype=float;
+    description="Influences the distance that movers tend to travel."]
 
 [predef: function = 
 def sparsemod_predef():
