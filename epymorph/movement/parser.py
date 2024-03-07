@@ -2,14 +2,17 @@
 from typing import Literal, NamedTuple, cast
 
 import pyparsing as P
+from numpy.typing import DTypeLike
 
 import epymorph.movement.parser_util as p
+from epymorph.data_shape import DataShape
 from epymorph.error import MmParseException
 
 # A MovementSpec has the following object structure:
 #
 # - MovementSpec
 #   - MoveSteps (1)
+#   - Attribute (0 or more)
 #   - Predef (0 or 1)
 #   - MovementClause (1 or more)
 
@@ -25,8 +28,8 @@ class MoveSteps(NamedTuple):
 
 
 move_steps: P.ParserElement = p.tag('move-steps', [
-    p.field('per-day', p.integer('num_steps')),
-    p.field('duration', p.num_list('steps'))
+    p.field('per-day', p.integer)('num_steps'),
+    p.field('duration', p.num_list)('steps')
 ])
 
 
@@ -35,6 +38,37 @@ def marshal_move_steps(results: P.ParseResults):
     """Convert a pyparsing result to a MoveSteps."""
     fields = results.as_dict()
     return MoveSteps(fields['steps'])
+
+
+############################################################
+# Attributes
+############################################################
+
+
+class Attribute(NamedTuple):
+    """The data model for an Attribute clause."""
+    # TODO: maybe replace with epymorph.simulation.AttributeDef in v0.5
+    name: str
+    shape: DataShape
+    dtype: DTypeLike  # TODO: replace with DataDType in v0.5?
+    source: Literal['geo', 'params']
+    description: str
+
+
+attribute: P.ParserElement = p.tag('attrib', [
+    p.field('source', P.one_of('geo params')),
+    p.field('name', p.name),
+    p.field('shape', p.shape),
+    p.field('dtype', p.dtype),
+    p.field('description', p.quoted),
+])
+
+
+@attribute.set_parse_action
+def marshal_attribute(results: P.ParseResults):
+    """Convert a pyparsing result to an Attribute."""
+    fields = results.as_dict()
+    return Attribute(fields['name'], fields['shape'], fields['dtype'][0], fields['source'], fields['description'])
 
 
 ############################################################
@@ -90,11 +124,11 @@ class DailyClause(NamedTuple):
 
 
 daily: P.ParserElement = p.tag('mtype', [
-    p.field('days', ('all' | day_list)('days')),
-    p.field('leave', p.integer('leave')),
-    p.field('duration', p.duration('duration')),
-    p.field('return', p.integer('return')),
-    p.field('function', p.fn_body('function'))
+    p.field('days', ('all' | day_list)),
+    p.field('leave', p.integer),
+    p.field('duration', p.duration),
+    p.field('return', p.integer),
+    p.field('function', p.fn_body)
 ])
 """
 Parser for a DailyClause. e.g.:
@@ -144,6 +178,7 @@ MovementClause = DailyClause
 class MovementSpec(NamedTuple):
     """The data model for a movement model spec."""
     steps: MoveSteps
+    attributes: list[Attribute]
     predef: Predef | None
     clauses: list[MovementClause]
 
@@ -160,6 +195,7 @@ def parse_movement_spec(string: str) -> MovementSpec:
 
 movement_spec = P.OneOrMore(
     move_steps |
+    attribute |
     predef |
     daily
 ).ignore(p.code_comment)
@@ -170,6 +206,7 @@ movement_spec = P.OneOrMore(
 def marshal_movement(instring: str, loc: int, results: P.ParseResults):
     """Convert a pyparsing result to a MovementSpec."""
     s = [x for x in results if isinstance(x, MoveSteps)]
+    a = [x for x in results if isinstance(x, Attribute)]
     c = [x for x in results if isinstance(x, MovementClause)]
     d = [x for x in results if isinstance(x, Predef)]
     if len(s) < 1 or len(s) > 1:
@@ -183,4 +220,4 @@ def marshal_movement(instring: str, loc: int, results: P.ParseResults):
         raise P.ParseException(instring, loc, msg)
 
     predef_clause = d[0] if len(d) == 1 else None
-    return P.ParseResults(MovementSpec(steps=s[0], predef=predef_clause, clauses=c))
+    return P.ParseResults(MovementSpec(steps=s[0], attributes=a, predef=predef_clause, clauses=c))

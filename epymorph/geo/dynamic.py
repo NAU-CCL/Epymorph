@@ -15,7 +15,8 @@ from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
                                validate_geo_values)
-from epymorph.simulation import AdrioStart, DynamicGeoEvents, FetchStart
+from epymorph.simulation import (AdrioStart, AttributeArray, DynamicGeoEvents,
+                                 FetchStart)
 from epymorph.util import Event, MemoDict
 
 
@@ -83,12 +84,15 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
         self.adrio_start = Event()
         self.fetch_end = Event()
 
-    def __getitem__(self, name: str) -> NDArray:
+    def __getitem__(self, name: str, /) -> AttributeArray:
         if name not in self._adrios:
             raise AttributeException(f"Attribute not found in geo: '{name}'")
         if self._adrios[name]._cached_value is None:
             self.adrio_start.publish(AdrioStart(name, None, None))
         return self._adrios[name].get_value()
+
+    def __contains__(self, name: str, /) -> bool:
+        return name in self._adrios
 
     @property
     def labels(self) -> NDArray[np.str_]:

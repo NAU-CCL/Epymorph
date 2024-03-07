@@ -1,9 +1,13 @@
 # pylint: disable=missing-docstring
 import unittest
 
+import numpy as np
 from pyparsing import ParseBaseException
 
-from epymorph.movement.parser import DailyClause, MoveSteps, daily, move_steps
+from epymorph.data_shape import Shapes
+from epymorph.geo.spec import CentroidDType
+from epymorph.movement.parser import (Attribute, DailyClause, MoveSteps,
+                                      attribute, daily, move_steps)
 from epymorph.movement.parser_util import Duration
 
 
@@ -32,6 +36,37 @@ class TestMoveSteps(unittest.TestCase):
             '[move-steps: duration=[2/3, 1/3]; per-day=2]',
             '[move-steps: per-day=2; duration=[]]',
             '[move-steps-2: per-day=2; duration=[]]'
+        ]
+        for c in cases:
+            with self.assertRaises(ParseBaseException):
+                move_steps.parse_string(c)
+
+
+class TestAttribute(unittest.TestCase):
+    def test_successful(self):
+        cases = [
+            '[attrib: source=geo; name=commuters; shape=NxN; dtype=int; description="hey1"]',
+            '[attrib: source=params; name=move_control; shape=TxN; dtype=float; description="hey2"]',
+            '[attrib: source=params; name=move_control; shape=TxN; dtype=float;\n    description="hey3"]',
+            '[attrib:\nsource=params;\nname=theta;\nshape=S;\ndtype=str;\ndescription="hey4"]',
+            '[attrib: source=geo; name=centroids; shape=N; dtype=[(longitude, float), (latitude, float)]; description="hey5"]',
+        ]
+        exps = [
+            Attribute('commuters', Shapes.NxN, np.int64, 'geo', 'hey1'),
+            Attribute('move_control', Shapes.TxN, np.float64, 'params', 'hey2'),
+            Attribute('move_control', Shapes.TxN, np.float64, 'params', 'hey3'),
+            Attribute('theta', Shapes.S, np.str_, 'params', 'hey4'),
+            Attribute('centroids', Shapes.N, CentroidDType, 'geo', 'hey5'),
+        ]
+        for c, e in zip(cases, exps):
+            a = attribute.parse_string(c)[0]
+            self.assertEqual(a, e, f"{str(a)} did not match {str(e)}")
+
+    def test_failures(self):
+        cases = [
+            '[attrib: source=blah; name=commuters; shape=NxN; dtype=int; description="hey1"]',
+            '[attrib: source=params; name=move_control; shape=TxN; dtype=uint8; description="hey2"]',
+            '[attrib: source=params; name=move_control; shape=TxA; dtype=float; description="hey3"]',
         ]
         for c in cases:
             with self.assertRaises(ParseBaseException):
