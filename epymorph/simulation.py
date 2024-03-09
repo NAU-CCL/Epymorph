@@ -5,15 +5,14 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import partial
 from importlib import reload
-from typing import (Any, Callable, NamedTuple, Protocol, Self, Sequence,
-                    runtime_checkable)
+from typing import Any, Callable, NamedTuple, Protocol, Self, Sequence
 
 import numpy as np
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
 
 from epymorph.code import ImmutableNamespace, base_namespace
-from epymorph.util import Event, pairwise_haversine, row_normalize
+from epymorph.util import pairwise_haversine, row_normalize
 
 SimDType = np.int64
 """
@@ -129,82 +128,6 @@ class SimDimensions(NamedTuple):
     N: number of geo nodes;
     C: number of IPM compartments;
     E: number of IPM events (transitions)
-    """
-
-
-class OnStart(NamedTuple):
-    """The payload of a Simulation on_start event."""
-    dim: SimDimensions
-    time_frame: TimeFrame
-
-
-class SimTick(NamedTuple):
-    """The payload of a Simulation tick event."""
-    tick_index: int
-    percent_complete: float
-
-
-class FetchStart(NamedTuple):
-    """The payload of a DynamicGeo fetch_start event."""
-    adrio_len: int
-
-
-class AdrioStart(NamedTuple):
-    """The payload of a DynamicGeo adrio_start event."""
-    attribute: str
-    index: int | None
-    """An index assigned to this ADRIO if fetching ADRIOs as a batch."""
-    adrio_len: int | None
-    """The total number of ADRIOs being fetched if fetching ADRIOs as a batch."""
-
-
-@runtime_checkable
-class SimulationEvents(Protocol):
-    """
-    Protocol for Simulations that support lifecycle events.
-    For correct operation, ensure that `on_start` is fired first,
-    then `on_tick` at least once, then finally `on_end`.
-    """
-
-    on_start: Event[OnStart]
-    """
-    Event fires at the start of a simulation run. Payload is a subset of the context for this run.
-    """
-
-    on_tick: Event[SimTick] | None
-    """
-    Optional event which fires after each tick has been processed.
-    Event payload is a tuple containing the tick index just completed (an integer),
-    and the percentage complete (a float).
-    """
-
-    on_end: Event[None]
-    """
-    Event fires after a simulation run is complete.
-    """
-
-
-@runtime_checkable
-class DynamicGeoEvents(Protocol):
-    """
-    Protocol for DynamicGeos that support lifecycle events.
-    For correct operation, ensure that `fetch_start` is fired first,
-    then `adrio_start` any number of times, then finally `fetch_end`.
-    """
-
-    fetch_start: Event[FetchStart]
-    """
-    Event that fires when geo begins fetching attributes. Payload is the number of ADRIOs.
-    """
-
-    adrio_start: Event[AdrioStart]
-    """
-    Event that fires when an individual ADRIO begins data retreival. Payload is the attribute name and index.
-    """
-
-    fetch_end: Event[None]
-    """
-    Event that fires when data retreival is complete.
     """
 
 

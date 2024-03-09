@@ -107,11 +107,14 @@ class HypercubeWorld(World):
         self.ledger[return_tick + 1, :, :, :] += travelers
         self.time_frontier = max(self.time_frontier, return_tick + 2)
 
-    def apply_return(self, tick: Tick) -> int:
-        total = self.ledger[self.time_offset + 1, :, :, :].sum(dtype=SimDType)
-        movers = self.ledger[self.time_offset + 1, :, :, :].sum(
+    def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
+        # we have to transpose the movers "stats" result since they're being stored here as
+        # (home, visiting) and our result needs to be
+        # (moving from "visiting", moving to "home")
+        movers = self.ledger[self.time_offset + 1, :, :, :].transpose((1, 0, 2)).copy()
+        movers_by_home = self.ledger[self.time_offset + 1, :, :, :].sum(
             axis=1, dtype=SimDType) * self._ident
-        self.ledger[self.time_offset + 1, :, :, :] = movers + \
+        self.ledger[self.time_offset + 1, :, :, :] = movers_by_home + \
             self.ledger[self.time_offset, :, :, :]
         self.time_offset += 1  # assumes there's only ever one return clause per tick
-        return total
+        return movers if return_stats else None

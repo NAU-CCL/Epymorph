@@ -2,8 +2,8 @@ from contextlib import contextmanager
 from time import perf_counter
 from typing import Generator
 
-from epymorph.simulation import (AdrioStart, DynamicGeoEvents, FetchStart,
-                                 OnStart, SimTick, SimulationEvents)
+from epymorph.event import (AdrioStart, DynamicGeoEvents, FetchStart, OnStart,
+                            OnTick, SimulationEvents)
 from epymorph.util import progress, subscriptions
 
 
@@ -49,7 +49,7 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
         nonlocal start_time
         start_time = perf_counter()
 
-    def on_tick(tick: SimTick) -> None:
+    def on_tick(tick: OnTick) -> None:
         print(progress(tick.percent_complete), end='\r')
 
     def adrio_start(adrio: AdrioStart) -> None:
