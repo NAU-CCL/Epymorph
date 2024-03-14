@@ -11,12 +11,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.error import AttributeException, GeoValidationException
+from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
                                validate_geo_values)
-from epymorph.simulation import (AdrioStart, AttributeArray, DynamicGeoEvents,
-                                 FetchStart)
+from epymorph.simulation import AttributeArray
 from epymorph.util import Event, MemoDict
 
 

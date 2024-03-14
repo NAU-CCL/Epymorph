@@ -46,7 +46,9 @@ class World(ABC):
         """
 
     @abstractmethod
-    def apply_return(self, tick: Tick) -> int:
+    def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
         """
         Modify the world state as a result of returning all movers that are ready to be returned home.
+        If `return_stats` is True, returns an NxNxC array containing the individuals moved during the return.
+        Otherwise returns None.
         """
