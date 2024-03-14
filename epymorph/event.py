@@ -30,7 +30,7 @@ class SimulationEvents(Protocol):
     """
     Protocol for Simulations that support lifecycle events.
     For correct operation, ensure that `on_start` is fired first,
-    then `on_tick` at least once, then finally `on_end`.
+    then `on_tick` any number of times, then finally `on_end`.
     """
 
     on_start: Event[OnStart]

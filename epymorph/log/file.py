@@ -19,6 +19,7 @@ def file_log(
 ) -> Generator[None, None, None]:
     """Attach file logging to a simulation."""
 
+    # Initialize the logging system and create some Loggers for epymorph subsystems.
     log_handler = FileHandler(log_file, "w", "utf8")
     log_handler.setFormatter(Formatter(BASIC_FORMAT))
 
@@ -80,15 +81,14 @@ def file_log(
     with subscriptions() as subs:
         # Simulation logging
         subs.subscribe(sim.on_start, on_start)
-        if sim.on_tick is not None:
-            subs.subscribe(sim.on_tick, on_tick)
+        subs.subscribe(sim.on_tick, on_tick)
         subs.subscribe(sim.on_end, on_end)
 
         # Geo logging will be attached if it makes sense.
         sim_geo = getattr(sim, 'geo', None)
         if isinstance(sim_geo, DynamicGeoEvents):
-            geo_log.info(
-                "Geo not loaded from cache; attributes will be lazily loaded during simulation run.")
+            geo_log.info("Geo not loaded from cache; "
+                         "attributes will be lazily loaded during simulation run.")
             subs.subscribe(sim_geo.adrio_start, adrio_start)
 
         # Movement logging
@@ -98,5 +98,9 @@ def file_log(
 
         yield  # to outer context
 
+    # Close out the log file.
+    # This isn't necessary if we're running on the CLI, but if we're in a Jupyter context,
+    # running the sim multiple times would keep appending to the file.
+    # For most use-cases, just having one sim run in the log file is preferable.
     epy_log.removeHandler(log_handler)
     epy_log.setLevel(NOTSET)

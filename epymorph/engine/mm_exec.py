@@ -46,7 +46,8 @@ class StandardMovementExecutor(MovementEventsMixin, MovementExecutor):
     _predef_hash: int | None = None
 
     def __init__(self, ctx: RumeContext):
-        super().__init__()
+        MovementEventsMixin.__init__(self)
+
         # If we were given a MovementSpec, we need to compile it to get its clauses.
         if isinstance(ctx.mm, MovementSpec):
             self._model = compile_spec(ctx.mm, ctx.rng)
