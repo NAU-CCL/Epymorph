@@ -14,6 +14,7 @@ from epymorph.data_shape import DataShape, Shapes
 from epymorph.error import IpmValidationException
 from epymorph.sympy_shim import simplify, simplify_sum, to_symbol
 from epymorph.util import iterator_length
+from epymorph.viz import render
 
 ############################################################
 # Model Attributes
@@ -244,6 +245,12 @@ class CompartmentModel:
         """The names of all events in the order they were declared."""
         return [f"{e.compartment_from} → {e.compartment_to}"
                 for e in self.events]
+
+    def draw(self, save: bool = False, filename: str = "") -> None:
+        """use visual module to draw the ipm in a jupyter interface"""
+        render(self, save, filename)
+
+
 
 
 def create_model(symbols: CompartmentSymbols, transitions: Iterable[TransitionDef]) -> CompartmentModel:

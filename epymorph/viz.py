@@ -1,7 +1,5 @@
 from graphviz import Digraph
 from sympy import Expr, Symbol, preview
-from epymorph import ipm_library
-from epymorph.compartment_model import EdgeDef, ForkDef, CompartmentModel 
 from typing import List, Union
 from IPython import display
 from tempfile import NamedTemporaryFile
@@ -81,7 +79,7 @@ class EdgeTracker():
         return None
 
 
-def build_ipm_graph(ipm: CompartmentModel) -> Digraph:
+def build_ipm_graph(ipm) -> Digraph:
     """
     primary function for creating a model visualization, given an ipm label 
     that exists within the ipm library
@@ -129,7 +127,7 @@ def build_ipm_graph(ipm: CompartmentModel) -> Digraph:
     # return created visualization graph
     return model_viz
 
-def render(ipm: CompartmentModel, save: bool = False, filename: str = "",
+def render(ipm, save: bool = False, filename: str = "",
                                                       console: bool = False) \
                                                                        -> None:
     """
@@ -150,7 +148,7 @@ def render(ipm: CompartmentModel, save: bool = False, filename: str = "",
     if save:
         save_model(ipm_graph, filename)
 
-def save_model(ipm_graph: Digraph, filename: str) -> None:
+def save_model(ipm_graph: Digraph, filename: str) -> bool:
     """
     function that saves a given graphviz ipm digraph to a png in the
     'model_pngs' folder with the given file name. Creates the folder if it 
@@ -167,12 +165,15 @@ def save_model(ipm_graph: Digraph, filename: str) -> None:
             makedirs('model_pngs')
 
         # render and save png
-        ipm_graph.render(filename, 'model_pngs', cleanup=True)
+        ipm_graph.render(filename, directory = 'model_pngs', cleanup=True)
+
+        return True
         
 
     # file name is empty, print err message
-    else:
-        print("ERR: no file name provided, could not save model")
+    print("ERR: no file name provided, could not save model")
+
+    return False
 
 def png_to_label(png_filepath: str) -> str:
     """
