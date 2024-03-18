@@ -55,22 +55,11 @@ class InitContext(Protocol):
     params: ContextParams
 
 
-def _default_compartments(ctx: InitContext) -> NDArray[SimDType]:
-    """
-    Create a default compartments by population array (N,C).
-    This places everyone from geo['population'] in the first
-    compartment, and zero everywhere else.
-    """
-    # assumes 'population' has already been checked
-    _, N, C, _ = ctx.dim.TNCE
-    cs = np.zeros((N, C), dtype=SimDType)
-    cs[:, 0] = ctx.geo['population']
-    return cs
-
-
-def _check_population(ctx: InitContext) -> None:
+def _get_population(ctx: InitContext) -> NDArray[np.int64]:
     try:
-        check_ndarray(ctx.geo['population'], dtype=[np.int64], shape=(ctx.dim.nodes,))
+        pop = ctx.geo['population']
+        check_ndarray(pop, dtype=[np.int64], shape=(ctx.dim.nodes,))
+        return cast(NDArray[np.int64], pop)
     except KeyError as e:
         raise InitException.for_arg('population', 'No such value in the geo.') from e
     except NumpyTypeError as e:
@@ -78,6 +67,18 @@ def _check_population(ctx: InitContext) -> None:
 
 
 # Pre-baked initializer implementations
+
+
+def no_infection(ctx: InitContext) -> NDArray[SimDType]:
+    """
+    Create a default compartments by population array (N,C).
+    This places everyone from geo['population'] in the first
+    compartment, and zero everywhere else.
+    """
+    _, N, C, _ = ctx.dim.TNCE
+    cs = np.zeros((N, C), dtype=SimDType)
+    cs[:, 0] = _get_population(ctx)
+    return cs
 
 
 def explicit(ctx: InitContext, initials: NDArray[SimDType]) -> NDArray[SimDType]:
@@ -103,20 +104,19 @@ def proportional(ctx: InitContext, ratios: NDArray[np.int64 | np.float64]) -> ND
     (as long as no row is zero). Parameters:
     - `ratios` a (C,) or (N,C) numpy array describing the ratios for each compartment
     """
-    _check_population(ctx)
-
     _, N, C, _ = ctx.dim.TNCE
     try:
         check_ndarray(ratios, dtype=[np.int64, np.float64], shape=[(C,), (N, C)])
     except NumpyTypeError as e:
         raise InitException.for_arg('ratios') from e
 
-    ratios = np.broadcast_to(ratios, (N, C))
+    ratios = np.broadcast_to(ratios, (N, C)).astype(np.float64, copy=False)
     row_sums = cast(NDArray[np.float64], np.sum(ratios, axis=1, dtype=np.float64))
     if np.any(row_sums <= 0):
         raise InitException.for_arg('ratios', 'One or more rows sum to zero or less.')
 
-    result = ctx.geo['population'][:, np.newaxis] * (ratios / row_sums[:, np.newaxis])
+    pop = _get_population(ctx)
+    result = pop[:, np.newaxis] * (ratios / row_sums[:, np.newaxis])
     return result.round().astype(SimDType, copy=True)
 
 
@@ -128,7 +128,6 @@ def indexed_locations(ctx: InitContext, selection: NDArray[np.intp], seed_size: 
     - `selection` a one-dimensional array of indices; all values must be in range (-N,+N)
     - `seed_size` the number of individuals to infect in total
     """
-    _check_population(ctx)
     N = ctx.dim.nodes
 
     try:
@@ -143,7 +142,7 @@ def indexed_locations(ctx: InitContext, selection: NDArray[np.intp], seed_size: 
         raise InitException.for_arg(
             'seed_size', 'Must be a non-negative integer value.')
 
-    selected = ctx.geo['population'][selection]
+    selected = _get_population(ctx)[selection]
     available = selected.sum()
     if available < seed_size:
         msg = f"Attempted to infect {seed_size} individuals but only had {available} available."
@@ -152,7 +151,7 @@ def indexed_locations(ctx: InitContext, selection: NDArray[np.intp], seed_size: 
     # Randomly select individuals from each of the selected locations.
     infected = ctx.rng.multivariate_hypergeometric(selected, seed_size)
 
-    result = _default_compartments(ctx)
+    result = no_infection(ctx)
 
     # Special case: the "no" IPM has only one compartment!
     # Technically it would be more "correct" to choose a different initializer,
@@ -226,7 +225,7 @@ def top_locations(ctx: InitContext, attribute: str, num_locations: int, seed_siz
     selecting the top locations as measured by a given geo attribute.
     """
     N = ctx.dim.nodes
-    if not isinstance(attribute, str) or not attribute in ctx.geo.spec.attribute_map:
+    if not isinstance(attribute, str) or not attribute in ctx.geo:
         raise InitException.for_arg(
             'attribute', 'Must name an existing attribute in the geo.')
     if not isinstance(num_locations, int) or not 0 < num_locations <= N:
@@ -251,7 +250,7 @@ def bottom_locations(ctx: InitContext, attribute: str, num_locations: int, seed_
     selecting the bottom locations as measured by a given geo attribute.
     """
     N = ctx.dim.nodes
-    if not isinstance(attribute, str) or not attribute in ctx.geo.spec.attribute_map:
+    if not isinstance(attribute, str) or not attribute in ctx.geo:
         raise InitException.for_arg(
             'attribute', 'Must name an existing attribute in the geo.')
     if not isinstance(num_locations, int) or not 0 < num_locations <= N:
@@ -273,6 +272,7 @@ def bottom_locations(ctx: InitContext, attribute: str, num_locations: int, seed_
 DEFAULT_INITIALIZER = single_location
 
 initializer_library: dict[str, Initializer] = {
+    'no_infection': no_infection,
     'explicit': explicit,
     'proportional': proportional,
     'indexed_locations': indexed_locations,

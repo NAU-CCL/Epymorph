@@ -2,7 +2,6 @@
 Movement executor classes handle the logic for processing the movement step of the simulation.
 """
 from abc import ABC, abstractmethod
-from logging import DEBUG, Logger, getLogger
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,6 +9,8 @@ from numpy.typing import NDArray
 from epymorph.engine.context import RumeContext
 from epymorph.engine.world import World
 from epymorph.error import AttributeException, MmCompileException
+from epymorph.event import (MovementEventsMixin, OnMovementClause,
+                            OnMovementFinish, OnMovementStart)
 from epymorph.movement.compile import compile_spec
 from epymorph.movement.movement_model import (MovementModel, PredefParams,
                                               TravelClause)
@@ -35,25 +36,25 @@ class MovementExecutor(ABC):
 ############################################################
 
 
-class StandardMovementExecutor(MovementExecutor):
+class StandardMovementExecutor(MovementEventsMixin, MovementExecutor):
     """The standard implementation of movement model execution."""
 
     _ctx: RumeContext
-    _log: Logger
     _model: MovementModel
     _clause_masks: dict[TravelClause, NDArray[np.bool_]]
     _predef: PredefParams = {}
     _predef_hash: int | None = None
 
     def __init__(self, ctx: RumeContext):
+        MovementEventsMixin.__init__(self)
+
         # If we were given a MovementSpec, we need to compile it to get its clauses.
         if isinstance(ctx.mm, MovementSpec):
-            self._model = compile_spec(ctx, ctx.mm)
+            self._model = compile_spec(ctx.mm, ctx.rng)
         else:
             self._model = ctx.mm
 
         self._ctx = ctx
-        self._log = getLogger('movement')
         self._clause_masks = {c: c.mask(ctx) for c in self._model.clauses}
         self._check_predef()
 
@@ -76,11 +77,14 @@ class StandardMovementExecutor(MovementExecutor):
 
     def apply(self, world: World, tick: Tick) -> None:
         """Applies movement for this tick, mutating the world state."""
-        self._log.debug('Processing movement for day %s, step %s', tick.day, tick.step)
+
+        self.on_movement_start.publish(
+            OnMovementStart(tick.index, tick.day, tick.step))
 
         self._check_predef()
 
         # Process travel clauses.
+        total = 0
         for clause in self._model.clauses:
             if not clause.predicate(self._ctx, tick):
                 continue
@@ -89,10 +93,30 @@ class StandardMovementExecutor(MovementExecutor):
             returns = clause.returns(self._ctx, tick)
             return_tick = self._ctx.resolve_tick(tick, returns)
             world.apply_travel(travelers, return_tick)
+            total += travelers.sum()
 
         # Process return clause.
-        return_movers = world.apply_return(tick)
-        self._log.getChild('Return').debug("moved %d", return_movers)
+        # return_requested, return_actual, return_total = world.apply_return(tick)
+        return_movers = world.apply_return(tick, return_stats=True)
+        if return_movers is not None:
+            return_total = return_movers.sum()
+            total += return_total
+
+            self.on_movement_clause.publish(
+                OnMovementClause(
+                    tick.index,
+                    tick.day,
+                    tick.step,
+                    "return",
+                    return_movers,
+                    return_movers,
+                    return_total,
+                    False,
+                )
+            )
+
+        self.on_movement_finish.publish(
+            OnMovementFinish(tick.index, tick.day, tick.step, total))
 
     def _travelers(self, clause: TravelClause, tick: Tick, local_cohorts: NDArray[SimDType]) -> NDArray[SimDType]:
         """
@@ -101,37 +125,34 @@ class StandardMovementExecutor(MovementExecutor):
         then selects exactly which individuals (by compartment) should move.
         Returns an (N,N,C) array; from-source-to-destination-by-compartment.
         """
-        clause_log = self._log.getChild(clause.name)
         _, N, C, _ = self._ctx.dim.TNCE
 
-        requested_movers = clause.requested(self._ctx, self._predef, tick)
-        np.fill_diagonal(requested_movers, 0)
-        requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
+        clause_movers = clause.requested(self._ctx, self._predef, tick)
+        np.fill_diagonal(clause_movers, 0)
+        clause_sum = clause_movers.sum(axis=1, dtype=SimDType)
 
         available_movers = local_cohorts * self._clause_masks[clause]
         available_sum = available_movers.sum(axis=1, dtype=SimDType)
 
-        # If requested total is greater than the total available,
+        # If clause requested total is greater than the total available,
         # use mvhg to select as many as possible.
-        throttled = False
-        for src in range(N):
-            if requested_sum[src] > available_sum[src]:
-                msg = "<WARNING> movement throttled for insufficient population at %d"
-                clause_log.debug(msg, src)
-                requested_movers[src, :] = self._ctx.rng.multivariate_hypergeometric(
-                    colors=requested_movers[src, :],
-                    nsample=available_sum[src]
-                )
-                throttled = True
-
-        # Update sum if it changed in the previous step.
-        if throttled:
+        if not np.any(clause_sum > available_sum):
+            throttled = False
+            requested_movers = clause_movers
+            requested_sum = clause_sum
+        else:
+            throttled = True
+            requested_movers = clause_movers.copy()
+            for src in range(N):
+                if clause_sum[src] > available_sum[src]:
+                    requested_movers[src, :] = self._ctx.rng.multivariate_hypergeometric(
+                        colors=requested_movers[src, :],
+                        nsample=available_sum[src]
+                    )
             requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
 
         # The probability a mover from a src will go to a dst.
         requested_prb = row_normalize(requested_movers, requested_sum, dtype=SimDType)
-
-        clause_log.debug("requested_movers:\n%s", requested_movers)
 
         travelers_cs = np.zeros((N, N, C), dtype=SimDType)
         for src in range(N):
@@ -151,7 +172,17 @@ class StandardMovementExecutor(MovementExecutor):
                 requested_prb[src, :]
             ).T.astype(SimDType)
 
-        if clause_log.isEnabledFor(DEBUG):
-            clause_log.debug("moved %d", requested_sum.sum())
+        self.on_movement_clause.publish(
+            OnMovementClause(
+                tick.index,
+                tick.day,
+                tick.step,
+                clause.name,
+                clause_movers,
+                travelers_cs,
+                requested_sum.sum(),
+                throttled,
+            )
+        )
 
         return travelers_cs

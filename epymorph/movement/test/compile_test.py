@@ -3,8 +3,8 @@ import unittest
 from unittest.mock import MagicMock
 
 from epymorph.code import compile_function, parse_function
-from epymorph.movement.compile import (transform_movement_ast,
-                                       transform_predef_ast)
+from epymorph.movement.compile import (ClauseFunctionTransformer,
+                                       PredefFunctionTransformer)
 from epymorph.movement.movement_model import MovementContext, PredefParams
 
 
@@ -19,7 +19,9 @@ class TestMovementClauseTransformer(unittest.TestCase):
         ast1 = parse_function(source)
         f1 = compile_function(ast1, {})
 
-        ast2 = transform_movement_ast(ast1)
+        transformer = ClauseFunctionTransformer([])
+        ast2 = transformer.visit_and_fix(ast1)
+
         f2 = compile_function(ast2, {
             'MovementContext': MovementContext,
             'PredefParams': PredefParams,
@@ -42,7 +44,9 @@ class TestMovementClauseTransformer(unittest.TestCase):
         ast1 = parse_function(source)
         f1 = compile_function(ast1, {})
 
-        ast2 = transform_predef_ast(ast1)
+        transformer = PredefFunctionTransformer([])
+        ast2 = transformer.visit_and_fix(ast1)
+
         f2 = compile_function(ast2, {
             'MovementContext': MovementContext,
             'PredefParams': PredefParams,

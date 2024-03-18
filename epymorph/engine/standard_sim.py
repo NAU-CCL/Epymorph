@@ -16,14 +16,15 @@ from epymorph.engine.world_list import ListWorld
 from epymorph.error import (AttributeException, CompilationException,
                             InitException, IpmSimException, MmSimException,
                             ValidationException, error_gate)
+from epymorph.event import (MovementEventsMixin, OnStart, OnTick,
+                            SimulationEventsMixin)
 from epymorph.geo.geo import Geo
 from epymorph.initializer import DEFAULT_INITIALIZER, Initializer
-from epymorph.movement.movement_model import MovementModel
+from epymorph.movement.movement_model import MovementModel, validate_mm
 from epymorph.movement.parser import MovementSpec
 from epymorph.params import ContextParams, Params
-from epymorph.simulation import (OnStart, SimDimensions, SimDType, SimTick,
-                                 SimulationEvents, TimeFrame)
-from epymorph.util import Event
+from epymorph.simulation import SimDimensions, SimDType, TimeFrame
+from epymorph.util import Subscriber
 
 
 @dataclass
@@ -88,13 +89,12 @@ class Output:
         return np.cumsum(np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64)
 
 
-class StandardSimulation(SimulationEvents):
+class StandardSimulation(SimulationEventsMixin, MovementEventsMixin):
     """Runs singular simulation passes, producing time-series output."""
 
     _config: RumeConfig
     _params: ContextParams | None = None
     geo: Geo
-    on_tick: Event[SimTick]  # this class supports on_tick; so narrow the type def
 
     def __init__(self,
                  geo: Geo,
@@ -104,6 +104,9 @@ class StandardSimulation(SimulationEvents):
                  time_frame: TimeFrame,
                  initializer: Initializer | None = None,
                  rng: Callable[[], np.random.Generator] | None = None):
+        SimulationEventsMixin.__init__(self)
+        MovementEventsMixin.__init__(self)
+
         self.geo = geo
         if initializer is None:
             initializer = DEFAULT_INITIALIZER
@@ -112,17 +115,13 @@ class StandardSimulation(SimulationEvents):
 
         self._config = RumeConfig(geo, ipm, mm, params, time_frame, initializer, rng)
 
-        # events
-        self.on_start = Event()
-        self.on_tick = Event()
-        self.on_end = Event()
-
     def validate(self) -> None:
         """Validate the simulation."""
         with error_gate("validating the simulation", ValidationException, CompilationException):
             ctx = RumeContext.from_config(self._config)
+            check_attribute_declarations(ctx.ipm, ctx.mm)
             # ctx.validate_geo() # validate only the required geo parameters?
-            # ctx.validate_mm()
+            validate_mm(ctx.mm.attributes, ctx.dim, ctx.geo, ctx.params)
             ctx.validate_ipm()
             # ctx.validate_init()
 
@@ -147,10 +146,21 @@ class StandardSimulation(SimulationEvents):
         Run the simulation. It is safe to call this multiple times
         to run multiple independent simulations with the same configuraiton.
         """
+        event_subs = Subscriber()
+
         with error_gate("compiling the simulation", CompilationException):
             ctx = RumeContext.from_config(self._config)
             ipm_exec = StandardIpmExecutor(ctx)
             movement_exec = StandardMovementExecutor(ctx)
+
+            # Proxy the movement_exec's events, if anyone is listening for them.
+            if MovementEventsMixin.has_subscribers(self):
+                event_subs.subscribe(movement_exec.on_movement_start,
+                                     self.on_movement_start.publish)
+                event_subs.subscribe(movement_exec.on_movement_clause,
+                                     self.on_movement_clause.publish)
+                event_subs.subscribe(movement_exec.on_movement_finish,
+                                     self.on_movement_finish.publish)
 
         with error_gate("initializing the simulation", InitException):
             ini = ctx.initialize()
@@ -172,7 +182,32 @@ class StandardSimulation(SimulationEvents):
                 out.prevalence[tick.index] = tick_prevalence
 
             t = tick.index
-            self.on_tick.publish(SimTick(t, (t + 1) / ctx.dim.ticks))
+            self.on_tick.publish(OnTick(t, (t + 1) / ctx.dim.ticks))
 
         self.on_end.publish(None)
+
+        event_subs.unsubscribe()
         return out
+
+
+def check_attribute_declarations(ipm: CompartmentModel, mm: MovementModel | MovementSpec) -> None:
+    """
+    Check that the IPM's and MM's declared attributes are compatible.
+    Raises ValidationException on any incompatibility.
+    """
+    # NOTE: for now, any overlapping declarations must be strictly equal,
+    # but this should be relaxed when MMs support shape polymorphism.
+    ipm_attrs = {a.name: a for a in ipm.attributes}
+    mm_attrs = {a.name: a for a in mm.attributes}
+    for name in set(ipm_attrs.keys()).intersection(mm_attrs.keys()):
+        a1 = ipm_attrs[name]
+        a2 = mm_attrs[name]
+        if not a1.source == a2.source:
+            msg = f"Both the IPM and MM declare attribute '{name}', but they are not from the same source ({a1.source} vs {a2.source})."
+            raise ValidationException(msg)
+        if not np.issubdtype(a1.dtype_as_np, a2.dtype):
+            msg = f"Both the IPM and MM declare attribute '{name}', but they are not a type match ({a1.dtype_as_np} vs {np.dtype(a2.dtype)})."
+            raise ValidationException(msg)
+        if not a1.shape == a2.shape:
+            msg = f"Both the IPM and MM declare attribute '{name}', but they are not a shape match ({a1.shape} vs {a2.shape})."
+            raise ValidationException(msg)

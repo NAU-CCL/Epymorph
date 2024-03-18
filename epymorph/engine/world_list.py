@@ -1,6 +1,6 @@
 """World implementation: ListWorld."""
 from operator import attrgetter
-from typing import Iterable, Self
+from typing import Any, Iterable, Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -64,6 +64,7 @@ class ListWorld(World):
     """The value of a population's `return_tick` when the population is home."""
 
     nodes: int
+    compartments: int
     locations: list[list[Cohort]]
 
     @classmethod
@@ -79,6 +80,7 @@ class ListWorld(World):
 
     def __init__(self, locations: list[list[Cohort]]):
         self.nodes = len(locations)
+        self.compartments = len(locations[0][0].compartments)
         self.locations = locations
 
     def normalize(self) -> None:
@@ -133,22 +135,28 @@ class ListWorld(World):
 
         self.normalize()
 
-    def apply_return(self, tick: Tick) -> int:
-        total_movers = 0
+    def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
+        movers: Any = None
+        if return_stats:
+            size = (self.nodes, self.nodes, self.compartments)
+            movers = np.zeros(size, dtype=SimDType)
+
         next_locations = [[locals] for locals in self.get_local_cohorts()]
-        for loc_index, loc in enumerate(self.locations):
-            for cohort in loc:
+        for i, location in enumerate(self.locations):
+            for cohort in location:
                 if cohort.return_tick == ListWorld.HOME_TICK:
                     # locals are already where they need to be
                     continue
                 elif cohort.return_tick == tick.index:
                     # cohort ready to go home, merge with locals
-                    next_locations[cohort.return_location][0].compartments += cohort.compartments
-                    total_movers += cohort.compartments.sum()
+                    j = cohort.return_location
+                    next_locations[j][0].compartments += cohort.compartments
+                    if return_stats:
+                        movers[i, j, :] = cohort.compartments
                 else:
                     # cohort staying
-                    next_locations[loc_index].append(cohort)
+                    next_locations[i].append(cohort)
 
         self.locations = next_locations
         self.normalize()
-        return total_movers
+        return movers if return_stats else None

@@ -216,7 +216,7 @@ class TestListWorld(EpymorphTestCase):
             Cohort(np.array([19]), 0, 2),
         ]])
 
-        world.apply_return(Tick(1, 1, date(2023, 1, 1), 0, 1.0))
+        world.apply_return(Tick(1, 1, date(2023, 1, 1), 0, 1.0), return_stats=False)
 
         self.assertWorld(
             world.locations,

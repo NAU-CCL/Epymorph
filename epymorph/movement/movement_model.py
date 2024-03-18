@@ -11,10 +11,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.compartment_model import CompartmentModel
-from epymorph.error import AttributeException
+from epymorph.error import AttributeException, MmValidationException
 from epymorph.geo.geo import Geo
+from epymorph.movement.parser import Attribute as MmAttribute
 from epymorph.params import ContextParams
-from epymorph.simulation import SimDimensions, SimDType, Tick, TickDelta
+from epymorph.simulation import (DataSource, SimDimensions, SimDType, Tick,
+                                 TickDelta)
+from epymorph.util import NumpyTypeError
 
 
 class MovementContext(Protocol):
@@ -129,6 +132,8 @@ class MovementModel:
     tau_steps: list[float]
     """The tau steps for the simulation."""
 
+    attributes: list[MmAttribute]
+
     predef: PredefClause
     """The predef clause for this movement model."""
     predef_context_hash: Callable[[MovementContext], int]
@@ -139,3 +144,71 @@ class MovementModel:
 
     clauses: list[TravelClause]
     """The clauses which express the movement model"""
+
+
+# Validation
+
+
+def validate_mm(
+    mm_attribs: list[MmAttribute],
+    dim: SimDimensions,
+    geo_data: DataSource,  # GeoData
+    params_data: DataSource,  # ParamsData
+) -> None:
+    """Validate that the MM has all required attributes."""
+
+    def _validate_attr(attr: MmAttribute) -> Exception | None:
+        try:
+            name = attr.name
+            match attr.source:
+                case 'geo':
+                    if not name in geo_data:
+                        msg = f"Missing geo attribute '{name}'"
+                        raise AttributeException(msg)
+                    value = geo_data[name]
+                case 'params':
+                    if not name in params_data:
+                        msg = f"Missing params attribute '{name}'"
+                        raise AttributeException(msg)
+                    value = params_data[name]
+
+            # NOTE: Movement Model currently DOES NOT allow shape polymorphism.
+            # It doesn't have an infrastructure to adapt input arrays like the IPM does.
+            # The goal is to support this, but I want to delay to 0.5 so as to contain
+            # the scope of changes in 0.4. Until then, you have to provide exact shape matches,
+            # both in the attributes declaration and in the submitted parameters (which has been the case).
+
+            if not attr.shape.matches(dim, value, False):
+                msg = f"Attribute '{attr.name}' was expected to be an array of shape {attr.shape} " + \
+                    f"-- got {value.shape}."
+                raise AttributeException(msg)
+
+            # if attr.dtype == int:
+            #     dtype = np.dtype(np.int64)
+            # elif attr.dtype == float:
+            #     dtype = np.dtype(np.float64)
+            # elif attr.dtype == str:
+            #     dtype = np.dtype(np.str_)
+            # else:
+            #     raise ValueError(f"Unsupported dtype: {attr.dtype}")
+
+            if not np.can_cast(value.dtype, attr.dtype):
+                msg = f"Attribute '{attr.name}' was expected to be an array of type {attr.dtype} " + \
+                    f"-- got {value.dtype}."
+                raise AttributeException(msg)
+
+            return None
+        except NumpyTypeError as e:
+            msg = f"Attribute '{attr.name}' is not properly specified. {e}"
+            return AttributeException(msg)
+        except AttributeException as e:
+            return e
+
+    # Collect all attribute errors to raise as a group.
+    errors = [x for x in (_validate_attr(attr) for attr in mm_attribs)
+              if x is not None]
+
+    if len(errors) > 0:
+        msg = "MM attribute requirements were not met. See errors:" + \
+            "".join(f"\n- {e}" for e in errors)
+        raise MmValidationException(msg)

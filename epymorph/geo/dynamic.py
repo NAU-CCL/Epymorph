@@ -11,11 +11,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.error import AttributeException, GeoValidationException
+from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
                                validate_geo_values)
-from epymorph.simulation import AdrioStart, DynamicGeoEvents, FetchStart
+from epymorph.simulation import AttributeArray
 from epymorph.util import Event, MemoDict
 
 
@@ -72,6 +73,8 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
     _adrios: dict[str, ADRIO]
 
     def __init__(self, spec: DynamicGeoSpec, adrios: dict[str, ADRIO]):
+        if not LABEL.name in adrios:
+            raise ValueError("Geo must contain an attribute called 'label'.")
         self._adrios = adrios
         labels = self._adrios[LABEL.name].get_value()
         super().__init__(spec, len(labels))
@@ -81,12 +84,15 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
         self.adrio_start = Event()
         self.fetch_end = Event()
 
-    def __getitem__(self, name: str) -> NDArray:
+    def __getitem__(self, name: str, /) -> AttributeArray:
         if name not in self._adrios:
             raise AttributeException(f"Attribute not found in geo: '{name}'")
         if self._adrios[name]._cached_value is None:
             self.adrio_start.publish(AdrioStart(name, None, None))
         return self._adrios[name].get_value()
+
+    def __contains__(self, name: str, /) -> bool:
+        return name in self._adrios
 
     @property
     def labels(self) -> NDArray[np.str_]:

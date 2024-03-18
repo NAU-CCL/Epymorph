@@ -358,10 +358,10 @@ class Shapes:
 # - T is the number of ticks
 # - N is the number of nodes
 # ---
-# S; A; T; N; TxA; NxA; TxN; TxNxA
+# S; A; T; N; NxN; TxA; NxA; TxN; TxNxA
 
 
-_shape_regex = re.compile(r"A|[STN]|[TN]xA|TxN(xA)?"
+_shape_regex = re.compile(r"A|[STN]|NxN|[TN]xA|TxN(xA)?"
                           .replace("A", "(0|[1-9][0-9]*)"))
 _parts_regex = re.compile(r"(.*?)([0-9]*)")
 

@@ -305,6 +305,11 @@ class Event(Generic[T]):
         for subscriber in self._subscribers:
             subscriber(event)
 
+    @property
+    def has_subscribers(self) -> bool:
+        """True if at least one listener is subscribed to this event."""
+        return len(self._subscribers) > 0
+
 
 class Subscriber:
     """
