@@ -241,10 +241,6 @@ class CompartmentModel:
         """The names of all compartments in the order they were declared."""
         return [c.name for c in self.compartments]
 
-    def draw(self, save: bool = False, filename: str = "") -> None:
-        """use visual module to draw the ipm in a jupyter interface"""
-        render(self, save, filename)
-
     @cached_property
     def event_names(self) -> list[str]:
         """The names of all events in the order they were declared."""
@@ -263,6 +259,10 @@ class CompartmentModel:
         escaped_pattern = re.escape(pattern).replace(r'\*', '[^_]+')
         # Compile with anchors so it matches the entire string.
         return re.compile(f"^{escaped_pattern}$")
+
+    def draw(self, save: bool = False, filename: str = "") -> None:
+        """use visual module to draw the ipm in a jupyter interface"""
+        render(self, save, filename)
 
     def events_by_src(self, pattern: str) -> tuple[int, ...]:
         """
