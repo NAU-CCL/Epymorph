@@ -55,12 +55,3 @@ class VizTest(unittest.TestCase):
 
         rmdir('model_pngs')
 
-
-
-
-
-
-        
-
-        
-
