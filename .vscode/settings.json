@@ -9,9 +9,10 @@
     "**/__pycache__": true,
     ".pytest_cache": true
   },
+  "vim.leader": "<Space>",
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
-  
+  "editor.lineNumbers": "relative",
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit"
@@ -20,15 +21,12 @@
   "notebook.codeActionsOnSave": {
     "source.organizeImports": "explicit"
   },
-  
   "autopep8.importStrategy": "fromEnvironment",
   "isort.importStrategy": "fromEnvironment",
-  
   "python.formatting.provider": "none",
   "python.analysis.autoImportCompletions": true,
   "python.analysis.typeCheckingMode": "basic",
   "python.analysis.diagnosticMode": "workspace",
-
   "python.testing.pytestEnabled": false,
   "python.testing.unittestEnabled": true,
   "python.testing.unittestArgs": [
@@ -38,7 +36,6 @@
     "-p",
     "*_test.py"
   ],
-
   "editor.defaultFormatter": null,
   "[python]": {
     "editor.detectIndentation": false,
@@ -46,6 +43,5 @@
     "editor.tabSize": 4,
     "editor.defaultFormatter": "ms-python.autopep8",
   },
-
   "jupyter.notebookFileRoot": "${workspaceFolder}",
 }

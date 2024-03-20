@@ -1,10 +1,13 @@
 import unittest
-import epymorph.viz
-from epymorph.compartment_model import CompartmentModel
-from epymorph import ipm_library
+from os import path, remove, rmdir
+
 from graphviz import Digraph
 from sympy import Symbol
-from os import path, remove, rmdir
+
+import epymorph.viz
+from epymorph import ipm_library
+from epymorph.compartment_model import CompartmentModel
+
 
 class VizTest(unittest.TestCase):
     test_ipm = ipm_library['sirs']()
@@ -25,7 +28,8 @@ class VizTest(unittest.TestCase):
         self.assertEqual(graph_attrs['edge_attr']['minlen'], '2.0')
 
         for edge_index in range(len(graph_attrs['body'])):
-            self.assertTrue(graph_attrs['body'][edge_index].startswith(edge_prefixes[edge_index]))
+            self.assertTrue(graph_attrs['body'][edge_index].startswith(
+                edge_prefixes[edge_index]))
 
     def test_edge_tracker(self):
         test_tracker = epymorph.viz.EdgeTracker()
@@ -41,8 +45,8 @@ class VizTest(unittest.TestCase):
         self.assertEqual(d + d, test_tracker.get_edge_label('a', 'c'))
 
     def test_pngtolabel(self):
-        self.assertEqual(epymorph.viz.png_to_label('test_path'), 
-        '<<TABLE border="0"><TR><TD><IMG SRC="test_path"/></TD></TR></TABLE>>')
+        self.assertEqual(epymorph.viz.png_to_label('test_path'),
+                         '<<TABLE border="0"><TR><TD><IMG SRC="test_path"/></TD></TR></TABLE>>')
 
     def test_save(self):
         self.assertFalse(epymorph.viz.save_model(self.test_graph, ''))
@@ -54,4 +58,3 @@ class VizTest(unittest.TestCase):
         remove('model_pngs/test_model.png')
 
         rmdir('model_pngs')
-
