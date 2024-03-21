@@ -53,7 +53,7 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
             maker_name = source
             adrio_attrib = attr
 
-            if source != "File":
+            if not source.startswith("File"):
                 # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
                 # the geo wants to use a different name than the one the maker uses;
                 # no problem, just provide a modified AttribDef to the maker.
@@ -84,10 +84,10 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                     adrio = maker.make_adrio(
                         adrio_attrib,
                         spec.geography,
-                        spec.time_period,
                         file_path,
                         key
                     )
+                    adrios[attrib.name] = adrio
 
         return cls(spec, adrios)
 
