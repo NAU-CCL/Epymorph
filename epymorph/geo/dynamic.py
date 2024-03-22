@@ -71,11 +71,12 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 adrios[attr.name] = adrio
 
             else:
-                if source.count(':') != 2:
-                    msg = "File source requires a file path and column name or dictionary key for each attribute."
+                if source.count(':') != 4:
+                    msg = "File source requires a file path, label and data column names, and label type specifier."
                     raise GeoValidationException(msg)
                 else:
-                    maker_name, file_path, key = source.split(":")
+                    maker_name, file_path, label_key, data_key, join = source.split(
+                        ":")
                     adrio_attrib = geo_attrib(
                         adrio_attrib.name, attr.dtype, attr.shape)
 
@@ -85,9 +86,11 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                         adrio_attrib,
                         spec.geography,
                         file_path,
-                        key
+                        label_key,
+                        data_key,
+                        join,
                     )
-                    adrios[attrib.name] = adrio
+                    adrios[attr.name] = adrio
 
         return cls(spec, adrios)
 
