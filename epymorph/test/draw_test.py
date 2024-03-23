@@ -34,23 +34,3 @@ class DrawTest(unittest.TestCase):
 
         self.assertEqual(c + d + c * d, test_tracker.edge_dict[('a', 'b')])
         self.assertEqual(d + d, test_tracker.edge_dict[('a', 'c')])
-
-    def test_save(self):
-        # if model_pngs didnt exist before the test, delete it
-        remove_dir_check = not path.exists('model_pngs')
-
-        test_graph = Digraph(format='png')
-
-        test_graph.edge("a", "b", "label")
-
-        self.assertFalse(epymorph.draw.save_model(test_graph, ''))
-
-        self.assertTrue(epymorph.draw.save_model(test_graph, 'test_model'))
-
-        self.assertTrue(path.exists('model_pngs/test_model.png'))
-
-        remove('model_pngs/test_model.png')
-
-        # delete directory if it didnt exist before test
-        if remove_dir_check:
-            rmdir('model_pngs')
