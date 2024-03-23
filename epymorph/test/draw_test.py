@@ -1,12 +1,9 @@
 import unittest
-from os import path, remove, rmdir
 
-from graphviz import Digraph
 from sympy import Max, symbols
 
 import epymorph.draw
 from epymorph import ipm_library
-from epymorph.compartment_model import CompartmentModel
 
 
 class DrawTest(unittest.TestCase):
