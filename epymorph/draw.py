@@ -55,8 +55,9 @@ def check_draw_requirements() -> bool:
 
     # print errors if needed for latex check
     if latexCheck is None:
-        print("ERROR: No LaTeX converter found for ipm visualization. We reccomend " +
-              "MikTeX, found at https://miktex.org/download")
+        print("ERROR: No LaTeX converter found for ipm visualization.")
+        print("We reccomend MikTeX, found at https://miktex.org/download, or TexLive, found at https://tug.org/texlive/.")
+        print("These interpretters are reccomended by SymPy, a package we use for mathematical expressions.")
 
     # print errors if needed for graphviz check
     if graphvizCheck is None:
@@ -204,7 +205,7 @@ def render(ipm: CompartmentModel, console: bool = False) -> None:
     draw_and_return(ipm, console)
 
 
-def render_and_save(ipm: CompartmentModel, file_name: str,
+def render_and_save(ipm: CompartmentModel, file_path: str,
                     console: bool = False) -> None:
     """
     render function that saves to file system, draws jupyter by default
@@ -215,31 +216,32 @@ def render_and_save(ipm: CompartmentModel, file_name: str,
 
     # save to file system if graph not empty
     if ipm_graph:
-        save_model(ipm_graph, file_name)
+        save_model(ipm_graph, file_path)
 
 
-def save_model(ipm_graph: Digraph, filename: str) -> bool:
+def save_model(ipm_graph: Digraph, filepath: str) -> bool:
     """
     function that saves a given graphviz ipm digraph to a png in the
-    'model_pngs' folder with the given file name. Creates the folder if it
-    does not exist. Returns file creation success (true) or error (false)
+    given file path. Returns true upon save success, false upon save failure
     """
 
-    # ensure filename not empty
-    if filename:
+    # ensure filepath not empty
+    if filepath:
 
-        # create visualization directory if it doesn't exist
-        if not path.exists('model_pngs'):
+        # get the directory and filename
+        directory, filename = path.split(filepath)
 
-            # doesn't exist, create the directory
-            makedirs('model_pngs')
+        # ensure directory exists
+        if path.exists(directory):
+            # render and save png
+            ipm_graph.render(filename=filename, directory=directory,
+                             cleanup=True)
 
-        # render and save png
-        ipm_graph.render(filename, directory='model_pngs', cleanup=True)
-
-        return True
+            # display save succes
+            print(f"Model saved successfully at {filepath}")
+            return True
 
     # file name is empty, print err message
-    print("ERR: no file name provided, could not save model")
+    print("ERR: inavlid file path, could not save model")
 
     return False

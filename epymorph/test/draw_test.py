@@ -9,6 +9,10 @@ from epymorph import ipm_library
 class DrawTest(unittest.TestCase):
 
     def test_build_edges(self):
+        """
+        Tests the conversion between ipm edges and an edge tracker object
+        WARNING: Will stop working if SIRS model changes and/or is deleted!
+        """
         test_ipm = ipm_library['sirs']()
         test_edge_set = epymorph.draw.build_ipm_edge_set(test_ipm)
 
@@ -19,6 +23,7 @@ class DrawTest(unittest.TestCase):
         self.assertEqual(test_edge_set.edge_dict[('S', 'I')], beta * S * I / N)
         self.assertEqual(test_edge_set.edge_dict[('I', 'R')], gamma * I)
         self.assertEqual(test_edge_set.edge_dict[('R', 'S')], xi * R)
+        self.assertEqual(len(test_edge_set.edge_dict), 3)
 
     def test_edge_tracker(self):
         test_tracker = epymorph.draw.EdgeTracker()
