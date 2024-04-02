@@ -1,8 +1,7 @@
 from io import BytesIO
-from os import makedirs, path
+from os import path
 from shutil import which
 from tempfile import NamedTemporaryFile
-from typing import Union
 
 import matplotlib.pyplot as plt
 from graphviz import Digraph
@@ -13,7 +12,7 @@ from sympy import Expr, preview
 from epymorph.compartment_model import CompartmentModel
 
 
-class EdgeTracker():
+class EdgeTracker:
     """ class for keeping track of the edges added to the visualization """
 
     def __init__(self):
@@ -48,23 +47,23 @@ def check_draw_requirements() -> bool:
     displays messages to help guide installation
     """
     # check for latex installation
-    latexCheck = which('latex')
+    latex_check = which('latex')
 
     # check for graphviz installation
-    graphvizCheck = which('dot')
+    graphviz_check = which('dot')
 
     # print errors if needed for latex check
-    if latexCheck is None:
-        print("ERROR: No LaTeX converter found for ipm visualization.")
-        print("We reccomend MikTeX, found at https://miktex.org/download, or TexLive, found at https://tug.org/texlive/.")
-        print("These interpretters are reccomended by SymPy, a package we use for mathematical expressions.")
+    if latex_check is None:
+        print("ERROR: No LaTeX converter found for IPM visualization.")
+        print("We recommend MiKTeX, found at https://miktex.org/download, or TexLive, found at https://tug.org/texlive/.")
+        print("These distributions are recommended by SymPy, a package we use for mathematical expressions.")
 
     # print errors if needed for graphviz check
-    if graphvizCheck is None:
-        print("ERROR: Graphviz not found for ipm visualization. Intallation guides " +
+    if graphviz_check is None:
+        print("ERROR: Graphviz not found for IPM visualization. Installation guides " +
               "can be found at https://graphviz.org/download/")
 
-    return latexCheck is not None and graphvizCheck is not None
+    return latex_check is not None and graphviz_check is not None
 
 
 def build_ipm_edge_set(ipm: CompartmentModel) -> EdgeTracker:
@@ -167,8 +166,7 @@ def draw_console(graph: Digraph):
     plt.show()
 
 
-def draw_and_return(ipm: CompartmentModel, console: bool) -> Union[Digraph,
-                                                                   None]:
+def draw_and_return(ipm: CompartmentModel, console: bool) -> Digraph | None:
     """
     main function for converting an ipm into a visual model to be displayed
     by default in jupyter notebook, but optionally to console.
@@ -242,6 +240,6 @@ def save_model(ipm_graph: Digraph, filepath: str) -> bool:
             return True
 
     # file name is empty, print err message
-    print("ERR: inavlid file path, could not save model")
+    print("ERR: invalid file path, could not save model")
 
     return False
