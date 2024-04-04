@@ -208,7 +208,11 @@ class StandardIpmExecutor(IpmExecutor):
             attrs = self._ctx.ipm.attributes
             for attr_index in range(len(attrs)):
                 attr_dict[attrs[attr_index].name] = rate_attrs[attr_index]
+<<<<<<< HEAD
             raise IpmSimLessThanZeroException(("ipm params", attr_dict))
+=======
+            raise IpmSimLessThanZeroException(("params", attr_dict))
+>>>>>>> 7a1c385 (added unit tests for new exceptions, refactored display to only show current node/tick parameters)
         elif np.isnan(rate):
             event_dict = {}
             for event in self._ctx.ipm.events:
