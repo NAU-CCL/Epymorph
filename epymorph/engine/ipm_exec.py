@@ -3,7 +3,7 @@ IPM executor classes handle the logic for processing the IPM step of the simulat
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, List
 
 import numpy as np
 from numpy.typing import NDArray
@@ -163,10 +163,11 @@ class StandardIpmExecutor(IpmExecutor):
             match t:
                 case _IndependentTrx(rate_lambda):
                     rate = rate_lambda(rate_args)
-                    self._check_rate(rate)
+                    self._check_rate(rate, rate_args[len(effective_pop):])
                     occur[index] = self._ctx.rng.poisson(rate * tick.tau)
                 case _ForkedTrx(size, rate_lambda, prob_lambda):
                     rate = rate_lambda(rate_args)
+                    self._check_rate(rate, rate_args[len(effective_pop):])
                     base = self._ctx.rng.poisson(rate * tick.tau)
                     prob = prob_lambda(rate_args)
                     stop = index + size
@@ -202,9 +203,13 @@ class StandardIpmExecutor(IpmExecutor):
                         desired, available)
         return occur
 
-    def _check_rate(self, rate: np.float64) -> None:
+    def _check_rate(self, rate: np.float64, rate_attrs: List) -> None:
         if rate < 0:
-            raise IpmSimLessThanZeroException(("params", self._ctx.params))
+            attr_dict = {}
+            attrs = self._ctx.ipm.attributes
+            for attr_index in range(len(attrs)):
+                attr_dict[attrs[attr_index].name] = rate_attrs[attr_index]
+            raise IpmSimLessThanZeroException(("params", attr_dict))
         elif np.isnan(rate):
             event_dict = {}
             for event in self._ctx.ipm.events:

@@ -144,7 +144,7 @@ class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
 
     def __init__(self, display_fields: Tuple[str, Dict] | List[Tuple[str, Dict]]):
         msg = '''
-              Less than zero rate detected. When providing or defining parameters, ensure that
+              Less than zero rate detected. When providing or defining ipm parameters, ensure that
               they will not result in a negative rate. Note: this can often happen unintentionally
               if a function is given as a parameter.
               '''
