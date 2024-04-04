@@ -18,9 +18,6 @@ dist/
 build/
 *.egg-info
 
-# Visualization Saves
-model_pngs/
-
 # Testing & dev
 .pytest_cache/
 debug.log
