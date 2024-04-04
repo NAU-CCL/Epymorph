@@ -12,6 +12,8 @@ from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
 from epymorph.engine.context import RumeContext, Tick
 from epymorph.engine.world import World
+from epymorph.error import (IpmSimException, IpmSimLessThanZeroException,
+                            IpmSimNaNException)
 from epymorph.simulation import SimDType
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
@@ -161,6 +163,7 @@ class StandardIpmExecutor(IpmExecutor):
             match t:
                 case _IndependentTrx(rate_lambda):
                     rate = rate_lambda(rate_args)
+                    self._check_rate(rate)
                     occur[index] = self._ctx.rng.poisson(rate * tick.tau)
                 case _ForkedTrx(size, rate_lambda, prob_lambda):
                     rate = rate_lambda(rate_args)
@@ -198,6 +201,16 @@ class StandardIpmExecutor(IpmExecutor):
                     occur[eidxs] = self._ctx.rng.multivariate_hypergeometric(
                         desired, available)
         return occur
+
+    def _check_rate(self, rate: np.float64) -> None:
+        if rate < 0:
+            raise IpmSimLessThanZeroException(("params", self._ctx.params))
+        elif np.isnan(rate):
+            event_dict = {}
+            for event in self._ctx.ipm.events:
+                event_dict[f"{event.compartment_from}->{event.compartment_to}"] = event.rate
+
+            raise IpmSimNaNException(("events", event_dict))
 
     def _distribute(self, cohorts: NDArray[SimDType], events: NDArray[SimDType]) -> NDArray[SimDType]:
         """Distribute all events across a location's cohorts and return the compartment deltas for each."""

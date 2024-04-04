@@ -1,8 +1,10 @@
 """
 A common exception framework for epymorph.
 """
+import dis
 from contextlib import contextmanager
-from typing import Self
+from textwrap import dedent
+from typing import Dict, List, Self, Tuple
 
 
 class UnknownModel(Exception):
@@ -97,6 +99,57 @@ class InitException(SimulationException):
 
 class IpmSimException(SimulationException):
     """Exception during IPM processing."""
+
+
+class IpmSimExceptionWithFields(IpmSimException):
+    """
+    Exception during IPM processing where it is appropriate to show specific
+    fields within the simulation
+    Currently implemented given parameters and rate transitions
+    """
+
+    def __init__(self, message: str, display_fields: Tuple[str, Dict] | List[Tuple[str, Dict]]):
+        super().__init__(message)
+        if isinstance(display_fields, tuple):
+            display_fields = [display_fields]
+        self.display_fields = display_fields
+
+    def __str__(self):
+        msg = super().__str__()
+        fields = ""
+        for name, values in self.display_fields:
+            fields += f"Showing current {name} \n"
+            for key, value in values.items():
+                fields += f"{key}: {value}\n"
+        return f"{msg}\n{fields}"
+
+
+class IpmSimNaNException(IpmSimExceptionWithFields):
+    """Exception for handling NaN (not a number) rate values"""
+
+    def __init__(self, display_fields: Tuple[str, Dict] | List[Tuple[str, Dict]]):
+        msg = '''
+              NaN (not a number) rate detected. This is often the result of a divide by zero error.
+              When constructing the IPM, ensure that no edge transitions can result in division by zero
+              This commonly occurs when defining an S->I edge that is (some rate / sum of the compartments)
+              To fix this, change the edge to define the S->I dege as (some rate / Max(1/sum of the the compartments))
+              See examples of this in the provided example ipm definitions in the data/ipms folder.
+              '''
+        msg = dedent(msg)
+        super().__init__(msg, display_fields)
+
+
+class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
+    """ Exception for handling less than 0 rate values """
+
+    def __init__(self, display_fields: Tuple[str, Dict] | List[Tuple[str, Dict]]):
+        msg = '''
+              Less than zero rate detected. When providing or defining parameters, ensure that
+              they will not result in a negative rate. Note: this can often happen unintentionally
+              if a function is given as a parameter.
+              '''
+        msg = dedent(msg)
+        super().__init__(msg, display_fields)
 
 
 class MmSimException(SimulationException):
