@@ -3,6 +3,7 @@
 import epymorph.compartment_model as IPM
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.data_shape import Shapes
+from epymorph.draw import render, render_and_save
 from epymorph.engine.standard_sim import StandardSimulation
 from epymorph.log.messaging import sim_messaging
 from epymorph.plots import plot_event, plot_pop
@@ -24,4 +25,6 @@ __all__ = [
     'TimeFrame',
     'default_rng',
     'sim_messaging',
+    'render',
+    'render_and_save'
 ]

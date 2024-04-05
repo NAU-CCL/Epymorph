@@ -45,6 +45,7 @@ dependencies = [
   "shapely",
   "openpyxl",
   "platformdirs",
+  "graphviz",
 ]
 
 [project.optional-dependencies]
