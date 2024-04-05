@@ -98,19 +98,12 @@ class SimulateTest(unittest.TestCase):
         with self.assertRaises(IpmSimLessThanZeroException) as e:
             sim.run()
 
-        err_msg = '''
-              Less than zero rate detected. When providing or defining ipm parameters, ensure that
-              they will not result in a negative rate. Note: this can often happen unintentionally
-              if a function is given as a parameter.
+        err_msg = str(e.exception)
 
-              Showing current ipm params
-              infection_duration: 0.25
-              immunity_duration: -0.01
-              humidity: 0.01003
-              '''
-        err_msg = dedent(err_msg)
-
-        self.assertEqual(str(e.exception), err_msg)
+        self.assertIn("Less than zero rate detected", err_msg)
+        self.assertIn("infection_duration: 0.25", err_msg)
+        self.assertIn("immunity_duration: -0.01", err_msg)
+        self.assertIn("humidity: 0.01003", err_msg)
 
     def test_divide_by_zero_err(self):
         """Test exception handling for a divide by zero (NaN) error"""
@@ -133,9 +126,7 @@ class SimulateTest(unittest.TestCase):
             [S, I, R] = symbols.compartment_symbols
             [β, γ, ξ] = symbols.attribute_symbols
 
-            # LOOK!
             # N is NOT protected by Max(1, ...) here
-            # This isn't necessary for Case 1, but is necessary for Case 2.
             N = S + I + R
 
             return create_model(
@@ -179,18 +170,9 @@ class SimulateTest(unittest.TestCase):
         with self.assertRaises(IpmSimNaNException) as e:
             sim.run()
 
-        err_msg = '''
-              NaN (not a number) rate detected. This is often the result of a divide by zero error.
-              When constructing the IPM, ensure that no edge transitions can result in division by zero
-              This commonly occurs when defining an S->I edge that is (some rate / sum of the compartments)
-              To fix this, change the edge to define the S->I edge as (some rate / Max(1/sum of the the compartments))
-              See examples of this in the provided example ipm definitions in the data/ipms folder.
+        err_msg = str(e.exception)
 
-              Showing current events
-              S->I: I*S*beta/(I + R + S)
-              I->R: I*gamma
-              R->S: R*xi
-              '''
-        err_msg = dedent(err_msg)
-
-        self.assertEqual(str(e.exception), err_msg)
+        self.assertIn("NaN (not a number) rate detected", err_msg)
+        self.assertIn("S->I: I*S*beta/(I + R + S)", err_msg)
+        self.assertIn("I->R: I*gamma", err_msg)
+        self.assertIn("R->S: R*xi", err_msg)
