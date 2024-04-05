@@ -118,7 +118,7 @@ class IpmSimExceptionWithFields(IpmSimException):
         msg = super().__str__()
         fields = ""
         for name, values in self.display_fields:
-            fields += f"Showing current {name} \n"
+            fields += f"Showing current {name}\n"
             for key, value in values.items():
                 fields += f"{key}: {value}\n"
         return f"{msg}\n{fields}"
@@ -132,7 +132,7 @@ class IpmSimNaNException(IpmSimExceptionWithFields):
               NaN (not a number) rate detected. This is often the result of a divide by zero error.
               When constructing the IPM, ensure that no edge transitions can result in division by zero
               This commonly occurs when defining an S->I edge that is (some rate / sum of the compartments)
-              To fix this, change the edge to define the S->I dege as (some rate / Max(1/sum of the the compartments))
+              To fix this, change the edge to define the S->I edge as (some rate / Max(1/sum of the the compartments))
               See examples of this in the provided example ipm definitions in the data/ipms folder.
               '''
         msg = dedent(msg)

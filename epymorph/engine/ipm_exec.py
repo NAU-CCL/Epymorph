@@ -12,8 +12,7 @@ from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
 from epymorph.engine.context import RumeContext, Tick
 from epymorph.engine.world import World
-from epymorph.error import (IpmSimException, IpmSimLessThanZeroException,
-                            IpmSimNaNException)
+from epymorph.error import IpmSimLessThanZeroException, IpmSimNaNException
 from epymorph.simulation import SimDType
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
@@ -209,7 +208,7 @@ class StandardIpmExecutor(IpmExecutor):
             attrs = self._ctx.ipm.attributes
             for attr_index in range(len(attrs)):
                 attr_dict[attrs[attr_index].name] = rate_attrs[attr_index]
-            raise IpmSimLessThanZeroException(("params", attr_dict))
+            raise IpmSimLessThanZeroException(("ipm params", attr_dict))
         elif np.isnan(rate):
             event_dict = {}
             for event in self._ctx.ipm.events:
