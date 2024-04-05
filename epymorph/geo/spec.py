@@ -29,6 +29,13 @@ It is the source of truth for how many nodes are in the geo.
 """
 
 
+class SourceSpec(ABC):
+    """
+    Contains information needed by a data source to correctly fetch an attribute.
+    Type of information varies by data source, as well as if any is needed at all.
+    """
+
+
 class Geography(ABC):
     """
     Describes the geographic extent of a dynamic geo.
@@ -165,8 +172,8 @@ class StaticGeoSpec(GeoSpec):
 @dataclass
 class DynamicGeoSpec(GeoSpec):
     """The spec for a DynamicGeo."""
-    scope: GeoScope
-    source: dict[str, str]
+    geography: Geography
+    source: dict[str, str | SourceSpec]
 
 
 def attrib(name: str, dtype: DataDType, shape: DataShape = Shapes.N, comment: str | None = None):

@@ -13,7 +13,7 @@ from numpy.typing import NDArray
 from epymorph.error import AttributeException, GeoValidationException
 from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
-from epymorph.geo.adrio.file.adrio_file import ADRIOMakerFile
+from epymorph.geo.adrio.file.adrio_file import ADRIOMakerFile, FileSpec
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import LABEL, DynamicGeoSpec, validate_geo_values
 from epymorph.simulation import AttributeArray, geo_attrib
@@ -50,10 +50,10 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 msg = f"Missing source for attribute: {attr.name}."
                 raise GeoValidationException(msg)
 
-            maker_name = source
-            adrio_attrib = attr
+            if isinstance(source, str):
+                maker_name = source
+                adrio_attrib = attr
 
-            if not source.startswith("File"):
                 # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
                 # the geo wants to use a different name than the one the maker uses;
                 # no problem, just provide a modified AttribDef to the maker.
@@ -71,24 +71,12 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 adrios[attr.name] = adrio
 
             else:
-                if source.count(':') != 4:
-                    msg = "File source requires a file path, label and data column names, and label type specifier."
-                    raise GeoValidationException(msg)
-                else:
-                    maker_name, file_path, label_key, data_key, join = source.split(
-                        ":")
-                    adrio_attrib = geo_attrib(
-                        adrio_attrib.name, attr.dtype, attr.shape)
-
-                maker = makers[maker_name]
-                if type(maker) is ADRIOMakerFile:
+                maker = makers['File']
+                if isinstance(maker, ADRIOMakerFile) and isinstance(source, FileSpec):
                     adrio = maker.make_adrio(
                         adrio_attrib,
                         spec.geography,
-                        file_path,
-                        label_key,
-                        data_key,
-                        join,
+                        source
                     )
                     adrios[attr.name] = adrio
 
