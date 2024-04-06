@@ -86,11 +86,7 @@ class SimulateTest(unittest.TestCase):
             mm=mm_library['pei'](),
             params={
                 'infection_duration': 1 / 4,
-<<<<<<< HEAD
                 'immunity_duration': -1 / 100,  # notice the negative parameter
-=======
-                'immunity_duration': -1 / 90,  # notice the negative parameter
->>>>>>> 7a1c385 (added unit tests for new exceptions, refactored display to only show current node/tick parameters)
                 'move_control': 0.9,
                 'theta': 0.1,
             },
@@ -99,7 +95,6 @@ class SimulateTest(unittest.TestCase):
             rng=default_rng(42)
         )
 
-<<<<<<< HEAD
         with self.assertRaises(IpmSimLessThanZeroException) as e:
             sim.run()
 
@@ -110,11 +105,6 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("immunity_duration: -0.01", err_msg)
         self.assertIn("humidity: 0.01003", err_msg)
 
-=======
-        with self.assertRaises(IpmSimLessThanZeroException):
-            sim.run()
-
->>>>>>> 7a1c385 (added unit tests for new exceptions, refactored display to only show current node/tick parameters)
     def test_divide_by_zero_err(self):
         """Test exception handling for a divide by zero (NaN) error"""
         def load_ipm() -> CompartmentModel:
@@ -136,13 +126,7 @@ class SimulateTest(unittest.TestCase):
             [S, I, R] = symbols.compartment_symbols
             [β, γ, ξ] = symbols.attribute_symbols
 
-<<<<<<< HEAD
             # N is NOT protected by Max(1, ...) here
-=======
-            # LOOK!
-            # N is NOT protected by Max(1, ...) here
-            # This isn't necessary for Case 1, but is necessary for Case 2.
->>>>>>> 7a1c385 (added unit tests for new exceptions, refactored display to only show current node/tick parameters)
             N = S + I + R
 
             return create_model(
@@ -183,7 +167,6 @@ class SimulateTest(unittest.TestCase):
             rng=default_rng(1)
         )
 
-<<<<<<< HEAD
         with self.assertRaises(IpmSimNaNException) as e:
             sim.run()
 
@@ -193,7 +176,3 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("S->I: I*S*beta/(I + R + S)", err_msg)
         self.assertIn("I->R: I*gamma", err_msg)
         self.assertIn("R->S: R*xi", err_msg)
-=======
-        with self.assertRaises(IpmSimNaNException):
-            sim.run()
->>>>>>> 7a1c385 (added unit tests for new exceptions, refactored display to only show current node/tick parameters)
