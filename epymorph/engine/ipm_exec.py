@@ -1,12 +1,15 @@
 """
 IPM executor classes handle the logic for processing the IPM step of the simulation.
 """
+import inspect
 from abc import ABC, abstractmethod
+from asyncio import events
 from dataclasses import dataclass
-from typing import ClassVar, List
+from typing import Callable, ClassVar, List
 
 import numpy as np
 from numpy.typing import NDArray
+from sympy import sympify
 
 from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
@@ -16,6 +19,9 @@ from epymorph.error import IpmSimLessThanZeroException, IpmSimNaNException
 from epymorph.simulation import SimDType
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
+
+"""Init. numpy to raise errors, not warnings, for divide by zero error"""
+np.seterr(all='raise')
 
 
 class IpmExecutor(ABC):
@@ -161,12 +167,34 @@ class StandardIpmExecutor(IpmExecutor):
         for t in self._trxs:
             match t:
                 case _IndependentTrx(rate_lambda):
-                    rate = rate_lambda(rate_args)
-                    self._check_rate(rate, rate_args[len(effective_pop):])
+                    # get rate from lambda expression, catch divide by zero error
+                    try:
+                        rate = rate_lambda(rate_args)
+                    except (ZeroDivisionError, FloatingPointError):
+                        raise IpmSimNaNException(
+                            self._get_zero_division_args(
+                                rate_args, node, tick, t)
+                        )
+                    # check for < 0 rate, throw error in this case
+                    if rate < 0:
+                        raise IpmSimLessThanZeroException(
+                            self._get_default_error_args(rate_args, node, tick)
+                        )
                     occur[index] = self._ctx.rng.poisson(rate * tick.tau)
                 case _ForkedTrx(size, rate_lambda, prob_lambda):
-                    rate = rate_lambda(rate_args)
-                    self._check_rate(rate, rate_args[len(effective_pop):])
+                    # get rate from lambda expression, catch divide by zero error
+                    try:
+                        rate = rate_lambda(rate_args)
+                    except (ZeroDivisionError, FloatingPointError):
+                        raise IpmSimNaNException(
+                            self._get_zero_division_args(
+                                rate_args, node, tick, t)
+                        )
+                    # check for < 0 base, throw error in this case
+                    if rate < 0:
+                        raise IpmSimLessThanZeroException(
+                            self._get_default_error_args(rate_args, node, tick)
+                        )
                     base = self._ctx.rng.poisson(rate * tick.tau)
                     prob = prob_lambda(rate_args)
                     stop = index + size
@@ -202,19 +230,37 @@ class StandardIpmExecutor(IpmExecutor):
                         desired, available)
         return occur
 
-    def _check_rate(self, rate: np.float64, rate_attrs: List) -> None:
-        if rate < 0:
-            attr_dict = {}
-            attrs = self._ctx.ipm.attributes
-            for attr_index in range(len(attrs)):
-                attr_dict[attrs[attr_index].name] = rate_attrs[attr_index]
-            raise IpmSimLessThanZeroException(("ipm params", attr_dict))
-        elif np.isnan(rate):
-            event_dict = {}
-            for event in self._ctx.ipm.events:
-                event_dict[f"{event.compartment_from}->{event.compartment_to}"] = event.rate
+    def _get_default_error_args(self, rate_attrs: List, node: int, tick: Tick) -> List[tuple[str, dict]]:
+        arg_list = []
+        arg_list.append(("Node : Timestep", {node: tick.step}))
+        arg_list.append(("compartment values", {
+            name: value for (name, value) in zip(self._ctx.ipm.compartment_names,
+                                                 rate_attrs[:self._ctx.dim.compartments])
+        }))
+        arg_list.append(("ipm params", {
+            attribute.name: value for (attribute, value) in zip(self._ctx.ipm.attributes,
+                                                                rate_attrs[self._ctx.dim.compartments:])
+        }))
 
-            raise IpmSimNaNException(("events", event_dict))
+        return arg_list
+
+    def _get_zero_division_args(self, rate_attrs: List, node: int, tick: Tick,
+                                transition: _IndependentTrx | _ForkedTrx) -> List[tuple[str, dict]]:
+        arg_list = self._get_default_error_args(rate_attrs, node, tick)
+
+        transition_index = self._trxs.index(transition)
+        corr_transition = self._ctx.ipm.transitions[transition_index]
+        if isinstance(corr_transition, EdgeDef):
+            arg_list.append(("corresponding transition", {
+                            f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate}))
+        if isinstance(corr_transition, ForkDef):
+            to_compartments = ", ".join([str(edge.compartment_to)
+                                        for edge in corr_transition.edges])
+            from_compartment = corr_transition.edges[0].compartment_from
+            arg_list.append(("corresponding fork transition", {
+                            f"{from_compartment}->({to_compartments})": corr_transition.rate}))
+
+        return arg_list
 
     def _distribute(self, cohorts: NDArray[SimDType], events: NDArray[SimDType]) -> NDArray[SimDType]:
         """Distribute all events across a location's cohorts and return the compartment deltas for each."""

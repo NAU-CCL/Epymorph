@@ -121,6 +121,7 @@ class IpmSimExceptionWithFields(IpmSimException):
             fields += f"Showing current {name}\n"
             for key, value in values.items():
                 fields += f"{key}: {value}\n"
+            fields += "\n"
         return f"{msg}\n{fields}"
 
 
