@@ -15,7 +15,8 @@ from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
 from epymorph.engine.context import RumeContext, Tick
 from epymorph.engine.world import World
-from epymorph.error import IpmSimLessThanZeroException, IpmSimNaNException
+from epymorph.error import (IpmSimInvalidProbsException,
+                            IpmSimLessThanZeroException, IpmSimNaNException)
 from epymorph.simulation import SimDType
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
@@ -197,6 +198,11 @@ class StandardIpmExecutor(IpmExecutor):
                         )
                     base = self._ctx.rng.poisson(rate * tick.tau)
                     prob = prob_lambda(rate_args)
+                    # check for negative probs
+                    if any(n < 0 for n in prob):
+                        raise IpmSimInvalidProbsException(
+                            self._get_invalid_prob_args(rate_args, node, tick, t)
+                        )
                     stop = index + size
                     occur[index:stop] = self._ctx.rng.multinomial(
                         base, prob)
@@ -241,6 +247,24 @@ class StandardIpmExecutor(IpmExecutor):
             attribute.name: value for (attribute, value) in zip(self._ctx.ipm.attributes,
                                                                 rate_attrs[self._ctx.dim.compartments:])
         }))
+
+        return arg_list
+
+    def _get_invalid_prob_args(self, rate_attrs: List, node: int, tick: Tick,
+                               transition: _ForkedTrx) -> List[tuple[str, dict]]:
+        arg_list = self._get_default_error_args(rate_attrs, node, tick)
+
+        transition_index = self._trxs.index(transition)
+        corr_transition = self._ctx.ipm.transitions[transition_index]
+        if isinstance(corr_transition, ForkDef):
+            to_compartments = ", ".join([str(edge.compartment_to)
+                                        for edge in corr_transition.edges])
+            from_compartment = corr_transition.edges[0].compartment_from
+            arg_list.append(("corresponding fork transition and probabilities",
+                             {
+                                 f"{from_compartment}->({to_compartments})": corr_transition.rate,
+                                 f"Probabilities": ', '.join([str(expr) for expr in corr_transition.probs]),
+                             }))
 
         return arg_list
 

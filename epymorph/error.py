@@ -153,6 +153,18 @@ class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
         super().__init__(msg, display_fields)
 
 
+class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
+    """ Exception for handling invalid probability values """
+
+    def __init__(self, display_fields: Tuple[str, Dict] | List[Tuple[str, Dict]]):
+        msg = '''
+              Invalid probabilities for fork definition detected. Probabilities for a 
+              given tick should always be nonnegative and sum to 1
+              '''
+        msg = dedent(msg)
+        super().__init__(msg, display_fields)
+
+
 class MmSimException(SimulationException):
     """Exception during MM processing."""
 
