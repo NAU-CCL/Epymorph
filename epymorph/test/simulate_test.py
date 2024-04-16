@@ -9,7 +9,8 @@ from epymorph import *
 from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge,
                                         param)
-from epymorph.error import IpmSimLessThanZeroException, IpmSimNaNException
+from epymorph.error import (IpmSimInvalidProbsException,
+                            IpmSimLessThanZeroException, IpmSimNaNException)
 from epymorph.geo.spec import NO_DURATION, AttribDef, StaticGeoSpec
 from epymorph.geo.static import StaticGeo
 from epymorph.initializer import single_location
@@ -101,6 +102,10 @@ class SimulateTest(unittest.TestCase):
         err_msg = str(e.exception)
 
         self.assertIn("Less than zero rate detected", err_msg)
+        self.assertIn("Showing current Node : Timestep", err_msg)
+        self.assertIn("S: ", err_msg)
+        self.assertIn("I: ", err_msg)
+        self.assertIn("R: ", err_msg)
         self.assertIn("infection_duration: 0.25", err_msg)
         self.assertIn("immunity_duration: -0.01", err_msg)
         self.assertIn("humidity: 0.01003", err_msg)
@@ -160,7 +165,7 @@ class SimulateTest(unittest.TestCase):
                 'phi': 40.0,
                 'beta': 0.4,
                 'gamma': 1 / 5,
-                'xi': 1 / 90,
+                'xi': 1 / 100,
             },
             time_frame=TimeFrame.of("2015-01-01", 150),
             initializer=partial(single_location, location=1, seed_size=5),
@@ -173,6 +178,49 @@ class SimulateTest(unittest.TestCase):
         err_msg = str(e.exception)
 
         self.assertIn("NaN (not a number) rate detected", err_msg)
+        self.assertIn("Showing current Node : Timestep", err_msg)
+        self.assertIn("S: 0", err_msg)
+        self.assertIn("I: 0", err_msg)
+        self.assertIn("R: 0", err_msg)
+        self.assertIn("beta: 0.4", err_msg)
+        self.assertIn("gamma: 0.2", err_msg)
+        self.assertIn("xi: 0.01", err_msg)
         self.assertIn("S->I: I*S*beta/(I + R + S)", err_msg)
-        self.assertIn("I->R: I*gamma", err_msg)
-        self.assertIn("R->S: R*xi", err_msg)
+
+    def test_negative_probs_error(self):
+        """Test for handling negative probability error"""
+        sim = StandardSimulation(
+            geo=geo_library['pei'](),
+            ipm=ipm_library['sirh'](),
+            mm=mm_library['no'](),
+            params={
+                'beta': 0.4,
+                'gamma': 1 / 5,
+                'xi': 1 / 100,
+                'hospitalization_prob': -1 / 5,
+                'hospitalization_duration': 15
+            },
+            time_frame=TimeFrame.of("2015-01-01", 150),
+            initializer=partial(single_location, location=1, seed_size=5),
+            rng=default_rng(1)
+        )
+
+        with self.assertRaises(IpmSimInvalidProbsException) as e:
+            sim.run()
+
+        err_msg = str(e.exception)
+
+        self.assertIn("Invalid probabilities for fork definition detected.", err_msg)
+        self.assertIn("Showing current Node : Timestep", err_msg)
+        self.assertIn("S: ", err_msg)
+        self.assertIn("I: ", err_msg)
+        self.assertIn("R: ", err_msg)
+        self.assertIn("beta: 0.4", err_msg)
+        self.assertIn("gamma: 0.2", err_msg)
+        self.assertIn("xi: 0.01", err_msg)
+        self.assertIn("hospitalization_prob: -0.2", err_msg)
+        self.assertIn("hospitalization_duration: 15", err_msg)
+
+        self.assertIn("I->(H, R): I*gamma", err_msg)
+        self.assertIn(
+            "Probabilities: hospitalization_prob, 1 - hospitalization_prob", err_msg)
