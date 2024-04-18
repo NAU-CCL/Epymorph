@@ -104,8 +104,10 @@ class IpmSimException(SimulationException):
 class IpmSimExceptionWithFields(IpmSimException):
     """
     Exception during IPM processing where it is appropriate to show specific
-    fields within the simulation
-    Currently implemented given parameters and rate transitions
+    fields within the simulation.
+    To create a new error with fields, create a subclass of this and set the 
+    displayed error message along with the fields to print.
+    See 'IpmSimNaNException' for an example.
     """
 
     def __init__(self, message: str, display_fields: Tuple[str, Dict] | List[Tuple[str, Dict]]):
