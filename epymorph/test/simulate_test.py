@@ -10,7 +10,8 @@ from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge,
                                         param)
 from epymorph.error import (IpmSimInvalidProbsException,
-                            IpmSimLessThanZeroException, IpmSimNaNException)
+                            IpmSimLessThanZeroException, IpmSimNaNException,
+                            MmSimException)
 from epymorph.geo.spec import NO_DURATION, AttribDef, StaticGeoSpec
 from epymorph.geo.static import StaticGeo
 from epymorph.initializer import single_location
@@ -142,8 +143,6 @@ class SimulateTest(unittest.TestCase):
                     edge(R, S, rate=ξ * R)
                 ])
 
-        ipm = load_ipm()
-
         my_geo = StaticGeo(
             spec=StaticGeoSpec(
                 attributes=[
@@ -224,3 +223,30 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("I->(H, R): I*gamma", err_msg)
         self.assertIn(
             "Probabilities: hospitalization_prob, 1 - hospitalization_prob", err_msg)
+
+    def test_mm_clause_error(self):
+        """Test for handling invalid movement model clause application"""
+
+        sim = StandardSimulation(
+            geo=geo_library['pei'](),
+            ipm=ipm_library['pei'](),
+            mm=mm_library['pei'](),
+            params={
+                'infection_duration': 40.0,
+                'immunity_duration': 0.4,
+                'humidity': 20.2,
+                'move_control': 0.4,
+                'theta': -5
+            },
+            time_frame=TimeFrame.of("2015-01-01", 150),
+            initializer=partial(single_location, location=1, seed_size=5),
+            rng=default_rng(1)
+        )
+
+        with self.assertRaises(MmSimException) as e:
+            sim.run()
+
+        err_msg = str(e.exception)
+
+        self.assertIn(
+            "Error from applying clause 'dispersers': lam < 0 or lam contains NaNs", err_msg)
