@@ -117,9 +117,9 @@ class DynamicTravelClause(TravelClause):
             msg = f"Missing attribute {e} required by movement model clause '{self.name}'."
             raise AttributeException(msg) from None
         except Exception as e:
-            # NOTE: catching ValueError here is necessary to get nice error messages
+            # NOTE: catching exceptions here is necessary to get nice error messages
             # for some value error cause by incorrect parameter and/or clause definition
-            msg = f"Error from applying clause '{self.name}': {e}"
+            msg = f"Error from applying clause '{self.name}': see exception trace"
             raise MmSimException(msg) from e
 
     def returns(self, ctx: MovementContext, tick: Tick) -> TickDelta:

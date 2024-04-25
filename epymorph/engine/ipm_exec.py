@@ -1,15 +1,12 @@
 """
 IPM executor classes handle the logic for processing the IPM step of the simulation.
 """
-import inspect
 from abc import ABC, abstractmethod
-from asyncio import events
 from dataclasses import dataclass
-from typing import Callable, ClassVar, List
+from typing import ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
-from sympy import sympify
 
 from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
@@ -20,9 +17,6 @@ from epymorph.error import (IpmSimInvalidProbsException,
 from epymorph.simulation import SimDType
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
-
-"""Init. numpy to raise errors, not warnings, for divide by zero error"""
-np.seterr(all='raise')
 
 
 class IpmExecutor(ABC):
@@ -236,7 +230,7 @@ class StandardIpmExecutor(IpmExecutor):
                         desired, available)
         return occur
 
-    def _get_default_error_args(self, rate_attrs: List, node: int, tick: Tick) -> List[tuple[str, dict]]:
+    def _get_default_error_args(self, rate_attrs: list, node: int, tick: Tick) -> list[tuple[str, dict]]:
         arg_list = []
         arg_list.append(("Node : Timestep", {node: tick.step}))
         arg_list.append(("compartment values", {
@@ -250,8 +244,8 @@ class StandardIpmExecutor(IpmExecutor):
 
         return arg_list
 
-    def _get_invalid_prob_args(self, rate_attrs: List, node: int, tick: Tick,
-                               transition: _ForkedTrx) -> List[tuple[str, dict]]:
+    def _get_invalid_prob_args(self, rate_attrs: list, node: int, tick: Tick,
+                               transition: _ForkedTrx) -> list[tuple[str, dict]]:
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
@@ -268,8 +262,8 @@ class StandardIpmExecutor(IpmExecutor):
 
         return arg_list
 
-    def _get_zero_division_args(self, rate_attrs: List, node: int, tick: Tick,
-                                transition: _IndependentTrx | _ForkedTrx) -> List[tuple[str, dict]]:
+    def _get_zero_division_args(self, rate_attrs: list, node: int, tick: Tick,
+                                transition: _IndependentTrx | _ForkedTrx) -> list[tuple[str, dict]]:
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)

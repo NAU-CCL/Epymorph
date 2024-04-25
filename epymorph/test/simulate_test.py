@@ -1,7 +1,6 @@
 # pylint: disable=missing-docstring
 import unittest
 from functools import partial
-from textwrap import dedent
 
 import numpy as np
 
@@ -249,4 +248,4 @@ class SimulateTest(unittest.TestCase):
         err_msg = str(e.exception)
 
         self.assertIn(
-            "Error from applying clause 'dispersers': lam < 0 or lam contains NaNs", err_msg)
+            "Error from applying clause 'dispersers': see exception trace", err_msg)

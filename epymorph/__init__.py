@@ -1,5 +1,7 @@
 """epymorph's main package and main exports"""
 
+from numpy import seterr
+
 import epymorph.compartment_model as IPM
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.data_shape import Shapes
@@ -9,6 +11,10 @@ from epymorph.log.messaging import sim_messaging
 from epymorph.plots import plot_event, plot_pop
 from epymorph.proxy import dim, geo
 from epymorph.simulation import SimDType, TimeFrame, default_rng
+
+# set numpy errors to raise exceptions instead of warnings, useful for catching
+# simulation errrors
+seterr(all='raise')
 
 __all__ = [
     'IPM',
