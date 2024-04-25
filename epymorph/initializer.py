@@ -90,7 +90,7 @@ def explicit(ctx: InitContext, initials: NDArray[SimDType]) -> NDArray[SimDType]
     """
     _, N, C, _ = ctx.dim.TNCE
     try:
-        check_ndarray(initials, SimDType, (N, C))
+        check_ndarray(initials, [SimDType], (N, C))
     except NumpyTypeError as e:
         raise InitException.for_arg('initials') from e
     return initials.copy()
@@ -131,7 +131,7 @@ def indexed_locations(ctx: InitContext, selection: NDArray[np.intp], seed_size: 
     N = ctx.dim.nodes
 
     try:
-        check_ndarray(selection, np.intp, dimensions=1)
+        check_ndarray(selection, [np.intp], dimensions=1)
     except NumpyTypeError as e:
         raise InitException.for_arg('selection') from e
     if not np.all((-N < selection) & (selection < N)):
@@ -176,7 +176,7 @@ def labeled_locations(ctx: InitContext, labels: NDArray[np.str_], seed_size: int
     - `seed_size` the number of individuals to infect in total
     """
     try:
-        check_ndarray(labels, np.str_)
+        check_ndarray(labels, [np.str_])
     except NumpyTypeError as e:
         raise InitException.for_arg('label') from e
 

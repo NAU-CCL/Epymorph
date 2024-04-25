@@ -194,7 +194,7 @@ def validate_geo_values(spec: GeoSpec, values: dict[str, NDArray]) -> None:
         try:
             v = values[a.name]
             expected_shape = a.shape.as_tuple(N, T)
-            check_ndarray(v, dtype=a.dtype, shape=expected_shape)
+            check_ndarray(v, dtype=[a.dtype], shape=expected_shape)
         except KeyError:
             msg = f"Geo is missing values for attribute '{a.name}'."
             attribute_errors.append(msg)

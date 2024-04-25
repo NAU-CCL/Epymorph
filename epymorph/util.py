@@ -236,7 +236,7 @@ def dtype_name(d: np.dtype) -> str:
 
 def check_ndarray(
     value: Any,
-    dtype: DTypeLike | list[DTypeLike] | None = None,
+    dtype: list[DTypeLike] | None = None,
     shape: tuple[int, ...] | list[tuple[int, ...]] | None = None,
     dimensions: int | list[int] | None = None,
 ) -> None:
@@ -255,7 +255,7 @@ def check_ndarray(
             msg = f"Not a numpy shape match: got {value.shape}, expected {shape}"
             raise NumpyTypeError(msg)
     if dtype is not None:
-        npdtypes = [np.dtype(x) for x in as_list(dtype)]
+        npdtypes = [np.dtype(x) for x in dtype]
         is_subtype = map(lambda x: np.issubdtype(value.dtype, x), npdtypes)
         if not any(is_subtype):
             if len(npdtypes) == 1:
