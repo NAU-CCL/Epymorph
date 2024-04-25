@@ -258,7 +258,7 @@ def _initialize(ctx: RumeContext) -> NDArray[SimDType]:
 
     try:
         _, N, C, _ = ctx.dim.TNCE
-        check_ndarray(result, SimDType, (N, C))
+        check_ndarray(result, [SimDType], (N, C))
     except NumpyTypeError as e:
         raise InitException(f"Invalid return type from '{init_name}'") from e
     return result

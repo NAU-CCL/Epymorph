@@ -46,9 +46,9 @@ class TestUtil(unittest.TestCase):
         # Test is just to make sure none of these raise NumpyTypeError
         arr = np.array([1, 2, 3], dtype=np.int64)
         util.check_ndarray(arr)
-        util.check_ndarray(arr, dtype=np.int64)
+        util.check_ndarray(arr, dtype=[np.int64])
         util.check_ndarray(arr, shape=(3,))
-        util.check_ndarray(arr, np.int64, (3,))
+        util.check_ndarray(arr, [np.int64], (3,))
         util.check_ndarray(arr, [np.int64], (3,))
         util.check_ndarray(arr, [np.int64, np.float64], (3,))
         util.check_ndarray(arr, [np.float64, np.int64], (3,))
@@ -80,6 +80,33 @@ class TestUtil(unittest.TestCase):
         with self.assertRaises(util.NumpyTypeError):
             util.check_ndarray(arr, shape=(3, 4, 1))
         with self.assertRaises(util.NumpyTypeError):
-            util.check_ndarray(arr, dtype=np.str_)
+            util.check_ndarray(arr, dtype=[np.str_])
         with self.assertRaises(util.NumpyTypeError):
             util.check_ndarray(arr, dimensions=3)
+
+    def test_check_ndarray_04(self):
+        # check_ndarray is poorly constructed to support structural types.
+        #
+        # Its original signature accepted a single DType or lists of DTypes intended to be joined with a logical "or".
+        # However in this scheme it's hard to distinguish structural types (which are also lists).
+        # With enough effort we could get this to work, but really this is a pretty unnecessary feature, so not worth it.
+        #
+        # For the time-being we're going to patch this by just requiring the dtype argument is passed as a list,
+        # even when there's only one option. This way structural types are wrapped in an extra list and we can drop
+        # the list detection logic. (Long term I want to phase out check_ndarray and its over-flexibility.)
+        #
+        # What makes this patch unfortunate is that if you accidentally pass a structural type without wrapping it in a list
+        # type-checking succeeds, but will fail at runtime:
+        #
+        # util.check_ndarray(arr, dtype=lnglat) --> ERROR: "data type 'longitude' not understood"
+
+        lnglat = [('longitude', np.float64), ('latitude', np.float64)]
+        arr = np.array([(1.0, 2.0), (3.0, 4.0)], dtype=lnglat)
+        # Doesn't raise...
+        util.check_ndarray(arr, dtype=[lnglat])
+        util.check_ndarray(arr, dtype=[np.float64, lnglat])
+        # Does raise...
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(arr, dtype=[np.str_])
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray(arr, dtype=[np.float64])
