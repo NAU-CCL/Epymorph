@@ -2,8 +2,7 @@
 import os
 from pathlib import Path
 
-from platformdirs import user_cache_path
-
+from epymorph.cache import CACHE_PATH
 from epymorph.data import adrio_maker_library, geo_library_dynamic
 from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.dynamic import DynamicGeoFileOps as DF
@@ -12,8 +11,6 @@ from epymorph.geo.static import StaticGeo
 from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
 from epymorph.log.messaging import dynamic_geo_messaging
-
-CACHE_PATH = user_cache_path(appname='epymorph', ensure_exists=True)
 
 
 class GeoCacheException(Exception):
@@ -166,9 +163,6 @@ def format_size(size: int) -> str:
 
 def get_total_size() -> str:
     """Returns the total size of all files in the geo cache using 1024-based unit representation."""
-    files = os.listdir(CACHE_PATH)
-    total_size = 0
-    for file in files:
-        total_size += os.path.getsize(CACHE_PATH / file)
-
+    total_size = sum((os.path.getsize(CACHE_PATH / file)
+                      for file, _ in F.iterate_dir_path(CACHE_PATH)))
     return format_size(total_size)

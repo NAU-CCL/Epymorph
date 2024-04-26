@@ -2,19 +2,18 @@
 A static geo is one that is pre-packaged with all of its data; it doesn't need to fetch any data from outside itself,
 and all of its data is resident in memory when loaded.
 """
-import hashlib
-import io
-import os
-import tarfile
 from importlib.abc import Traversable
+from io import BytesIO
+from os import PathLike
 from pathlib import Path
 from typing import Iterator, Self, cast
 
-import jsonpickle
 import numpy as np
+from jsonpickle import encode as json_encode
 from numpy.typing import NDArray
 
 import epymorph.data_shape as shape
+from epymorph.cache import load_bundle, save_bundle
 from epymorph.error import AttributeException, GeoValidationException
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import (LABEL, AttribDef, StaticGeoSpec,
@@ -95,7 +94,7 @@ class StaticGeo(Geo[StaticGeoSpec]):
         }
         return self.__class__(self.spec, filtered_values)
 
-    def save(self, file: os.PathLike) -> None:
+    def save(self, file: PathLike) -> None:
         """Saves this geo to tar format."""
         StaticGeoFileOps.save_as_archive(self, file)
 
@@ -106,12 +105,12 @@ class StaticGeoFileOps:
     @staticmethod
     def to_archive_filename(geo_id: str) -> str:
         """Returns the standard filename for a geo archive."""
-        return f"{geo_id}.geo.tar"
+        return f"{geo_id}.geo.tgz"
 
     @staticmethod
     def to_geo_name(filename: str) -> str:
         """Returns the geo ID from a standard geo archive filename."""
-        return filename.removesuffix('.geo.tar')
+        return filename.removesuffix('.geo.tgz')
 
     @staticmethod
     def iterate_dir(directory: Traversable) -> Iterator[tuple[Traversable, str]]:
@@ -123,7 +122,7 @@ class StaticGeoFileOps:
         """
         return ((f, StaticGeoFileOps.to_geo_name(f.name))
                 for f in directory.iterdir()
-                if f.is_file() and f.name.endswith('.geo.tar'))
+                if f.is_file() and f.name.endswith('.geo.tgz'))
 
     @staticmethod
     def iterate_dir_path(directory: Path) -> Iterator[tuple[Path, str]]:
@@ -135,100 +134,53 @@ class StaticGeoFileOps:
         """
         return ((f, StaticGeoFileOps.to_geo_name(f.name))
                 for f in directory.iterdir()
-                if f.is_file() and f.name.endswith('.geo.tar'))
+                if f.is_file() and f.name.endswith('.geo.tgz'))
 
     @staticmethod
-    def save_as_archive(geo: StaticGeo, file: os.PathLike) -> None:
+    def save_as_archive(geo: StaticGeo, file: PathLike) -> None:
         """Save a StaticGeo to its tar format."""
 
-        # Write the data file in memory
-        npz_file = io.BytesIO()
-        # sorting the geo values makes the sha256 a little more stable
+        # Write the data file
+        # (sorting the geo values makes the sha256 a little more stable)
+        npz_file = BytesIO()
         np.savez_compressed(npz_file, **as_sorted_dict(geo.values))
-        # Data checksum
-        npz_file.seek(0)
-        data_sha256 = hashlib.sha256()
-        data_sha256.update(npz_file.read())
 
-        # Write the spec file in memory
-        geo_file = io.BytesIO()
-        geo_json = cast(str, jsonpickle.encode(geo.spec, unpicklable=True))
+        # Write the spec file
+        geo_file = BytesIO()
+        geo_json = cast(str, json_encode(geo.spec, unpicklable=True))
         geo_file.write(geo_json.encode('utf-8'))
-        # Spec checksum
-        geo_file.seek(0)
-        spec_sha256 = hashlib.sha256()
-        spec_sha256.update(geo_file.read())
 
-        # Write sha256 checksums file in memory
-        sha_file = io.BytesIO()
-        sha_text = f"""\
-{data_sha256.hexdigest()}  data.npz
-{spec_sha256.hexdigest()}  spec.geo"""
-        sha_file.write(bytes(sha_text, encoding='utf-8'))
-
-        # Write the tar to disk
-        with tarfile.open(file, 'w') as tar:
-            def add_file(contents: io.BytesIO, name: str) -> None:
-                info = tarfile.TarInfo(name)
-                info.size = contents.tell()
-                contents.seek(0)
-                tar.addfile(info, contents)
-
-            add_file(npz_file, 'data.npz')
-            add_file(geo_file, 'spec.geo')
-            add_file(sha_file, 'checksums.sha256')
+        save_bundle(
+            to_path=file,
+            version=1,
+            files={
+                "data.npz": npz_file,
+                "spec.geo": geo_file,
+            },
+        )
 
     @staticmethod
-    def load_from_archive(file: os.PathLike) -> StaticGeo:
+    def load_from_archive(file: PathLike) -> StaticGeo:
         """Load a StaticGeo from its tar format."""
         try:
-            # Read the tar file into memory
-            tar_buffer = io.BytesIO()
-            with open(file, 'rb') as f:
-                tar_buffer.write(f.read())
-            tar_buffer.seek(0)
+            # allow version -1 so this is backwards compatible with geos that didn't have version
+            files = load_bundle(file, version_at_least=-1)
+            if "data.npz" not in files or "spec.geo" not in files:
+                msg = 'Archive is incomplete: missing data, spec, and/or checksum files.'
+                raise GeoValidationException(msg)
 
-            with tarfile.open(fileobj=tar_buffer, mode='r') as tar:
-                npz_file = tar.extractfile(tar.getmember('data.npz'))
-                geo_file = tar.extractfile(tar.getmember('spec.geo'))
-                sha_file = tar.extractfile(tar.getmember('checksums.sha256'))
+            # Read the spec file
+            geo_file = files["spec.geo"]
+            geo_file.seek(0)
+            spec_json = geo_file.read().decode('utf8')
+            spec = StaticGeoSpec.deserialize(spec_json)
 
-                if npz_file is None or geo_file is None or sha_file is None:
-                    msg = 'Archive is incomplete: missing data, spec, and/or checksum files.'
-                    raise GeoValidationException(msg)
+            # Read the data file
+            npz_file = files["data.npz"]
+            npz_file.seek(0)
+            with np.load(npz_file) as data:
+                values = dict(data)
 
-                # Verify the checksums
-                for line_bytes in sha_file.readlines():
-                    line = str(line_bytes, encoding='utf-8')
-                    [checksum, filename] = line.strip().split('  ')
-                    match filename:
-                        case 'data.npz':
-                            file_to_check = npz_file
-                        case 'spec.geo':
-                            file_to_check = geo_file
-                        case _:
-                            # There shouldn't be any other files listed in the checksum.
-                            msg = f"Unknown file listing in checksums.sha256 ({filename})."
-                            raise GeoValidationException(msg)
-                    file_to_check.seek(0)
-                    sha256 = hashlib.sha256()
-                    sha256.update(file_to_check.read())
-                    if checksum != sha256.hexdigest():
-                        msg = f"Archive checksum did not match (for file {filename}). "\
-                            "It is possible the file has been corrupted."
-                        raise GeoValidationException(msg)
-
-                # Read the spec file in memory
-                geo_file.seek(0)
-                spec_json = geo_file.read().decode('utf8')
-                spec = StaticGeoSpec.deserialize(spec_json)
-
-                # Read the data file in memory
-                npz_file.seek(0)
-                with np.load(npz_file) as data:
-                    values = dict(data)
-
-                return StaticGeo(spec, values)
-
+            return StaticGeo(spec, values)
         except Exception as e:
             raise GeoValidationException(f"Unable to load '{file}' as a geo.") from e
