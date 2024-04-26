@@ -5,6 +5,7 @@ import os
 from argparse import _SubParsersAction
 from pathlib import Path
 
+from epymorph.cache import CACHE_PATH
 from epymorph.data import geo_library, geo_library_dynamic
 from epymorph.geo import cache
 from epymorph.geo.static import StaticGeoFileOps as F
@@ -111,7 +112,7 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
         raise cache.GeoCacheException("Specified geo not found.")
 
     # cache geo according to information passed
-    file_path = cache.CACHE_PATH / F.to_archive_filename(geo_name)
+    file_path = CACHE_PATH / F.to_archive_filename(geo_name)
     if geo_path is not None and geo_name in geo_library:
         msg = f"A geo named {geo_name} is already present in the library. Please use the existing geo or change the file name."
         raise cache.GeoCacheException(msg)
@@ -131,9 +132,9 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
 def export(geo_name_or_path: str, out: str | None, rename: str | None, ignore_cache: bool) -> int:
     """CLI command handler: export compressed geo to a location outside the cache."""
     # split geo name and path
-    if geo_name_or_path in geo_library_dynamic or os.path.exists(cache.CACHE_PATH / F.to_archive_filename(geo_name_or_path)):
+    if geo_name_or_path in geo_library_dynamic or os.path.exists(CACHE_PATH / F.to_archive_filename(geo_name_or_path)):
         geo_name = geo_name_or_path
-        geo_path = cache.CACHE_PATH / F.to_archive_filename(geo_name)
+        geo_path = CACHE_PATH / F.to_archive_filename(geo_name)
     elif os.path.exists(Path(geo_name_or_path).expanduser()):
         geo_path = Path(geo_name_or_path).expanduser()
         geo_name = geo_path.stem
@@ -161,23 +162,26 @@ def remove(geo_name: str) -> int:
 def print_geos() -> int:
     """CLI command handler: print geo cache information"""
     geos = cache.list_geos()
-    num_geos = len(geos)
-    if num_geos > 0:
+    n = len(geos)
+    if n > 0:
         print(
-            f'epymorph geo cache contains {num_geos} geos totaling {cache.get_total_size()} ({cache.CACHE_PATH})')
+            f"epymorph geo cache contains {n} geo{('s' if n > 1 else '')} "
+            f"totaling {cache.get_total_size()} ({CACHE_PATH})"
+        )
         for (name, file_size) in geos:
             print(f"* {name} ({cache.format_size(file_size)})")
     else:
-        print(f'epymorph geo cache is empty ({cache.CACHE_PATH})')
+        print(f'epymorph geo cache ({CACHE_PATH}) is empty')
     return 0  # exit code: success
 
 
 def clear() -> int:
     """CLI command handler: clear geo cache"""
-    if len(os.listdir(cache.CACHE_PATH)) > 0:
+    geos = cache.list_geos()
+    if len(geos) > 0:
         print(
-            f'The following geos will be removed from the cache ({cache.CACHE_PATH}) and free {cache.get_total_size()} of space:')
-        for (name, file_size) in cache.list_geos():
+            f'The following geos will be removed from the cache ({CACHE_PATH}) and free {cache.get_total_size()} of space:')
+        for (name, file_size) in geos:
             print(f"* {name} ({cache.format_size(file_size)})")
         choice = input('proceed? [y/n] ')
         if choice == 'y':
@@ -188,5 +192,5 @@ def clear() -> int:
 
         return 0  # exit code: success
     else:
-        print(f'cache ({cache.CACHE_PATH}) is empty, nothing to clear.')
+        print(f'epymorph geo cache ({CACHE_PATH}) is empty, nothing to clear.')
         return 2  # exit code: empty cache
