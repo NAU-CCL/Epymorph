@@ -12,6 +12,8 @@ from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
 from epymorph.engine.context import RumeContext, Tick
 from epymorph.engine.world import World
+from epymorph.error import (IpmSimInvalidProbsException,
+                            IpmSimLessThanZeroException, IpmSimNaNException)
 from epymorph.simulation import SimDType
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
@@ -160,12 +162,41 @@ class StandardIpmExecutor(IpmExecutor):
         for t in self._trxs:
             match t:
                 case _IndependentTrx(rate_lambda):
-                    rate = rate_lambda(rate_args)
+                    # get rate from lambda expression, catch divide by zero error
+                    try:
+                        rate = rate_lambda(rate_args)
+                    except (ZeroDivisionError, FloatingPointError):
+                        raise IpmSimNaNException(
+                            self._get_zero_division_args(
+                                rate_args, node, tick, t)
+                        )
+                    # check for < 0 rate, throw error in this case
+                    if rate < 0:
+                        raise IpmSimLessThanZeroException(
+                            self._get_default_error_args(rate_args, node, tick)
+                        )
                     occur[index] = self._ctx.rng.poisson(rate * tick.tau)
                 case _ForkedTrx(size, rate_lambda, prob_lambda):
-                    rate = rate_lambda(rate_args)
+                    # get rate from lambda expression, catch divide by zero error
+                    try:
+                        rate = rate_lambda(rate_args)
+                    except (ZeroDivisionError, FloatingPointError):
+                        raise IpmSimNaNException(
+                            self._get_zero_division_args(
+                                rate_args, node, tick, t)
+                        )
+                    # check for < 0 base, throw error in this case
+                    if rate < 0:
+                        raise IpmSimLessThanZeroException(
+                            self._get_default_error_args(rate_args, node, tick)
+                        )
                     base = self._ctx.rng.poisson(rate * tick.tau)
                     prob = prob_lambda(rate_args)
+                    # check for negative probs
+                    if any(n < 0 for n in prob):
+                        raise IpmSimInvalidProbsException(
+                            self._get_invalid_prob_args(rate_args, node, tick, t)
+                        )
                     stop = index + size
                     occur[index:stop] = self._ctx.rng.multinomial(
                         base, prob)
@@ -198,6 +229,56 @@ class StandardIpmExecutor(IpmExecutor):
                     occur[eidxs] = self._ctx.rng.multivariate_hypergeometric(
                         desired, available)
         return occur
+
+    def _get_default_error_args(self, rate_attrs: list, node: int, tick: Tick) -> list[tuple[str, dict]]:
+        arg_list = []
+        arg_list.append(("Node : Timestep", {node: tick.step}))
+        arg_list.append(("compartment values", {
+            name: value for (name, value) in zip(self._ctx.ipm.compartment_names,
+                                                 rate_attrs[:self._ctx.dim.compartments])
+        }))
+        arg_list.append(("ipm params", {
+            attribute.name: value for (attribute, value) in zip(self._ctx.ipm.attributes,
+                                                                rate_attrs[self._ctx.dim.compartments:])
+        }))
+
+        return arg_list
+
+    def _get_invalid_prob_args(self, rate_attrs: list, node: int, tick: Tick,
+                               transition: _ForkedTrx) -> list[tuple[str, dict]]:
+        arg_list = self._get_default_error_args(rate_attrs, node, tick)
+
+        transition_index = self._trxs.index(transition)
+        corr_transition = self._ctx.ipm.transitions[transition_index]
+        if isinstance(corr_transition, ForkDef):
+            to_compartments = ", ".join([str(edge.compartment_to)
+                                        for edge in corr_transition.edges])
+            from_compartment = corr_transition.edges[0].compartment_from
+            arg_list.append(("corresponding fork transition and probabilities",
+                             {
+                                 f"{from_compartment}->({to_compartments})": corr_transition.rate,
+                                 f"Probabilities": ', '.join([str(expr) for expr in corr_transition.probs]),
+                             }))
+
+        return arg_list
+
+    def _get_zero_division_args(self, rate_attrs: list, node: int, tick: Tick,
+                                transition: _IndependentTrx | _ForkedTrx) -> list[tuple[str, dict]]:
+        arg_list = self._get_default_error_args(rate_attrs, node, tick)
+
+        transition_index = self._trxs.index(transition)
+        corr_transition = self._ctx.ipm.transitions[transition_index]
+        if isinstance(corr_transition, EdgeDef):
+            arg_list.append(("corresponding transition", {
+                            f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate}))
+        if isinstance(corr_transition, ForkDef):
+            to_compartments = ", ".join([str(edge.compartment_to)
+                                        for edge in corr_transition.edges])
+            from_compartment = corr_transition.edges[0].compartment_from
+            arg_list.append(("corresponding fork transition", {
+                            f"{from_compartment}->({to_compartments})": corr_transition.rate}))
+
+        return arg_list
 
     def _distribute(self, cohorts: NDArray[SimDType], events: NDArray[SimDType]) -> NDArray[SimDType]:
         """Distribute all events across a location's cohorts and return the compartment deltas for each."""

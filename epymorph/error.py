@@ -2,6 +2,7 @@
 A common exception framework for epymorph.
 """
 from contextlib import contextmanager
+from textwrap import dedent
 from typing import Self
 
 
@@ -97,6 +98,74 @@ class InitException(SimulationException):
 
 class IpmSimException(SimulationException):
     """Exception during IPM processing."""
+
+
+class IpmSimExceptionWithFields(IpmSimException):
+    """
+    Exception during IPM processing where it is appropriate to show specific
+    fields within the simulation.
+    To create a new error with fields, create a subclass of this and set the 
+    displayed error message along with the fields to print.
+    See 'IpmSimNaNException' for an example.
+    """
+
+    display_fields: tuple[str, dict] | list[tuple[str, dict]]
+
+    def __init__(self, message: str, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+        super().__init__(message)
+        if isinstance(display_fields, tuple):
+            display_fields = [display_fields]
+        self.display_fields = display_fields
+
+    def __str__(self):
+        msg = super().__str__()
+        fields = ""
+        for name, values in self.display_fields:
+            fields += f"Showing current {name}\n"
+            for key, value in values.items():
+                fields += f"{key}: {value}\n"
+            fields += "\n"
+        return f"{msg}\n{fields}"
+
+
+class IpmSimNaNException(IpmSimExceptionWithFields):
+    """Exception for handling NaN (not a number) rate values"""
+
+    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+        msg = '''
+              NaN (not a number) rate detected. This is often the result of a divide by zero error.
+              When constructing the IPM, ensure that no edge transitions can result in division by zero
+              This commonly occurs when defining an S->I edge that is (some rate / sum of the compartments)
+              To fix this, change the edge to define the S->I edge as (some rate / Max(1/sum of the the compartments))
+              See examples of this in the provided example ipm definitions in the data/ipms folder.
+              '''
+        msg = dedent(msg)
+        super().__init__(msg, display_fields)
+
+
+class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
+    """ Exception for handling less than 0 rate values """
+
+    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+        msg = '''
+              Less than zero rate detected. When providing or defining ipm parameters, ensure that
+              they will not result in a negative rate. Note: this can often happen unintentionally
+              if a function is given as a parameter.
+              '''
+        msg = dedent(msg)
+        super().__init__(msg, display_fields)
+
+
+class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
+    """ Exception for handling invalid probability values """
+
+    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+        msg = '''
+              Invalid probabilities for fork definition detected. Probabilities for a 
+              given tick should always be nonnegative and sum to 1
+              '''
+        msg = dedent(msg)
+        super().__init__(msg, display_fields)
 
 
 class MmSimException(SimulationException):
