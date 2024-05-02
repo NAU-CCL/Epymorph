@@ -8,7 +8,7 @@ from argparse import _SubParsersAction
 from datetime import date
 from functools import partial, wraps
 from pathlib import Path
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Any, Callable, Concatenate, ParamSpec, TypeVar
 
 import numpy as np
 from pydantic import BaseModel, ValidationError
@@ -220,25 +220,22 @@ P = ParamSpec('P')
 
 
 def load_messaging(description: str):
-    """Decorates a loading function to make it emit pretty messages."""
-    def make_decorator(func: Callable[P, ModelT]) -> Callable[P, ModelT]:
+    """
+    Decorates a loading function to make it emit pretty messages.
+    Requires that the first parameter is a name.
+    """
+    def make_decorator(func: Callable[Concatenate[str, P], ModelT]) -> Callable[Concatenate[str, P], ModelT]:
         @wraps(func)
-        def decorator(*args: P.args, **kwargs: P.kwargs) -> ModelT:
-            # assumes first param is name
-            if len(args) > 0 and isinstance(args[0], str):
-                name = args[0]
-                full_description = f"{description} ({name})"
-            else:
-                full_description = description
-
+        def decorator(name: str, *args: P.args, **kwargs: P.kwargs) -> ModelT:
+            full_description = f"{description} ({name})"
             try:
                 print(f"[-] {full_description}", end="\r")
-                value = func(*args, **kwargs)
+                value = func(name, *args, **kwargs)
                 print(f"[✓] {full_description}")
                 return value
-            except Exception as e:
+            except Exception:
                 print(f"[X] {full_description}")
-                raise e
+                raise
         return decorator
     return make_decorator
 
