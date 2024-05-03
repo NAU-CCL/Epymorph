@@ -35,6 +35,54 @@ class CacheMiss(FileError):
     """Raised on a cache-miss (for any reason) during a load-from-cache operation."""
 
 
+class CacheWarning(Warning):
+    """
+    Warning issued when we are unable to interact with the file cache but in a situation where 
+    program execution can continue, even if less optimally. For example: if we successfully load data
+    from an external source but are unable to cache it for later, this is a warning because we assume
+    the data is valid and that it could always be loaded again from the same source at a later time.
+    The warning is issued to give the user the opportunity to fix it for next time.
+    """
+
+
+def save_file(to_path: str | PathLike[str], file: BytesIO) -> None:
+    """
+    Save a single file. `to_path` can be absolute or relative; relative paths will be reoslved
+    against the current working directory. Folders in the path which do not exist will be created
+    automatically.
+    """
+    try:
+        file_path = Path(to_path).resolve()
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, mode="wb") as f:
+            f.write(file.getbuffer())
+    except Exception as e:
+        msg = f"Unable to write file at path: {to_path}"
+        raise FileWriteError(msg) from e
+
+
+def load_file(from_path: str | PathLike[str]) -> BytesIO:
+    """
+    Load a single file. An Exception is raised if the file cannot be loaded for any reason.
+    On success, returns the bytes of the file.
+    """
+    try:
+        file_path = Path(from_path).resolve()
+        if not file_path.is_file():
+            raise FileMissingError(f"No file at: {file_path}")
+
+        # Read the file into memory
+        file_buffer = BytesIO()
+        with open(file_path, 'rb') as f:
+            file_buffer.write(f.read())
+        file_buffer.seek(0)
+        return file_buffer
+    except FileError:
+        raise
+    except Exception as e:
+        raise FileReadError(f"Unable to load file at: {from_path}") from e
+
+
 def save_bundle(to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]) -> None:
     """
     Save a bundle of files in our tar format with an associated version number.
@@ -164,6 +212,23 @@ def _resolve_cache_path(path: str | PathLike[str]) -> Path:
         msg = "When saving to or loading from the cache, please supply a relative path."
         raise ValueError(msg)
     return CACHE_PATH.joinpath(cache_path).resolve()
+
+
+def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
+    """
+    Save a single file to the cache (overwriting the existing file, if any).
+    """
+    save_file(_resolve_cache_path(to_path), file)
+
+
+def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
+    """
+    Load a single file from the cache.
+    """
+    try:
+        return load_file(_resolve_cache_path(from_path))
+    except FileError as e:
+        raise CacheMiss() from e
 
 
 def save_bundle_to_cache(to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]) -> None:
