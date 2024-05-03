@@ -6,6 +6,12 @@ from textwrap import dedent
 from typing import Self
 
 
+class GeographyError(Exception):
+    """Exception working with geographic system representations."""
+    # NOTE: this is *not* for general errors related to the epymorph GEO module,
+    # but instead for things like utility functions for working with US Census delineations.
+
+
 class UnknownModel(Exception):
     """Exception for the inability to load a model as specified."""
     model_type: str
