@@ -18,6 +18,19 @@ from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
                             save_file_to_cache)
 from epymorph.error import GeographyError
 
+# A fair question is why did we implement our own TIGER files loader instead of using pygris?
+# The short answer is for efficiently and to correct inconsistencies that matter for our use-case.
+# For one, pygris always loads geography but we only want the geography sometimes. By loading it ourselves,
+# we can tell Geopandas to skip it, which is a lot faster.
+# Second, asking pygris for counties in 2020 returns all territories, while 2010 and 2000 do not.
+# This *is* consistent with the TIGER files themselves, but not ideal for us.
+# (You can compare the following two files to see for yourself:)
+# https://www2.census.gov/geo/tiger/TIGER2020/COUNTY/tl_2020_us_county.zip
+# https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_us_county10.zip
+# Lastly, pygris has a bug which is patched but not available in a release version at this time:
+# https://github.com/walkerke/pygris/commit/9ad16208b5b1e67909ff2dfdea26333ddd4a2e17
+
+
 TigerYear = Literal[2000, 2010, 2020]
 """A supported TIGER file year."""
 
@@ -95,23 +108,6 @@ def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataF
     df.rename(columns=dict(zip(cols, result_cols)), inplace=True)
     df.drop_duplicates(inplace=True)
     return df
-
-# TODO: okay, so the 2010 and 2000 counties lists using this approach are missing
-# territories (besides PR). pygris is loading this file (for 2010):
-# https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_us_county10.zip
-# Seemingly that omits the other territories, however specific files DO exist for those, e.g.,:
-# https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_66_county10.zip
-# see the file list here:
-# - https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/
-# - https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2000/
-# I did learn that the Cartographic Boundary files (generalized geography) explicitly exclude
-# the smaller territories, so we can't use those (at least not for all of them).
-# Now all pygris is doing anyway is using geopandas to open those URLs, so maybe we should
-# just bypass pygris anyway -- we don't really need its cache after all.
-# There's also a pygris bug that I ran into that's patched in GitHub but not in the released version,
-# so it might not be a bad idea to ditch it.
-# https://github.com/walkerke/pygris/commit/9ad16208b5b1e67909ff2dfdea26333ddd4a2e17
-# And once we fix this, we can verify the fix using test-us-geo.ipynb
 
 
 ##########

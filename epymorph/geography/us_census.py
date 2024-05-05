@@ -26,7 +26,7 @@ from epymorph.util import prefix
 CensusGranularityName = Literal['state', 'county', 'tract', 'block group', 'block']
 """The name of a supported Census granularity."""
 
-_CENSUS_HIERARCHY = ('state', 'county', 'tract', 'block group', 'block')
+CENSUS_HIERARCHY = ('state', 'county', 'tract', 'block group', 'block')
 """The granularities in hierarchy order (largest to smallest)."""
 
 
@@ -69,7 +69,7 @@ class CensusGranularity(ABC):
 
     def is_nested(self, outer: CensusGranularityName) -> bool:
         """Test whether this granularity is nested inside (or equal to) the given granularity."""
-        return _CENSUS_HIERARCHY.index(outer) <= _CENSUS_HIERARCHY.index(self.name)
+        return CENSUS_HIERARCHY.index(outer) <= CENSUS_HIERARCHY.index(self.name)
 
     def matches(self, geoid: str) -> bool:
         """Test whether the given GEOID matches this granularity."""
@@ -111,14 +111,14 @@ class CensusGranularity(ABC):
         The GEOID must match this granularity exactly, or else GeographyError will be raised.
         """
 
-    def grouped(self, geoids: NDArray[np.str_]) -> dict[str, NDArray[np.str_]]:
+    def grouped(self, sorted_geoids: NDArray[np.str_]) -> dict[str, NDArray[np.str_]]:
         """
         Group a list of GEOIDs by this level of granularity.
         WARNING: Requires that the GEOID array has been sorted!
         """
-        group_prefix = prefix(self.length)(geoids)
+        group_prefix = prefix(self.length)(sorted_geoids)
         uniques, splits = np.unique(group_prefix, return_index=True)
-        grouped = np.split(geoids, splits[1:])
+        grouped = np.split(sorted_geoids, splits[1:])
         return dict(zip(uniques, grouped))
 
 
@@ -216,7 +216,7 @@ TRACT = Tract()
 BLOCK_GROUP = BlockGroup()
 BLOCK = Block()
 
-_CENSUS_GRANULARITY = (STATE, COUNTY, TRACT, BLOCK_GROUP, BLOCK)
+CENSUS_GRANULARITY = (STATE, COUNTY, TRACT, BLOCK_GROUP, BLOCK)
 """CensusGranularity singletons in hierarchy order."""
 
 
@@ -238,15 +238,12 @@ def get_census_granularity(name: CensusGranularityName) -> CensusGranularity:
 # Census data loading and caching
 
 
-T = TypeVar('T')
-P = ParamSpec('P')
-
 CensusYear = Literal[2000, 2010, 2020]
 """A supported Census delineation year."""
 
 DEFAULT_YEAR = 2020
 
-GEOGRAPHY_CACHE_PATH = Path("geography")
+_GEOGRAPHY_CACHE_PATH = Path("geography")
 
 ModelT = TypeVar('ModelT', bound=NamedTuple)
 
@@ -254,7 +251,7 @@ ModelT = TypeVar('ModelT', bound=NamedTuple)
 def _load_cached(relpath: str, on_miss: Callable[[], ModelT], on_hit: Callable[..., ModelT]) -> ModelT:
     # NOTE: this would be more natural as a decorator,
     # but Pylance seems to have problems tracking the return type properly with that implementation
-    path = GEOGRAPHY_CACHE_PATH.joinpath(relpath)
+    path = _GEOGRAPHY_CACHE_PATH.joinpath(relpath)
     try:
         content = load_bundle_from_cache(path, 1)
         with np.load(content['data.npz']) as data_npz:
@@ -277,10 +274,10 @@ class StatesInfo(NamedTuple):
     """The US postal code for the state."""
 
 
-def get_us_states() -> StatesInfo:
+def get_us_states(year: CensusYear) -> StatesInfo:
     """Loads US States information (assumed to be invariant for all supported years)."""
     def _get_us_states() -> StatesInfo:
-        df = us_tiger.get_states_info(2020)  # 2020 works for all supported years
+        df = us_tiger.get_states_info(year)
         df.sort_values("GEOID", inplace=True)
         return StatesInfo(
             geoid=df["GEOID"].to_numpy(np.str_),
@@ -347,6 +344,10 @@ def get_us_block_groups(year: CensusYear) -> BlockGroupsInfo:
 # Census utility functions
 
 
+T = TypeVar('T')
+P = ParamSpec('P')
+
+
 def verify_fips(granularity: CensusGranularityName):
     """
     Decorates a function in order to validate the list of FIPS codes provided as the first argument.
@@ -364,7 +365,7 @@ def verify_fips(granularity: CensusGranularityName):
             # (Or maybe we can at least do this for states/counties, and fall back to format-checking others.)
             match granularity:
                 case 'state':
-                    states = get_us_states().geoid
+                    states = get_us_states(year).geoid
                     if not all((last := x) in states for x in fips):
                         msg = f"Not all given state fips codes are valid (see: {last})."
                         raise GeographyError(msg)
@@ -390,36 +391,36 @@ def verify_fips(granularity: CensusGranularityName):
 
 
 @cache
-def state_code_to_fips() -> Mapping[str, str]:
+def state_code_to_fips(year: CensusYear) -> Mapping[str, str]:
     """Mapping from state postal code to FIPS code."""
-    states = get_us_states()
+    states = get_us_states(year)
     return dict(zip(states.code, states.geoid))
 
 
 @cache
-def state_fips_to_code() -> Mapping[str, str]:
+def state_fips_to_code(year: CensusYear) -> Mapping[str, str]:
     """Mapping from state FIPS code to postal code."""
-    states = get_us_states()
+    states = get_us_states(year)
     return dict(zip(states.geoid, states.code))
 
 
 def convert_state_code_to_fips(
-    f: Callable[Concatenate[Sequence[str], P], T]
-) -> Callable[Concatenate[Sequence[str], P], T]:
+    f: Callable[Concatenate[Sequence[str], CensusYear, P], T]
+) -> Callable[Concatenate[Sequence[str], CensusYear, P], T]:
     """
     Decorates a function in order to validate the list of state postal codes provided as the first argument.
     If any postal codes are found to be invalid, raises GeographyError.
     """
     @wraps(f)
-    def decorated(codes: Sequence[str], *args: P.args, **kwargs: P.kwargs) -> T:
+    def decorated(codes: Sequence[str], year: CensusYear, *args: P.args, **kwargs: P.kwargs) -> T:
         code = ""  # capturing the last tried code lets us report which one is invalid
         try:
-            mapping = state_code_to_fips()
+            mapping = state_code_to_fips(year)
             fips = [mapping[(code := x)] for x in codes]
         except KeyError:
             msg = f"Unknown state postal code abbreviation: {code}"
             raise GeographyError(msg) from None
-        return f(sorted(fips), *args, **kwargs)
+        return f(sorted(fips), year, *args, **kwargs)
     return decorated
 
 
@@ -452,7 +453,7 @@ class StateScopeAll(CensusScope):
     granularity: Literal['state'] = field(init=False, default='state')
 
     def get_node_ids(self) -> NDArray[np.str_]:
-        return get_us_states().geoid
+        return get_us_states(self.year).geoid
 
 
 @dataclass(frozen=True)
