@@ -7,11 +7,11 @@ and a structured ID system for labeling all delineations
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from functools import cache, wraps
+from functools import cache
 from io import BytesIO
 from pathlib import Path
-from typing import (Callable, Concatenate, Literal, Mapping, NamedTuple,
-                    ParamSpec, Sequence, TypeVar)
+from typing import (Callable, Literal, Mapping, NamedTuple, ParamSpec,
+                    Sequence, TypeVar)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -348,40 +348,28 @@ T = TypeVar('T')
 P = ParamSpec('P')
 
 
-def verify_fips(granularity: CensusGranularityName):
+def verify_fips(granularity: CensusGranularityName, year: CensusYear, fips: Sequence[str]) -> None:
     """
-    Decorates a function in order to validate the list of FIPS codes provided as the first argument.
-    If any FIPS codes are found to be invalid, raises GeographyError.
+    Validates a list of FIPS codes are valid for the given granularity and year.
+    If any FIPS code is found to be invalid, raises GeographyError.
     """
-    g = get_census_granularity(granularity)
+    fips = sorted(fips)
+    match granularity:
+        case 'state':
+            valid_nodes = get_us_states(year).geoid
+        case 'county':
+            valid_nodes = get_us_counties(year).geoid
+        case 'tract':
+            valid_nodes = get_us_tracts(year).geoid
+        case 'block group':
+            valid_nodes = get_us_block_groups(year).geoid
+        case _:
+            raise GeographyError(f"Unsupported granularity: {granularity}")
 
-    def decorator(
-        f: Callable[Concatenate[Sequence[str], CensusYear, P], T]
-    ) -> Callable[Concatenate[Sequence[str], CensusYear, P], T]:
-        @wraps(f)
-        def decorated(fips: Sequence[str], year: CensusYear, *args: P.args, **kwargs: P.kwargs) -> T:
-            # TODO: if we have a cache of all IDs -- maybe we should check if the codes really exist,
-            # not just that they're the correct format.
-            # (Or maybe we can at least do this for states/counties, and fall back to format-checking others.)
-            match granularity:
-                case 'state':
-                    states = get_us_states(year).geoid
-                    if not all((last := x) in states for x in fips):
-                        msg = f"Not all given state fips codes are valid (see: {last})."
-                        raise GeographyError(msg)
-                case 'county':
-                    counties = get_us_counties(year).geoid
-                    if not all((last := x) in counties for x in fips):
-                        msg = f"Not all given county fips codes are valid for the given year (see: {last})."
-                        raise GeographyError(msg)
-                case _:
-                    if not all((g.matches(x) for x in fips)):
-                        msg = f"Not all fips codes match the expected granularity ({granularity})."
-                        raise GeographyError(msg)
+    if not all((curr := x) in valid_nodes for x in fips):
+        msg = f"Not all given {granularity} fips codes are valid for {year} (for example: {curr})."
+        raise GeographyError(msg)
 
-            return f(sorted(fips), year, *args, **kwargs)
-        return decorated
-    return decorator
 
 # We use the set of 56 two-letter abbreviations and FIPS codes returned by TIGRIS.
 # This set should be constant since 1970 when the FIPS standard was introduced.
@@ -404,24 +392,20 @@ def state_fips_to_code(year: CensusYear) -> Mapping[str, str]:
     return dict(zip(states.geoid, states.code))
 
 
-def convert_state_code_to_fips(
-    f: Callable[Concatenate[Sequence[str], CensusYear, P], T]
-) -> Callable[Concatenate[Sequence[str], CensusYear, P], T]:
+def validate_state_codes_as_fips(year: CensusYear, codes: Sequence[str]) -> Sequence[str]:
     """
-    Decorates a function in order to validate the list of state postal codes provided as the first argument.
-    If any postal codes are found to be invalid, raises GeographyError.
+    Validates a list of US state postal codes (two-letter abbreviations) and
+    returns them as a sorted list of FIPS codes.
+    If any postal code is found to be invalid, raises GeographyError.
     """
-    @wraps(f)
-    def decorated(codes: Sequence[str], year: CensusYear, *args: P.args, **kwargs: P.kwargs) -> T:
-        code = ""  # capturing the last tried code lets us report which one is invalid
-        try:
-            mapping = state_code_to_fips(year)
-            fips = [mapping[(code := x)] for x in codes]
-        except KeyError:
-            msg = f"Unknown state postal code abbreviation: {code}"
-            raise GeographyError(msg) from None
-        return f(sorted(fips), year, *args, **kwargs)
-    return decorated
+    curr = ""  # capturing the last tried code lets us report which one is invalid
+    try:
+        mapping = state_code_to_fips(year)
+        fips = [mapping[(curr := x)] for x in codes]
+    except KeyError:
+        msg = f"Unknown state postal code abbreviation: {curr}"
+        raise GeographyError(msg) from None
+    return sorted(fips)
 
 
 # Census GeoScopes
@@ -470,26 +454,22 @@ class StateScope(CensusScope):
         return StateScopeAll(year)
 
     @staticmethod
-    @verify_fips('state')
     def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'StateScope':
         """
         Create a scope including a set of US states/state-equivalents, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        # NOTE: the verify_fips decorator automatically validates FIPS codes.
+        verify_fips('state', year, states_fips)
         return StateScope('state', states_fips, year)
 
     @staticmethod
-    @convert_state_code_to_fips
     def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'StateScope':
         """
         Create a scope including a set of US states/state-equivalents, by postal code (two-letter abbreviation).
         Raise GeographyError if any postal code is invalid.
         """
-        # NOTE: the converter decorator automatically converts codes to FIPS
-        # (so the states_code argument is actually FIPS codes by the time we're inside this function).
-        # It also raises GeographyError on invalid codes, so at this point we can trust they're all valid.
-        return StateScope('state', states_code, year)
+        states_fips = validate_state_codes_as_fips(year, states_code)
+        return StateScope('state', states_fips, year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         # As long as we enforce that fips codes will be checked and sorted on construction,
@@ -506,42 +486,44 @@ class CountyScope(CensusScope):
     granularity: Literal['county'] = field(init=False, default='county')
 
     @staticmethod
-    @verify_fips('state')
     def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'CountyScope':
         """
         Create a scope including all counties in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
         """
+        verify_fips('state', year, states_fips)
         return CountyScope('state', states_fips, year)
 
     @staticmethod
-    @convert_state_code_to_fips
     def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'CountyScope':
         """
         Create a scope including all counties in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
         Raise GeographyError if any FIPS code is invalid.
         """
-        return CountyScope('state', states_code, year)
+        states_fips = validate_state_codes_as_fips(year, states_code)
+        return CountyScope('state', states_fips, year)
 
     @staticmethod
-    @verify_fips('county')
     def in_counties(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'CountyScope':
         """
         Create a scope including a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
+        verify_fips('county', year, counties_fips)
         return CountyScope('county', counties_fips, year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
             case 'state':
+                # return all counties in a list of states
                 def is_in_states(geoid: str) -> bool:
-                    return geoid[0:2] in self.includes
+                    return STATE.truncate(geoid) in self.includes
                 counties = get_us_counties(self.year).geoid
                 return counties[[is_in_states(x) for x in counties]]
 
             case 'county':
+                # return all counties in a list of counties
                 return np.array(self.includes, dtype=np.str_)
 
 
@@ -554,57 +536,60 @@ class TractScope(CensusScope):
     granularity: Literal['tract'] = field(init=False, default='tract')
 
     @staticmethod
-    @verify_fips('state')
     def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including all tracts in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
         """
+        verify_fips('state', year, states_fips)
         return TractScope('state', states_fips, year)
 
     @staticmethod
-    @convert_state_code_to_fips
     def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including all tracts in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
         Raise GeographyError if any FIPS code is invalid.
         """
-        return TractScope('state', states_code, year)
+        states_fips = validate_state_codes_as_fips(year, states_code)
+        return TractScope('state', states_fips, year)
 
     @staticmethod
-    @verify_fips('county')
     def in_counties(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including all tracts in a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
+        verify_fips('county', year, counties_fips)
         return TractScope('county', counties_fips, year)
 
     @staticmethod
-    @verify_fips('tract')
-    def in_tracts(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
+    def in_tracts(tract_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including a set of US tracts, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        return TractScope('tract', counties_fips, year)
+        verify_fips('tract', year, tract_fips)
+        return TractScope('tract', tract_fips, year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
             case 'state':
+                # return all tracts in a list of states
                 def is_in_states(geoid: str) -> bool:
-                    return geoid[0:2] in self.includes
+                    return STATE.truncate(geoid) in self.includes
                 tracts = get_us_tracts(self.year).geoid
                 return tracts[[is_in_states(x) for x in tracts]]
 
             case 'county':
+                # return all tracts in a list of counties
                 def is_in_counties(geoid: str) -> bool:
-                    return geoid[0:5] in self.includes
+                    return COUNTY.truncate(geoid) in self.includes
                 tracts = get_us_tracts(self.year).geoid
                 return tracts[[is_in_counties(x) for x in tracts]]
 
             case 'tract':
+                # return all tracts in a list of tracts
                 return np.array(self.includes, dtype=np.str_)
 
 
@@ -617,70 +602,74 @@ class BlockGroupScope(CensusScope):
     granularity: Literal['block group'] = field(init=False, default='block group')
 
     @staticmethod
-    @verify_fips('state')
     def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block groups in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
         """
+        verify_fips('state', year, states_fips)
         return BlockGroupScope('state', states_fips, year)
 
     @staticmethod
-    @convert_state_code_to_fips
     def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block groups in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
         Raise GeographyError if any FIPS code is invalid.
         """
-        return BlockGroupScope('state', states_code, year)
+        states_fips = validate_state_codes_as_fips(year, states_code)
+        return BlockGroupScope('state', states_fips, year)
 
     @staticmethod
-    @verify_fips('county')
     def in_counties(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block groups in a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
+        verify_fips('county', year, counties_fips)
         return BlockGroupScope('county', counties_fips, year)
 
     @staticmethod
-    @verify_fips('tract')
-    def in_tracts(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_tracts(tract_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block gropus in a set of US tracts, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        return BlockGroupScope('tract', counties_fips, year)
+        verify_fips('tract', year, tract_fips)
+        return BlockGroupScope('tract', tract_fips, year)
 
     @staticmethod
-    @verify_fips('block group')
-    def in_block_groups(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_block_groups(block_group_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including a set of US block groups, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        return BlockGroupScope('block group', counties_fips, year)
+        verify_fips('block group', year, block_group_fips)
+        return BlockGroupScope('block group', block_group_fips, year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
             case 'state':
+                # return all block groups in a list of states
                 def is_in_states(geoid: str) -> bool:
-                    return geoid[0:2] in self.includes
+                    return STATE.truncate(geoid) in self.includes
                 block_groups = get_us_block_groups(self.year).geoid
                 return block_groups[[is_in_states(x) for x in block_groups]]
 
             case 'county':
+                # return all block groups in a list of counties
                 def is_in_counties(geoid: str) -> bool:
-                    return geoid[0:5] in self.includes
+                    return COUNTY.truncate(geoid) in self.includes
                 block_groups = get_us_block_groups(self.year).geoid
                 return block_groups[[is_in_counties(x) for x in block_groups]]
 
             case 'tract':
+                # return all block groups in a list of tracts
                 def is_in_tracts(geoid: str) -> bool:
-                    return geoid[0:11] in self.includes
+                    return TRACT.truncate(geoid) in self.includes
                 block_groups = get_us_block_groups(self.year).geoid
                 return block_groups[[is_in_tracts(x) for x in block_groups]]
 
             case 'block group':
+                # return all block groups in a list of block groups
                 return np.array(self.includes, dtype=np.str_)
