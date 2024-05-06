@@ -6,12 +6,13 @@ and a structured ID system for labeling all delineations
 """
 import re
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import cache
 from io import BytesIO
 from pathlib import Path
-from typing import (Callable, Literal, Mapping, NamedTuple, ParamSpec,
-                    Sequence, TypeVar)
+from typing import (Callable, Iterable, Literal, Mapping, NamedTuple,
+                    ParamSpec, Sequence, TypeVar)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -92,6 +93,17 @@ class CensusGranularity(ABC):
         If the given GEOID is for a granularity larger than this level, the GEOID will be returned unchanged.
         """
         return geoid[:self.length]
+
+    def truncate_list(self, geoids: Iterable[str]) -> list[str]:
+        """
+        Truncates a list of GEOIDs to this level of granularity, returning only
+        unique entries without changing the ordering of entries.
+        """
+        n = self.length
+        results = OrderedDict()
+        for x in geoids:
+            results[x[:n]] = True
+        return list(results)
 
     def _decompose(self, geoid: str) -> re.Match[str]:
         """

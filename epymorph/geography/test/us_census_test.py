@@ -85,6 +85,11 @@ class TestCensusGranularity(unittest.TestCase):
 
         self.assertEqual("040039999998777", BLOCK.truncate("040039999998777"))
 
+    def test_truncate_list(self):
+        exp = ["08", "35", "04"]
+        act = STATE.truncate_list(["08001", "35", "04003", "08002", "04005", "35005"])
+        self.assertEqual(exp, act)
+
     def test_decompose(self):
         self.assertEqual(("04",), STATE.decompose("04"))
         self.assertEqual(("04", "003"), COUNTY.decompose("04003"))
