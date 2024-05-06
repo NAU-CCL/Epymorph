@@ -49,6 +49,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-04-04-draw-demo.ipynb | Izaac | | Showing the new draw module for visualising IPMs (NEW!) |
 | 2024-04-16.ipynb | Izaac | | Showing error handling for common ipm errors (NEW!)|
 | 2024-04-25.ipynb | Tyler | | Integration test: epymorph cache utilities |
+| 2024-05-03.ipynb | Tyler | | Integration test: loading US Census geography from TIGER |
 
 ## Contributing
 

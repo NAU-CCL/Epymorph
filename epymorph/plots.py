@@ -1,14 +1,17 @@
 """Our built-in plotting functions and helpful utilities."""
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import pygris
+from geopandas import GeoDataFrame
 from numpy.typing import NDArray
+from pandas import DataFrame
+from pandas import merge as pd_merge
 
 from epymorph.engine.standard_sim import Output
 from epymorph.geo.geo import Geo
+from epymorph.geography import us_tiger
+from epymorph.geography.us_census import STATE
 
 
 def plot_event(out: Output, event_idx: int) -> None:
@@ -51,16 +54,20 @@ def plot_pop(out: Output, pop_idx: int, log_scale: bool = False) -> None:
     plt.show()
 
 
+def _subset_states(gdf: GeoDataFrame, state_fips: tuple[str, ...]) -> GeoDataFrame:
+    return cast(GeoDataFrame, gdf[gdf["GEOID"].str.startswith(state_fips)])
+
+
 def map_data_by_county(
     geo: Geo,
     data: NDArray,
     *,
-    df_borders: pd.DataFrame | None = None,
     title: str,
     cmap: Any | None = None,
     vmin: float | None = None,
     vmax: float | None = None,
     outline: Literal['states', 'counties'] = 'counties',
+    year: us_tiger.TigerYear = 2020,
 ) -> None:
     """
     Draw a county-level choropleth map using the given `data`. This must be a numpy array whose
@@ -68,18 +75,14 @@ def map_data_by_county(
     Assumes that the geo contains an attribute (`geoid`) containing the geoids of its nodes.
     (This information is needed to fetch the map shapes.)
     """
-    state_fips = {s[:2] for s in geo['geoid']}
-    df_states = pygris.states(cb=True, resolution='5m', cache=True, year=2020)
-    df_states = df_states.loc[df_states['GEOID'].isin(state_fips)]
-    df_counties = pd.concat([
-        pygris.counties(state=s, cb=True, resolution='5m', cache=True, year=2020)
-        for s in state_fips
-    ])
-    if outline == 'counties':
-        df_borders = df_counties
-    else:
-        df_borders = df_states
-    return _map_data_by_geo(geo, data, df_counties, df_borders=df_borders, title=title, cmap=cmap, vmin=vmin, vmax=vmax)
+    state_fips = tuple(STATE.truncate_list(geo["geoid"]))
+    gdf_counties = us_tiger.get_counties_geo(year)
+    gdf_counties = _subset_states(gdf_counties, state_fips)
+    gdf_borders = gdf_counties
+    if outline == 'states':
+        gdf_states = us_tiger.get_states_geo(2020)
+        gdf_borders = _subset_states(gdf_states, state_fips)
+    return _map_data_by_geo(geo, data, gdf_counties, gdf_borders=gdf_borders, title=title, cmap=cmap, vmin=vmin, vmax=vmax)
 
 
 def map_data_by_state(
@@ -90,6 +93,7 @@ def map_data_by_state(
     cmap: Any | None = None,
     vmin: float | None = None,
     vmax: float | None = None,
+    year: us_tiger.TigerYear = 2020,
 ) -> None:
     """
     Draw a state-level choropleth map using the given `data`. This must be a numpy array whose
@@ -97,18 +101,18 @@ def map_data_by_state(
     Assumes that the geo contains an attribute (`geoid`) containing the geoids of its nodes.
     (This information is needed to fetch the map shapes.)
     """
-    state_fips = {s[:2] for s in geo['geoid']}
-    df_states = pygris.states(cb=True, resolution='5m', cache=True, year=2020)
-    df_states = df_states.loc[df_states['GEOID'].isin(state_fips)]
-    return _map_data_by_geo(geo, data, df_states, title=title, cmap=cmap, vmin=vmin, vmax=vmax)
+    state_fips = tuple(STATE.truncate_list(geo["geoid"]))
+    gdf_states = us_tiger.get_states_geo(year)
+    gdf_states = _subset_states(gdf_states, state_fips)
+    return _map_data_by_geo(geo, data, gdf_states, title=title, cmap=cmap, vmin=vmin, vmax=vmax)
 
 
 def _map_data_by_geo(
     geo: Geo,
     data: NDArray,
-    df_nodes: pd.DataFrame,
+    gdf_nodes: GeoDataFrame,
     *,
-    df_borders: pd.DataFrame | None = None,
+    gdf_borders: GeoDataFrame | None = None,
     title: str,
     cmap: Any | None = None,
     vmin: float | None = None,
@@ -118,18 +122,18 @@ def _map_data_by_geo(
     Draw a choropleth map for the geo information given.
     This is an internal function to abstract commonalities -- see `map_data_by_county()` and `map_data_by_state()`.
     """
-    df_merged = pd.merge(
+    df_merged = pd_merge(
         on="GEOID",
-        left=df_nodes,
-        right=pd.DataFrame({'GEOID': geo['geoid'], 'data': data}),
+        left=gdf_nodes,
+        right=DataFrame({'GEOID': geo['geoid'], 'data': data}),
     )
 
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.axis('off')
     ax.set_title(title)
     df_merged.plot(ax=ax, column='data', legend=True, cmap=cmap, vmin=vmin, vmax=vmax)
-    if df_borders is None:
-        df_borders = df_nodes
-    df_borders.plot(ax=ax, linewidth=1, edgecolor='black', color='none', alpha=0.8)
+    if gdf_borders is None:
+        gdf_borders = gdf_nodes
+    gdf_borders.plot(ax=ax, linewidth=1, edgecolor='black', color='none', alpha=0.8)
     fig.tight_layout()
     plt.show()

@@ -170,6 +170,11 @@ def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DT
     # numpy's types are garbage
 
 
+def prefix(length: int) -> Callable[[NDArray[np.str_]], NDArray[np.str_]]:
+    """A vectorized operation to return the prefix of each value in an NDArray of strings."""
+    return np.vectorize(lambda x: x[0:length], otypes=[np.str_])
+
+
 RADIUS_MI = 3959.87433  # radius of earth in mi
 
 
