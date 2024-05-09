@@ -294,7 +294,7 @@ class ADRIOMakerLODES(ADRIOMaker):
             print(f"Fetching data from URL: {url}")
 
             # if there are more than one state in the input, get the aux files (out of state residence)
-            if file_type is "aux":
+            if file_type == "aux":
                 url_aux = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{states}/od/{states}_od_aux_{job_type}_{year}.csv.gz'
                 cache_key = f"{year}_aux_{states}_{job_type}"
                 url_list.append(url_aux)
