@@ -1,30 +1,32 @@
-import gzip
-import os
-import shutil
-import urllib.request
 from copy import copy
 from dataclasses import dataclass
 from enum import Enum
-from io import StringIO
+from io import BytesIO
+from pathlib import Path
 from turtle import home
+from urllib.request import urlopen
+from warnings import warn
 
-import matplotlib.pyplot as plt
+import geopandas
+import matplotlib.pyplot
 import numpy as np
 import pandas as pd
 import plot_utils as pu
-import us
-from geopandas import GeoDataFrame
 from numpy.typing import NDArray
 from pandas import DataFrame, concat, read_excel
 from pygris import tracts
 from pygris.data import get_lodes
-from sympy.core.symbol import Str
 
+from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
+                            save_file_to_cache)
 from epymorph.data_shape import Shapes
 from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.spec import (AttribDef, CentroidDType, Geography, TimePeriod,
-                               Year)
+from epymorph.geo.spec import AttribDef, Geography, TimePeriod, Year
+from epymorph.geography.us_census import state_fips_to_code
+from epymorph.geography.us_tiger import _fetch_url
+
+_LODES_CACHE_PATH = Path("geo/adrio/census/lodes")
 
 
 class Granularity(Enum):
@@ -107,8 +109,6 @@ class ADRIOMakerLODES(ADRIOMaker):
         'federal_primary_jobs': ["JT05"]
     }
 
-    CACHE_DIR = 'lodes_cache'
-
     def make_adrio(self, attrib: AttribDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
         if attrib not in self.attributes:
             msg = f"{attrib.name} is not supported for the LODES data source."
@@ -159,23 +159,17 @@ class ADRIOMakerLODES(ADRIOMaker):
         else:
             return super().make_adrio(attrib, geography, time_period)
 
-        # fetch functions
+    # fetch functions
+    def _fetch_url(self, url: str) -> BytesIO:
+        """Reads a file from a URL as a BytesIO."""
+        with urlopen(url) as f:
+            file_buffer = BytesIO()
+            file_buffer.write(f.read())
+            file_buffer.seek(0)
+            return file_buffer
 
-        # fetch files from LODES depending on the state, residence in/out of state, job type, and year
+    # fetch files from LODES depending on the state, residence in/out of state, job type, and year
     def fetch_commuters(self, granularity: str, nodes: dict[str, list[str]], job_type: str, year: int):
-
-        # notes for Tyler's code
-
-        # check if the input state is a state
-        # function: STATE.matches(#)
-
-        # if not, throw error
-
-        # otherwise, get state from FIPS code for the url
-        # function: code_to_fips
-
-        # or, if input as a state abbreviation, get the FIPS code for reading and comparing geocodes
-        # function: state_fips_to_code?
 
         # file type is main (residence in state only) by default
         file_type = "main"
@@ -194,7 +188,6 @@ class ADRIOMakerLODES(ADRIOMaker):
 
                 # if multiple states, automatically aux file (residence out of state)
                 file_type = "aux"
-                # question for clarification, if multiple states, are mapping inside the state to itself still wanted?
 
         # check for valid years
         if year not in range(2002, 2022):
@@ -210,17 +203,6 @@ class ADRIOMakerLODES(ADRIOMaker):
 
             print(
                 f"Commuting data cannot be retrieved for {passed_year}, fetching {year} data instead.")
-
-        # translate state FIPS code to state to use in URL
-            # note, the if statement doesn't seem to be needed but gets rid of the None type error
-        state_abbreviations = []
-        if state:
-            for states in state:
-                state_name = pu._convert_FIPS_to_state_name({states: ''})
-                state_name = pu._translate_state_abbrev(state_name, False)
-                state_abbreviations.append(list(state_name.keys())[0].lower())
-
-        # Tyler's code may be able to simplify this ^^
 
         # check for valid files
 
@@ -274,69 +256,74 @@ class ADRIOMakerLODES(ADRIOMaker):
                 msg = "Invalid year for state, no commuters can be found for Alaska in between 2017-2021"
                 raise Exception(msg)
 
+        # translate state FIPS code to state to use in URL
+            # note, the if statement doesn't seem to be needed but gets rid of the None type error
+        state_code_results = state_fips_to_code(2020)
+        state_abbreviations = []
+        if state:
+            for fips_code in state:
+                state_code = state_code_results.get(fips_code).lower()
+                state_abbreviations.append(state_code)
+
         # get the current geoid
         geoid = self.aggregate_geoid(granularity, nodes)
 
-        # same here, may be able to rid of the aggregate_geoid function altogether
+        # loop through to check for
 
         for states in state_abbreviations:
 
             # construct the URL to fetch LODES data, reset to empty each time
             url_list = []
             cache_list = []
+            files = []
 
             # always get main file (in state residency)
-            url = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{states}/od/{states}_od_main_{job_type}_{year}.csv.gz'
-            cache_key = f"{year}_main_{states}_{job_type}"
-            url_list.append(url)
-            cache_list.append(cache_key)
+            url_main = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{states}/od/{states}_od_main_{job_type}_{year}.csv.gz'
             # print for testing purposes
-            print(f"Fetching data from URL: {url}")
+            print(f"Fetching data from URL: {url_main}")
+            url_list.append(url_main)
 
             # if there are more than one state in the input, get the aux files (out of state residence)
             if file_type == "aux":
                 url_aux = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{states}/od/{states}_od_aux_{job_type}_{year}.csv.gz'
-                cache_key = f"{year}_aux_{states}_{job_type}"
+                print(f"Fetching data from URL: {url_main}")
                 url_list.append(url_aux)
-                cache_list.append(cache_key)
-                print(f"Fetching data from URL: {url_aux}")
+            # list the urls
+            cache_list = [_LODES_CACHE_PATH / Path(u).name for u in url_list]
 
-            for urls, keys in zip(url_list, cache_list):
-                cache_file_path = os.path.join(
-                    self.CACHE_DIR, f"{keys}_{states}_{file_type}")
-                if os.path.exists(cache_file_path):
-                    print("Fetching data from cache...")
-                    data = pd.read_csv(cache_file_path)
-                else:
-                    with urllib.request.urlopen(urls) as response:
-                        with gzip.GzipFile(fileobj=response) as decompressed_file:
-                            lodes_data = decompressed_file.read().decode('utf-8')
+            # try to load the urls from the cache
+            try:
+                files = [load_file_from_cache(path) for path in cache_list]
+                print("Load from cache\n")
 
-                    data = pd.read_csv(StringIO(lodes_data))
+            # on except CacheMiss
+            except CacheMiss:
 
-                    # cache the downloaded data
-                    os.makedirs(self.CACHE_DIR, exist_ok=True)
-                    data.to_csv(cache_file_path, index=False)
+                print("Saving data to cache")
 
-                    # check if there is a manner of doing this in the url ^^
+                # fetch info from the urls
+                files = [_fetch_url(u) for u in url_list]
 
-                # make the compare strings for the home and work geocodes
-                # based on granularity
-                data['w_geocode'] = data['w_geocode'].astype(str).apply(
-                    lambda x: x.zfill(15) if len(x) == 14 else x)
-                data['h_geocode'] = data['h_geocode'].astype(str).apply(
-                    lambda x: x.zfill(15) if len(x) == 14 else x)
+                # try to save the files
+                try:
+                    for f, path in zip(files, cache_list):
+                        save_file_to_cache(path, f)
 
-                compare_h_geocode = data['h_geocode'].astype(str)
-                compare_w_geocode = data['w_geocode'].astype(str)
+                except Exception as e:
+                    msg = "We were unable to save LODES files to the cache.\n" \
+                        f"Cause: {e}"
+                    warn(msg, CacheWarning)
+
+            for file in files:
+                data = pd.read_csv(file, compression="gzip", converters={
+                                   'w_geocode': str, 'h_geocode': str})
 
                 filtered_rows_list = []
 
                 # filter the rows on if they start with the prefix
-                filtered_rows = data[compare_h_geocode.str.startswith(
-                    geoid) & compare_w_geocode.str.startswith(geoid)]
+                filtered_rows = data[data['h_geocode'].str.startswith(
+                    geoid) & data['w_geocode'].str.startswith(geoid)]
 
-                # add the filtered rows to the list
                 filtered_rows_list.append(filtered_rows)
 
                 # add the filtered dataframe to the list of dataframes
@@ -425,13 +412,15 @@ class ADRIOMakerLODES(ADRIOMaker):
                 msg = "Error: COUNTY value is not retrieved for county granularity"
                 raise Exception(msg)
 
-            # if there is only one state
-            if state:
-                if county:
+            if state and county:
+                # if there is only one state
+                if len(state) == 1:
                     home_geoids = [
-                        geoid_code + county_code for geoid_code in home_geoids for county_code in county]
-
-                # otherwise, only add the same index to the current state
+                        state_code + county_code for state_code in state for county_code in county]
+                else:
+                    # aggregate based on index if there are multiple states
+                    home_geoids = [state[i] + county[i]
+                                   for i in range(min(len(state), len(county)))]
 
         # if the given aggregation is TRACT and that the tract value is not empty
         if granularity == Granularity.TRACT.value or granularity == Granularity.CBG.value or granularity == Granularity.BLOCK.value:
@@ -443,9 +432,15 @@ class ADRIOMakerLODES(ADRIOMaker):
                 msg = "Error: TRACT value is not retrieved for tract granularity"
                 raise Exception(msg)
 
-            if tract:
-                home_geoids = [
-                    geoid_code + tract_code for geoid_code in home_geoids for tract_code in tract]
+            if state and tract:
+                # if there is only one state
+                if len(state) == 1:
+                    home_geoids = [
+                        geoid_code + tract_code for geoid_code in home_geoids for tract_code in tract]
+                else:
+                    # aggregate based on index if there are multiple states
+                    home_geoids = [home_geoids[i] + tract[i]
+                                   for i in range(min(len(home_geoids), len(tract)))]
 
         # if the given aggregation is CBG and that the CBG value is not empty
         if granularity == Granularity.CBG.value or granularity == Granularity.BLOCK.value:
@@ -457,9 +452,15 @@ class ADRIOMakerLODES(ADRIOMaker):
                 msg = "Error: CBG value is not retrieved for cbg granularity"
                 raise Exception(msg)
 
-            if cbg:
-                home_geoids = [
-                    geoid_code + cbg_code for geoid_code in home_geoids for cbg_code in cbg]
+            if state and cbg:
+                # if there is only one state
+                if len(state) == 1:
+                    home_geoids = [
+                        geoid_code + cbg_code for geoid_code in home_geoids for cbg_code in cbg]
+                else:
+                    # aggregate based on index if there are multiple states
+                    home_geoids = [home_geoids[i] + cbg[i]
+                                   for i in range(min(len(home_geoids), len(cbg)))]
 
         # if the given aggregation is block and the block value is not empty
         if granularity == Granularity.BLOCK.value:
@@ -474,5 +475,15 @@ class ADRIOMakerLODES(ADRIOMaker):
             if block:
                 home_geoids = [
                     geoid_code + block_code for geoid_code in home_geoids for block_code in block]
+
+            if state and block:
+                # if there is only one state
+                if len(state) == 1:
+                    home_geoids = [
+                        geoid_code + block_code for geoid_code in home_geoids for block_code in block]
+                else:
+                    # aggregate based on index if there are multiple states
+                    home_geoids = [home_geoids[i] + block[i]
+                                   for i in range(min(len(home_geoids), len(block)))]
 
         return tuple(home_geoids)
