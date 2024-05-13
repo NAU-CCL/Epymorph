@@ -11,7 +11,8 @@ from us.states import lookup
 from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.adrio.census.adrio_census import CensusGeography
-from epymorph.geo.spec import AttribDef, Geography, SourceSpec
+from epymorph.geo.spec import (AttribDef, Geography, SourceSpec, TimePeriod,
+                               Year)
 
 
 @dataclass
@@ -21,8 +22,15 @@ class FileSpec(SourceSpec):
     data_key: str | int
     label_type: str
     file_type: str
-    time_key: list[str | int] | None = None
+    time_key: str | int | None = None
+    time_type: TimePeriod | None = None
     header: int | None = None
+
+
+@dataclass
+class FileSpecTime(FileSpec):
+    time_key: str | int
+    time_type: TimePeriod
 
 
 class ADRIOMakerFile(ADRIOMaker):
@@ -35,6 +43,13 @@ class ADRIOMakerFile(ADRIOMaker):
 
                 sort_key = self.label_sort(spec.label_type, geography)
 
+                time_series = False
+                time_sort_key = 0
+                if isinstance(spec, FileSpecTime):
+                    time_series = True
+                    if isinstance(spec.time_type, Year):
+                        time_sort_key = spec.time_type.year
+
                 # read value from csv
                 if spec.file_type == 'csv':
                     if isinstance(spec.label_key, int) and spec.header is not None:
@@ -46,6 +61,9 @@ class ADRIOMakerFile(ADRIOMaker):
                     if isinstance(spec.label_key, int):
                         dataframe = dataframe.loc[dataframe.iloc[:, spec.label_key].isin(
                             sort_key)]
+                        if time_series and isinstance(spec.time_key, int):
+                            dataframe = dataframe.loc[dataframe.iloc[:,
+                                                                     spec.time_key] == time_sort_key]
                         sort_df = pd.DataFrame(sort_key)
                         data_values = dataframe.iloc[: spec.data_key]
                         dataframe = pd.merge(sort_df, dataframe,
@@ -57,6 +75,9 @@ class ADRIOMakerFile(ADRIOMaker):
                             raise GeoValidationException(msg)
                         dataframe = dataframe.loc[dataframe[spec.label_key].isin(
                             sort_key)]
+                        if time_series and isinstance(spec.time_key, str):
+                            dataframe = dataframe.loc[dataframe[spec.time_key]
+                                                      == time_sort_key]
                         sort_df = pd.DataFrame({spec.label_key: sort_key})
                         data_values = dataframe[spec.data_key]
                         dataframe = pd.merge(sort_df, dataframe, how='left')
@@ -118,6 +139,10 @@ class ADRIOMakerFile(ADRIOMaker):
 
 
 def get_county_from_fips(geography: CensusGeography) -> list[str]:
+    """
+    Converts county fips codes from a census geography filter to county names.
+    Returns a list of strings containing the name of each county in county, state format.
+    """
     state_filter = geography.filter.get("state")
     county_filter = geography.filter.get("county")
     if state_filter is None or county_filter is None:
@@ -141,3 +166,23 @@ def get_county_from_fips(geography: CensusGeography) -> list[str]:
             for county_fips in county_filter:
                 county_list.append(county_mapping.get(f"{state_fips}{county_fips}"))
     return county_list
+
+
+def get_fips_from_county(counties: list[str]) -> list[str]:
+    """
+    Converts a list of county names in county, state format to county fips codes.
+    Returns a list of strings containing the fips code for each county provided.
+    """
+    county_mapping = {}
+    fips_list = []
+    with open("./epymorph/data/geo/county_mapping.csv", 'r') as f:
+        county_reader = reader(f)
+        for county in county_reader:
+            county_mapping[county[0]] = county[1]
+
+    if county[0] == '*':
+        fips_list = list(county_mapping.values())
+    else:
+        for county in counties:
+            fips_list.append(county_mapping.get(county))
+    return fips_list
