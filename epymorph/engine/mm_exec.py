@@ -96,24 +96,22 @@ class StandardMovementExecutor(MovementEventsMixin, MovementExecutor):
             total += travelers.sum()
 
         # Process return clause.
-        # return_requested, return_actual, return_total = world.apply_return(tick)
         return_movers = world.apply_return(tick, return_stats=True)
-        if return_movers is not None:
-            return_total = return_movers.sum()
-            total += return_total
+        return_total = return_movers.sum()
+        total += return_total
 
-            self.on_movement_clause.publish(
-                OnMovementClause(
-                    tick.index,
-                    tick.day,
-                    tick.step,
-                    "return",
-                    return_movers,
-                    return_movers,
-                    return_total,
-                    False,
-                )
+        self.on_movement_clause.publish(
+            OnMovementClause(
+                tick.index,
+                tick.day,
+                tick.step,
+                "return",
+                return_movers,
+                return_movers,
+                return_total,
+                False,
             )
+        )
 
         self.on_movement_finish.publish(
             OnMovementFinish(tick.index, tick.day, tick.step, total))

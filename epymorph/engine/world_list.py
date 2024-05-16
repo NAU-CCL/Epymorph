@@ -1,6 +1,6 @@
 """World implementation: ListWorld."""
 from operator import attrgetter
-from typing import Any, Iterable, Self
+from typing import Any, Iterable, Literal, Self, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -134,6 +134,14 @@ class ListWorld(World):
                     self.locations[dst].append(p)
 
         self.normalize()
+
+    @overload
+    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None:
+        ...
+
+    @overload
+    def apply_return(self, tick: Tick, *, return_stats: Literal[True]) -> NDArray[SimDType]:
+        ...
 
     def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
         movers: Any = None

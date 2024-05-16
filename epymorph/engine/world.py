@@ -6,6 +6,7 @@ They also keep track of groups of individuals which have moved between locations
 and will eventually be returning or moving to another location.
 """
 from abc import ABC, abstractmethod
+from typing import Literal, overload
 
 from numpy.typing import NDArray
 
@@ -44,6 +45,16 @@ class World(ABC):
         Given an (N,N,C) array determining who should travel -- from-source-to-destination-by-compartment --
         modify the world state as a result of that movement.
         """
+
+    @abstractmethod
+    @overload
+    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None:
+        ...
+
+    @abstractmethod
+    @overload
+    def apply_return(self, tick: Tick, *, return_stats: Literal[True]) -> NDArray[SimDType]:
+        ...
 
     @abstractmethod
     def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:

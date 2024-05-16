@@ -1,5 +1,5 @@
 """World implementation: HypercubeWorld."""
-from typing import Self
+from typing import Literal, Self, overload
 
 import numpy as np
 import psutil
@@ -106,6 +106,14 @@ class HypercubeWorld(World):
         self.ledger[self.time_offset, :, :, :] -= trav_by_source
         self.ledger[return_tick + 1, :, :, :] += travelers
         self.time_frontier = max(self.time_frontier, return_tick + 2)
+
+    @overload
+    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None:
+        ...
+
+    @overload
+    def apply_return(self, tick: Tick, *, return_stats: Literal[True]) -> NDArray[SimDType]:
+        ...
 
     def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
         # we have to transpose the movers "stats" result since they're being stored here as
