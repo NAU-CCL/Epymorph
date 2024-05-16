@@ -6,7 +6,7 @@ from argparse import _SubParsersAction
 from pathlib import Path
 
 from epymorph.cache import CACHE_PATH
-from epymorph.data import geo_library, geo_library_dynamic
+from epymorph.data import adrio_maker_library, geo_library, geo_library_dynamic
 from epymorph.geo import cache
 from epymorph.geo.static import StaticGeoFileOps as F
 
@@ -121,7 +121,7 @@ def fetch(geo_name_or_path: str, force: bool) -> int:
         choice = input(f'{geo_name} is already cached, overwrite? [y/n] ')
     if force or choice == 'y':
         try:
-            cache.fetch(geo_name_or_path)
+            cache.fetch(geo_name_or_path, geo_library_dynamic, adrio_maker_library)
             print("geo sucessfully cached.")
         except cache.GeoCacheException as e:
             print(e)
@@ -141,7 +141,8 @@ def export(geo_name_or_path: str, out: str | None, rename: str | None, ignore_ca
     else:
         raise cache.GeoCacheException("Specified geo not found.")
 
-    cache.export(geo_name, geo_path, out, rename, ignore_cache)
+    cache.export(geo_name, geo_path, out, rename, ignore_cache,
+                 geo_library_dynamic, adrio_maker_library)
 
     print("Geo successfully exported.")
 

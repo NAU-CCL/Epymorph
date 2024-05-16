@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, overload
 
 from epymorph.cache import CACHE_PATH
-from epymorph.data import adrio_maker_library, geo_library_dynamic
+from epymorph.geo.adrio.adrio import ADRIOMaker
 from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.dynamic import DynamicGeoFileOps as DF
 from epymorph.geo.geo import Geo
@@ -13,12 +13,17 @@ from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
 from epymorph.log.messaging import dynamic_geo_messaging
 
+AdrioMakerLibrary = dict[str, type[ADRIOMaker]]
+DynamicGeoLibrary = dict[str, Callable[[], DynamicGeo]]
+
 
 class GeoCacheException(Exception):
     """An exception raised when a geo cache operation fails."""
 
 
-def fetch(geo_name_or_path: str) -> None:
+def fetch(geo_name_or_path: str,
+          geo_library_dynamic: DynamicGeoLibrary,
+          adrio_maker_library: AdrioMakerLibrary) -> None:
     """
     Caches all attribute data for a dynamic geo from the library or spec file at a given path.
     Raises GeoCacheException if spec not found.
@@ -48,7 +53,13 @@ def fetch(geo_name_or_path: str) -> None:
             raise GeoCacheException(f'spec file at {geo_name_or_path} not found.')
 
 
-def export(geo_name: str, geo_path: Path, out: str | None, rename: str | None, ignore_cache: bool) -> None:
+def export(geo_name: str,
+           geo_path: Path,
+           out: str | None,
+           rename: str | None,
+           ignore_cache: bool,
+           geo_library_dynamic: DynamicGeoLibrary,
+           adrio_maker_library: AdrioMakerLibrary) -> None:
     """
     Exports a geo as a .geo.tar file to a location outside the cache.
     If uncached, geo to export is also cached.

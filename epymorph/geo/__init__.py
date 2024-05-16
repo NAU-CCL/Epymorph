@@ -1,8 +1,11 @@
 """epymorph's geo package and exports"""
+from epymorph.geo.cache import load_from_cache, save_to_cache
+from epymorph.geo.dynamic import DynamicGeo
 from epymorph.geo.spec import (AttribDef, CentroidDType, DateAndDuration,
                                DateRange, DynamicGeoSpec, Geography, GeoSpec,
                                NonspecificDuration, SpecificTimePeriod,
                                StaticGeoSpec, TimePeriod, Year)
+from epymorph.geo.static import StaticGeo
 
 __all__ = [
     'AttribDef',
@@ -17,9 +20,8 @@ __all__ = [
     'StaticGeoSpec',
     'TimePeriod',
     'Year',
-    # TODO: these imports cause circular deps
-    # 'DynamicGeo',
-    # 'StaticGeo',
-    # 'save_to_cache',
-    # 'load_from_cache',
+    'DynamicGeo',
+    'StaticGeo',
+    'save_to_cache',
+    'load_from_cache',
 ]
