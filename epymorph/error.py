@@ -115,7 +115,7 @@ class IpmSimExceptionWithFields(IpmSimException):
     See 'IpmSimNaNException' for an example.
     """
 
-    display_fields: tuple[str, dict] | list[tuple[str, dict]]
+    display_fields: list[tuple[str, dict]]
 
     def __init__(self, message: str, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
         super().__init__(message)
