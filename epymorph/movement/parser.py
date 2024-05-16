@@ -2,11 +2,14 @@
 from typing import Literal, NamedTuple, cast
 
 import pyparsing as P
+import sympy
 from numpy.typing import DTypeLike
+from pyparsing import pyparsing_common as PC
 
 import epymorph.movement.parser_util as p
 from epymorph.data_shape import DataShape
 from epymorph.error import MmParseException
+from epymorph.sympy_shim import to_symbol
 
 # A MovementSpec has the following object structure:
 #
@@ -28,7 +31,7 @@ class MoveSteps(NamedTuple):
 
 
 move_steps: P.ParserElement = p.tag('move-steps', [
-    p.field('per-day', p.integer)('num_steps'),
+    p.field('per-day', PC.integer)('num_steps'),
     p.field('duration', p.num_list)('steps')
 ])
 
@@ -49,10 +52,14 @@ class Attribute(NamedTuple):
     """The data model for an Attribute clause."""
     # TODO: maybe replace with epymorph.simulation.AttributeDef in v0.5
     name: str
-    shape: DataShape
-    dtype: DTypeLike  # TODO: replace with DataDType in v0.5?
     source: Literal['geo', 'params']
-    description: str
+    dtype: DTypeLike  # TODO: replace with DataDType in v0.5?
+    shape: DataShape
+    symbol: sympy.Symbol
+    default_value: int | float | str \
+        | tuple[int | float | str, ...] \
+        | None
+    comment: str | None
 
 
 attribute: P.ParserElement = p.tag('attrib', [
@@ -60,7 +67,8 @@ attribute: P.ParserElement = p.tag('attrib', [
     p.field('name', p.name),
     p.field('shape', p.shape),
     p.field('dtype', p.dtype),
-    p.field('description', p.quoted),
+    p.field('default_value', p.scalar_value | p.none),
+    p.field('comment', p.quoted),
 ])
 
 
@@ -68,7 +76,22 @@ attribute: P.ParserElement = p.tag('attrib', [
 def marshal_attribute(results: P.ParseResults):
     """Convert a pyparsing result to an Attribute."""
     fields = results.as_dict()
-    return Attribute(fields['name'], fields['shape'], fields['dtype'][0], fields['source'], fields['description'])
+    dtype = fields['dtype'][0]
+    default_value = fields['default_value'][0]
+
+    # We can coerce integers to floats for convenience.
+    if dtype == float and isinstance(default_value, int):
+        default_value = float(default_value)
+
+    return Attribute(
+        name=fields['name'],
+        source=fields['source'],
+        dtype=dtype,
+        shape=fields['shape'],
+        symbol=to_symbol(fields['name']),
+        default_value=default_value,
+        comment=fields['comment'],
+    )
 
 
 ############################################################
@@ -125,9 +148,9 @@ class DailyClause(NamedTuple):
 
 daily: P.ParserElement = p.tag('mtype', [
     p.field('days', ('all' | day_list)),
-    p.field('leave', p.integer),
+    p.field('leave', PC.integer),
     p.field('duration', p.duration),
-    p.field('return', p.integer),
+    p.field('return', PC.integer),
     p.field('function', p.fn_body)
 ])
 """

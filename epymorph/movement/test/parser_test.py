@@ -9,6 +9,7 @@ from epymorph.geo.spec import CentroidDType
 from epymorph.movement.parser import (Attribute, DailyClause, MoveSteps,
                                       attribute, daily, move_steps)
 from epymorph.movement.parser_util import Duration
+from epymorph.sympy_shim import to_symbol
 
 
 class TestMoveSteps(unittest.TestCase):
@@ -45,18 +46,23 @@ class TestMoveSteps(unittest.TestCase):
 class TestAttribute(unittest.TestCase):
     def test_successful(self):
         cases = [
-            '[attrib: source=geo; name=commuters; shape=NxN; dtype=int; description="hey1"]',
-            '[attrib: source=params; name=move_control; shape=TxN; dtype=float; description="hey2"]',
-            '[attrib: source=params; name=move_control; shape=TxN; dtype=float;\n    description="hey3"]',
-            '[attrib:\nsource=params;\nname=theta;\nshape=S;\ndtype=str;\ndescription="hey4"]',
-            '[attrib: source=geo; name=centroids; shape=N; dtype=[(longitude, float), (latitude, float)]; description="hey5"]',
+            '[attrib: source=geo; name=commuters; shape=NxN; dtype=int; default_value=None; comment="hey1"]',
+            '[attrib: source=params; name=move_control; shape=TxN; dtype=float; default_value=42; comment="hey2"]',
+            '[attrib: source=params; name=move_control; shape=TxN; dtype=float; default_value=-32.7;\n    comment="hey3"]',
+            '[attrib:\nsource=params;\nname=theta;\nshape=S;\ndtype=str;\ndefault_value="hi";\ncomment="hey4"]',
+            '[attrib: source=geo; name=centroids; shape=N; dtype=[(longitude, float), (latitude, float)]; default_value=(1.0, 2.0); comment="hey5"]',
         ]
         exps = [
-            Attribute('commuters', Shapes.NxN, np.int64, 'geo', 'hey1'),
-            Attribute('move_control', Shapes.TxN, np.float64, 'params', 'hey2'),
-            Attribute('move_control', Shapes.TxN, np.float64, 'params', 'hey3'),
-            Attribute('theta', Shapes.S, np.str_, 'params', 'hey4'),
-            Attribute('centroids', Shapes.N, CentroidDType, 'geo', 'hey5'),
+            Attribute('commuters', 'geo', np.int64, Shapes.NxN,
+                      to_symbol('commuters'), None, 'hey1'),
+            Attribute('move_control', 'params', np.float64, Shapes.TxN,
+                      to_symbol('move_control'), 42.0, 'hey2'),
+            Attribute('move_control', 'params', np.float64, Shapes.TxN,
+                      to_symbol('move_control'), -32.7, 'hey3'),
+            Attribute('theta', 'params', np.str_, Shapes.S,
+                      to_symbol('theta'), 'hi', 'hey4'),
+            Attribute('centroids', 'geo', CentroidDType, Shapes.N,
+                      to_symbol('centroids'), (1.0, 2.0), 'hey5'),
         ]
         for c, e in zip(cases, exps):
             a = attribute.parse_string(c)[0]
@@ -64,9 +70,9 @@ class TestAttribute(unittest.TestCase):
 
     def test_failures(self):
         cases = [
-            '[attrib: source=blah; name=commuters; shape=NxN; dtype=int; description="hey1"]',
-            '[attrib: source=params; name=move_control; shape=TxN; dtype=uint8; description="hey2"]',
-            '[attrib: source=params; name=move_control; shape=TxA; dtype=float; description="hey3"]',
+            '[attrib: source=blah; name=commuters; shape=NxN; dtype=int; default_value=23; comment="hey1"]',
+            '[attrib: source=params; name=move_control; shape=TxN; dtype=uint8; default_value=1; comment="hey2"]',
+            '[attrib: source=params; name=move_control; shape=TxA; dtype=float; default_value=27.3; comment="hey3"]',
         ]
         for c in cases:
             with self.assertRaises(ParseBaseException):

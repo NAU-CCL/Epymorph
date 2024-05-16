@@ -6,6 +6,7 @@ from typing import NamedTuple
 
 import numpy as np
 import pyparsing as P
+from pyparsing import pyparsing_common as PC
 
 from epymorph.data_shape import parse_shape
 
@@ -15,9 +16,14 @@ from epymorph.data_shape import parse_shape
 E = P.ParserElement
 _ = P.Suppress
 l = P.Literal
-fnumber = P.pyparsing_common.fnumber
-fraction = P.pyparsing_common.fraction
-integer = P.pyparsing_common.integer
+none = l('None')
+
+
+@none.set_parse_action
+def marshal_none(_results: P.ParseResults):
+    """Marshal a None value."""
+    return P.ParseResults([None])
+
 
 quoted = P.QuotedString(quote_char='"', unquote_results=True) |\
     P.QuotedString(quote_char="'", unquote_results=True)
@@ -55,7 +61,7 @@ def tag(tag_name: str, fields: list[E]) -> E:
     return bracketed(_(l(tag_name) + l(":")) - field_list)
 
 
-num_list: E = bracketed(P.delimited_list(fraction | fnumber))
+num_list: E = bracketed(P.delimited_list(PC.fraction | PC.fnumber))
 """Parser for a list of numbers in brackets, like: `[1,2,3]`"""
 
 
@@ -74,7 +80,7 @@ class Duration(NamedTuple):
             raise ValueError(f"unsupported unit {self.unit}")
 
 
-duration = P.Group(integer + P.one_of('d w'))
+duration = P.Group(PC.integer + P.one_of('d w'))
 """Parser for a duration expression."""
 
 
@@ -100,6 +106,9 @@ def my_function():
 """
 
 
+# Shapes
+
+
 shape = P.one_of("S T N TxN NxN")
 """
 Describes the dimensions of an array in terms of the simulation.
@@ -115,6 +124,9 @@ def marshal_shape(results: P.ParseResults):
     """Convert a pyparsing result to a Shape object."""
     value = str(results[0])
     return P.ParseResults(parse_shape(value))
+
+
+# dtypes
 
 
 base_dtype = P.one_of('int float str')
@@ -151,7 +163,24 @@ struct_dtype = bracketed(P.delimited_list(struct_dtype_field))
 @struct_dtype.set_parse_action
 def marshal_struct_dtype(results: P.ParseResults):
     """Convert a pyparsing results to a structured dtype object."""
-    return np.dtype(results.as_list())
+    return [results.as_list()]
 
 
 dtype = base_dtype | struct_dtype
+
+
+# Scalar Values
+
+
+base_scalar = quoted | PC.number
+
+tuple_scalar = _('(') + P.delimited_list(base_scalar, ',') + _(')')
+
+
+@tuple_scalar.set_parse_action
+def marshal_tuple_scalar(results: P.ParseResults):
+    """Convert a pyparsing result to a tuple of values."""
+    return tuple(results.as_list())
+
+
+scalar_value = tuple_scalar | base_scalar
