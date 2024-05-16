@@ -16,6 +16,7 @@ from numpy.typing import NDArray
 from epymorph.data_shape import DataShape, Shapes
 from epymorph.data_type import DataDType
 from epymorph.error import GeoValidationException
+from epymorph.geography.scope import GeoScope
 from epymorph.simulation import AttributeDef, geo_attrib
 from epymorph.sympy_shim import to_symbol
 from epymorph.util import NumpyTypeError, check_ndarray
@@ -164,7 +165,7 @@ class StaticGeoSpec(GeoSpec):
 @dataclass
 class DynamicGeoSpec(GeoSpec):
     """The spec for a DynamicGeo."""
-    geography: Geography
+    scope: GeoScope
     source: dict[str, str]
 
 

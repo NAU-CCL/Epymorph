@@ -64,7 +64,7 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
             # Make and store adrio.
             adrio = makers[maker_name].make_adrio(
                 adrio_attrib,
-                spec.geography,
+                spec.scope,
                 spec.time_period
             )
             adrios[attr.name] = adrio
