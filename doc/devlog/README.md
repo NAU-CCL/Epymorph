@@ -27,7 +27,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2023-07-24.ipynb | Tyler | | Experiments with adapting an IPM by "attaching" a function to an IPM parameter. This approach has been superseded by a design for direct support for functional parameters. |
 | 2023-08-11.ipynb | Tyler | | Demonstrates performance differences between the Basic and Hypercube movement engines. A pending refactor will make the concept of movement engines obsolete. |
 | 2023-08-17.ipynb | Tyler | ✓ | Demonstrates the newly-added Initializer functions, including library examples and custom initializers. |
-| 2023-08-23.ipynb | Tyler | ✓ | Describes what IPM attribute broadcasting is and why it's useful. Introduces our concept of data shapes. |
+| 2023-08-23.ipynb | Tyler | | Describes what IPM attribute broadcasting is and why it's useful. Introduces our concept of data shapes. |
 | 2023-09-22-adrio-demo.ipynb | Trevor | | Demonstrates the newly-added ADRIOs functionality by fetching data from the US Census ACS5. |
 | 2023-09-29.ipynb | Tyler | | Experiments in representing exogenous births and deaths in the existing compartment IPM system. |
 | 2023-10-05.ipynb | Tyler | | Demonstrates the newly-added first-class support for exogenous births and deaths in the compartment IPM system. |
@@ -47,10 +47,11 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-02-14.ipynb | Tyler | | Prep work related to the "Z-virus" workshop. (Not very organized.) |
 | 2024-03-01.ipynb | Tyler | | Getting the indices of IPM events and compartments by name with wildcard support. |
 | 2024-03-13.ipynb | Tyler | | Showing off movement data collection (NEW!) |
+| 2024-03-19.ipynb | Tyler | ✓ | Create and save the `us_sw_counties_2015.geo` spec file. |
 | 2024-04-04-draw-demo.ipynb | Izaac | | Showing the new draw module for visualising IPMs (NEW!) |
 | 2024-04-16.ipynb | Izaac | | Showing error handling for common ipm errors (NEW!)|
-| 2024-04-25.ipynb | Tyler | | Integration test: epymorph cache utilities |
-| 2024-05-03.ipynb | Tyler | | Integration test: loading US Census geography from TIGER |
+| 2024-04-25.ipynb | Tyler | ✓ | Integration test: epymorph cache utilities |
+| 2024-05-03.ipynb | Tyler | ✓ | Integration test: loading US Census geography from TIGER |
 
 ## Contributing
 
