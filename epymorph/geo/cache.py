@@ -1,6 +1,7 @@
 """Logic for saving to, loading from, and managing a cache of geos on the user's hard disk."""
 import os
 from pathlib import Path
+from typing import Callable, overload
 
 from epymorph.cache import CACHE_PATH
 from epymorph.data import adrio_maker_library, geo_library_dynamic
@@ -135,13 +136,34 @@ def save_to_cache(geo: Geo, geo_name: str) -> None:
     F.save_as_archive(static_geo, file_path)
 
 
+@overload
+def load_from_cache(geo_name: str, or_else: Callable[[], StaticGeo]) -> StaticGeo:
+    ...
+
+
+@overload
 def load_from_cache(geo_name: str) -> StaticGeo | None:
-    """Checks whether a dynamic geo has already been cached and returns it if so."""
+    ...
+
+
+def load_from_cache(geo_name: str, or_else: Callable[[], StaticGeo] | None = None) -> StaticGeo | None:
+    """
+    If a geo has already been cached, load and return it.
+    Otherwise, if you provide a fall-back function (`or_else`), use that to fetch a geo.
+    If there is no fall-back function, `None` is returned.
+    If the fallback function is used, the result will be saved to the cache.
+    """
     file_path = CACHE_PATH / F.to_archive_filename(geo_name)
-    if not os.path.exists(file_path):
-        return None
-    else:
+
+    if os.path.exists(file_path):
         return F.load_from_archive(file_path)
+
+    if or_else is not None:
+        geo = or_else()
+        F.save_as_archive(geo, file_path)
+        return geo
+
+    return None
 
 
 def format_size(size: int) -> str:
