@@ -5,7 +5,7 @@ import numpy as np
 from census import Census
 from geopandas import GeoDataFrame
 from numpy.typing import NDArray
-from pandas import DataFrame, concat, merge, read_excel
+from pandas import DataFrame, concat, read_excel
 from pygris import block_groups, counties, states, tracts
 
 from epymorph.data_shape import Shapes
@@ -174,6 +174,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                     "for": "county:*",
                     "in": f"state:{','.join(includes)}",
                 }]
+
             case CountyScope('county', includes):
                 # NOTE: this is a case where our scope results in multiple queries!
                 counties_by_state: dict[str, list[str]] = defaultdict(list)
@@ -189,7 +190,33 @@ class ADRIOMakerCensus(ADRIOMaker):
                     "for": "tract:*",
                     "in": f"state:{','.join(includes)} county:*",
                 }]
-            # ... TODO: other tracts cases...
+
+            case TractScope('county', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                for state, county in map(COUNTY.decompose, includes):
+                    counties_by_state[state].append(county)
+                queries = [
+                    {"for": "tract:*",
+                        "in": f"state:{s} county:{','.join(cs)}"}
+                    for s, cs in counties_by_state.items()
+                ]
+
+            case TractScope('tract', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                tracts_by_county: dict[str, list[str]] = defaultdict(list)
+
+                for state, county, tract in map(TRACT.decompose, includes):
+                    if state not in counties_by_state:
+                        counties_by_state[state].append(county)
+                    tracts_by_county[county].append(tract)
+
+                queries = []
+                for state, counties in counties_by_state.items():
+                    for cs in counties:
+                        queries.append(
+                            {"for": f"tract:{','.join(tracts_by_county[cs])}",
+                             "in": f"state:{state} county:{cs}"}
+                        )
 
             case BlockGroupScope('state', includes):
                 # This wouldn't normally need to be multiple queries,
@@ -199,18 +226,64 @@ class ADRIOMakerCensus(ADRIOMaker):
                     {"for": "block group:*", "in": f"state:{s} county:* tract:*"}
                     for s in states
                 ]
-            # ... TODO: other block groups cases...
 
-            # case Blocks(_, _):
-            #     # block data not available in ACS 5!
-            #     raise Exception("unsupported query lol")
+            case BlockGroupScope('county', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                for state, county in map(COUNTY.decompose, includes):
+                    counties_by_state[state].append(county)
+                queries = [
+                    {"for": "block group:*",
+                        "in": f"state:{s} county:{','.join(cs)} tract:*"}
+                    for s, cs in counties_by_state.items()
+                ]
+
+            case BlockGroupScope('tract', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                tracts_by_county: dict[str, list[str]] = defaultdict(list)
+
+                for state, county, tract in map(TRACT.decompose, includes):
+                    if state not in counties_by_state or county not in counties_by_state[state]:
+                        counties_by_state[state].append(county)
+                    tracts_by_county[county].append(tract)
+
+                queries = []
+                for state, counties in counties_by_state.items():
+                    for cs in counties:
+                        queries.append(
+                            {"for": f"block group:*",
+                                "in": f"state:{state} county:{cs} tract:{','.join(tracts_by_county[cs])}"}
+                        )
+
+            case BlockGroupScope('block group', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                tracts_by_county: dict[str, list[str]] = defaultdict(list)
+                block_groups_by_tract: dict[str, list[str]] = defaultdict(list)
+
+                for state, county, tract, block_group in map(BLOCK_GROUP.decompose, includes):
+                    if state not in counties_by_state or county not in counties_by_state[state]:
+                        counties_by_state[state].append(county)
+                    if county not in tracts_by_county or tract not in tracts_by_county[county]:
+                        tracts_by_county[county].append(tract)
+                    block_groups_by_tract[tract].append(block_group)
+
+                queries = []
+                for state, counties in counties_by_state.items():
+                    for cs, tracts in tracts_by_county.items():
+                        for tcs in tracts:
+                            if cs in counties_by_state[state]:
+                                queries.append(
+                                    {"for": f"block group:{','.join(block_groups_by_tract[tcs])}",
+                                     "in": f"state:{state} county:{cs} tract:{tcs}"}
+                                )
 
             case _:
-                raise Exception("unsupported query lol")
+                raise Exception("Unsupported query.")
 
+        # check if granularity other than scope granularity requested
         if granularity is None:
             granularity = CENSUS_GRANULARITY_CODE[scope.granularity]
 
+        # fetch and combine all queries
         results_df = concat([
             DataFrame.from_records(
                 self.census.acs5.get(
