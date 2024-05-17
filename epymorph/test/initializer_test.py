@@ -1,17 +1,22 @@
 # pylint: disable=missing-docstring
 import unittest
+from datetime import date
+from functools import partial
 from unittest.mock import MagicMock
 
 import numpy as np
 
-from epymorph.data_shape import Shapes
+from epymorph.data_shape import SimDimensions
+from epymorph.data_type import SimDType
 from epymorph.error import InitException
-from epymorph.geo.spec import LABEL, NO_DURATION, AttribDef
+from epymorph.geo.spec import LABEL, NO_DURATION
 from epymorph.geo.static import StaticGeo, StaticGeoSpec
 from epymorph.initializer import (InitContext, bottom_locations, explicit,
-                                  indexed_locations, labeled_locations,
-                                  proportional, single_location, top_locations)
-from epymorph.simulation import SimDimensions, SimDType
+                                  indexed_locations, initialize,
+                                  labeled_locations, proportional,
+                                  single_location, top_locations)
+from epymorph.params import GeoData
+from epymorph.simulation import geo_attrib
 
 
 def test_context() -> InitContext:
@@ -19,8 +24,8 @@ def test_context() -> InitContext:
         spec=StaticGeoSpec(
             attributes=[
                 LABEL,
-                AttribDef('population', np.int64, Shapes.N),
-                AttribDef('foosball_championships', np.int64, Shapes.N),
+                geo_attrib('population', dtype=int),
+                geo_attrib('foosball_championships', dtype=int),
             ],
             time_period=NO_DURATION,
         ),
@@ -32,8 +37,8 @@ def test_context() -> InitContext:
 
     init_context = MagicMock(spec=InitContext)
     init_context.dim = SimDimensions.build(
-        tau_step_lengths=[1 / 3, 2 / 3], days=100, nodes=geo.nodes,
-        compartments=3, events=3
+        tau_step_lengths=[1 / 3, 2 / 3], start_date=date(2020, 1, 1), days=100,
+        nodes=geo.nodes, compartments=3, events=3
     )
     init_context.rng = np.random.default_rng(1)
     init_context.geo = geo
@@ -222,3 +227,121 @@ class TestBottomInitializer(unittest.TestCase):
         act = out[:, 1] > 0
         exp = np.array([True, True, True, False, False])
         np.testing.assert_array_equal(act, exp)
+
+
+class TestInitialize(unittest.TestCase):
+
+    def make_geo(self) -> GeoData:
+        return {
+            'label': np.array(list('ABCDE'), dtype=np.str_),
+            'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
+            'foosball_championships': np.array([2, 4, 1, 9, 6]),
+        }
+
+    def make_dim(self) -> SimDimensions:
+        return SimDimensions.build(
+            tau_step_lengths=[1 / 3, 2 / 3], start_date=date(2020, 1, 1), days=100, nodes=5,
+            compartments=3, events=3
+        )
+
+    def test_initialize_01(self):
+        # Mostly to determine if auto-wiring from params works as expected.
+        out = initialize(
+            init=indexed_locations,
+            dim=self.make_dim(),
+            geo=self.make_geo(),
+            raw_params={
+                'selection': np.array([1, 3], dtype=np.intp),
+                'seed_size': 100,
+            },
+            rng=np.random.default_rng(1),
+        )
+        act = out[:, 1] > 0
+        exp = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(act, exp)
+
+    def test_initialize_02(self):
+        # Mixing partial with some params.
+        out = initialize(
+            init=partial(indexed_locations, seed_size=100),
+            dim=self.make_dim(),
+            geo=self.make_geo(),
+            raw_params={
+                'selection': np.array([1, 3], dtype=np.intp),
+            },
+            rng=np.random.default_rng(1),
+        )
+        # Make sure only the selected locations get infected.
+        act = out[:, 1] > 0
+        exp = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(act, exp)
+        # And check for 100 infected in total.
+        self.assertEqual(out[:, 1].sum(), 100)
+
+    def test_initialize_03(self):
+        # Partial-provided args should take precedence over params.
+        out = initialize(
+            init=partial(indexed_locations, selection=np.array([1, 3], dtype=np.intp)),
+            dim=self.make_dim(),
+            geo=self.make_geo(),
+            raw_params={
+                'selection': np.array([2, 4], dtype=np.intp),
+                'seed_size': 100,
+            },
+            rng=np.random.default_rng(1),
+        )
+        # Make sure only the selected locations get infected.
+        act = out[:, 1] > 0
+        exp = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(act, exp)
+
+    def test_initialize_bad(self):
+        with self.assertRaises(InitException):
+            # Missing param
+            initialize(
+                init=single_location,
+                dim=self.make_dim(),
+                geo=self.make_geo(),
+                raw_params={},
+                rng=np.random.default_rng(1),
+            )
+
+        with self.assertRaises(InitException):
+            # Bad param type
+            initialize(
+                init=single_location,
+                dim=self.make_dim(),
+                geo=self.make_geo(),
+                raw_params={'location': 13},
+                rng=np.random.default_rng(1),
+            )
+
+        with self.assertRaises(InitException):
+            # Bad param type
+            initialize(
+                init=single_location,
+                dim=self.make_dim(),
+                geo=self.make_geo(),
+                raw_params={'location': [1, 2]},
+                rng=np.random.default_rng(1),
+            )
+
+        with self.assertRaises(InitException):
+            # Bad param type
+            initialize(
+                init=single_location,
+                dim=self.make_dim(),
+                geo=self.make_geo(),
+                raw_params={'location': 'abc'},
+                rng=np.random.default_rng(1),
+            )
+
+        with self.assertRaises(InitException):
+            # Bad param type
+            initialize(
+                init=single_location,
+                dim=self.make_dim(),
+                geo=self.make_geo(),
+                raw_params={'location': np.arange(20).reshape((4, 5))},
+                rng=np.random.default_rng(1),
+            )

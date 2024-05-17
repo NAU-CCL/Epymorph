@@ -8,20 +8,21 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.code import ImmutableNamespace, compile_function, parse_function
+from epymorph.code import (ImmutableNamespace, compile_function,
+                           epymorph_namespace, parse_function)
+from epymorph.data_type import SimDType
 from epymorph.error import AttributeException, MmCompileException, error_gate
 from epymorph.movement.movement_model import (DynamicTravelClause,
                                               MovementContext,
                                               MovementFunction, MovementModel,
-                                              PredefParams, TravelClause)
-from epymorph.movement.parser import ALL_DAYS
-from epymorph.movement.parser import Attribute as MmAttribute
-from epymorph.movement.parser import DailyClause, MovementClause, MovementSpec
-from epymorph.simulation import SimDType, Tick, TickDelta, epymorph_namespace
+                                              PredefData, TravelClause)
+from epymorph.movement.parser import (ALL_DAYS, DailyClause, MovementClause,
+                                      MovementSpec)
+from epymorph.simulation import AttributeDef, Tick, TickDelta
 from epymorph.util import identity
 
 
-def _empty_predef(_ctx: MovementContext) -> PredefParams:
+def _empty_predef(_ctx: MovementContext) -> PredefData:
     """A placeholder predef function for when none is given by the movement spec."""
     return {}
 
@@ -81,7 +82,7 @@ def _movement_global_namespace(rng: np.random.Generator) -> dict[str, Any]:
                 return result.astype(SimDType)
         return wrapped_func
 
-    global_namespace = epymorph_namespace()
+    global_namespace = epymorph_namespace(SimDType)
     # Add rng functions to np namespace.
     np_ns = ImmutableNamespace({
         **global_namespace['np'].to_dict_shallow(),
@@ -92,7 +93,7 @@ def _movement_global_namespace(rng: np.random.Generator) -> dict[str, Any]:
     # Add simulation details.
     global_namespace |= {
         'MovementContext': MovementContext,
-        'PredefParams': PredefParams,
+        'PredefData': PredefData,
         'np': np_ns,
     }
     return global_namespace
@@ -100,7 +101,7 @@ def _movement_global_namespace(rng: np.random.Generator) -> dict[str, Any]:
 
 def _compile_clause(
     clause: MovementClause,
-    model_attributes: Sequence[MmAttribute],
+    model_attributes: Sequence[AttributeDef],
     global_namespace: dict[str, Any],
     name_override: Callable[[str], str] = identity,
 ) -> TravelClause:
@@ -117,13 +118,6 @@ def _compile_clause(
         msg = "Unable to parse and compile movement clause function."
         raise MmCompileException(msg) from e
 
-    # Construct a mask for IPM compartments subject to movement.
-    def mask_predicate(ctx: MovementContext) -> NDArray[np.bool_]:
-        return np.array(
-            ['immobile' not in c.tags for c in ctx.ipm.compartments],
-            dtype=np.bool_
-        )
-
     # Handle different types of MovementClause.
     match clause:
         case DailyClause():
@@ -131,6 +125,10 @@ def _compile_clause(
                 i for (i, d) in enumerate(ALL_DAYS)
                 if d in clause.days
             )
+
+            # TODO: @cache?
+            def mask_predicate(ctx: MovementContext) -> NDArray[np.bool_]:
+                return ctx.compartment_mobility
 
             def move_predicate(_ctx: MovementContext, tick: Tick) -> bool:
                 return clause.leave_step == tick.step and \
@@ -161,7 +159,7 @@ def _adapt_move_function(fn: Callable, fn_ast: ast.FunctionDef) -> MovementFunct
         # Remember `fn` has been transformed, so if the user gave 1 arg we added 2 for a total of 3.
         case 3:
             @wraps(fn)
-            def fn_arity1(ctx: MovementContext, predef: PredefParams, tick: Tick) -> NDArray[SimDType]:
+            def fn_arity1(ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
                 requested = fn(ctx, predef, tick)
                 np.fill_diagonal(requested, 0)
                 return requested
@@ -169,7 +167,7 @@ def _adapt_move_function(fn: Callable, fn_ast: ast.FunctionDef) -> MovementFunct
 
         case 4:
             @wraps(fn)
-            def fn_arity2(ctx: MovementContext, predef: PredefParams, tick: Tick) -> NDArray[SimDType]:
+            def fn_arity2(ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
                 N = ctx.dim.nodes
                 requested = np.zeros((N, N), dtype=SimDType)
                 for n in range(N):
@@ -180,7 +178,7 @@ def _adapt_move_function(fn: Callable, fn_ast: ast.FunctionDef) -> MovementFunct
 
         case 5:
             @wraps(fn)
-            def fn_arity3(ctx: MovementContext, predef: PredefParams, tick: Tick) -> NDArray[SimDType]:
+            def fn_arity3(ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
                 N = ctx.dim.nodes
                 requested = np.zeros((N, N), dtype=SimDType)
                 for i, j in np.ndindex(N, N):
@@ -205,7 +203,7 @@ class _MovementCodeTransformer(ast.NodeTransformer):
     """
 
     check_attributes: bool
-    attributes: Mapping[str, MmAttribute]
+    attributes: Mapping[str, AttributeDef]
 
     geo_remapping: Callable[[str], str]
     params_remapping: Callable[[str], str]
@@ -213,7 +211,7 @@ class _MovementCodeTransformer(ast.NodeTransformer):
 
     def __init__(
         self,
-        attributes: Sequence[MmAttribute],
+        attributes: Sequence[AttributeDef],
         geo_remapping: Callable[[str], str] = identity,
         params_remapping: Callable[[str], str] = identity,
         predef_remapping: Callable[[str], str] = identity,
@@ -384,7 +382,7 @@ class ClauseFunctionTransformer(_MovementCodeTransformer):
             )
             predef_arg = ast.arg(
                 arg='predef',
-                annotation=ast.Name(id='PredefParams', ctx=ast.Load()),
+                annotation=ast.Name(id='PredefData', ctx=ast.Load()),
             )
             new_node.args.args = [ctx_arg, predef_arg, *new_node.args.args]
         return new_node

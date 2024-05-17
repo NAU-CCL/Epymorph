@@ -7,7 +7,9 @@ from typing import NamedTuple, Protocol, runtime_checkable
 
 from numpy.typing import NDArray
 
-from epymorph.simulation import SimDimensions, SimDType, TimeFrame
+from epymorph.data_shape import SimDimensions
+from epymorph.data_type import SimDType
+from epymorph.simulation import TimeFrame
 from epymorph.util import Event
 
 # Simulation Events

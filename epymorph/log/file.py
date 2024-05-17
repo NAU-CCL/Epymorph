@@ -36,9 +36,9 @@ def file_log(
     start_time: float | None = None
 
     def on_start(ctx: OnStart) -> None:
-        start_date = ctx.time_frame.start_date
-        duration_days = ctx.time_frame.duration_days
-        end_date = ctx.time_frame.end_date
+        start_date = ctx.dim.start_date
+        end_date = ctx.dim.end_date
+        duration_days = ctx.dim.days
 
         sim_log.info(f"Running simulation ({sim.__class__.__name__}):")
         sim_log.info(f"- {start_date} to {end_date} ({duration_days} days)")

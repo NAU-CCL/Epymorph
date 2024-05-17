@@ -5,15 +5,19 @@ There are potentially many ways to do this, driven by source data from
 the geo or simulation parameters, so this module provides a uniform interface
 to accomplish the task, as well as a few common implementations.
 """
-from typing import Any, Callable, Protocol, cast
+import inspect
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, Callable, Mapping, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.data_shape import SimDimensions
+from epymorph.data_type import RawParam, SimDType
 from epymorph.error import InitException
-from epymorph.geo.geo import Geo
-from epymorph.params import ContextParams
-from epymorph.simulation import SimDimensions, SimDType
+from epymorph.params import normalize_params
+from epymorph.simulation import GeoData, ParamsData
 from epymorph.util import NumpyTypeError, check_ndarray
 
 Initializer = Callable[..., NDArray[SimDType]]
@@ -39,20 +43,21 @@ if you specify an initializer parameter called 'population' and there's a geo
 attribute called 'population', those can be auto-wired together. (If a geo attribute
 and params attribute happened to use the same name, geo wins.) There is also a special
 value to get the simulation's context info: the name 'ctx' and/or any parameter with
-RumeContext or InitContext as its type annotation will be auto-wired with the context.
+InitContext as its type annotation will be auto-wired with the context.
 This gives access to useful things like the simulation dimensions and random number generator.
 Of course you can always use partial function application to directly specify initializer arguments,
 if that's your style.
 """
 
 
-class InitContext(Protocol):
-    """The subset of the RumeContext that initialization might need."""
+@dataclass(frozen=True)
+class InitContext:
+    """The subset of the context that initialization might need."""
     # This machine avoids circular deps.
     dim: SimDimensions
+    geo: GeoData
+    params: ParamsData
     rng: np.random.Generator
-    geo: Geo
-    params: ContextParams
 
 
 def _get_population(ctx: InitContext) -> NDArray[np.int64]:
@@ -285,7 +290,7 @@ initializer_library: dict[str, Initializer] = {
 """A library for the built-in initializer functions."""
 
 
-def normalize_init_params(data: dict[str, Any]) -> dict[str, Any]:
+def normalize_init_params(data: Mapping[str, RawParam]) -> dict[str, Any]:
     """Normalize parameters for initializers."""
     return {
         # Replace list values with numpy arrays.
@@ -298,3 +303,83 @@ def normalize_init_params(data: dict[str, Any]) -> dict[str, Any]:
         key: np.asarray(value) if isinstance(value, list) else value
         for key, value in data.items()
     }
+
+
+def initialize(
+    init: Initializer,
+    dim: SimDimensions,
+    geo: GeoData,
+    raw_params: Mapping[str, RawParam],
+    rng: np.random.Generator
+) -> NDArray[SimDType]:
+    """
+    Executes an initialization function, auto-wiring from available data where necessary.
+    Auto-wiring initializer function parameters can provide an InitContext instance,
+    a geo attribute, a params attribute, or a default argument -- if they have
+    not already been provided using partial.
+    """
+    partial_kwargs = set[str]()
+    if isinstance(init, partial):
+        # partial funcs require a bit of extra massaging
+        init_name = init.func.__name__
+        partial_kwargs = set(init.keywords)
+        init = cast(Initializer, init)
+    else:
+        init_name = cast(str, getattr(init, '__name__', 'UNKNOWN'))
+
+    norm_params = normalize_params(raw_params, geo, dim)
+    ctx = InitContext(dim, geo, norm_params, rng)
+    init_params = normalize_init_params(raw_params)
+
+    # get list of args for function
+    sig = inspect.signature(init)
+
+    # Build up the arguments dict.
+    kwargs = {}
+    for p in sig.parameters.values():
+        if p.kind in ['POSITIONAL_ONLY', 'VAR_POSITIONAL', 'VAR_KEYWORD']:
+            # var-args not supported
+            msg = f"'{init_name}' requires an argument of an unsupported kind: {p.name} is a {p.kind} parameter"
+            raise InitException(msg)
+
+        if p.name in partial_kwargs:
+            # Skip any args in partial_kwargs, otherwise we're just repeating them.
+            continue
+        elif p.name == 'ctx' or p.annotation in [InitContext]:
+            # If context needed, supply context!
+            kwargs[p.name] = ctx
+        elif p.name in geo:
+            # If name is in geo, use that.
+            kwargs[p.name] = geo[p.name]
+        elif p.name in init_params:
+            # If name is in params, use that.
+            kwargs[p.name] = init_params[p.name]
+        elif p.default is not inspect.Parameter.empty:
+            # If arg has a default, use that.
+            kwargs[p.name] = p.default
+        else:
+            # Unable to auto-wire the arg!
+            msg = f"'{init_name}' requires an argument that we couldn't auto-wire: {p.name} ({p.annotation})"
+            raise InitException(msg)
+
+    # Execute function with matched args.
+    try:
+        result = init(**kwargs)
+    except InitException as e:
+        raise e
+    except Exception as e:
+        raise InitException('Initializer failed during execution.') from e
+
+    # NOTE: I'm boxing the np.min result as an int to convince Pylance/Pyright that the < operator
+    # works. For some reason, it seems to be having trouble discovering operators in library code.
+    # I'm not able to duplicate this in a sandbox environment, so it must be an obscure peculiarity
+    # of our project. For now, better to work around it; this isn't in a performance-critical code path.
+    if int(np.min(result)) < 0:
+        raise InitException(f"Initializer '{init_name}' returned values less than zero")
+
+    try:
+        _, N, C, _ = dim.TNCE
+        check_ndarray(result, [SimDType], (N, C))
+    except NumpyTypeError as e:
+        raise InitException(f"Invalid return type from '{init_name}'") from e
+    return result

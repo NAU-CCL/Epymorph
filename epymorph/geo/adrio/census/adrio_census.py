@@ -11,10 +11,11 @@ from pandas import DataFrame, read_excel
 from pygris import block_groups, counties, states, tracts
 
 from epymorph.data_shape import Shapes
+from epymorph.data_type import CentroidDType
 from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.spec import (AttribDef, CentroidDType, Geography, TimePeriod,
-                               Year)
+from epymorph.geo.spec import Geography, TimePeriod, Year
+from epymorph.simulation import AttributeDef, geo_attrib
 
 
 class Granularity(Enum):
@@ -89,20 +90,35 @@ class ADRIOMakerCensus(ADRIOMaker):
                         'B01001_049E']
 
     attributes = [
-        AttribDef('name', np.str_, Shapes.N),
-        AttribDef('population', np.int64, Shapes.N),
-        AttribDef('population_by_age', np.int64, Shapes.NxA(3)),
-        AttribDef('population_by_age_x6', np.int64, Shapes.NxA(6)),
-        AttribDef('centroid', CentroidDType, Shapes.N),
-        AttribDef('geoid', np.str_, Shapes.N),
-        AttribDef('average_household_size', np.int64, Shapes.N),
-        AttribDef('dissimilarity_index', np.float64, Shapes.N),
-        AttribDef('commuters', np.int64, Shapes.NxN),
-        AttribDef('gini_index', np.float64, Shapes.N),
-        AttribDef('median_age', np.int64, Shapes.N),
-        AttribDef('median_income', np.int64, Shapes.N),
-        AttribDef('tract_median_income', np.int64, Shapes.N),
-        AttribDef('pop_density_km2', np.float64, Shapes.N),
+        geo_attrib('name', dtype=str, shape=Shapes.N,
+                   comment='The proper name of the place.'),
+        geo_attrib('population', dtype=int, shape=Shapes.N,
+                   comment='The number of residents of the place.'),
+        geo_attrib('population_by_age', dtype=int, shape=Shapes.NxA(3),
+                   comment='The number of residents, divided into three age categories: 0-19, 20-64, 65+'),
+        geo_attrib('population_by_age_x6', dtype=int, shape=Shapes.NxA(6),
+                   comment='The number of residents, divided into six age categories: 0-19, 20-34, 35-54, 55-64, 65-75, 75+'),
+        geo_attrib('centroid', dtype=CentroidDType, shape=Shapes.N,
+                   comment='A geographic centroid for the place, in longitude/latitude.'),
+        geo_attrib('geoid', dtype=str, shape=Shapes.N,
+                   comment='The GEOID (in many cases synonymous with FIPS code) for the place.'),
+        geo_attrib('average_household_size', dtype=int, shape=Shapes.N,
+                   comment='Average household size within the place.'),
+        geo_attrib('dissimilarity_index', dtype=float, shape=Shapes.N,
+                   comment='An index describing the amount of racial segregation in the place, from 0 to 1.'),
+        geo_attrib('commuters', dtype=int, shape=Shapes.NxN,
+                   comment='The number of commuters between places, as reported by the ACS Commuting Flows data.'),
+        geo_attrib('gini_index', dtype=float, shape=Shapes.N,
+                   comment='An index describing wealth inequality in the place, from 0 to 1.'),
+        geo_attrib('median_age', dtype=int, shape=Shapes.N,
+                   comment='The median age of residents in the place.'),
+        geo_attrib('median_income', dtype=int, shape=Shapes.N,
+                   comment='The median income of residents in the place.'),
+        geo_attrib('tract_median_income', dtype=int, shape=Shapes.N,
+                   comment='The median income according to the Census Tract which encloses this place.'
+                   'This attribute is only valid if the geo granularity is below tract.'),
+        geo_attrib('pop_density_km2', dtype=float, shape=Shapes.N,
+                   comment='The population density of this place by square kilometer.'),
     ]
 
     attrib_vars = {
@@ -134,7 +150,7 @@ class ADRIOMakerCensus(ADRIOMaker):
             raise Exception(msg)
         self.census = Census(api_key)
 
-    def make_adrio(self, attrib: AttribDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
         if attrib not in self.attributes:
             msg = f"{attrib.name} is not supported for the Census data source."
             raise GeoValidationException(msg)
@@ -624,7 +640,7 @@ class ADRIOMakerCensus(ADRIOMaker):
             return output
         return ADRIO('commuters', fetch)
 
-    def _make_simple_adrios(self, attrib: AttribDef, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_simple_adrios(self, attrib: AttributeDef, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
         """Makes ADRIOs for simple attributes that require no additional postprocessing."""
         def fetch() -> NDArray:
             data_df = self.fetch_acs5(

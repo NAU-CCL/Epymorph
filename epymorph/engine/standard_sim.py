@@ -2,16 +2,17 @@
 The most fundamental epymorph simulation type:
 run a single simulation from start to finish with a static set of parameters.
 """
-from dataclasses import dataclass, field
-from typing import Callable, Sequence
+from typing import Callable
 
 import numpy as np
-from numpy.typing import NDArray
+from typing_extensions import deprecated
 
-from epymorph.compartment_model import CompartmentModel
-from epymorph.engine.context import RumeConfig, RumeContext
+from epymorph.compartment_model import CompartmentModel, validate_ipm
+from epymorph.data_shape import SimDimensions
+from epymorph.engine.context import RumeContext
 from epymorph.engine.ipm_exec import StandardIpmExecutor
 from epymorph.engine.mm_exec import StandardMovementExecutor
+from epymorph.engine.output import Output
 from epymorph.engine.world_list import ListWorld
 from epymorph.error import (AttributeException, CompilationException,
                             InitException, IpmSimException, MmSimException,
@@ -19,114 +20,66 @@ from epymorph.error import (AttributeException, CompilationException,
 from epymorph.event import (MovementEventsMixin, OnStart, OnTick,
                             SimulationEventsMixin)
 from epymorph.geo.geo import Geo
-from epymorph.initializer import DEFAULT_INITIALIZER, Initializer
+from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
 from epymorph.movement.movement_model import MovementModel, validate_mm
 from epymorph.movement.parser import MovementSpec
-from epymorph.params import ContextParams, Params
-from epymorph.simulation import SimDimensions, SimDType, TimeFrame
+from epymorph.params import NormalizedParamsDict, RawParams, normalize_params
+from epymorph.simulation import TimeFrame
 from epymorph.util import Subscriber
-
-
-@dataclass
-class Output:
-    """
-    The output of a simulation run, including prevalence for all populations and all IPM compartments
-    and incidence for all populations and all IPM events.
-    """
-
-    dim: SimDimensions
-    geo_labels: Sequence[str]
-    compartment_labels: Sequence[str]
-    event_labels: Sequence[str]
-
-    initial: NDArray[SimDType]
-    """
-    Initial prevalence data by population and compartment.
-    Array of shape (N, C) where N is the number of populations, and C is the number of compartments
-    """
-
-    prevalence: NDArray[SimDType] = field(init=False)
-    """
-    Prevalence data by timestep, population, and compartment.
-    Array of shape (T,N,C) where T is the number of ticks in the simulation,
-    N is the number of populations, and C is the number of compartments.
-    """
-
-    incidence: NDArray[SimDType] = field(init=False)
-    """
-    Incidence data by timestep, population, and event.
-    Array of shape (T,N,E) where T is the number of ticks in the simulation,
-    N is the number of populations, and E is the number of events.
-    """
-
-    def __post_init__(self):
-        T, N, C, E = self.dim.TNCE
-        self.prevalence = np.zeros((T, N, C), dtype=SimDType)
-        self.incidence = np.zeros((T, N, E), dtype=SimDType)
-
-    @property
-    def incidence_per_day(self) -> NDArray[SimDType]:
-        """
-        Returns this output's `incidence` from a per-tick value to a per-day value.
-        Returns a shape (D,N,E) array, where D is the number of simulation days.
-        """
-        T, N, _, E = self.dim.TNCE
-        taus = self.dim.tau_steps
-        return np.sum(
-            self.incidence.reshape((T // taus, taus, N, E)),
-            axis=1,
-            dtype=SimDType
-        )
-
-    @property
-    def ticks_in_days(self) -> NDArray[np.float64]:
-        """
-        Create a series with as many values as there are simulation ticks,
-        but in the scale of fractional days. That is: the cumulative sum of
-        the simulation's tau step lengths across the simulation duration.
-        Returns a shape (T,) array, where T is the number of simulation ticks.
-        """
-        return np.cumsum(np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64)
 
 
 class StandardSimulation(SimulationEventsMixin, MovementEventsMixin):
     """Runs singular simulation passes, producing time-series output."""
 
-    _config: RumeConfig
-    _params: ContextParams | None = None
+    dim: SimDimensions
     geo: Geo
+    ipm: CompartmentModel
+    mm: MovementSpec
+    initializer: Initializer
+    time_frame: TimeFrame
+    rng_factory: Callable[[], np.random.Generator]
+    _raw_params: RawParams
 
     def __init__(self,
                  geo: Geo,
                  ipm: CompartmentModel,
-                 mm: MovementModel | MovementSpec,
-                 params: Params,
+                 mm: MovementSpec,
+                 params: RawParams,
                  time_frame: TimeFrame,
                  initializer: Initializer | None = None,
                  rng: Callable[[], np.random.Generator] | None = None):
         SimulationEventsMixin.__init__(self)
         MovementEventsMixin.__init__(self)
 
+        self.dim = SimDimensions.build(
+            tau_step_lengths=mm.steps.step_lengths,
+            start_date=time_frame.start_date,
+            days=time_frame.duration_days,
+            nodes=geo.nodes,
+            compartments=ipm.num_compartments,
+            events=ipm.num_events,
+        )
         self.geo = geo
-        if initializer is None:
-            initializer = DEFAULT_INITIALIZER
-        if rng is None:
-            rng = np.random.default_rng
+        self.ipm = ipm
+        self.mm = mm
+        self.initializer = initializer or DEFAULT_INITIALIZER
+        self.time_frame = time_frame
+        self.rng_factory = rng or np.random.default_rng
+        self._raw_params = params
 
-        self._config = RumeConfig(geo, ipm, mm, params, time_frame, initializer, rng)
-
+    @deprecated("Validation will happen automatically in future during run.")
     def validate(self) -> None:
         """Validate the simulation."""
         with error_gate("validating the simulation", ValidationException, CompilationException):
-            ctx = RumeContext.from_config(self._config)
-            check_attribute_declarations(ctx.ipm, ctx.mm)
-            # ctx.validate_geo() # validate only the required geo parameters?
-            validate_mm(ctx.mm.attributes, ctx.dim, ctx.geo, ctx.params)
-            ctx.validate_ipm()
-            # ctx.validate_init()
+            # (See comments in validation step during `run()`)
+            norm_params = normalize_params(
+                self._raw_params, self.geo, self.dim, dtypes=self.ipm.attribute_dtypes)
+            check_attribute_declarations(self.ipm, self.mm)
+            validate_mm(self.mm.attributes, self.dim, self.geo, norm_params)
+            validate_ipm(self.ipm, self.dim, self.geo, norm_params)
 
     @property
-    def params(self) -> ContextParams:
+    def params(self) -> NormalizedParamsDict:
         """Simulation parameters as used by this simulation."""
         # Here we lazily-evaluate and then cache params from the context.
         # Why not just cache the whole context when StandardSim is constructed? The problem is mutability.
@@ -137,21 +90,44 @@ class StandardSimulation(SimulationEventsMixin, MovementEventsMixin):
         # Of course, the user can still muck with this cached version of params, but the blast radius
         # for doing so is sufficiently contained by this approach because sim runs use a fresh context.
         # It would be nice to be able to deep-freeze the entire context object tree, but alas...
-        if self._params is None:
-            self._params = RumeContext.from_config(self._config).params
-        return self._params
+        return normalize_params(self._raw_params, self.geo, self.dim, dtypes=self.ipm.attribute_dtypes)
 
     def run(self) -> Output:
         """
         Run the simulation. It is safe to call this multiple times
         to run multiple independent simulations with the same configuraiton.
         """
+        with error_gate("preparing the simulation context", ValidationException, CompilationException):
+            norm_params = normalize_params(
+                self._raw_params, self.geo, self.dim, dtypes=self.ipm.attribute_dtypes)
+
+            ctx = RumeContext(
+                dim=self.dim,
+                geo=self.geo,
+                ipm=self.ipm,
+                rng=self.rng_factory(),
+                params=norm_params,
+            )
+
+        with error_gate("validating the simulation", ValidationException, CompilationException):
+            # Each strata IPM and corresponding MM should be attribute-compatible.
+            # We can't check against the combined IPM, because the attribute names
+            # are remapped in the combined IPM. You might think this makes attribute
+            # compatibility unnecessary, but it still is, because of the way params
+            # are provided to the simulation.
+            check_attribute_declarations(self.ipm, self.mm)
+            # Then we can validate the MM's params.
+            validate_mm(self.mm.attributes, self.dim, self.geo, norm_params)
+            validate_ipm(self.ipm, self.dim, self.geo, norm_params)
+            # TODO: more validation!
+            # ctx.validate_geo() # validate only the required geo parameters?
+            # ctx.validate_init()
+
         event_subs = Subscriber()
 
         with error_gate("compiling the simulation", CompilationException):
-            ctx = RumeContext.from_config(self._config)
-            ipm_exec = StandardIpmExecutor(ctx)
-            movement_exec = StandardMovementExecutor(ctx)
+            ipm_exec = StandardIpmExecutor(ctx, self.ipm)
+            movement_exec = StandardMovementExecutor(ctx, self.mm)
 
             # Proxy the movement_exec's events, if anyone is listening for them.
             if MovementEventsMixin.has_subscribers(self):
@@ -163,12 +139,23 @@ class StandardSimulation(SimulationEventsMixin, MovementEventsMixin):
                                      self.on_movement_finish.publish)
 
         with error_gate("initializing the simulation", InitException):
-            ini = ctx.initialize()
-            world = ListWorld.from_initials(ini)
-            out = Output(ctx.dim, ctx.geo.labels.tolist(),
-                         ctx.ipm.compartment_names, ctx.ipm.event_names, ini)
+            init = initialize(
+                self.initializer,
+                self.dim,
+                self.geo,
+                self._raw_params,
+                ctx.rng,
+            )
+            world = ListWorld.from_initials(init)
+            out = Output(
+                self.dim,
+                self.geo.labels.tolist(),
+                self.ipm.compartment_names,
+                self.ipm.event_names,
+                init,
+            )
 
-        self.on_start.publish(OnStart(dim=ctx.dim, time_frame=ctx.time_frame))
+        self.on_start.publish(OnStart(dim=ctx.dim, time_frame=self.time_frame))
 
         for tick in ctx.clock():
             # First do movement

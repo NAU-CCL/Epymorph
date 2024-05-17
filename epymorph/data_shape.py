@@ -6,14 +6,61 @@ and to adapt equivalent shapes.
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, TypeVar
+from datetime import date, timedelta
+from typing import Callable, NamedTuple, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.simulation import SimDimensions, Tick
+from epymorph.data_type import AttributeArray, AttributeScalar
+from epymorph.util import Matcher
 
-DataT = TypeVar('DataT', bound=np.generic)
+AttributeGetter = Callable[[int, int], AttributeScalar]
+"""A function for retrieving a scalar value for a given simulation day and a given geo node."""
+
+
+class SimDimensions(NamedTuple):
+    """The dimensionality of a simulation."""
+
+    @classmethod
+    def build(cls, tau_step_lengths: Sequence[float], start_date: date, days: int, nodes: int, compartments: int, events: int):
+        """Convenience constructor which reduces the overhead of initializing duplicative fields."""
+        tau_steps = len(tau_step_lengths)
+        ticks = tau_steps * days
+        return cls(
+            tau_step_lengths, tau_steps, start_date, days, ticks,
+            nodes, compartments, events,
+            (ticks, nodes, compartments, events))
+
+    tau_step_lengths: Sequence[float]
+    """The lengths of each tau step in the MM."""
+    tau_steps: int
+    """How many tau steps are in the MM?"""
+    start_date: date
+    """On what calendar date did the simulation start?"""
+    days: int
+    """How many days are we going to run the simulation for?"""
+    ticks: int
+    """How many clock ticks are we going to run the simulation for?"""
+    nodes: int
+    """How many nodes are there in the GEO?"""
+    compartments: int
+    """How many disease compartments are in the IPM?"""
+    events: int
+    """How many transition events are in the IPM?"""
+    TNCE: tuple[int, int, int, int]
+    """
+    The critical dimensionalities of the simulation, for ease of unpacking.
+    T: number of ticks;
+    N: number of geo nodes;
+    C: number of IPM compartments;
+    E: number of IPM events (transitions)
+    """
+
+    @property
+    def end_date(self) -> date:
+        """The end date (the first day not included in the simulation)."""
+        return self.start_date + timedelta(days=self.days)
 
 
 class DataShape(ABC):
@@ -32,12 +79,31 @@ class DataShape(ABC):
         """Return a concrete shape as a tuple, using the given number of nodes and days to fill in for N and T."""
 
     @abstractmethod
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
         """
         Returns an accessor function for the given shape on the given data array.
-        The accessor function is designed to retrieve a scalar value for a given simulation tick
+        The accessor function is designed to retrieve a scalar value for a given simulation day
         and a given geo node (by index).
         """
+
+
+class DataShapeMatcher(Matcher[NDArray]):
+    """Matches a DataShape, given the SimDimensions."""
+    _shape: DataShape
+    _dim: SimDimensions
+    _allow_broadcast: bool
+
+    def __init__(self, shape: DataShape, dim: SimDimensions, allow_broadcast: bool):
+        self._shape = shape
+        self._dim = dim
+        self._allow_broadcast = allow_broadcast
+
+    def expected(self) -> str:
+        """Describes what the expected value is."""
+        return str(self._shape)
+
+    def __call__(self, value: NDArray) -> bool:
+        return self._shape.matches(self._dim, value, self._allow_broadcast)
 
 
 @dataclass(frozen=True)
@@ -55,8 +121,8 @@ class Scalar(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return ()
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda _tick, _node: data  # type: ignore
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda _day, _node: data  # type: ignore
 
     def __str__(self):
         return "S"
@@ -83,8 +149,8 @@ class Time(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days,)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda tick, _node: data[tick.day]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda day, _node: data[day]
 
     def __str__(self):
         return "T"
@@ -111,8 +177,8 @@ class Node(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes,)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda _tick, node: data[node]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda _day, node: data[node]
 
     def __str__(self):
         return "N"
@@ -140,8 +206,8 @@ class NodeAndNode(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes, nodes)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda _tick, node: data[node]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda _day, node: data[node]
 
     def __str__(self):
         return "N"
@@ -178,8 +244,8 @@ class TimeAndNode(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, nodes)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda tick, node: data[tick.day, node]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda day, node: data[day, node]
 
     def __str__(self):
         return "TxN"
@@ -213,8 +279,8 @@ class Arbitrary(DataShape):
         # The MM/IPM usage is more like a selection than a shape... maybe we should be using Slice for that...
         return (self.index,)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda _tick, _node: data[self.index]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda _day, _node: data[self.index]
 
     def __str__(self):
         return f"A({self.index})"
@@ -249,8 +315,8 @@ class TimeAndArbitrary(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, self.index)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda tick, _node: data[tick.day, self.index]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda day, _node: data[day, self.index]
 
     def __str__(self):
         return f"TxA({self.index})"
@@ -285,8 +351,8 @@ class NodeAndArbitrary(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (nodes, self.index)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda _tick, node: data[node, self.index]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda _day, node: data[node, self.index]
 
     def __str__(self):
         return f"NxA({self.index})"
@@ -331,8 +397,8 @@ class TimeAndNodeAndArbitrary(DataShape):
     def as_tuple(self, nodes: int, days: int) -> tuple[int, ...]:
         return (days, nodes, self.index)
 
-    def accessor(self, data: NDArray[DataT]) -> Callable[[Tick, int], DataT]:
-        return lambda tick, node: data[tick.day, node, self.index]
+    def accessor(self, data: AttributeArray) -> AttributeGetter:
+        return lambda day, node: data[day, node, self.index]
 
     def __str__(self):
         return f"TxNxA({self.index})"

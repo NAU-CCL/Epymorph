@@ -32,9 +32,9 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
         sim_geo = getattr(sim, 'geo')
 
     def on_start(ctx: OnStart) -> None:
-        start_date = ctx.time_frame.start_date
-        duration_days = ctx.time_frame.duration_days
-        end_date = ctx.time_frame.end_date
+        start_date = ctx.dim.start_date
+        end_date = ctx.dim.end_date
+        duration_days = ctx.dim.days
 
         print(f"Running simulation ({sim.__class__.__name__}):")
         print(f"• {start_date} to {end_date} ({duration_days} days)")

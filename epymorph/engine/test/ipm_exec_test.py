@@ -6,10 +6,11 @@ import numpy as np
 
 from epymorph.compartment_model import (BIRTH, DEATH, CompartmentModel,
                                         compartment, create_model,
-                                        create_symbols, edge, param)
-from epymorph.engine.context import RumeContext
-from epymorph.engine.ipm_exec import StandardIpmExecutor, _make_apply_matrix
-from epymorph.simulation import SimDType
+                                        create_symbols, edge)
+from epymorph.data_type import SimDType
+from epymorph.engine.ipm_exec import (IpmContext, StandardIpmExecutor,
+                                      _make_apply_matrix)
+from epymorph.simulation import params_attrib as param
 
 
 def model1() -> CompartmentModel:
@@ -20,8 +21,8 @@ def model1() -> CompartmentModel:
             compartment('R'),
         ],
         attributes=[
-            param('beta'),
-            param('gamma'),
+            param('beta', float),
+            param('gamma', float),
         ]
     )
 
@@ -45,10 +46,10 @@ def model2() -> CompartmentModel:
             compartment('R'),
         ],
         attributes=[
-            param('beta'),
-            param('gamma'),
-            param('b'),  # birth rate
-            param('d'),  # death rate
+            param('beta', float),
+            param('gamma', float),
+            param('b', float),  # birth rate
+            param('d', float),  # death rate
         ]
     )
 
@@ -93,18 +94,18 @@ class IpmExecutorTest(unittest.TestCase):
 class StandardIpmExecutorTest(unittest.TestCase):
 
     def test_init_01(self):
-        ctx = MagicMock(spec=RumeContext)
-        ctx.ipm = model1()
+        ctx = MagicMock(spec=IpmContext)
+        ipm = model1()
 
-        exe = StandardIpmExecutor(ctx)
+        exe = StandardIpmExecutor(ctx, ipm)
 
         self.assertEqual(exe._events_leaving_compartment, [[0], [1], []])
         self.assertEqual(exe._source_compartment_for_event, [0, 1])
 
     def test_init_02(self):
-        ctx = MagicMock(spec=RumeContext)
-        ctx.ipm = model2()
+        ctx = MagicMock(spec=IpmContext)
+        ipm = model2()
 
-        exe = StandardIpmExecutor(ctx)
+        exe = StandardIpmExecutor(ctx, ipm)
 
         self.assertEqual(exe._source_compartment_for_event, [0, -1, 1, 0, 1, 2])

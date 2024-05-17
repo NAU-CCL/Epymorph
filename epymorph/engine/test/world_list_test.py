@@ -3,8 +3,9 @@ from datetime import date
 
 import numpy as np
 
+from epymorph.data_type import SimDType
 from epymorph.engine.world_list import Cohort, ListWorld
-from epymorph.simulation import SimDType, Tick
+from epymorph.simulation import Tick
 from epymorph.test import EpymorphTestCase
 
 

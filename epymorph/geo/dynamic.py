@@ -3,6 +3,7 @@ A dynamic geo is capable of fetching data from arbitrary external data sources
 via the use of ADRIO implementations. It may fetch this data lazily, loading
 only the attributes needed by the simulation.
 """
+import dataclasses
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Self
@@ -14,9 +15,9 @@ from epymorph.error import AttributeException, GeoValidationException
 from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
-from epymorph.geo.spec import (LABEL, AttribDef, DynamicGeoSpec,
-                               validate_geo_values)
+from epymorph.geo.spec import LABEL, DynamicGeoSpec, validate_geo_values
 from epymorph.simulation import AttributeArray
+from epymorph.sympy_shim import to_symbol
 from epymorph.util import Event, MemoDict
 
 
@@ -44,20 +45,21 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
 
         # loop through attributes and make adrios for each
         adrios = dict[str, ADRIO]()
-        for attrib in spec.attributes:
-            source = spec.source.get(attrib.name)
+        for attr in spec.attributes:
+            source = spec.source.get(attr.name)
             if source is None:
-                msg = f"Missing source for attribute: {attrib.name}."
+                msg = f"Missing source for attribute: {attr.name}."
                 raise GeoValidationException(msg)
 
             # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
             # the geo wants to use a different name than the one the maker uses;
-            # no problem, just provide a modified AttribDef to the maker.
+            # no problem, just provide a modified AttributeDef to the maker.
             maker_name = source
-            adrio_attrib = attrib
+            adrio_attrib = attr
             if ":" in source:
                 maker_name, adrio_attrib_name = source.split(":")[0:2]
-                adrio_attrib = AttribDef(adrio_attrib_name, attrib.dtype, attrib.shape)
+                adrio_attrib = dataclasses.replace(
+                    attr, name=adrio_attrib_name, symbol=to_symbol(adrio_attrib_name))
 
             # Make and store adrio.
             adrio = makers[maker_name].make_adrio(
@@ -65,7 +67,7 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 spec.geography,
                 spec.time_period
             )
-            adrios[attrib.name] = adrio
+            adrios[attr.name] = adrio
 
         return cls(spec, adrios)
 

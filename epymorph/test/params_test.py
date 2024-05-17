@@ -1,18 +1,18 @@
 # pylint: disable=missing-docstring
 import unittest
+from datetime import date
 from unittest.mock import Mock
 
 import numpy as np
 
-from epymorph.data_shape import Shapes
-from epymorph.engine.context import normalize_params
+from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.data_type import CentroidDType
 from epymorph.error import CompilationException
 from epymorph.geo.geo import Geo
-from epymorph.geo.spec import (LABEL, NO_DURATION, AttribDef, CentroidDType,
-                               StaticGeoSpec)
+from epymorph.geo.spec import LABEL, NO_DURATION, StaticGeoSpec
 from epymorph.geo.static import StaticGeo
-from epymorph.params import _evaluate_param_function
-from epymorph.simulation import SimDimensions
+from epymorph.params import _evaluate_param_function, normalize_params
+from epymorph.simulation import geo_attrib
 
 
 class TestNormalizeParams(unittest.TestCase):
@@ -24,10 +24,10 @@ class TestNormalizeParams(unittest.TestCase):
             StaticGeoSpec(
                 attributes=[
                     LABEL,
-                    AttribDef('geoid', np.str_, Shapes.N),
-                    AttribDef('centroid', CentroidDType, Shapes.N),
-                    AttribDef('population', np.int64, Shapes.N),
-                    AttribDef('commuters', np.int64, Shapes.NxN),
+                    geo_attrib('geoid', dtype=str),
+                    geo_attrib('centroid', dtype=CentroidDType),
+                    geo_attrib('population', dtype=int),
+                    geo_attrib('commuters', dtype=int, shape=Shapes.NxN),
                 ],
                 time_period=NO_DURATION
             ), {
@@ -40,6 +40,7 @@ class TestNormalizeParams(unittest.TestCase):
 
         self.test_dim = SimDimensions.build(
             tau_step_lengths=[0.3, 0.7],
+            start_date=date(2020, 1, 1),
             days=100,
             nodes=1,
             compartments=1,

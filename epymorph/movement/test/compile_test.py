@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from epymorph.code import compile_function, parse_function
 from epymorph.movement.compile import (ClauseFunctionTransformer,
                                        PredefFunctionTransformer)
-from epymorph.movement.movement_model import MovementContext, PredefParams
+from epymorph.movement.movement_model import MovementContext, PredefData
 
 
 class TestMovementClauseTransformer(unittest.TestCase):
@@ -24,7 +24,7 @@ class TestMovementClauseTransformer(unittest.TestCase):
 
         f2 = compile_function(ast2, {
             'MovementContext': MovementContext,
-            'PredefParams': PredefParams,
+            'PredefData': PredefData,
         })
 
         ctx = MagicMock(spec=MovementContext)
@@ -49,7 +49,7 @@ class TestMovementClauseTransformer(unittest.TestCase):
 
         f2 = compile_function(ast2, {
             'MovementContext': MovementContext,
-            'PredefParams': PredefParams,
+            'PredefData': PredefData,
         })
 
         ctx = MagicMock(spec=MovementContext)

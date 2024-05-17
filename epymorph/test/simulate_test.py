@@ -6,14 +6,14 @@ import numpy as np
 
 from epymorph import *
 from epymorph.compartment_model import (CompartmentModel, compartment,
-                                        create_model, create_symbols, edge,
-                                        param)
+                                        create_model, create_symbols, edge)
 from epymorph.error import (IpmSimInvalidProbsException,
                             IpmSimLessThanZeroException, IpmSimNaNException,
                             MmSimException)
-from epymorph.geo.spec import NO_DURATION, AttribDef, StaticGeoSpec
+from epymorph.geo.spec import NO_DURATION, StaticGeoSpec
 from epymorph.geo.static import StaticGeo
 from epymorph.initializer import single_location
+from epymorph.simulation import geo_attrib, params_attrib
 
 
 class SimulateTest(unittest.TestCase):
@@ -121,11 +121,11 @@ class SimulateTest(unittest.TestCase):
                     compartment('R'),
                 ],
                 attributes=[
-                    param('beta', shape=Shapes.TxN),  # infectivity
+                    params_attrib('beta', dtype=float, shape=Shapes.TxN),  # infectivity
                     # progression from infected to recovered
-                    param('gamma', shape=Shapes.TxN),
+                    params_attrib('gamma', dtype=float, shape=Shapes.TxN),
                     # progression from recovered to susceptible
-                    param('xi', shape=Shapes.TxN)
+                    params_attrib('xi', dtype=float, shape=Shapes.TxN)
                 ])
 
             [S, I, R] = symbols.compartment_symbols
@@ -145,8 +145,8 @@ class SimulateTest(unittest.TestCase):
         my_geo = StaticGeo(
             spec=StaticGeoSpec(
                 attributes=[
-                    AttribDef('label', dtype=str, shape=Shapes.N),
-                    AttribDef('population', dtype=str, shape=Shapes.N),
+                    geo_attrib('label', dtype=str, shape=Shapes.N),
+                    geo_attrib('population', dtype=str, shape=Shapes.N),
                 ],
                 time_period=NO_DURATION,
             ),

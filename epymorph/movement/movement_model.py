@@ -10,30 +10,57 @@ from typing import Callable, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.compartment_model import CompartmentModel
+from epymorph.data_type import SimDType
 from epymorph.error import (AttributeException, MmSimException,
                             MmValidationException)
-from epymorph.geo.geo import Geo
-from epymorph.movement.parser import Attribute as MmAttribute
-from epymorph.params import ContextParams
-from epymorph.simulation import (DataSource, SimDimensions, SimDType, Tick,
-                                 TickDelta)
+from epymorph.simulation import (AttributeDef, DataSource, GeoData, ParamsData,
+                                 SimDimensions, Tick, TickDelta)
 from epymorph.util import NumpyTypeError
 
 
 class MovementContext(Protocol):
     """The subset of the RumeContext that the movement model clauses need."""
     # This machine avoids circular deps.
-    dim: SimDimensions
-    geo: Geo
-    ipm: CompartmentModel
-    params: ContextParams
-    rng: np.random.Generator
-    version: int
+    @property
+    def dim(self) -> SimDimensions:
+        """The simulation's dimensionality."""
+        raise NotImplementedError
+
+    @property
+    def geo(self) -> GeoData:
+        """The geo data."""
+        raise NotImplementedError
+
+    @property
+    def compartment_mobility(self) -> NDArray[np.bool_]:
+        """Which compartments from the IPM are subject to movement?"""
+        raise NotImplementedError
+
+    @property
+    def params(self) -> ParamsData:
+        """The parameter data."""
+        raise NotImplementedError
+
+    @property
+    def rng(self) -> np.random.Generator:
+        """The random number generator."""
+        raise NotImplementedError
+
+    @property
+    def version(self) -> int:
+        """
+        `version` indicates when changes have been made to the context.
+        If `version` hasn't changed, no other changes have been made.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def resolve_tick(self, tick: Tick, delta: TickDelta) -> int:
+        """Add a delta to a tick to get the index of the resulting tick."""
 
 
-PredefParams = ContextParams
-PredefClause = Callable[[MovementContext], PredefParams]
+PredefData = ParamsData
+PredefClause = Callable[[MovementContext], PredefData]
 
 
 class TravelClause(ABC):
@@ -50,7 +77,7 @@ class TravelClause(ABC):
         """Should this clause apply this tick?"""
 
     @abstractmethod
-    def requested(self, ctx: MovementContext, predef: PredefParams, tick: Tick) -> NDArray[SimDType]:
+    def requested(self, ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
         """Evaluate this clause for the given tick, returning a requested movers array (N,N)."""
 
     @abstractmethod
@@ -67,7 +94,7 @@ should this compartment be subject to movement by this clause?
 MovementPredicate = Callable[[MovementContext, Tick], bool]
 """A predicate which decides if a clause should fire this tick."""
 
-MovementFunction = Callable[[MovementContext, PredefParams, Tick], NDArray[SimDType]]
+MovementFunction = Callable[[MovementContext, PredefData, Tick], NDArray[SimDType]]
 """
 A function which calculates the requested number of individuals to move due to this clause this tick.
 Returns an (N,N) array of integers.
@@ -108,7 +135,7 @@ class DynamicTravelClause(TravelClause):
     def predicate(self, ctx: MovementContext, tick: Tick) -> bool:
         return self._move(ctx, tick)
 
-    def requested(self, ctx: MovementContext, predef: PredefParams, tick: Tick) -> NDArray[SimDType]:
+    def requested(self, ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
         try:
             return self._requested(ctx, predef, tick)
         except KeyError as e:
@@ -138,10 +165,11 @@ class MovementModel:
     tau_steps: list[float]
     """The tau steps for the simulation."""
 
-    attributes: list[MmAttribute]
+    attributes: list[AttributeDef]
 
     predef: PredefClause
     """The predef clause for this movement model."""
+
     predef_context_hash: Callable[[MovementContext], int]
     """
     A hash function which determines if the given MovementContext has changed in a way that would
@@ -156,14 +184,14 @@ class MovementModel:
 
 
 def validate_mm(
-    mm_attribs: list[MmAttribute],
+    mm_attribs: list[AttributeDef],
     dim: SimDimensions,
     geo_data: DataSource,  # GeoData
     params_data: DataSource,  # ParamsData
 ) -> None:
     """Validate that the MM has all required attributes."""
 
-    def _validate_attr(attr: MmAttribute) -> Exception | None:
+    def _validate_attr(attr: AttributeDef) -> Exception | None:
         try:
             name = attr.name
             match attr.source:

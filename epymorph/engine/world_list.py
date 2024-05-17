@@ -5,8 +5,9 @@ from typing import Any, Iterable, Literal, Self, overload
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.data_type import SimDType
 from epymorph.engine.world import World
-from epymorph.simulation import SimDType, Tick
+from epymorph.simulation import Tick
 
 
 class Cohort:

@@ -16,7 +16,8 @@ from pydantic import BaseModel, ValidationError
 import epymorph.plots as plots
 from epymorph.compartment_model import CompartmentModel
 from epymorph.data import Library, geo_library, ipm_library, mm_library
-from epymorph.engine.standard_sim import Output, StandardSimulation
+from epymorph.engine.output import Output
+from epymorph.engine.standard_sim import StandardSimulation
 from epymorph.error import UnknownModel
 from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.cache import load_from_cache

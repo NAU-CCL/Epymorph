@@ -6,8 +6,9 @@ from typing import Generator, NamedTuple, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.data_shape import SimDimensions
+from epymorph.data_type import SimDType
 from epymorph.event import OnMovementClause, OnStart, SimWithEvents
-from epymorph.simulation import SimDimensions, SimDType
 from epymorph.util import subscriptions
 
 
