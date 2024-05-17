@@ -3,11 +3,12 @@
 import unittest
 
 from epymorph.compartment_model import (BIRTH, DEATH, CompartmentDef,
-                                        IpmAttributeDef, compartment,
-                                        create_model, create_symbols, edge,
-                                        param)
+                                        compartment, create_model,
+                                        create_symbols, edge)
 from epymorph.data_shape import Shapes
 from epymorph.error import IpmValidationException
+from epymorph.simulation import AttributeDef
+from epymorph.simulation import params_attrib as param
 from epymorph.sympy_shim import to_symbol
 
 
@@ -21,8 +22,8 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta'),
-                param('gamma'),
+                param('beta', float),
+                param('gamma', float),
             ]
         )
 
@@ -50,8 +51,10 @@ class CompartmentModelTest(unittest.TestCase):
             CompartmentDef(R, 'R', []),
         ])
         self.assertEqual(model.attributes, [
-            IpmAttributeDef('beta', Shapes.S, float, 'params', beta),
-            IpmAttributeDef('gamma', Shapes.S, float, 'params', gamma),
+            AttributeDef('beta', source='params', dtype=float,
+                         shape=Shapes.S, symbol=beta),
+            AttributeDef('gamma', source='params', dtype=float,
+                         shape=Shapes.S, symbol=gamma),
         ])
 
     def test_create_02(self):
@@ -62,10 +65,10 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta'),
-                param('gamma'),
-                param('b'),  # birth rate
-                param('d'),  # death rate
+                param('beta', float),
+                param('gamma', float),
+                param('b', float),  # birth rate
+                param('d', float),  # death rate
             ]
         )
 
@@ -96,8 +99,8 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta'),
-                param('gamma'),
+                param('beta', float),
+                param('gamma', float),
             ]
         )
 
@@ -123,8 +126,8 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta'),
-                param('gamma'),
+                param('beta', float),
+                param('gamma', float),
             ]
         )
 
@@ -149,8 +152,8 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta'),
-                param('gamma'),
+                param('beta', float),
+                param('gamma', float),
             ]
         )
 
@@ -172,8 +175,8 @@ class CompartmentModelTest(unittest.TestCase):
         symbols = create_symbols(
             compartments=[],
             attributes=[
-                param('beta'),
-                param('gamma'),
+                param('beta', float),
+                param('gamma', float),
             ]
         )
 

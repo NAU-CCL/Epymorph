@@ -7,7 +7,13 @@ the execution of malicious code.
 import ast
 import re
 import textwrap
+from functools import partial
 from typing import Any, Callable
+
+import numpy as np
+from numpy.typing import DTypeLike
+
+from epymorph.util import pairwise_haversine, row_normalize
 
 
 def has_function_structure(string: str) -> bool:
@@ -107,11 +113,6 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
     return function
 
 
-def base_namespace() -> dict[str, Any]:
-    """Make a safer namespace for user-defined functions."""
-    return {'__builtins__': {}}
-
-
 class ImmutableNamespace:
     """A simple dot-accessible dictionary."""
 
@@ -149,3 +150,60 @@ class ImmutableNamespace:
         # This is necessary in order to pass it to exec or eval.
         # The shallow copy allows child-namespaces to remain dot-accessible.
         return object.__getattribute__(self, '_data').copy()
+
+
+def base_namespace() -> dict[str, Any]:
+    """Make a safer namespace for user-defined functions."""
+    return {'__builtins__': {}}
+
+
+def epymorph_namespace(sim_dtype: DTypeLike) -> dict[str, Any]:
+    """
+    Make a safe namespace for user-defined functions,
+    including utilities that functions might need in epymorph.
+    """
+    return {
+        'SimDType': sim_dtype,
+        # our utility functions
+        'pairwise_haversine': pairwise_haversine,
+        'row_normalize': row_normalize,
+        # numpy namespace
+        'np': ImmutableNamespace({
+            # numpy utility functions
+            'array': partial(np.array, dtype=sim_dtype),
+            'zeros': partial(np.zeros, dtype=sim_dtype),
+            'zeros_like': partial(np.zeros_like, dtype=sim_dtype),
+            'ones': partial(np.ones, dtype=sim_dtype),
+            'ones_like': partial(np.ones_like, dtype=sim_dtype),
+            'full': partial(np.full, dtype=sim_dtype),
+            'arange': partial(np.arange, dtype=sim_dtype),
+            'concatenate': partial(np.concatenate, dtype=sim_dtype),
+            'sum': partial(np.sum, dtype=sim_dtype),
+            'newaxis': np.newaxis,
+            'fill_diagonal': np.fill_diagonal,
+            # numpy math functions
+            'radians': np.radians,
+            'degrees': np.degrees,
+            'exp': np.exp,
+            'log': np.log,
+            'sin': np.sin,
+            'cos': np.cos,
+            'tan': np.tan,
+            'arcsin': np.arcsin,
+            'arccos': np.arccos,
+            'arctan': np.arctan,
+            'arctan2': np.arctan2,
+            'sqrt': np.sqrt,
+            'add': np.add,
+            'subtract': np.subtract,
+            'multiply': np.multiply,
+            'divide': np.divide,
+            'maximum': np.maximum,
+            'minimum': np.minimum,
+            'absolute': np.absolute,
+            'floor': np.floor,
+            'ceil': np.ceil,
+            'pi': np.pi,
+        }),
+        **base_namespace(),
+    }

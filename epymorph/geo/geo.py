@@ -11,16 +11,16 @@ from numpy.typing import NDArray
 from epymorph.geo.spec import GeoSpec
 from epymorph.simulation import AttributeArray
 
-SpecT = TypeVar('SpecT', bound=GeoSpec)
+SpecT_co = TypeVar('SpecT_co', bound=GeoSpec, covariant=True)
 
 
-class Geo(Generic[SpecT], ABC):
+class Geo(Generic[SpecT_co], ABC):
     """
     Abstract class representing the GEO model.
     Implementations are thus free to vary how they provide the requested data.
     """
 
-    spec: SpecT
+    spec: SpecT_co
     """The specification for this Geo."""
 
     nodes: int
@@ -29,7 +29,7 @@ class Geo(Generic[SpecT], ABC):
     labels: NDArray[np.str_]
     """The labels for every node in this geo."""
 
-    def __init__(self, spec: SpecT, nodes: int):
+    def __init__(self, spec: SpecT_co, nodes: int):
         self.spec = spec
         self.nodes = nodes
 

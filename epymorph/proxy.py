@@ -5,8 +5,8 @@ define a function which depends on geo values, but before the geo itself has bee
 """
 from typing import Any, cast
 
+from epymorph.data_shape import SimDimensions
 from epymorph.geo.geo import Geo
-from epymorph.simulation import SimDimensions
 
 
 class ProxyAccessException(Exception):

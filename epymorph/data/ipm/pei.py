@@ -2,10 +2,11 @@
 from sympy import Max, exp, log
 
 from epymorph.compartment_model import (CompartmentModel, compartment,
-                                        create_model, create_symbols, edge,
-                                        geo, param)
+                                        create_model, create_symbols, edge)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
+from epymorph.simulation import geo_attrib as geo
+from epymorph.simulation import params_attrib as param
 
 
 @registry.ipm('pei')
@@ -18,9 +19,9 @@ def load() -> CompartmentModel:
             compartment('R'),
         ],
         attributes=[
-            param('infection_duration', Shapes.TxN, float, 'D'),
-            param('immunity_duration', Shapes.TxN, float, 'L'),
-            geo('humidity', Shapes.TxN, float, 'H'),
+            param('infection_duration', float, Shapes.TxN, 'D'),
+            param('immunity_duration', float, Shapes.TxN, 'L'),
+            geo('humidity', float, Shapes.TxN, 'H'),
         ])
 
     [S, I, R] = symbols.compartment_symbols

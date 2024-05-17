@@ -1,5 +1,7 @@
 """epymorph general utility functions and classes."""
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
                     OrderedDict, TypeVar)
 
@@ -91,7 +93,8 @@ def as_list(x: T | list[T]) -> list[T]:
     return x if isinstance(x, list) else [x]
 
 
-K, V = TypeVar('K'), TypeVar('V')
+K = TypeVar('K')
+V = TypeVar('V')
 
 
 def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
@@ -274,6 +277,132 @@ def check_ndarray(
         if not len(value.shape) in dimensions:
             msg = f"Not a numpy dimensional match: got {len(value.shape)} dimensions, expected {dimensions}"
             raise NumpyTypeError(msg)
+
+
+T_contra = TypeVar('T_contra', contravariant=True)
+
+
+class Matcher(Generic[T_contra], ABC):
+    """
+    A generic matcher. Returns True if a match, False otherwise.
+    """
+
+    @abstractmethod
+    def expected(self) -> str:
+        """Describes what the expected value is."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def __call__(self, value: Any) -> bool:
+        raise NotImplementedError
+
+
+class MatchAny(Matcher[Any]):
+    """Always matches (returns True)."""
+
+    def expected(self) -> str:
+        return "any value"
+
+    def __call__(self, _value: Any) -> bool:
+        return True
+
+
+class MatchEqual(Matcher[T_contra]):
+    """Matches a specific value by checking for equality (==)."""
+
+    _acceptable: T_contra
+
+    def __init__(self, acceptable: T_contra):
+        self._acceptable = acceptable
+
+    def expected(self) -> str:
+        return str(self._acceptable)
+
+    def __call__(self, value: Any) -> bool:
+        return value == self._acceptable
+
+
+class MatchAnyIn(Matcher[T_contra]):
+    """Matches for presence in a list of values (in)."""
+
+    _acceptable: list[T_contra]
+
+    def __init__(self, acceptable: list[T_contra]):
+        self._acceptable = acceptable
+
+    def expected(self) -> str:
+        return f"one of [{', '.join((str(x) for x in self._acceptable))}]"
+
+    def __call__(self, value: T_contra) -> bool:
+        return value in self._acceptable
+
+
+class MatchDType(Matcher[DTypeLike]):
+    """Matches one or more numpy dtypes using `np.issubdtype()`."""
+
+    _acceptable: list[np.dtype]
+
+    def __init__(self, *acceptable: DTypeLike):
+        if len(acceptable) == 0:
+            raise ValueError("Cannot match against no dtypes.")
+        self._acceptable = [np.dtype(x) for x in acceptable]
+
+    def expected(self) -> str:
+        if len(self._acceptable) == 1:
+            return dtype_name(self._acceptable[0])
+        else:
+            return f"one of [{', '.join((dtype_name(x) for x in self._acceptable))}]"
+
+    def __call__(self, value: DTypeLike) -> bool:
+        return any((np.issubdtype(value, x) for x in self._acceptable))
+
+
+@dataclass(frozen=True)
+class _Matchers:
+    """Convenience constructors for various matchers."""
+
+    any = MatchAny()
+    """A matcher that matches any value. (Singleton instance of MatchAny.)"""
+
+    def equal(self, value: T) -> Matcher[T]:
+        """Creates a MatchEqual instance."""
+        return MatchEqual(value)
+
+    def any_in(self, values: list[T]) -> Matcher[T]:
+        """Creates a MatchAnyIn instance."""
+        return MatchAnyIn(values)
+
+    def dtype(self, *dtypes: DTypeLike) -> Matcher[DTypeLike]:
+        """Creates a MatchDType instance."""
+        return MatchDType(*dtypes)
+
+
+match = _Matchers()
+"""Convenience constructors for various matchers."""
+
+
+def check_ndarray_2(
+    value: Any, *,
+    dtype: Matcher[DTypeLike] = MatchAny(),
+    shape: Matcher[NDArray] = MatchAny(),
+) -> None:
+    """
+    Checks that a value is a numpy array that matches the given dtype and shape Matchers.
+    Raises a NumpyTypeError if a check doesn't pass.
+    """
+    if value is None:
+        raise NumpyTypeError('Value is None.')
+
+    if not isinstance(value, np.ndarray):
+        raise NumpyTypeError('Not a numpy array.')
+
+    if not dtype(value.dtype):
+        msg = f"Not a numpy dtype match; got {value.dtype}, required {dtype.expected()}"
+        raise NumpyTypeError(msg)
+
+    if not shape(value):
+        msg = f"Not a numpy shape match: got {value.shape}, expected {shape.expected()}"
+        raise NumpyTypeError(msg)
 
 
 # console decorations

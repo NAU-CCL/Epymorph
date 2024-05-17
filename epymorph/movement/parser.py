@@ -2,20 +2,18 @@
 from typing import Literal, NamedTuple, cast
 
 import pyparsing as P
-import sympy
-from numpy.typing import DTypeLike
 from pyparsing import pyparsing_common as PC
 
 import epymorph.movement.parser_util as p
-from epymorph.data_shape import DataShape
 from epymorph.error import MmParseException
+from epymorph.simulation import AttributeDef
 from epymorph.sympy_shim import to_symbol
 
 # A MovementSpec has the following object structure:
 #
 # - MovementSpec
 #   - MoveSteps (1)
-#   - Attribute (0 or more)
+#   - AttributeDef (0 or more)
 #   - Predef (0 or 1)
 #   - MovementClause (1 or more)
 
@@ -48,20 +46,6 @@ def marshal_move_steps(results: P.ParseResults):
 ############################################################
 
 
-class Attribute(NamedTuple):
-    """The data model for an Attribute clause."""
-    # TODO: maybe replace with epymorph.simulation.AttributeDef in v0.5
-    name: str
-    source: Literal['geo', 'params']
-    dtype: DTypeLike  # TODO: replace with DataDType in v0.5?
-    shape: DataShape
-    symbol: sympy.Symbol
-    default_value: int | float | str \
-        | tuple[int | float | str, ...] \
-        | None
-    comment: str | None
-
-
 attribute: P.ParserElement = p.tag('attrib', [
     p.field('source', P.one_of('geo params')),
     p.field('name', p.name),
@@ -83,7 +67,7 @@ def marshal_attribute(results: P.ParseResults):
     if dtype == float and isinstance(default_value, int):
         default_value = float(default_value)
 
-    return Attribute(
+    return AttributeDef(
         name=fields['name'],
         source=fields['source'],
         dtype=dtype,
@@ -201,7 +185,7 @@ MovementClause = DailyClause
 class MovementSpec(NamedTuple):
     """The data model for a movement model spec."""
     steps: MoveSteps
-    attributes: list[Attribute]
+    attributes: list[AttributeDef]
     predef: Predef | None
     clauses: list[MovementClause]
 
@@ -229,7 +213,7 @@ movement_spec = P.OneOrMore(
 def marshal_movement(instring: str, loc: int, results: P.ParseResults):
     """Convert a pyparsing result to a MovementSpec."""
     s = [x for x in results if isinstance(x, MoveSteps)]
-    a = [x for x in results if isinstance(x, Attribute)]
+    a = [x for x in results if isinstance(x, AttributeDef)]
     c = [x for x in results if isinstance(x, MovementClause)]
     d = [x for x in results if isinstance(x, Predef)]
     if len(s) < 1 or len(s) > 1:

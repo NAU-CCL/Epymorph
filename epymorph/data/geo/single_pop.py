@@ -3,9 +3,10 @@ import numpy as np
 
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.geo.spec import (LABEL, NO_DURATION, AttribDef, CentroidDType,
-                               StaticGeoSpec)
+from epymorph.data_type import CentroidDType
+from epymorph.geo.spec import LABEL, NO_DURATION, StaticGeoSpec
 from epymorph.geo.static import StaticGeo
+from epymorph.simulation import geo_attrib as attrib
 
 
 @registry.geo('single_pop')
@@ -14,10 +15,10 @@ def load() -> StaticGeo:
     spec = StaticGeoSpec(
         attributes=[
             LABEL,
-            AttribDef('geoid', np.str_, Shapes.N),
-            AttribDef('centroid', CentroidDType, Shapes.N),
-            AttribDef('population', np.int64, Shapes.N),
-            AttribDef('commuters', np.int64, Shapes.NxN),
+            attrib('geoid', dtype=str),
+            attrib('centroid', dtype=CentroidDType),
+            attrib('population', dtype=int),
+            attrib('commuters', dtype=int, shape=Shapes.NxN),
         ],
         time_period=NO_DURATION
     )

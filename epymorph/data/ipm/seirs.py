@@ -1,10 +1,10 @@
 from sympy import Max
 
 from epymorph.compartment_model import (CompartmentModel, compartment,
-                                        create_model, create_symbols, edge,
-                                        param)
+                                        create_model, create_symbols, edge)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
+from epymorph.simulation import params_attrib as param
 
 
 @registry.ipm('seirs')
@@ -17,10 +17,14 @@ def load() -> CompartmentModel:
             compartment('R'),
         ],
         attributes=[
-            param('beta', shape=Shapes.TxN),   # infectivity
-            param('sigma', shape=Shapes.TxN),  # progression from exposed to infected
-            param('gamma', shape=Shapes.TxN),  # progression from infected to recovered
-            param('xi', shape=Shapes.TxN)      # progression from recoved to susceptible
+            param('beta', dtype=float, shape=Shapes.TxN,
+                  comment='infectivity'),
+            param('sigma', dtype=float, shape=Shapes.TxN,
+                  comment='progression from exposed to infected'),
+            param('gamma', dtype=float, shape=Shapes.TxN,
+                  comment='progression from infected to recovered'),
+            param('xi', dtype=float, shape=Shapes.TxN,
+                  comment='progression from recovered to susceptible'),
         ])
 
     [S, E, I, R] = symbols.compartment_symbols

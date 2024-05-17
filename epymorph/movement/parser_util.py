@@ -4,7 +4,6 @@ Common parsing utilities.
 from functools import reduce
 from typing import NamedTuple
 
-import numpy as np
 import pyparsing as P
 from pyparsing import pyparsing_common as PC
 
@@ -138,11 +137,11 @@ def marshal_base_dtype(results: P.ParseResults):
     """Convert a pyparsing result to dtype object."""
     match results[0]:
         case 'int':
-            result = np.int64
+            result = int
         case 'float':
-            result = np.float64
+            result = float
         case 'str':
-            result = np.str_
+            result = str
     return result
 
 

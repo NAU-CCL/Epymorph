@@ -1,14 +1,14 @@
 # pylint: disable=missing-docstring
 import unittest
 
-import numpy as np
 from pyparsing import ParseBaseException
 
 from epymorph.data_shape import Shapes
-from epymorph.geo.spec import CentroidDType
-from epymorph.movement.parser import (Attribute, DailyClause, MoveSteps,
-                                      attribute, daily, move_steps)
+from epymorph.data_type import CentroidDType
+from epymorph.movement.parser import (DailyClause, MoveSteps, attribute, daily,
+                                      move_steps)
 from epymorph.movement.parser_util import Duration
+from epymorph.simulation import AttributeDef
 from epymorph.sympy_shim import to_symbol
 
 
@@ -53,16 +53,16 @@ class TestAttribute(unittest.TestCase):
             '[attrib: source=geo; name=centroids; shape=N; dtype=[(longitude, float), (latitude, float)]; default_value=(1.0, 2.0); comment="hey5"]',
         ]
         exps = [
-            Attribute('commuters', 'geo', np.int64, Shapes.NxN,
-                      to_symbol('commuters'), None, 'hey1'),
-            Attribute('move_control', 'params', np.float64, Shapes.TxN,
-                      to_symbol('move_control'), 42.0, 'hey2'),
-            Attribute('move_control', 'params', np.float64, Shapes.TxN,
-                      to_symbol('move_control'), -32.7, 'hey3'),
-            Attribute('theta', 'params', np.str_, Shapes.S,
-                      to_symbol('theta'), 'hi', 'hey4'),
-            Attribute('centroids', 'geo', CentroidDType, Shapes.N,
-                      to_symbol('centroids'), (1.0, 2.0), 'hey5'),
+            AttributeDef('commuters', 'geo', int, Shapes.NxN,
+                         to_symbol('commuters'), None, 'hey1'),
+            AttributeDef('move_control', 'params', float, Shapes.TxN,
+                         to_symbol('move_control'), 42.0, 'hey2'),
+            AttributeDef('move_control', 'params', float, Shapes.TxN,
+                         to_symbol('move_control'), -32.7, 'hey3'),
+            AttributeDef('theta', 'params', str, Shapes.S,
+                         to_symbol('theta'), 'hi', 'hey4'),
+            AttributeDef('centroids', 'geo', CentroidDType, Shapes.N,
+                         to_symbol('centroids'), (1.0, 2.0), 'hey5'),
         ]
         for c, e in zip(cases, exps):
             a = attribute.parse_string(c)[0]

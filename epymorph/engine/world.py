@@ -10,7 +10,8 @@ from typing import Literal, overload
 
 from numpy.typing import NDArray
 
-from epymorph.simulation import SimDType, Tick
+from epymorph.data_type import SimDType
+from epymorph.simulation import Tick
 
 
 class World(ABC):

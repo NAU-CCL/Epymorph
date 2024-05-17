@@ -16,9 +16,8 @@ import epymorph.data_shape as shape
 from epymorph.cache import load_bundle, save_bundle
 from epymorph.error import AttributeException, GeoValidationException
 from epymorph.geo.geo import Geo
-from epymorph.geo.spec import (LABEL, AttribDef, StaticGeoSpec,
-                               validate_geo_values)
-from epymorph.simulation import AttributeArray
+from epymorph.geo.spec import LABEL, StaticGeoSpec, validate_geo_values
+from epymorph.simulation import AttributeArray, AttributeDef
 from epymorph.util import NDIndices, as_sorted_dict
 
 
@@ -63,7 +62,7 @@ class StaticGeo(Geo[StaticGeoSpec]):
         Does not alter the original geo.
         """
 
-        def select(attrib: AttribDef) -> NDArray:
+        def select(attrib: AttributeDef) -> NDArray:
             """Perform selections on attribute arrays."""
             arr = self.values[attrib.name]
             match attrib.shape:

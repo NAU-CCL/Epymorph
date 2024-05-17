@@ -1,5 +1,6 @@
 # pylint: disable=missing-docstring
 import unittest
+from datetime import date
 from functools import reduce
 from typing import Any, TypeGuard, TypeVar
 
@@ -11,6 +12,7 @@ _to_str = np.vectorize(str)
 
 _dim = SimDimensions.build(
     tau_step_lengths=[0.5, 0.5],
+    start_date=date(2020, 1, 1),
     days=90,
     nodes=6,
     compartments=3,

@@ -6,9 +6,11 @@ import psutil
 from numpy.typing import NDArray
 from typing_extensions import deprecated
 
+from epymorph.data_shape import SimDimensions
+from epymorph.data_type import SimDType
 from epymorph.engine.world import World
 from epymorph.error import InitException
-from epymorph.simulation import SimDimensions, SimDType, Tick
+from epymorph.simulation import Tick
 
 
 def to_gib(n_bytes: int) -> float:

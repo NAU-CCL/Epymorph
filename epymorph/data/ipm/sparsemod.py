@@ -3,9 +3,10 @@ from sympy import Max
 
 from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge,
-                                        fork, param)
+                                        fork)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
+from epymorph.simulation import params_attrib as param
 
 
 @registry.ipm('sparsemod')
@@ -26,22 +27,22 @@ def load() -> CompartmentModel:
             compartment('R', description='recovered')
         ],
         attributes=[
-            param('beta', Shapes.TxN, symbolic_name='beta_1'),
-            param('omega', Shapes.TxNxA(0), symbolic_name='omega_1'),
-            param('omega', Shapes.TxNxA(1), symbolic_name='omega_2'),
-            param('delta', Shapes.TxNxA(0), symbolic_name='delta_1'),
-            param('delta', Shapes.TxNxA(1), symbolic_name='delta_2'),
-            param('delta', Shapes.TxNxA(2), symbolic_name='delta_3'),
-            param('delta', Shapes.TxNxA(3), symbolic_name='delta_4'),
-            param('delta', Shapes.TxNxA(4), symbolic_name='delta_5'),
-            param('gamma', Shapes.TxNxA(0), symbolic_name='gamma_a'),
-            param('gamma', Shapes.TxNxA(1), symbolic_name='gamma_b'),
-            param('gamma', Shapes.TxNxA(2), symbolic_name='gamma_c'),
-            param('rho', Shapes.TxNxA(0), symbolic_name='rho_1'),
-            param('rho', Shapes.TxNxA(1), symbolic_name='rho_2'),
-            param('rho', Shapes.TxNxA(2), symbolic_name='rho_3'),
-            param('rho', Shapes.TxNxA(3), symbolic_name='rho_4'),
-            param('rho', Shapes.TxNxA(4), symbolic_name='rho_5'),
+            param('beta', dtype=float, shape=Shapes.TxN, symbolic_name='beta_1'),
+            param('omega', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='omega_1'),
+            param('omega', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='omega_2'),
+            param('delta', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='delta_1'),
+            param('delta', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='delta_2'),
+            param('delta', dtype=float, shape=Shapes.TxNxA(2), symbolic_name='delta_3'),
+            param('delta', dtype=float, shape=Shapes.TxNxA(3), symbolic_name='delta_4'),
+            param('delta', dtype=float, shape=Shapes.TxNxA(4), symbolic_name='delta_5'),
+            param('gamma', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='gamma_a'),
+            param('gamma', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='gamma_b'),
+            param('gamma', dtype=float, shape=Shapes.TxNxA(2), symbolic_name='gamma_c'),
+            param('rho', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='rho_1'),
+            param('rho', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='rho_2'),
+            param('rho', dtype=float, shape=Shapes.TxNxA(2), symbolic_name='rho_3'),
+            param('rho', dtype=float, shape=Shapes.TxNxA(3), symbolic_name='rho_4'),
+            param('rho', dtype=float, shape=Shapes.TxNxA(4), symbolic_name='rho_5'),
         ])
 
     [S, E, Ia, Ip, Is, Ib, Ih, Ic1, Ic2, D, R] = symbols.compartment_symbols

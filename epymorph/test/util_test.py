@@ -1,9 +1,12 @@
 # pylint: disable=missing-docstring
 import unittest
+from unittest.mock import Mock
 
 import numpy as np
 
 from epymorph import util
+from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
+from epymorph.util import match as m
 
 
 class TestUtil(unittest.TestCase):
@@ -110,3 +113,59 @@ class TestUtil(unittest.TestCase):
             util.check_ndarray(arr, dtype=[np.str_])
         with self.assertRaises(util.NumpyTypeError):
             util.check_ndarray(arr, dtype=[np.float64])
+
+    def test_check_ndarray_2_01(self):
+        # None of these should raise NumpyTypeError
+        arr = np.array([1, 2, 3], dtype=np.int64)
+
+        dim = Mock(SimDimensions)
+        dim.nodes = 3
+        dim.days = 10
+
+        util.check_ndarray_2(arr)
+        util.check_ndarray_2(arr, dtype=m.dtype(np.int64))
+        util.check_ndarray_2(arr, shape=DataShapeMatcher(Shapes.N, dim, True))
+        util.check_ndarray_2(arr,
+                             dtype=m.dtype(np.int64),
+                             shape=DataShapeMatcher(Shapes.N, dim, True))
+        util.check_ndarray_2(arr,
+                             dtype=m.dtype(np.int64, np.float64),
+                             shape=DataShapeMatcher(Shapes.N, dim, True))
+        util.check_ndarray_2(arr,
+                             dtype=m.dtype(np.float64, np.int64),
+                             shape=DataShapeMatcher(Shapes.N, dim, False))
+        util.check_ndarray_2(arr,
+                             dtype=m.dtype(np.int64, np.float64),
+                             shape=DataShapeMatcher(Shapes.TxN, dim, True))
+        util.check_ndarray_2(arr,
+                             dtype=m.dtype(np.int64, np.float64),
+                             shape=DataShapeMatcher(Shapes.TxNxA(2), dim, True))
+
+    def test_check_ndarray_2_02(self):
+        # Raises exception for anything that's not a numpy array
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray_2(None)
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray_2(1)
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray_2([1, 2, 3])
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray_2("foofaraw")
+
+    def test_check_ndarray_2_03(self):
+        arr = np.arange(12).reshape((3, 4))
+
+        # Doesn't raise...
+        dim1 = Mock(SimDimensions)
+        dim1.nodes = 4
+        dim1.days = 3
+        util.check_ndarray_2(arr, shape=DataShapeMatcher(Shapes.TxN, dim1, True))
+
+        # Does raise...
+        with self.assertRaises(util.NumpyTypeError):
+            dim2 = Mock(SimDimensions)
+            dim2.nodes = 3
+            dim2.days = 4
+            util.check_ndarray_2(arr, shape=DataShapeMatcher(Shapes.TxN, dim2, True))
+        with self.assertRaises(util.NumpyTypeError):
+            util.check_ndarray_2(arr, dtype=m.dtype(np.str_))

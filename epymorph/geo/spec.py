@@ -8,28 +8,20 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import cached_property
 from types import MappingProxyType
-from typing import NamedTuple, Self, cast
+from typing import Self, cast
 
 import jsonpickle
-import numpy as np
-from numpy.typing import DTypeLike, NDArray
+from numpy.typing import NDArray
 
 from epymorph.data_shape import DataShape, Shapes
+from epymorph.data_type import DataDType
 from epymorph.error import GeoValidationException
+from epymorph.simulation import AttributeDef, geo_attrib
+from epymorph.sympy_shim import to_symbol
 from epymorph.util import NumpyTypeError, check_ndarray
 
-CentroidDType = [('longitude', np.float64), ('latitude', np.float64)]
-"""Structured numpy dtype for long/lat coordinates."""
-
-
-class AttribDef(NamedTuple):
-    """Metadata about a Geo attribute."""
-    name: str
-    dtype: DTypeLike
-    shape: DataShape
-
-
-LABEL = AttribDef('label', np.str_, Shapes.N)
+LABEL = geo_attrib('label', dtype=str, shape=Shapes.N,
+                   comment='The label associated with each node.')
 """
 Label is a required attribute of every geo.
 It is the source of truth for how many nodes are in the geo.
@@ -137,7 +129,7 @@ class GeoSpec(ABC):
             raise GeoValidationException('Invalid geo spec.')
         return spec
 
-    attributes: list[AttribDef]
+    attributes: list[AttributeDef]
     """The attributes in the spec."""
 
     time_period: TimePeriod
@@ -148,7 +140,7 @@ class GeoSpec(ABC):
     """
 
     @cached_property
-    def attribute_map(self) -> MappingProxyType[str, AttribDef]:
+    def attribute_map(self) -> MappingProxyType[str, AttributeDef]:
         """The attributes in the spec, mapped by attribute name."""
         return MappingProxyType({a.name: a for a in self.attributes})
 
@@ -174,6 +166,23 @@ class DynamicGeoSpec(GeoSpec):
     """The spec for a DynamicGeo."""
     geography: Geography
     source: dict[str, str]
+
+
+def attrib(name: str, dtype: DataDType, shape: DataShape = Shapes.N, comment: str | None = None):
+    """
+    A convenience constructor for an AttributeDef as used in the geo spec or an ADRIO maker.
+    Although we use the same class for any context, there are certain arguments which aren't really
+    useful when writing a geo spec or ADRIO maker, and so this method hides the non-useful options.
+    """
+    return AttributeDef(
+        name=name,
+        source='geo',
+        dtype=dtype,
+        shape=shape,
+        symbol=to_symbol(name),
+        default_value=None,
+        comment=comment,
+    )
 
 
 def validate_geo_values(spec: GeoSpec, values: dict[str, NDArray]) -> None:

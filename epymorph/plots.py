@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import merge as pd_merge
 
-from epymorph.engine.standard_sim import Output
+from epymorph.engine.output import Output
 from epymorph.geo.geo import Geo
 from epymorph.geography import us_tiger
 from epymorph.geography.us_census import STATE

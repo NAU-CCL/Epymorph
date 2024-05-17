@@ -1,29 +1,26 @@
 """General simulation data types, events, and utility functions."""
 import logging
+import textwrap
 from abc import abstractmethod
-from dataclasses import dataclass
-from datetime import date, timedelta
+from dataclasses import dataclass, field
+from datetime import date
 from functools import partial
 from importlib import reload
-from typing import Any, Callable, NamedTuple, Protocol, Self, Sequence
+from typing import Any, Callable, Literal, Mapping, NamedTuple, Protocol, Self
 
 import numpy as np
+import sympy
 from numpy.random import SeedSequence
-from numpy.typing import NDArray
 
 from epymorph.code import ImmutableNamespace, base_namespace
-from epymorph.util import pairwise_haversine, row_normalize
-
-SimDType = np.int64
-"""
-This is the numpy datatype that should be used to represent internal simulation data.
-Where segments of the application maintain compartment and/or event counts,
-they should take pains to use this type at all times (if possible).
-"""
-# SimDType being centrally-located means we can change it reliably.
-
-
-AttributeArray = NDArray[np.int64 | np.float64 | np.str_]
+from epymorph.data_shape import (AttributeGetter, DataShape, Shapes,
+                                 SimDimensions)
+from epymorph.data_type import (AttributeArray, AttributeScalar, DataDType,
+                                DataPyScalar, SimDType, dtype_as_np,
+                                dtype_check, dtype_str)
+from epymorph.error import AttributeException
+from epymorph.sympy_shim import to_symbol
+from epymorph.util import MemoDict, pairwise_haversine, row_normalize
 
 
 class DataSource(Protocol):
@@ -36,6 +33,106 @@ class DataSource(Protocol):
     @abstractmethod
     def __contains__(self, name: str, /) -> bool:
         raise NotImplementedError
+
+
+GeoData = DataSource
+ParamsData = DataSource
+
+
+class DataMapping(DataSource):
+    """A mapping of a data source, allowing you to override the keys of certain attributes."""
+
+    _source: DataSource
+    _overrides: Mapping[str, str]
+
+    def __init__(self, source: DataSource, overrides: Mapping[str, str]):
+        self._source = source
+        self._overrides = overrides
+
+    def __getitem__(self, name: str, /) -> AttributeArray:
+        if name in self._overrides:
+            remapped_name = self._overrides[name]
+        else:
+            remapped_name = name
+        return self._source[remapped_name]
+
+    def __contains__(self, name: str, /) -> bool:
+        return name in self._overrides or name in self._source
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeDef:
+    """Definition of a simulation attribute."""
+    name: str
+    source: Literal['geo', 'params']
+    dtype: DataDType
+    shape: DataShape
+    symbol: sympy.Symbol = field(default=None, compare=False)
+    default_value: DataPyScalar | None = field(default=None, compare=False)
+    comment: str | None = field(default=None, compare=False)
+
+    def __post_init__(self):
+        if self.default_value is not None and not dtype_check(self.dtype, self.default_value):
+            print(dtype_str(self.dtype))
+            print(str(self.default_value), type(self.default_value))
+            msg = "AttributeDef's default value does not align with its dtype."
+            raise ValueError(msg)
+
+        if self.symbol is None:
+            object.__setattr__(self, 'symbol', to_symbol(self.name))
+
+    @property
+    def dtype_as_np(self) -> np.dtype:
+        """Return the dtype of this attribute in a numpy-equivalent type."""
+        return dtype_as_np(self.dtype)
+
+    @property
+    def description(self) -> str:
+        """Returns a textual description of this attribute."""
+        properties = [
+            f"type: {dtype_str(self.dtype)}",
+            f"shape: {self.shape}",
+        ]
+        if self.default_value is not None:
+            properties.append(f"default: {self.default_value}")
+        lines = [
+            f"- {self.name} ({', '.join(properties)})",
+        ]
+        if self.comment is not None:
+            lines.extend(
+                textwrap.wrap(self.comment,
+                              initial_indent="    ",
+                              subsequent_indent="    ")
+            )
+        return "\n".join(lines)
+
+
+def geo_attrib(name: str,
+               dtype: DataDType,
+               shape: DataShape = Shapes.N,
+               symbolic_name: str | None = None,
+               default_value: DataPyScalar | None = None,
+               comment: str | None = None) -> AttributeDef:
+    """
+    Convenience constructor for a geo attribute.
+    If `symbolic_name` is None, the attribute name will be used.
+    """
+    symbol = to_symbol(symbolic_name) if symbolic_name is not None else to_symbol(name)
+    return AttributeDef(name, 'geo', dtype, shape, symbol, default_value, comment)
+
+
+def params_attrib(name: str,
+                  dtype: DataDType,
+                  shape: DataShape = Shapes.S,
+                  symbolic_name: str | None = None,
+                  default_value: DataPyScalar | None = None,
+                  comment: str | None = None) -> AttributeDef:
+    """
+    Convenience constructor for a params attribute.
+    If `symbolic_name` is None, the attribute name will be used.
+    """
+    symbol = to_symbol(symbolic_name) if symbolic_name is not None else to_symbol(name)
+    return AttributeDef(name, 'params', dtype, shape, symbol, default_value, comment)
 
 
 def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:
@@ -57,11 +154,6 @@ class TimeFrame:
 
     start_date: date
     duration_days: int
-
-    @property
-    def end_date(self) -> date:
-        """The end date (the first day not included in the simulation)."""
-        return self.start_date + timedelta(days=self.duration_days)
 
 
 class Tick(NamedTuple):
@@ -94,41 +186,50 @@ Any Tick plus Never returns Never.
 """
 
 
-class SimDimensions(NamedTuple):
-    """The dimensionality of a simulation."""
-
-    @classmethod
-    def build(cls, tau_step_lengths: Sequence[float], days: int, nodes: int, compartments: int, events: int):
-        """Convenience constructor which reduces the overhead of initializing duplicative fields."""
-        tau_steps = len(tau_step_lengths)
-        ticks = tau_steps * days
-        return cls(
-            tau_step_lengths, tau_steps, days, ticks,
-            nodes, compartments, events,
-            (ticks, nodes, compartments, events))
-
-    tau_step_lengths: Sequence[float]
-    """The lengths of each tau step in the MM."""
-    tau_steps: int
-    """How many tau steps are in the MM?"""
-    days: int
-    """How many days are we going to run the simulation for?"""
-    ticks: int
-    """How many clock ticks are we going to run the simulation for?"""
-    nodes: int
-    """How many nodes are there in the GEO?"""
-    compartments: int
-    """How many disease compartments are in the IPM?"""
-    events: int
-    """How many transition events are in the IPM?"""
-    TNCE: tuple[int, int, int, int]
+class CachingGetAttributeMixin:
     """
-    The critical dimensionalities of the simulation, for ease of unpacking.
-    T: number of ticks;
-    N: number of geo nodes;
-    C: number of IPM compartments;
-    E: number of IPM events (transitions)
+    A mixin for adding cached attribute getter behavior to a context class.
+    Implements the `get_attribute()` method of RumeContext.
+    Make sure to call this class' constructor.
     """
+
+    _attribute_getters: MemoDict[AttributeDef, AttributeGetter]
+
+    def __init__(self, geo: GeoData, params: ParamsData, dim: SimDimensions):
+
+        def get_attribute_value(attr: AttributeDef) -> AttributeArray:
+            """Retrieve the value associated with the given attribute."""
+            match attr.source:
+                case 'geo':
+                    source = geo
+                case 'params':
+                    source = params
+
+            if not attr.name in source:
+                msg = f"Missing {attr.source} attribute '{attr.name}'"
+                raise AttributeException(msg)
+            return source[attr.name]
+
+        def create_attribute_getter(attr: AttributeDef) -> AttributeGetter:
+            """Create a tick-and-node accessor function for the given attribute."""
+            data_raw = get_attribute_value(attr)
+            data = attr.shape.adapt(dim, data_raw, True)
+            if data is None:
+                # TODO: should `adapt` raise the exception?
+                msg = f"Attribute '{attr.name}' could not be adapted to the required shape."
+                raise AttributeException(msg)
+            return attr.shape.accessor(data)
+
+        self._attribute_getters = MemoDict(create_attribute_getter)
+
+    def clear_attribute_getter(self, name: str) -> None:
+        """Clear the attribute getter for a particular attribute (by name)."""
+        for a in (a for a in self._attribute_getters if a.name == name):
+            del self._attribute_getters[a]
+
+    def get_attribute(self, attr: AttributeDef, tick: Tick, node: int) -> AttributeScalar:
+        """Get an attribute value at a specific tick and node."""
+        return self._attribute_getters[attr](tick.day, node)
 
 
 def enable_logging(filename: str = 'debug.log', movement: bool = True) -> None:

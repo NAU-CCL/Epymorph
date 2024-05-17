@@ -1,14 +1,17 @@
 # pylint: disable=missing-docstring
+from datetime import date
+
 import numpy as np
 
+from epymorph.data_shape import SimDimensions
+from epymorph.data_type import SimDType
 from epymorph.engine.world_hypercube import HypercubeWorld
-from epymorph.simulation import SimDimensions, SimDType
 from epymorph.test import EpymorphTestCase
 
 
 class TestHypercubeWorld(EpymorphTestCase):
 
-    _dim = SimDimensions.build([0.5, 0.5], 30, 4, 2, 2)
+    _dim = SimDimensions.build([0.5, 0.5], date(2020, 1, 1), 30, 4, 2, 2)
     _initials = np.array([[100, 25], [200, 75], [300, 125], [400, 175]], dtype=SimDType)
 
     def test_construct(self):
@@ -44,7 +47,7 @@ class TestHypercubeWorld(EpymorphTestCase):
         # We should have removed that many individuals from home
         self.assertNpEqual(
             world.get_local_array(),
-            self._initials - [30, 15]
+            self._initials - np.array([30, 15])
         )
 
         # And added those individuals at time index 2
@@ -85,7 +88,7 @@ class TestHypercubeWorld(EpymorphTestCase):
         # We should have removed that many individuals from home
         self.assertNpEqual(
             world.get_local_array(),
-            self._initials - [90, 45]
+            self._initials - np.array([90, 45])
         )
 
         # And added individuals at time index 2 and 3

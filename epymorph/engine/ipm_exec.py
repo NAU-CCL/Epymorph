@@ -3,18 +3,19 @@ IPM executor classes handle the logic for processing the IPM step of the simulat
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
-from epymorph.engine.context import RumeContext, Tick
+from epymorph.data_shape import SimDimensions
+from epymorph.data_type import AttributeScalar, SimArray, SimDType
 from epymorph.engine.world import World
 from epymorph.error import (IpmSimInvalidProbsException,
                             IpmSimLessThanZeroException, IpmSimNaNException)
-from epymorph.simulation import SimDType
+from epymorph.simulation import AttributeDef, Tick
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
 
@@ -25,7 +26,7 @@ class IpmExecutor(ABC):
     """
 
     @abstractmethod
-    def apply(self, world: World, tick: Tick) -> tuple[NDArray[SimDType], NDArray[SimDType]]:
+    def apply(self, world: World, tick: Tick) -> tuple[SimArray, SimArray]:
         """
         Applies the IPM for this tick, mutating the world state.
         Returns the tick's values of incidence and prevalence:
@@ -57,7 +58,7 @@ class _ForkedTrx:
 _Trx = _IndependentTrx | _ForkedTrx
 
 
-def _make_apply_matrix(ipm: CompartmentModel) -> NDArray[SimDType]:
+def _make_apply_matrix(ipm: CompartmentModel) -> SimArray:
     """
     Calc apply matrix; this matrix is used to apply a set of events
     to the compartments they impact. In general, an event indicates
@@ -77,11 +78,31 @@ def _make_apply_matrix(ipm: CompartmentModel) -> NDArray[SimDType]:
     return apply_matrix
 
 
+class IpmContext(Protocol):
+    """The subset of RumeContext that the IPM executor needs."""
+    @property
+    def dim(self) -> SimDimensions:
+        """The simulation's dimensionality."""
+        raise NotImplementedError
+
+    @property
+    def rng(self) -> np.random.Generator:
+        """The random number generator."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_attribute(self, attr: AttributeDef, tick: Tick, node: int) -> AttributeScalar:
+        """Get an attribute value at a specific tick and node."""
+        raise NotImplementedError
+
+
 class StandardIpmExecutor(IpmExecutor):
     """The standard implementation of compartment model IPM execution."""
 
-    _ctx: RumeContext
+    _ctx: IpmContext
     """the sim context"""
+    _ipm: CompartmentModel
+    """the IPM"""
     _trxs: list[_Trx]
     """compiled transitions"""
     _apply_matrix: NDArray[SimDType]
@@ -91,9 +112,7 @@ class StandardIpmExecutor(IpmExecutor):
     _source_compartment_for_event: list[int]
     """mapping from event index to the compartment index it sources from"""
 
-    def __init__(self, ctx: RumeContext):
-        ipm = ctx.ipm
-
+    def __init__(self, ctx: IpmContext, ipm: CompartmentModel):
         # Calc list of events leaving each compartment (each may have 0, 1, or more)
         events_leaving_compartment = [[eidx
                                        for eidx, e in enumerate(ipm.events)
@@ -120,6 +139,7 @@ class StandardIpmExecutor(IpmExecutor):
                     return _ForkedTrx(size, rate_lambda, prob_lambda)
 
         self._ctx = ctx
+        self._ipm = ipm
         self._trxs = [compile_transition(t) for t in ipm.transitions]
         self._apply_matrix = _make_apply_matrix(ipm)
         self._events_leaving_compartment = events_leaving_compartment
@@ -154,7 +174,7 @@ class StandardIpmExecutor(IpmExecutor):
         """Calculate how many events will happen this tick, correcting for the possibility of overruns."""
         rate_args = [*effective_pop,
                      *(self._ctx.get_attribute(a, tick, node)  # attribs
-                       for a in self._ctx.ipm.attributes)]
+                       for a in self._ipm.attributes)]
 
         # Evaluate the event rates and do random draws for all transition events.
         occur = np.zeros(self._ctx.dim.events, dtype=SimDType)
@@ -234,11 +254,11 @@ class StandardIpmExecutor(IpmExecutor):
         arg_list = []
         arg_list.append(("Node : Timestep", {node: tick.step}))
         arg_list.append(("compartment values", {
-            name: value for (name, value) in zip(self._ctx.ipm.compartment_names,
+            name: value for (name, value) in zip(self._ipm.compartment_names,
                                                  rate_attrs[:self._ctx.dim.compartments])
         }))
         arg_list.append(("ipm params", {
-            attribute.name: value for (attribute, value) in zip(self._ctx.ipm.attributes,
+            attribute.name: value for (attribute, value) in zip(self._ipm.attributes,
                                                                 rate_attrs[self._ctx.dim.compartments:])
         }))
 
@@ -249,7 +269,7 @@ class StandardIpmExecutor(IpmExecutor):
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
-        corr_transition = self._ctx.ipm.transitions[transition_index]
+        corr_transition = self._ipm.transitions[transition_index]
         if isinstance(corr_transition, ForkDef):
             to_compartments = ", ".join([str(edge.compartment_to)
                                         for edge in corr_transition.edges])
@@ -257,7 +277,7 @@ class StandardIpmExecutor(IpmExecutor):
             arg_list.append(("corresponding fork transition and probabilities",
                              {
                                  f"{from_compartment}->({to_compartments})": corr_transition.rate,
-                                 f"Probabilities": ', '.join([str(expr) for expr in corr_transition.probs]),
+                                 "Probabilities": ', '.join([str(expr) for expr in corr_transition.probs]),
                              }))
 
         return arg_list
@@ -267,7 +287,7 @@ class StandardIpmExecutor(IpmExecutor):
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
-        corr_transition = self._ctx.ipm.transitions[transition_index]
+        corr_transition = self._ipm.transitions[transition_index]
         if isinstance(corr_transition, EdgeDef):
             arg_list.append(("corresponding transition", {
                             f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate}))

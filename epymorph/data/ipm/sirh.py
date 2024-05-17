@@ -3,9 +3,10 @@ from sympy import Max
 
 from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge,
-                                        fork, param)
+                                        fork)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
+from epymorph.simulation import params_attrib as param
 
 
 @registry.ipm('sirh')
@@ -19,11 +20,16 @@ def load() -> CompartmentModel:
             compartment('H', tags=['immobile'])
         ],
         attributes=[
-            param('beta', shape=Shapes.TxN),
-            param('gamma', shape=Shapes.TxN),
-            param('xi', shape=Shapes.TxN),
-            param('hospitalization_prob', shape=Shapes.TxN),
-            param('hospitalization_duration', shape=Shapes.TxN)
+            param('beta', dtype=float, shape=Shapes.TxN,
+                  comment='infectivity'),
+            param('gamma', dtype=float, shape=Shapes.TxN,
+                  comment='recovery rate'),
+            param('xi', dtype=float, shape=Shapes.TxN,
+                  comment='immune waning rate'),
+            param('hospitalization_prob', dtype=float, shape=Shapes.TxN,
+                  comment='a ratio of cases which are expected to require hospitalization'),
+            param('hospitalization_duration', dtype=float, shape=Shapes.TxN,
+                  comment='the mean duration of hospitalization, in days')
         ])
 
     [S, I, R, H] = symbols.compartment_symbols

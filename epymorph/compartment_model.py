@@ -6,42 +6,17 @@ populations as groupings of integer-numbered individuals.
 import re
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, Mapping, Sequence
 
 from sympy import Expr, Float, Integer, Symbol
 
-from epymorph.attribute import AttributeDef, AttributeType
-from epymorph.data_shape import DataShape, Shapes
-from epymorph.error import IpmValidationException
+from epymorph.data_shape import DataShapeMatcher, SimDimensions
+from epymorph.data_type import DataDType
+from epymorph.error import AttributeException, IpmValidationException
+from epymorph.simulation import AttributeDef, GeoData, ParamsData
 from epymorph.sympy_shim import simplify, simplify_sum, to_symbol
-from epymorph.util import iterator_length
-
-############################################################
-# Model Attributes
-############################################################
-
-
-@dataclass(frozen=True)
-class IpmAttributeDef(AttributeDef):
-    """A attribute definition as used in an IPM."""
-    symbol: Symbol
-
-
-def geo(name: str, shape: DataShape = Shapes.S, dtype: AttributeType = float,
-        symbolic_name: str | None = None) -> IpmAttributeDef:
-    """Convenience constructor for geo AttributeDef."""
-    if symbolic_name is None:
-        symbolic_name = name
-    return IpmAttributeDef(name, shape, dtype, 'geo', to_symbol(symbolic_name))
-
-
-def param(name: str, shape: DataShape = Shapes.S, dtype: AttributeType = float,
-          symbolic_name: str | None = None) -> IpmAttributeDef:
-    """Convenience constructor for param AttributeDef."""
-    if symbolic_name is None:
-        symbolic_name = name
-    return IpmAttributeDef(name, shape, dtype, 'params', to_symbol(symbolic_name))
-
+from epymorph.util import (NumpyTypeError, check_ndarray_2, iterator_length,
+                           match)
 
 ############################################################
 # Model Transitions
@@ -173,7 +148,7 @@ class CompartmentSymbols:
     These symbols are necessary for defining the model's transition rate expressions.
     """
     compartments: list[CompartmentDef]
-    attributes: list[IpmAttributeDef]
+    attributes: list[AttributeDef]
 
     def __getitem__(self, name: str) -> Symbol:
         comp = next((c.symbol for c in self.compartments if c.name == name), None)
@@ -200,7 +175,7 @@ class CompartmentSymbols:
         return [*self.compartment_symbols, *self.attribute_symbols]
 
 
-def create_symbols(compartments: list[CompartmentDef], attributes: list[IpmAttributeDef]) -> CompartmentSymbols:
+def create_symbols(compartments: list[CompartmentDef], attributes: list[AttributeDef]) -> CompartmentSymbols:
     """Create a symbols object by combining compartment and attribute definitions."""
     return CompartmentSymbols(compartments, attributes)
 
@@ -217,7 +192,7 @@ class CompartmentModel:
     """transition definitions"""
     compartments: list[CompartmentDef]
     """compartment definitions"""
-    attributes: list[IpmAttributeDef]
+    attributes: list[AttributeDef]
     """attribute definitions"""
 
     @cached_property
@@ -236,12 +211,17 @@ class CompartmentModel:
         return list(_as_events(self.transitions))
 
     @cached_property
-    def compartment_names(self) -> list[str]:
+    def compartment_names(self) -> Sequence[str]:
         """The names of all compartments in the order they were declared."""
         return [c.name for c in self.compartments]
 
     @cached_property
-    def event_names(self) -> list[str]:
+    def compartment_tags(self) -> Sequence[list[str]]:
+        """Tags assigned to all IPM compartments."""
+        return [c.tags for c in self.compartments]
+
+    @cached_property
+    def event_names(self) -> Sequence[str]:
         """The names of all events in the order they were declared."""
         return [f"{e.compartment_from} → {e.compartment_to}"
                 for e in self.events]
@@ -250,6 +230,11 @@ class CompartmentModel:
     def event_src_dst(self) -> Sequence[tuple[str, str]]:
         """All events represented as a tuple of the source compartment and destination compartment."""
         return [(str(e.compartment_from), str(e.compartment_to)) for e in self.events]
+
+    @cached_property
+    def attribute_dtypes(self) -> Mapping[str, DataDType]:
+        """The dtypes of all IPM attributes."""
+        return {a.name: a.dtype for a in self.attributes}
 
     def _compile_pattern(self, pattern: str) -> re.Pattern:
         """Turn a pattern string (which is custom syntax) into a regular expression."""
@@ -293,7 +278,10 @@ def create_model(symbols: CompartmentSymbols, transitions: Iterable[TransitionDe
     `symbols` must include all of the symbols used in the transition definitions: all compartments and all attributes.
     Raises an IpmValidationException if a valid IPM cannot be constructed from the arguments.
     """
+    return _finalize_model(symbols, transitions)
 
+
+def _finalize_model(symbols: CompartmentSymbols, transitions: Iterable[TransitionDef]) -> CompartmentModel:
     if len(symbols.compartments) == 0:
         msg = "Compartment Model must contain at least one compartment."
         raise IpmValidationException(msg)
@@ -356,3 +344,47 @@ def _extract_symbols(trxs: Iterable[TransitionDef]) -> set[Symbol]:
     return set(symbol
                for e in _as_events(trxs)
                for symbol in e.rate.free_symbols if isinstance(symbol, Symbol))
+
+
+# Validation
+
+
+def validate_ipm(ipm: CompartmentModel, dim: SimDimensions, geo_data: GeoData, params_data: ParamsData) -> None:
+    """Validate that the IPM has all required attributes."""
+
+    def _validate_attr(attr: AttributeDef) -> Exception | None:
+        try:
+            name = attr.name
+            match attr.source:
+                case 'geo':
+                    if not name in geo_data:
+                        msg = f"Missing geo attribute '{name}'"
+                        raise AttributeException(msg)
+                    value = geo_data[name]
+                case 'params':
+                    if not name in params_data:
+                        msg = f"Missing params attribute '{name}'"
+                        raise AttributeException(msg)
+                    value = params_data[name]
+
+            check_ndarray_2(
+                value,
+                dtype=match.dtype(attr.dtype),
+                shape=DataShapeMatcher(attr.shape, dim, True),
+            )
+
+            return None
+        except NumpyTypeError as e:
+            msg = f"Attribute '{attr.name}' is not properly specified. {e}"
+            return AttributeException(msg)
+        except AttributeException as e:
+            return e
+
+    # Collect all attribute errors to raise as a group.
+    errors = [x for x in (_validate_attr(attr) for attr in ipm.attributes)
+              if x is not None]
+
+    if len(errors) > 0:
+        msg = "IPM attribute requirements were not met. See errors:" + \
+            "".join(f"\n- {e}" for e in errors)
+        raise IpmValidationException(msg)
