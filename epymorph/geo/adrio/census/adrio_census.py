@@ -345,7 +345,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                 sort_param = ['state', 'county', 'tract']
 
             case TractScope('county', includes):
-                data_df = concat(tracts(state=s, county=c)
+                data_df = concat(tracts(state=s, county=c, year=scope.year)
                                  for s, c in map(COUNTY.decompose, includes))
 
                 data_df = data_df.rename(
@@ -354,7 +354,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                 sort_param = ['state', 'county', 'tract']
 
             case TractScope('tract', includes):
-                data_df = concat(tracts(state=s, county=c)
+                data_df = concat(tracts(state=s, county=c, year=scope.year)
                                  for s, c, t in map(TRACT.decompose, includes))
 
                 data_df = data_df.rename(
@@ -374,7 +374,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                 sort_param = ['state', 'county', 'tract', 'block group']
 
             case BlockGroupScope('county', includes):
-                data_df = concat(block_groups(state=s, county=c)
+                data_df = concat(block_groups(state=s, county=c, year=scope.year)
                                  for s, c in map(COUNTY.decompose, includes))
 
                 data_df = data_df.rename(columns={
@@ -383,7 +383,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                 sort_param = ['state', 'county', 'tract', 'block group']
 
             case BlockGroupScope('tract', includes):
-                data_df = concat(block_groups(state=s, county=c)
+                data_df = concat(block_groups(state=s, county=c, year=scope.year)
                                  for s, c, t in map(TRACT.decompose, includes))
 
                 data_df = data_df.rename(columns={
@@ -395,7 +395,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                 sort_param = ['state', 'county', 'tract', 'block_group']
 
             case BlockGroupScope('block group', includes):
-                data_df = concat(block_groups(state=s, county=c)
+                data_df = concat(block_groups(state=s, county=c, year=scope.year)
                                  for s, c, t, bg in map(BLOCK_GROUP.decompose, includes))
 
                 data_df = data_df.rename(columns={
