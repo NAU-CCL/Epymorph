@@ -169,10 +169,18 @@ RADIUS_MI = 3959.87433  # radius of earth in mi
 
 
 def weibull_distribution_prob(distance: NDArray[N], shape: float, scale: float) -> NDArray[np.float64]:
-    result = np.zeros_like(distance, dtype=np.float64)
-    result = ((shape / scale) * ((distance / scale) ** (shape - 1))
-              * (np.exp(-((distance / scale)**shape))))
-    return result  # type:ignore
+    """
+    Calculate the Weibull distribution probability density function for each value in `x`.
+    `shape` and `scale` are parameters which alter the shape of the distribution,
+    and each must be greater than zero.
+    https://en.wikipedia.org/wiki/Weibull_distribution
+    """
+    if shape <= 0 or scale <= 0:
+        raise ValueError("`shape` and `scale` must be greater than zero.")
+    x = distance.astype(np.float64)
+    return ((shape / scale)
+            * ((x / scale) ** (shape - 1))
+            * (np.exp(-((x / scale) ** shape))))
 
 
 def powerlaw_distribution_probability(distance: NDArray[N], alpha: float) -> NDArray[np.float64]:
