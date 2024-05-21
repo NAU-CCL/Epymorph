@@ -12,7 +12,7 @@ from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidDType
 from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.spec import AttributeDef, TimePeriod, Year
+from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
                                           BlockGroupScope, CensusScope,
                                           CountyScope, StateScope,

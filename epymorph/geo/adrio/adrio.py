@@ -7,7 +7,7 @@ from typing import Callable
 
 from numpy.typing import NDArray
 
-from epymorph.geo.spec import AttributeDef, TimePeriod
+from epymorph.geo.spec import TimePeriod
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import AttributeDef
 
