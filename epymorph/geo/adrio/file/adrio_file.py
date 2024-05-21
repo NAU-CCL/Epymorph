@@ -11,7 +11,7 @@ from us.states import lookup
 from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.adrio.census.adrio_census import CensusGeography
-from epymorph.geo.spec import (AttribDef, Geography, SourceSpec, TimePeriod,
+from epymorph.geo.spec import (AttributeDef, Geography, SourceSpec, TimePeriod,
                                Year)
 
 
@@ -35,7 +35,7 @@ class FileSpecTime(FileSpec):
 
 class ADRIOMakerFile(ADRIOMaker):
 
-    def make_adrio(self, attrib: AttribDef, geography: Geography, spec: FileSpec) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, geography: Geography, spec: FileSpec) -> ADRIO:
         def fetch() -> NDArray:
             # check if file exists
             if os.path.exists(spec.file_path):
