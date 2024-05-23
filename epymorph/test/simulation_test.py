@@ -2,9 +2,7 @@
 import unittest
 from datetime import date
 
-from epymorph.data_shape import SimDimensions
-from epymorph.engine.context import _simulation_clock
-from epymorph.simulation import Tick
+from epymorph.simulation import SimDimensions, Tick, simulation_clock
 
 
 class TestClock(unittest.TestCase):
@@ -16,7 +14,7 @@ class TestClock(unittest.TestCase):
             # sim clock doesn't depend on GEO/IPM dimensions
             nodes=99, compartments=99, events=99,
         )
-        clock = _simulation_clock(dim)
+        clock = simulation_clock(dim)
         act = list(clock)
         exp = [
             Tick(0, 0, date(2023, 1, 1), 0, 2 / 3),
