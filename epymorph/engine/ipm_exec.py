@@ -189,7 +189,7 @@ class StandardIpmExecutor(IpmExecutor):
                         raise IpmSimNaNException(
                             self._get_zero_division_args(
                                 rate_args, node, tick, t)
-                        )
+                        ) from None
                     # check for < 0 rate, throw error in this case
                     if rate < 0:
                         raise IpmSimLessThanZeroException(
@@ -204,7 +204,7 @@ class StandardIpmExecutor(IpmExecutor):
                         raise IpmSimNaNException(
                             self._get_zero_division_args(
                                 rate_args, node, tick, t)
-                        )
+                        ) from None
                     # check for < 0 base, throw error in this case
                     if rate < 0:
                         raise IpmSimLessThanZeroException(
