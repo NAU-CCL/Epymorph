@@ -114,23 +114,24 @@ def calculate_travelers(
 class StandardMovementExecutor(MovementEventsMixin, MovementExecutor):
     """The standard implementation of movement model execution."""
 
-    _ctx: MovementContext
     _model: MovementModel
-    _clause_masks: dict[TravelClause, NDArray[np.bool_]]
-    _predef: PredefData = {}
-    _predef_hash: int | None = None
+    _predef: PredefData
+    _predef_hash: int | None
+    _mobility: NDArray[np.bool_]
+    _ctx: MovementContext
 
     def __init__(
         self,
         ctx: MovementContext,
         mm: MovementSpec,
+        compartment_mobility: NDArray[np.bool_],
     ):
         MovementEventsMixin.__init__(self)
         self._model = compile_spec(mm, ctx.rng)
         self._predef = {}
         self._predef_hash = None
+        self._mobility = compartment_mobility
         self._ctx = ctx
-        self._clause_masks = {c: c.mask(ctx) for c in self._model.clauses}
         self._check_predef()
 
     def _check_predef(self) -> None:
@@ -141,8 +142,6 @@ class StandardMovementExecutor(MovementEventsMixin, MovementExecutor):
                 self._predef = self._model.predef(self._ctx)
                 self._predef_hash = curr_hash
             except KeyError as e:
-                # NOTE: catching KeyError here will be necessary (to get nice error messages)
-                # until we can properly validate the MM clauses.
                 msg = f"Missing attribute {e} required by movement model predef."
                 raise AttributeException(msg) from None
 
@@ -167,7 +166,7 @@ class StandardMovementExecutor(MovementEventsMixin, MovementExecutor):
 
             clause_event = calculate_travelers(
                 self._ctx, self._predef,
-                clause, self._clause_masks[clause], tick, local_array,
+                clause, self._mobility, tick, local_array,
             )
             self.on_movement_clause.publish(clause_event)
             travelers = clause_event.actual

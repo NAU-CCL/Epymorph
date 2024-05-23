@@ -127,7 +127,17 @@ class StandardSimulation(SimulationEventsMixin, MovementEventsMixin):
 
         with error_gate("compiling the simulation", CompilationException):
             ipm_exec = StandardIpmExecutor(ctx, self.ipm)
-            movement_exec = StandardMovementExecutor(ctx, self.mm)
+
+            compartment_mobility = np.array(
+                ['immobile' not in tags for tags in self.ipm.compartment_tags],
+                dtype=np.bool_
+            )
+
+            movement_exec = StandardMovementExecutor(
+                ctx=ctx,
+                mm=self.mm,
+                compartment_mobility=compartment_mobility,
+            )
 
             # Proxy the movement_exec's events, if anyone is listening for them.
             if MovementEventsMixin.has_subscribers(self):

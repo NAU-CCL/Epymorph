@@ -32,11 +32,6 @@ class MovementContext(Protocol):
         raise NotImplementedError
 
     @property
-    def compartment_mobility(self) -> NDArray[np.bool_]:
-        """Which compartments from the IPM are subject to movement?"""
-        raise NotImplementedError
-
-    @property
     def params(self) -> ParamsData:
         """The parameter data."""
         raise NotImplementedError
@@ -65,10 +60,6 @@ class TravelClause(ABC):
     name: str
 
     @abstractmethod
-    def mask(self, ctx: MovementContext) -> NDArray[np.bool_]:
-        """Calculate the movement mask for this clause."""
-
-    @abstractmethod
     def predicate(self, ctx: MovementContext, tick: Tick) -> bool:
         """Should this clause apply this tick?"""
 
@@ -80,12 +71,6 @@ class TravelClause(ABC):
     def returns(self, ctx: MovementContext, tick: Tick) -> TickDelta:
         """Calculate when this clause's movers should return (which may vary from tick-to-tick)."""
 
-
-MaskPredicate = Callable[[MovementContext], NDArray[np.bool_]]
-"""
-A predicate which creates a per-IPM-compartment mask:
-should this compartment be subject to movement by this clause?
-"""
 
 MovementPredicate = Callable[[MovementContext, Tick], bool]
 """A predicate which decides if a clause should fire this tick."""
@@ -108,25 +93,19 @@ class DynamicTravelClause(TravelClause):
 
     name: str
 
-    _mask: MaskPredicate
     _move: MovementPredicate
     _requested: MovementFunction
     _returns: ReturnsFunction
 
     def __init__(self,
                  name: str,
-                 mask_predicate: MaskPredicate,
                  move_predicate: MovementPredicate,
                  requested: MovementFunction,
                  returns: ReturnsFunction):
         self.name = name
-        self._mask = mask_predicate
         self._move = move_predicate
         self._requested = requested
         self._returns = returns
-
-    def mask(self, ctx: MovementContext) -> NDArray[np.bool_]:
-        return self._mask(ctx)
 
     def predicate(self, ctx: MovementContext, tick: Tick) -> bool:
         return self._move(ctx, tick)
