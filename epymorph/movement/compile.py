@@ -126,10 +126,6 @@ def _compile_clause(
                 if d in clause.days
             )
 
-            # TODO: @cache?
-            def mask_predicate(ctx: MovementContext) -> NDArray[np.bool_]:
-                return ctx.compartment_mobility
-
             def move_predicate(_ctx: MovementContext, tick: Tick) -> bool:
                 return clause.leave_step == tick.step and \
                     tick.date.weekday() in clause_weekdays
@@ -142,7 +138,6 @@ def _compile_clause(
 
             return DynamicTravelClause(
                 name=name_override(fn_ast.name),
-                mask_predicate=mask_predicate,
                 move_predicate=move_predicate,
                 requested=_adapt_move_function(fn, fn_ast),
                 returns=returns
