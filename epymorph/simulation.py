@@ -3,24 +3,23 @@ import logging
 import textwrap
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from datetime import date
-from functools import partial
+from datetime import date, timedelta
 from importlib import reload
-from typing import Any, Callable, Literal, Mapping, NamedTuple, Protocol, Self
+from typing import (Callable, Iterable, Literal, Mapping, NamedTuple, Protocol,
+                    Self)
 
 import numpy as np
 import sympy
 from numpy.random import SeedSequence
 
-from epymorph.code import ImmutableNamespace, base_namespace
 from epymorph.data_shape import (AttributeGetter, DataShape, Shapes,
                                  SimDimensions)
 from epymorph.data_type import (AttributeArray, AttributeScalar, DataDType,
-                                DataPyScalar, SimDType, dtype_as_np,
-                                dtype_check, dtype_str)
+                                DataPyScalar, dtype_as_np, dtype_check,
+                                dtype_str)
 from epymorph.error import AttributeException
 from epymorph.sympy_shim import to_symbol
-from epymorph.util import MemoDict, pairwise_haversine, row_normalize
+from epymorph.util import MemoDict
 
 
 class DataSource(Protocol):
@@ -184,6 +183,25 @@ NEVER = TickDelta(-1, -1)
 A special TickDelta value which expresses an event that should never happen.
 Any Tick plus Never returns Never.
 """
+
+
+def resolve_tick(dim: SimDimensions, tick: Tick, delta: TickDelta) -> int:
+    """Add a delta to a tick to get the index of the resulting tick."""
+    return -1 if delta.days == -1 else \
+        tick.index - tick.step + (dim.tau_steps * delta.days) + delta.step
+
+
+def simulation_clock(dim: SimDimensions) -> Iterable[Tick]:
+    """Generator for the sequence of ticks which makes up the simulation clock."""
+    one_day = timedelta(days=1)
+    tau_steps = list(enumerate(dim.tau_step_lengths))
+    curr_index = 0
+    curr_date = dim.start_date
+    for day in range(dim.days):
+        for step, tau in tau_steps:
+            yield Tick(curr_index, day, curr_date, step, tau)
+            curr_index += 1
+        curr_date += one_day
 
 
 class CachingGetAttributeMixin:

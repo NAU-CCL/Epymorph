@@ -54,10 +54,6 @@ class MovementContext(Protocol):
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def resolve_tick(self, tick: Tick, delta: TickDelta) -> int:
-        """Add a delta to a tick to get the index of the resulting tick."""
-
 
 PredefData = ParamsData
 PredefClause = Callable[[MovementContext], PredefData]

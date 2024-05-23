@@ -24,7 +24,7 @@ from epymorph.initializer import DEFAULT_INITIALIZER, Initializer, initialize
 from epymorph.movement.movement_model import MovementModel, validate_mm
 from epymorph.movement.parser import MovementSpec
 from epymorph.params import NormalizedParamsDict, RawParams, normalize_params
-from epymorph.simulation import TimeFrame
+from epymorph.simulation import TimeFrame, simulation_clock
 from epymorph.util import Subscriber
 
 
@@ -157,7 +157,7 @@ class StandardSimulation(SimulationEventsMixin, MovementEventsMixin):
 
         self.on_start.publish(OnStart(dim=ctx.dim, time_frame=self.time_frame))
 
-        for tick in ctx.clock():
+        for tick in simulation_clock(self.dim):
             # First do movement
             with error_gate("executing the movement model", MmSimException, AttributeException):
                 movement_exec.apply(world, tick)

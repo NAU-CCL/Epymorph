@@ -15,7 +15,7 @@ from epymorph.movement.compile import compile_spec
 from epymorph.movement.movement_model import (MovementContext, MovementModel,
                                               PredefData, TravelClause)
 from epymorph.movement.parser import MovementSpec
-from epymorph.simulation import Tick
+from epymorph.simulation import Tick, resolve_tick
 from epymorph.util import row_normalize
 
 
@@ -173,7 +173,7 @@ class StandardMovementExecutor(MovementEventsMixin, MovementExecutor):
             travelers = clause_event.actual
 
             returns = clause.returns(self._ctx, tick)
-            return_tick = self._ctx.resolve_tick(tick, returns)
+            return_tick = resolve_tick(self._ctx.dim, tick, returns)
             world.apply_travel(travelers, return_tick)
             total += travelers.sum()
 
