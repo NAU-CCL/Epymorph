@@ -19,12 +19,12 @@ from epymorph.geo.spec import (AttributeDef, Geography, SourceSpec, TimePeriod,
 class FileSpec(SourceSpec):
     file_path: os.PathLike
     label_key: str | int
-    data_key: str | int
+    data_key: list[str] | list[int]
     label_type: str
     file_type: str
-    time_key: str | int | None = None
-    time_type: TimePeriod | None = None
-    header: int | None = None
+    time_key: str | int | None
+    time_type: TimePeriod | None
+    header: int | None
 
 
 @dataclass
@@ -43,51 +43,47 @@ class ADRIOMakerFile(ADRIOMaker):
 
                 sort_key = self.label_sort(spec.label_type, geography)
 
-                time_series = False
                 time_sort_key = 0
                 if isinstance(spec, FileSpecTime):
-                    time_series = True
                     if isinstance(spec.time_type, Year):
                         time_sort_key = spec.time_type.year
 
                 # read value from csv
                 if spec.file_type == 'csv':
                     if isinstance(spec.label_key, int) and spec.header is not None:
-                        dataframe = pd.read_csv(path, skiprows=spec.header)
+                        df = pd.read_csv(path, skiprows=spec.header)
                     else:
-                        dataframe = pd.read_csv(path, header=spec.header)
+                        df = pd.read_csv(path, header=spec.header)
 
                     # column index passed
                     if isinstance(spec.label_key, int):
-                        dataframe = dataframe.loc[dataframe.iloc[:, spec.label_key].isin(
-                            sort_key)]
-                        if time_series and isinstance(spec.time_key, int):
-                            dataframe = dataframe.loc[dataframe.iloc[:,
-                                                                     spec.time_key] == time_sort_key]
+                        df = df.loc[df.iloc[:, spec.label_key].isin(sort_key)]
+                        if isinstance(spec, FileSpecTime) and isinstance(spec.time_key, int):
+                            df = df.loc[df.iloc[:, spec.time_key] == time_sort_key]
                         sort_df = pd.DataFrame(sort_key)
-                        data_values = dataframe.iloc[: spec.data_key]
-                        dataframe = pd.merge(sort_df, dataframe,
-                                             how='left', on=spec.label_key)
+                        data_values = df[df.index.isin(spec.data_key)]
+                        df = pd.merge(sort_df, df, how='left', on=spec.label_key)
+
                     # column name passed (must have header)
-                    elif isinstance(spec.label_key, str):
+                    else:
                         if spec.header is None:
                             msg = "Header row is required to get column attributes by name."
                             raise GeoValidationException(msg)
-                        dataframe = dataframe.loc[dataframe[spec.label_key].isin(
-                            sort_key)]
-                        if time_series and isinstance(spec.time_key, str):
-                            dataframe = dataframe.loc[dataframe[spec.time_key]
-                                                      == time_sort_key]
+                        df = df.loc[df[spec.label_key].isin(sort_key)]
+                        if isinstance(spec, FileSpecTime) and isinstance(spec.time_key, str):
+                            df = df.loc[df[spec.time_key] == time_sort_key]
                         sort_df = pd.DataFrame({spec.label_key: sort_key})
-                        data_values = dataframe[spec.data_key]
-                        dataframe = pd.merge(sort_df, dataframe, how='left')
+                        data_values = df[spec.data_key]
+                        df = pd.merge(sort_df, df, how='left')
 
                     # check for null values (missing data in file)
-                    if data_values.isnull().any():
+                    if data_values.isnull().any().any():
                         msg = f"Data for required geographies missing from {attrib.name} attribute file or could not be found."
                         raise GeoValidationException(msg)
-
-                    return dataframe[spec.data_key].to_numpy(dtype=attrib.dtype)
+                    if len(spec.data_key) == 1:
+                        return df[spec.data_key[0]].to_numpy()
+                    else:
+                        return df[spec.data_key].to_numpy()
 
                 # read value from npz
                 elif spec.file_type == 'npz':
@@ -165,7 +161,7 @@ def get_county_from_fips(geography: CensusGeography) -> list[str]:
         for state_fips in state_filter:
             for county_fips in county_filter:
                 county_list.append(county_mapping.get(f"{state_fips}{county_fips}"))
-    return county_list
+    return list(np.concatenate(county_list).flat)
 
 
 def get_fips_from_county(counties: list[str]) -> list[str]:
