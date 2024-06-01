@@ -155,7 +155,7 @@ class ADRIOMakerLODES(ADRIOMaker):
         elif attrib.name == 'commuters_other_industry':
             return self._make_commuter_adrio(granularity, nodes, 'SI03', "JT00", year)
         elif attrib.name == 'name':
-            return self._make_name_adrio(granularity, nodes, year)
+            return self._make_name_adrio(granularity, nodes, "JT00", year)
         else:
             return super().make_adrio(attrib, geography, time_period)
 
@@ -168,14 +168,32 @@ class ADRIOMakerLODES(ADRIOMaker):
             file_buffer.seek(0)
             return file_buffer
 
+    def sort_geoids(self, geoids: list, data_frame: DataFrame):
+        data_frame['w_geocode'] = data_frame['w_geocode'].astype(str)
+        data_frame['h_geocode'] = data_frame['h_geocode'].astype(str)
+
+        if not data_frame.empty:
+            w_prefix = data_frame['w_geocode'].iloc[0][:2]
+            h_prefix = data_frame['h_geocode'].iloc[0][:2]
+
+            # if the file is a main file
+            if w_prefix == h_prefix:
+                # if the state for the geoid matches the main file and the geoid is not in the file, remove from the list
+                geoid_to_remove = [geo for geo in geoids if geo[:2] == w_prefix and not (
+                    data_frame['w_geocode'].str.startswith(geo).any() or data_frame['h_geocode'].str.startswith(geo).any())]
+
+                for geos in geoid_to_remove:
+                    geoids.remove(geos)
+
+        return geoids
+
     # fetch files from LODES depending on the state, residence in/out of state, job type, and year
     def fetch_commuters(self, granularity: str, nodes: dict[str, list[str]], job_type: str, year: int):
 
         # file type is main (residence in state only) by default
         file_type = "main"
 
-        # fetch the state for the URL
-        state = copy(nodes.get('state'))
+        state = copy(nodes.get('state')) or []
 
         # can change the lodes version, default is the most recent LODES8
         lodes_ver = "LODES8"
@@ -183,11 +201,8 @@ class ADRIOMakerLODES(ADRIOMaker):
         data_frames = []
 
         # check for multiple states
-        if state:
-            if (len(state) > 1):
-
-                # if multiple states, automatically aux file (residence out of state)
-                file_type = "aux"
+        if (len(state) > 1):
+            file_type = "aux"
 
         # check for valid years
         if year not in range(2002, 2022):
@@ -204,8 +219,6 @@ class ADRIOMakerLODES(ADRIOMaker):
             print(
                 f"Commuting data cannot be retrieved for {passed_year}, fetching {year} data instead.")
 
-        # check for valid files
-
         # if the year is between 2002-2009 and the job_type is JT04 or JT05
         if year in range(2002, 2010) and (job_type == "JT04" or job_type == "JT05"):
 
@@ -213,62 +226,48 @@ class ADRIOMakerLODES(ADRIOMaker):
             msg = "Invalid year for job type, no federal jobs can be found between 2002 to 2009"
             raise Exception(msg)
 
-        if state:
-            # if the state is 05 and the year is 2002 or between 2019-2021
-            if ('05' in state) and (year == 2002 or year in range(2019, 2022)):
+        invalid_conditions = [
+            (year in range(2002, 2010) and (job_type == "JT04" or job_type == "JT05"),
+             "Invalid year for job type, no federal jobs can be found between 2002 to 2009"),
 
-                msg = "Invalid year for state, no commuters can be found for Arkansas in 2002 or between 2019-2021"
-                raise Exception(msg)
+            (('05' in state) and (year == 2002 or year in range(2019, 2022)),
+             "Invalid year for state, no commuters can be found for Arkansas in 2002 or between 2019-2021"),
 
-            # if the state is 04 and the year is 2002 or 2003
-            if ('04' in state) and (year == 2002 or year == 2003):
+            (('04' in state) and (year == 2002 or year == 2003),
+             "Invalid year for state, no commuters can be found for Arizona in 2002 or 2003"),
 
-                msg = "Invalid year for state, no commuters can be found for Arizona in 2002 or 2003"
-                raise Exception(msg)
+            (('11' in state) and (year in range(2002, 2010)),
+             "Invalid year for state, no commuters can be found for DC in 2002 or between 2002-2009"),
 
-            # if the state is 11 and the year is between 2002-2009
-            if ('11' in state) and (year in range(2002, 2010)):
+            (('25' in state) and (year in range(2002, 2011)),
+             "Invalid year for state, no commuters can be found for Massachusetts between 2002-2010"),
 
-                msg = "Invalid year for state, no commuters can be found for DC in 2002 or between 2002-2009"
-                raise Exception(msg)
+            (('28' in state) and (year in range(2002, 2004) or year in range(2019, 2022)),
+             "Invalid year for state, no commuters can be found for Mississippi in 2002, 2003, or between 2019-2021"),
 
-            # if the state is 25 and the year is 2002-2010
-            if ('25' in state) and (year in range(2002, 2011)):
+            (('33' in state) and year == 2002,
+             "Invalid year for state, no commuters can be found for New Hampshire in 2002"),
 
-                msg = "Invalid year for state, no commuters can be found for Massachusetts between 2002-2010"
-                raise Exception(msg)
-
-            # if the state is 28 and the year is 2002, 2003, or between 2019-2021
-            if ('28' in state) and (year in range(2002, 2004) or year in range(2019, 2022)):
-
-                msg = "Invalid year for state, no commuters can be found for Mississippi in 2002, 2003, or between 2019-2021"
-                raise Exception(msg)
-
-            # if the state is 33 and the year is 2002
-            if ('33' in state) and year == 2002:
-
-                msg = "Invalid year for state, no commuters can be found for New Hampshire in 2002"
-                raise Exception(msg)
-
-            # if the state is 02 and the year is 2017, 2018, or between 2019-2021
-            if ('02' in state) and year in range(2017, 2022):
-
-                msg = "Invalid year for state, no commuters can be found for Alaska in between 2017-2021"
-                raise Exception(msg)
+            (('02' in state) and year in range(2017, 2022),
+             "Invalid year for state, no commuters can be found for Alaska in between 2017-2021")
+        ]
+        for condition, message in invalid_conditions:
+            if condition:
+                raise Exception(message)
 
         # translate state FIPS code to state to use in URL
             # note, the if statement doesn't seem to be needed but gets rid of the None type error
         state_code_results = state_fips_to_code(2020)
+        if state_code_results is None:
+            print("STATE NONE")
         state_abbreviations = []
-        if state:
-            for fips_code in state:
-                state_code = state_code_results.get(fips_code).lower()
-                state_abbreviations.append(state_code)
+        for fips_code in state:
+            state_code = state_code_results.get(fips_code).lower()
+            state_abbreviations.append(state_code)
 
         # get the current geoid
         geoid = self.aggregate_geoid(granularity, nodes)
-
-        # loop through to check for
+        list_geoids = list(geoid)
 
         for states in state_abbreviations:
 
@@ -314,15 +313,24 @@ class ADRIOMakerLODES(ADRIOMaker):
                         f"Cause: {e}"
                     warn(msg, CacheWarning)
 
+            unfiltered_df = []
+
             for file in files:
                 data = pd.read_csv(file, compression="gzip", converters={
                                    'w_geocode': str, 'h_geocode': str})
 
+                list_geoids = self.sort_geoids(list_geoids, data)
+                geoid = tuple(list_geoids)
+
+                unfiltered_df.append(data)
+
+            for df in unfiltered_df:
+
                 filtered_rows_list = []
 
                 # filter the rows on if they start with the prefix
-                filtered_rows = data[data['h_geocode'].str.startswith(
-                    geoid) & data['w_geocode'].str.startswith(geoid)]
+                filtered_rows = df[df['h_geocode'].str.startswith(
+                    geoid) & df['w_geocode'].str.startswith(geoid)]
 
                 filtered_rows_list.append(filtered_rows)
 
@@ -331,11 +339,22 @@ class ADRIOMakerLODES(ADRIOMaker):
 
         return data_frames
 
-    def _make_name_adrio(self, granularity: str, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_name_adrio(self, granularity: str, nodes: dict[str, list[str]], job_type: str, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve home and work geocodes geoids."""
         def fetch() -> NDArray:
             # aggregate based on granularities
             geoid = self.aggregate_geoid(granularity, nodes)
+
+            if geoid is None:
+                geoid = ()
+            list_geoids = list(geoid)
+
+            data_frames = self.fetch_commuters(granularity, nodes, job_type, year)
+
+            for df in data_frames:
+                list_geoids = self.sort_geoids(list_geoids, df)
+
+            geoid = tuple(list_geoids)
 
             # put together array of geoids
             n_geocode = len(geoid)
@@ -355,9 +374,16 @@ class ADRIOMakerLODES(ADRIOMaker):
             # initialize variables
             aggregated_data = None
             geoid = self.aggregate_geoid(granularity, nodes)
-            geocode_len = len(geoid[0])
+            list_geoids = list(geoid)
+
+            # loop through the data frames and search for invalid geocodes
+            for data_df in data_frames:
+                list_geoids = self.sort_geoids(list_geoids, data_df)
+
+            geoid = tuple(list_geoids)
             n_geocode = len(geoid)
             geocode_to_index = {geocode: i for i, geocode in enumerate(geoid)}
+            geocode_len = len(geoid[0])
 
             for data_df in data_frames:
                 # convert w_geocode and h_geocode to strings
@@ -408,19 +434,17 @@ class ADRIOMakerLODES(ADRIOMaker):
 
             # check if the current value is empty
             if county == '*':
-                # raise error
                 msg = "Error: COUNTY value is not retrieved for county granularity"
                 raise Exception(msg)
 
             if state and county:
                 # if there is only one state
-                if len(state) == 1:
-                    home_geoids = [
-                        state_code + county_code for state_code in state for county_code in county]
-                else:
-                    # aggregate based on index if there are multiple states
-                    home_geoids = [state[i] + county[i]
-                                   for i in range(min(len(state), len(county)))]
+                home_geoids = [
+                    state_code + county_code for state_code in state for county_code in county]
+                # else:
+                # aggregate based on index if there are multiple states
+                #   home_geoids = [state[i] + county[i]
+                #                 for i in range(min(len(state), len(county)))]
 
         # if the given aggregation is TRACT and that the tract value is not empty
         if granularity == Granularity.TRACT.value or granularity == Granularity.CBG.value or granularity == Granularity.BLOCK.value:
@@ -434,13 +458,13 @@ class ADRIOMakerLODES(ADRIOMaker):
 
             if state and tract:
                 # if there is only one state
-                if len(state) == 1:
-                    home_geoids = [
-                        geoid_code + tract_code for geoid_code in home_geoids for tract_code in tract]
-                else:
-                    # aggregate based on index if there are multiple states
-                    home_geoids = [home_geoids[i] + tract[i]
-                                   for i in range(min(len(home_geoids), len(tract)))]
+                #            if len(state) == 1:
+                home_geoids = [
+                    geoid_code + tract_code for geoid_code in home_geoids for tract_code in tract]
+      #          else:
+                # aggregate based on index if there are multiple states
+     #               home_geoids = [home_geoids[i] + tract[i]
+    #                               for i in range(min(len(home_geoids), len(tract)))]
 
         # if the given aggregation is CBG and that the CBG value is not empty
         if granularity == Granularity.CBG.value or granularity == Granularity.BLOCK.value:
@@ -454,13 +478,13 @@ class ADRIOMakerLODES(ADRIOMaker):
 
             if state and cbg:
                 # if there is only one state
-                if len(state) == 1:
-                    home_geoids = [
-                        geoid_code + cbg_code for geoid_code in home_geoids for cbg_code in cbg]
-                else:
-                    # aggregate based on index if there are multiple states
-                    home_geoids = [home_geoids[i] + cbg[i]
-                                   for i in range(min(len(home_geoids), len(cbg)))]
+                #                if len(state) == 1:
+                home_geoids = [
+                    geoid_code + cbg_code for geoid_code in home_geoids for cbg_code in cbg]
+  #              else:
+                # aggregate based on index if there are multiple states
+ #                   home_geoids = [home_geoids[i] + cbg[i]
+#                                   for i in range(min(len(home_geoids), len(cbg)))]
 
         # if the given aggregation is block and the block value is not empty
         if granularity == Granularity.BLOCK.value:
@@ -472,18 +496,14 @@ class ADRIOMakerLODES(ADRIOMaker):
                 msg = "Error: BLOCK value is not retrieved for block granularity"
                 raise Exception(msg)
 
-            if block:
-                home_geoids = [
-                    geoid_code + block_code for geoid_code in home_geoids for block_code in block]
-
             if state and block:
                 # if there is only one state
-                if len(state) == 1:
-                    home_geoids = [
-                        geoid_code + block_code for geoid_code in home_geoids for block_code in block]
-                else:
-                    # aggregate based on index if there are multiple states
-                    home_geoids = [home_geoids[i] + block[i]
-                                   for i in range(min(len(home_geoids), len(block)))]
+               #             if len(state) == 1:
+                home_geoids = [
+                    geoid_code + block_code for geoid_code in home_geoids for block_code in block]
+  #              else:
+                # aggregate based on index if there are multiple states
+ #                   home_geoids = [home_geoids[i] + block[i]
+#                                   for i in range(min(len(home_geoids), len(block)))]
 
         return tuple(home_geoids)
