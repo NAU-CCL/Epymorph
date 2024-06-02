@@ -58,6 +58,10 @@ class GeoValidationException(ValidationException):
         return str(self) + "".join((f"\n- {e}" for e in self.attribute_errors))
 
 
+class DataResourceException(Exception):
+    """Exception during resource loading from ADRIOs."""
+
+
 class IpmValidationException(ValidationException):
     """Exception for invalid IPM."""
 

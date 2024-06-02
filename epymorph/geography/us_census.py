@@ -12,7 +12,7 @@ from functools import cache
 from io import BytesIO
 from pathlib import Path
 from typing import (Callable, Iterable, Literal, Mapping, NamedTuple,
-                    ParamSpec, Sequence, TypeVar)
+                    ParamSpec, Self, Sequence, TypeVar)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -440,6 +440,12 @@ class CensusScope(GeoScope):
     @abstractmethod
     def get_node_ids(self) -> NDArray[np.str_]: ...
 
+    @abstractmethod
+    def raise_granularity(self) -> Self: ...
+
+    @abstractmethod
+    def lower_granularity(self) -> Self: ...
+
 
 @dataclass(frozen=True)
 class StateScopeAll(CensusScope):
@@ -450,6 +456,13 @@ class StateScopeAll(CensusScope):
 
     def get_node_ids(self) -> NDArray[np.str_]:
         return get_us_states(self.year).geoid
+
+    def raise_granularity(self) -> CensusScope:
+        raise Exception("No granularity higher than state.")
+
+    def lower_granularity(self) -> CensusScope:
+        """Create and return CountyScope object with identical properties."""
+        return CountyScope('state', ['*'], self.year)
 
 
 @dataclass(frozen=True)
@@ -487,6 +500,13 @@ class StateScope(CensusScope):
         # As long as we enforce that fips codes will be checked and sorted on construction,
         # we can use the value of 'includes'.
         return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> CensusScope:
+        raise Exception("No granularity higher than state.")
+
+    def lower_granularity(self) -> CensusScope:
+        """Create and return CountyScope object with identical properties."""
+        return CountyScope(self.includes_granularity, self.includes, self.year)
 
 
 @dataclass(frozen=True)
@@ -537,6 +557,19 @@ class CountyScope(CensusScope):
             case 'county':
                 # return all counties in a list of counties
                 return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> CensusScope:
+        """Create and return StateScope object with identical properties."""
+        raised_granularity = self.includes_granularity
+        raised_includes = self.includes
+        if raised_granularity == 'county':
+            raised_granularity = 'state'
+            raised_includes = [fips[:-3] for fips in raised_includes]
+        return StateScope(raised_granularity, raised_includes, self.year)
+
+    def lower_granularity(self) -> CensusScope:
+        """Create and return TractScope object with identical properties."""
+        return TractScope(self.includes_granularity, self.includes, self.year)
 
 
 @dataclass(frozen=True)
@@ -603,6 +636,19 @@ class TractScope(CensusScope):
             case 'tract':
                 # return all tracts in a list of tracts
                 return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> CensusScope:
+        """Create and return CountyScope object with identical properties."""
+        raised_granularity = self.includes_granularity
+        raised_includes = self.includes
+        if raised_granularity == 'tract':
+            raised_granularity = 'county'
+            raised_includes = [fips[:-6] for fips in raised_includes]
+        return CountyScope(raised_granularity, raised_includes, self.year)
+
+    def lower_granularity(self) -> CensusScope:
+        """Create and return BlockGroupScope object with identical properties."""
+        return BlockGroupScope(self.includes_granularity, self.includes, self.year)
 
 
 @dataclass(frozen=True)
@@ -685,3 +731,15 @@ class BlockGroupScope(CensusScope):
             case 'block group':
                 # return all block groups in a list of block groups
                 return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> CensusScope:
+        """Create and return TractScope object with identical properties."""
+        raised_granularity = self.includes_granularity
+        raised_includes = self.includes
+        if raised_granularity == 'block group':
+            raised_granularity = 'tract'
+            raised_includes = [fips[:-1] for fips in raised_includes]
+        return TractScope(raised_granularity, raised_includes, self.year)
+
+    def lower_granularity(self) -> CensusScope:
+        raise Exception("No valid granularity lower than block group.")
