@@ -1,0 +1,46 @@
+[move-steps: per-day=2; duration=[1/3, 2/3]]
+
+[attrib: source=geo; name=population; shape=N; dtype=int;
+    description="The total population at each node."]
+
+[attrib: source=geo; name=centroid; shape=N; dtype=[(longitude, float), (latitude, float)];
+    description="The centroids for each node as (longitude, latitude) tuples."]
+
+#################### Data for Good Numpy Array ####################
+[attrib: source=params; name= distance_0km; shape=S; dtype=float;
+    description="Influences the distance that movers tend to travel."]
+
+#################### Phi values for Gavity Model ####################
+[attrib: source=params; name= distance_phi; shape=S; dtype=float;
+    description="Influences the distance that movers tend to travel."]
+
+[predef: function = 
+def dynamic_movement():
+    centroid = geo['centroid']
+    distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+    
+    ############################## Distance cutoffs #############################
+    distance_indices = distance < 1
+
+
+    ############################### Dispersal Kernel ##############################
+    distance_kernel = np.zeros_like(distance)
+    distance_kernel[distance_indices] = 1 / np.exp(distance[distance_indices] / params['distance_phi'])
+    distance_kernel = row_normalize(distance_kernel)
+    return {
+        'distance_kernel': distance_kernel,
+    }
+]
+
+# Commuter movement: assume 10% of the population are commuters
+[mtype: days=all; leave=1; duration=0d; return=2; function=
+def dynamic_movement(t):
+    population = geo['population']
+    ########################### Params Numpy Array #############################
+    distance_0km = params['distance_0km'][t.day]
+    #################### Fraction of the population moving ####################
+    staying_at_home = np.floor(population * distance_0km)
+
+    n_commuters = staying_at_home.astype(SimDType)
+    return np.multinomial(n_commuters, predef['distance_kernel'])
+]
