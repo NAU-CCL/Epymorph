@@ -257,6 +257,8 @@ DEFAULT_YEAR = 2020
 
 _GEOGRAPHY_CACHE_PATH = Path("geography")
 
+_CACHE_VERSION = 2
+
 ModelT = TypeVar('ModelT', bound=NamedTuple)
 
 
@@ -265,14 +267,14 @@ def _load_cached(relpath: str, on_miss: Callable[[], ModelT], on_hit: Callable[.
     # but Pylance seems to have problems tracking the return type properly with that implementation
     path = _GEOGRAPHY_CACHE_PATH.joinpath(relpath)
     try:
-        content = load_bundle_from_cache(path, 1)
+        content = load_bundle_from_cache(path, _CACHE_VERSION)
         with np.load(content['data.npz']) as data_npz:
             return on_hit(**data_npz)
     except CacheMiss:
         data = on_miss()
         data_bytes = BytesIO()
         np.savez_compressed(data_bytes, **data._asdict())
-        save_bundle_to_cache(path, 1, {'data.npz': data_bytes})
+        save_bundle_to_cache(path, _CACHE_VERSION, {'data.npz': data_bytes})
         return data
 
 
