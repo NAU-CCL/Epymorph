@@ -1,11 +1,12 @@
 import os
 from collections import defaultdict
+from functools import partial
 
 import numpy as np
 from census import Census
 from geopandas import GeoDataFrame
 from numpy.typing import NDArray
-from pandas import DataFrame, concat, read_excel
+from pandas import DataFrame, Series, concat, read_excel
 from shapely import area
 
 from epymorph.data_shape import Shapes
@@ -208,6 +209,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
         if not isinstance(scope, StateScopeAll):
             df = df.loc[df['geoid'].isin(scope.includes)]
+        # remove nodes not in acs5 data for all states case
         elif scope.year == 2020:
             df = df.loc[~df['geoid'].isin(['66', '69', '60', '78'])]
 
@@ -268,6 +270,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
         match scope:
             case StateScopeAll():
+                # remove nodes not in acs5 data for all states case
                 data = data.loc[data['res_state_code'] < '73']
                 data = data.loc[data['wrk_state_code'] < '073']
 
@@ -421,32 +424,29 @@ class ADRIOMakerCensus(ADRIOMaker):
     def _make_population_adrio(self, scope: CensusScope, year: int, num_groups: int) -> ADRIO:
         """Makes an ADRIO to retrieve population data split into 3 or 6 age groups."""
         def fetch() -> NDArray:
+            def group_cols(first: int, last: int, source: DataFrame) -> Series:
+                result = source[f"B01001_{first:03d}E"]
+                for line in range(first + 1, last + 1):
+                    result = result + source[f"B01001_{line:03d}E"]
+                return result
+
             df = self.fetch_acs5(self.population_query, scope, year)
-            df = df.loc[:, self.population_query]
-            # calculate population of each age bracket and enter into a numpy array to return
-            output = np.zeros((len(df.index), num_groups), dtype=int)
-            pop = [0, 0, 0, 0, 0, 0]
-            for node in range(len(df.index)):
-                for age_group in range(len(df.iloc[node].index)):
-                    if age_group >= 0 and age_group < 10:
-                        pop[0] += df.iloc[node][age_group]
-                    elif age_group >= 10 and age_group < 20:
-                        pop[1] += df.iloc[node][age_group]
-                    elif age_group >= 20 and age_group < 28:
-                        pop[2] += df.iloc[node][age_group]
-                    elif age_group >= 28 and age_group < 34:
-                        pop[3] += df.iloc[node][age_group]
-                    elif age_group >= 34 and age_group < 40:
-                        pop[4] += df.iloc[node][age_group]
-                    elif age_group < 47:
-                        pop[5] += df.iloc[node][age_group]
 
-                if num_groups == 3:
-                    output[node] = [pop[0], pop[1] + pop[2] + pop[3], pop[4] + pop[5]]
-                else:
-                    output[node] = pop
+            group = partial(group_cols, source=df)
 
-            return output
+            if num_groups == 3:
+                output = DataFrame({'pop_0-19': group(3, 7) + group(27, 31),
+                                    'pop_20-64': group(8, 19) + group(32, 43),
+                                    'pop_65+': group(20, 25) + group(44, 49)})
+            else:
+                output = DataFrame({'pop_0-19': group(3, 7) + group(27, 31),
+                                    'pop_20-34': group(8, 12) + group(32, 36),
+                                    'pop_35-54': group(13, 16) + group(37, 40),
+                                    'pop_55-64': group(17, 19) + group(41, 43),
+                                    'pop_65-75': group(20, 22) + group(44, 46),
+                                    'pop_75+': group(23, 25) + group(47, 49)})
+
+            return output.to_numpy(dtype=int)
 
         if num_groups == 3:
             return ADRIO('population_by_age', fetch)
@@ -460,74 +460,44 @@ class ADRIOMakerCensus(ADRIOMaker):
             raise DataResourceException(msg)
 
         def fetch() -> NDArray:
-            df = self.fetch_acs5(
-                self.attrib_vars['dissimilarity_index'], scope, year)
-            lowered_scope = scope.lower_granularity()
-            df2 = self.fetch_acs5(
-                self.attrib_vars['dissimilarity_index'], lowered_scope, year)
-            output = np.zeros(len(df.index), dtype=float)
+            vars = self.attrib_vars['dissimilarity_index']
+            df = self.fetch_acs5(vars, scope, year)
+            df2 = self.fetch_acs5(vars, scope.lower_granularity(), year)
             df2 = self.concatenate_fips(df2, scope.granularity)
 
-            # loop for scope granularity
-            low_index = 0
-            for high_index in range(len(df.index)):
-                # assign county fip to variable
-                county_fip = df.iloc[high_index]['geoid']
-                # loop for lower granularity
-                sum = 0.0
-                while low_index < len(df2.index) and df2.iloc[low_index]['geoid'] == county_fip:
-                    # preliminary calculations
-                    tract_minority = df2.iloc[low_index]['B03002_004E'] + \
-                        df2.iloc[low_index]['B03002_014E']
-                    county_minority = df.iloc[high_index]['B03002_004E'] + \
-                        df.iloc[high_index]['B03002_014E']
-                    tract_majority = df2.iloc[low_index]['B03002_003E'] + \
-                        df2.iloc[low_index]['B03002_013E']
-                    county_majority = df.iloc[high_index]['B03002_003E'] + \
-                        df.iloc[high_index]['B03002_013E']
+            df['high_majority'] = df[vars[0]] + df[vars[1]]
+            df2['low_majority'] = df2[vars[0]] + df2[vars[1]]
+            df['high_minority'] = df[vars[2]] + df[vars[3]]
+            df2['low_minority'] = df2[vars[2]] + df2[vars[3]]
 
-                    # run calculation sum += ( |minority(tract) / minority(county) - majority(tract) / majority(county)| )
-                    if county_minority != 0 and county_majority != 0:
-                        sum = sum + abs(tract_minority / county_minority -
-                                        tract_majority / county_majority)
-                    low_index += 1
+            df3 = df.merge(df2, on='geoid')
+            df3['score'] = abs(df3['low_minority'] / df3['high_minority'] -
+                               df3['low_majority'] / df3['high_majority'])
+            df3 = df3.groupby('geoid').sum()
+            df3['score'] *= .5
+            df3['score'].replace(0., 0.5)
 
-                sum *= .5
-                if sum == 0.:
-                    sum = 0.5
-
-                # assign current output element to sum
-                output[high_index] = sum
-
-            return output
+            return df3['score'].to_numpy(dtype=float)
         return ADRIO('dissimilarity_index', fetch)
 
     def _make_gini_index_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve gini index."""
         def fetch() -> NDArray:
-            df = self.fetch_acs5(
-                self.attrib_vars['gini_index'], scope, year)
-            df2 = None
-            df['B19083_001E'] = df['B19083_001E'].astype(
-                np.float64).fillna(0.5).replace(-666666666, 0.5)
+            var = self.attrib_vars['gini_index']
+            df = self.fetch_acs5(var, scope, year)
+            df[var] = df[var].astype(np.float64).fillna(0.5).replace(-666666666, 0.5)
 
             # set cbg data to that of the parent tract if geo granularity = cbg
             if isinstance(scope, BlockGroupScope):
                 print(
-                    'Gini Index cannot be retrieved for block group level, fetching tract level data instead.')
-                df2 = self.fetch_acs5(
-                    self.attrib_vars['gini_index'], scope.raise_granularity(), scope.year)
+                    "Gini Index cannot be retrieved for block group level, fetching tract level data instead.")
+                df2 = self.fetch_acs5(var, scope.raise_granularity(), scope.year)
+                df['geoid'] = df['geoid'].apply(lambda x: x[:-1])
+                df = df.drop(columns=var)
 
-                output = np.zeros(len(df.index), dtype=float)
-                bg = 0
-                for tract in range(len(df2.index)):
-                    tract_fip = df2.iloc[tract]['geoid']
-                    while bg < len(df.index) and df.iloc[bg]['geoid'][:-1] == tract_fip:
-                        output[bg] = df2.iloc[tract]['B19083_001E']
-                        bg += 1
-                return output
+                df = df.merge(df2, on='geoid')
 
-            return df[self.attrib_vars['gini_index']].to_numpy(dtype=float).squeeze()
+            return df[var].to_numpy(dtype=float).squeeze()
         return ADRIO('gini_index', fetch)
 
     def _make_pop_density_adrio(self, scope: CensusScope, year: int) -> ADRIO:
@@ -561,28 +531,21 @@ class ADRIOMakerCensus(ADRIOMaker):
         """Makes an ADRIO to retrieve median income at the Census tract level."""
         def fetch() -> NDArray:
             if isinstance(scope, BlockGroupScope):
+                var = self.attrib_vars['tract_median_income']
                 # query median income at cbg and tract level
-                df = self.fetch_acs5(
-                    self.attrib_vars['median_income'], scope.raise_granularity(), year)
-                df2 = self.fetch_acs5(
-                    self.attrib_vars['median_income'], BlockGroupScope(scope.includes_granularity, scope.includes, scope.year), year)
-                df = df.fillna(0).replace(-666666666, 0)
+                df = self.fetch_acs5(['NAME'], scope, year)
+                df2 = self.fetch_acs5(var, scope.raise_granularity(), year)
+                df2 = df2.fillna(0).replace(-666666666, 0)
 
-                # set cbg data to that of the parent tract
-                output = np.zeros(len(df2.index), dtype=int)
-                df = df.fillna(0).replace(-666666666, 0)
-                bg = 0
-                for tract in range(len(df.index)):
-                    tract_fip = df.iloc[tract]['geoid']
-                    while bg < len(df2.index) and df2.iloc[bg]['geoid'][:-1] == tract_fip:
-                        output[bg] = df.iloc[tract]['B19013_001E']
-                        bg += 1
+                df['geoid'] = df['geoid'].apply(lambda x: x[:-1])
+                df = df.merge(df2, on='geoid')
+
+                return df[var].to_numpy(dtype=int).squeeze()
 
             else:
                 msg = "Tract median income can only be retrieved for block group scope."
                 raise DataResourceException(msg)
 
-            return output
         return ADRIO('tract_median_income', fetch)
 
     def _make_commuter_adrio(self, scope: CensusScope, year: int) -> ADRIO:
