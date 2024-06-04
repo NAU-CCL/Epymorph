@@ -2,9 +2,9 @@ import os
 from csv import reader
 
 import numpy as np
-import pandas as pd
 from attr import dataclass
 from numpy.typing import NDArray
+from pandas import DataFrame, read_csv
 from us import STATES
 from us.states import lookup
 
@@ -22,8 +22,6 @@ class FileSpec(SourceSpec):
     data_key: list[str] | list[int]
     label_type: str
     file_type: str
-    time_key: str | int | None
-    time_type: TimePeriod | None
     header: int | None
 
 
@@ -51,30 +49,21 @@ class ADRIOMakerFile(ADRIOMaker):
                 # read value from csv
                 if spec.file_type == 'csv':
                     if isinstance(spec.label_key, int) and spec.header is not None:
-                        df = pd.read_csv(path, skiprows=spec.header)
+                        df = read_csv(path, skiprows=spec.header, header=None)
                     else:
-                        df = pd.read_csv(path, header=spec.header)
+                        df = read_csv(path, header=spec.header)
 
-                    # column index passed
-                    if isinstance(spec.label_key, int):
-                        df = df.loc[df.iloc[:, spec.label_key].isin(sort_key)]
-                        if isinstance(spec, FileSpecTime) and isinstance(spec.time_key, int):
-                            df = df.loc[df.iloc[:, spec.time_key] == time_sort_key]
-                        sort_df = pd.DataFrame(sort_key)
-                        data_values = df[df.index.isin(spec.data_key)]
-                        df = pd.merge(sort_df, df, how='left', on=spec.label_key)
+                    if isinstance(spec.label_key, str) and spec.header is None:
+                        msg = "Header row is required to get column attributes by name."
+                        raise GeoValidationException(msg)
 
-                    # column name passed (must have header)
-                    else:
-                        if spec.header is None:
-                            msg = "Header row is required to get column attributes by name."
-                            raise GeoValidationException(msg)
-                        df = df.loc[df[spec.label_key].isin(sort_key)]
-                        if isinstance(spec, FileSpecTime) and isinstance(spec.time_key, str):
-                            df = df.loc[df[spec.time_key] == time_sort_key]
-                        sort_df = pd.DataFrame({spec.label_key: sort_key})
-                        data_values = df[spec.data_key]
-                        df = pd.merge(sort_df, df, how='left')
+                    df = df.loc[df[spec.label_key].isin(sort_key)]
+                    if isinstance(spec, FileSpecTime):
+                        df = df.loc[df[spec.time_key] == time_sort_key]
+                    sort_df = DataFrame(sort_key, columns=[spec.label_key])
+
+                    data_values = df[spec.data_key]
+                    df = df.merge(sort_df, how='right')
 
                     # check for null values (missing data in file)
                     if data_values.isnull().any().any():
