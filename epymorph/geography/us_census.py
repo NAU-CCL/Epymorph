@@ -12,7 +12,7 @@ from functools import cache
 from io import BytesIO
 from pathlib import Path
 from typing import (Callable, Iterable, Literal, Mapping, NamedTuple,
-                    ParamSpec, Self, Sequence, TypeVar)
+                    ParamSpec, Sequence, TypeVar)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -443,10 +443,10 @@ class CensusScope(GeoScope):
     def get_node_ids(self) -> NDArray[np.str_]: ...
 
     @abstractmethod
-    def raise_granularity(self) -> Self: ...
+    def raise_granularity(self) -> 'CensusScope': ...
 
     @abstractmethod
-    def lower_granularity(self) -> Self: ...
+    def lower_granularity(self) -> 'CensusScope': ...
 
 
 @dataclass(frozen=True)
@@ -462,7 +462,7 @@ class StateScopeAll(CensusScope):
     def raise_granularity(self) -> CensusScope:
         raise Exception("No granularity higher than state.")
 
-    def lower_granularity(self) -> CensusScope:
+    def lower_granularity(self) -> 'CountyScope':
         """Create and return CountyScope object with identical properties."""
         return CountyScope('state', ['*'], self.year)
 
@@ -506,7 +506,7 @@ class StateScope(CensusScope):
     def raise_granularity(self) -> CensusScope:
         raise Exception("No granularity higher than state.")
 
-    def lower_granularity(self) -> CensusScope:
+    def lower_granularity(self) -> 'CountyScope':
         """Create and return CountyScope object with identical properties."""
         return CountyScope(self.includes_granularity, self.includes, self.year)
 
@@ -560,7 +560,7 @@ class CountyScope(CensusScope):
                 # return all counties in a list of counties
                 return np.array(self.includes, dtype=np.str_)
 
-    def raise_granularity(self) -> CensusScope:
+    def raise_granularity(self) -> StateScope:
         """Create and return StateScope object with identical properties."""
         raised_granularity = self.includes_granularity
         raised_includes = self.includes
@@ -569,7 +569,7 @@ class CountyScope(CensusScope):
             raised_includes = [fips[:-3] for fips in raised_includes]
         return StateScope(raised_granularity, raised_includes, self.year)
 
-    def lower_granularity(self) -> CensusScope:
+    def lower_granularity(self) -> 'TractScope':
         """Create and return TractScope object with identical properties."""
         return TractScope(self.includes_granularity, self.includes, self.year)
 
@@ -639,7 +639,7 @@ class TractScope(CensusScope):
                 # return all tracts in a list of tracts
                 return np.array(self.includes, dtype=np.str_)
 
-    def raise_granularity(self) -> CensusScope:
+    def raise_granularity(self) -> CountyScope:
         """Create and return CountyScope object with identical properties."""
         raised_granularity = self.includes_granularity
         raised_includes = self.includes
@@ -648,7 +648,7 @@ class TractScope(CensusScope):
             raised_includes = [fips[:-6] for fips in raised_includes]
         return CountyScope(raised_granularity, raised_includes, self.year)
 
-    def lower_granularity(self) -> CensusScope:
+    def lower_granularity(self) -> 'BlockGroupScope':
         """Create and return BlockGroupScope object with identical properties."""
         return BlockGroupScope(self.includes_granularity, self.includes, self.year)
 
@@ -734,7 +734,7 @@ class BlockGroupScope(CensusScope):
                 # return all block groups in a list of block groups
                 return np.array(self.includes, dtype=np.str_)
 
-    def raise_granularity(self) -> CensusScope:
+    def raise_granularity(self) -> TractScope:
         """Create and return TractScope object with identical properties."""
         raised_granularity = self.includes_granularity
         raised_includes = self.includes

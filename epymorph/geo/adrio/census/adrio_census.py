@@ -210,8 +210,8 @@ class ADRIOMakerCensus(ADRIOMaker):
         if not isinstance(scope, StateScopeAll):
             df = df.loc[df['geoid'].isin(scope.includes)]
         # remove nodes not in acs5 data for all states case
-        elif scope.year == 2020:
-            df = df.loc[~df['geoid'].isin(['66', '69', '60', '78'])]
+        else:
+            df = df.loc[df['geoid'].isin(scope.get_node_ids())]
 
         return GeoDataFrame(df)
 
@@ -271,8 +271,9 @@ class ADRIOMakerCensus(ADRIOMaker):
         match scope:
             case StateScopeAll():
                 # remove nodes not in acs5 data for all states case
-                data = data.loc[data['res_state_code'] < '73']
-                data = data.loc[data['wrk_state_code'] < '073']
+                data = data.loc[data['res_state_code'].isin(scope.get_node_ids())]
+                data = data.loc[data['wrk_state_code'].isin(
+                    '0' + x for x in scope.get_node_ids())]
 
             case StateScope('state', includes) | CountyScope('state', includes):
                 states = list(includes)
@@ -519,12 +520,10 @@ class ADRIOMakerCensus(ADRIOMaker):
         """Makes an ADRIO to retrieve geographic centroid coordinates."""
         def fetch() -> NDArray:
             df = self.fetch_sf(scope)
-            # map node's name to its centroid in a numpy array and return
-            output = np.zeros(len(df.index), dtype=CentroidDType)
-            for node in range(len(df.index)):
-                output[node] = df.iloc[node]['geometry'].centroid.coords[0]
+            # extract centroid coordinates from geometry object
+            output = df['geometry'].apply(lambda x: x.centroid.coords[0])
 
-            return output
+            return output.to_numpy(dtype=CentroidDType)
         return ADRIO('centroid', fetch)
 
     def _make_tract_med_income_adrio(self, scope: CensusScope, year: int) -> ADRIO:
