@@ -30,6 +30,15 @@ from epymorph.error import GeographyError
 # Lastly, pygris has a bug which is patched but not available in a release version at this time:
 # https://github.com/walkerke/pygris/commit/9ad16208b5b1e67909ff2dfdea26333ddd4a2e17
 
+# NOTE on which states/territories are included in our results --
+# We have chosen to filter results to include only the 50 states, District of Columbia, and Puerto Rico.
+# This is not the entire set of data provided by TIGER files, but does align with the
+# data that ACS5 provides. Since that is our primary data source at the moment, we felt
+# that this was an acceptable simplification. Either we make the two sets match
+# (as we've done here, by removing 4 territories) OR we have a special "all states for the ACS5" scope.
+# We chose this solution as the less-bad option, but this may be revised in future.
+# Below there are some commented-code remnants which demonstrate what it takes to support the additional
+# territories, in case we ever want to reverse this choice.
 
 TigerYear = Literal[2000, 2010, 2020]
 """A supported TIGER file year."""
@@ -37,6 +46,24 @@ TigerYear = Literal[2000, 2010, 2020]
 _TIGER_URL = "https://www2.census.gov/geo/tiger"
 
 _TIGER_CACHE_PATH = Path("geography/tiger")
+
+# _SUPPORTED_STATE_FILES = ['us', '60', '66', '69', '78']
+_SUPPORTED_STATE_FILES = ['us']
+"""
+The IDs of TIGER files that are included in our set of supported states.
+In some TIGER years, data for the 4 territories were given in separate files.
+"""
+
+_SUPPORTED_STATES = ['01', '02', '04', '05', '06', '08', '09', '10', '11', '12', '13',
+                     '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25',
+                     '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36',
+                     '37', '38', '39', '40', '41', '42', '44', '45', '46', '47', '48',
+                     '49', '50', '51', '53', '54', '55', '56', '72']
+#  '60', '66', '69', '78']
+"""
+The FIPS IDs of states which are included in our set of supported states.
+Not needed if we didn't have to filter out 4 territories.
+"""
 
 
 def _fetch_url(url: str) -> BytesIO:
@@ -95,7 +122,7 @@ def _get_geo(cols: list[str], urls: list[str], result_cols: list[str]) -> GeoDat
         ], ignore_index=True)
     )
     gdf.rename(columns=dict(zip(cols, result_cols)), inplace=True)
-    return gdf
+    return GeoDataFrame(gdf[gdf['GEOID'].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)])
 
 
 def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataFrame:
@@ -107,7 +134,7 @@ def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataF
     ], ignore_index=True)
     df.rename(columns=dict(zip(cols, result_cols)), inplace=True)
     df.drop_duplicates(inplace=True)
-    return df
+    return df[df['GEOID'].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)]
 
 
 ##########
@@ -127,13 +154,13 @@ def _get_states_config(year: TigerYear) -> tuple[list[str], list[str], list[str]
             cols = ["GEOID10", "NAME10", "STUSPS10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/STATE/2010/tl_2010_{xx}_state10.zip"
-                for xx in ['us', '60', '66', '69', '78']
+                for xx in _SUPPORTED_STATE_FILES
             ]
         case 2000:
             cols = ["STATEFP00", "NAME00", "STUSPS00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/STATE/2000/tl_2010_{xx}_state00.zip"
-                for xx in ['us', '60', '66', '69', '78']
+                for xx in _SUPPORTED_STATE_FILES
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
@@ -167,13 +194,13 @@ def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[st
             cols = ["GEOID10", "NAME10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/COUNTY/2010/tl_2010_{xx}_county10.zip"
-                for xx in ['us', '60', '66', '69', '78']
+                for xx in _SUPPORTED_STATE_FILES
             ]
         case 2000:
             cols = ["CNTYIDFP00", "NAME00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/COUNTY/2000/tl_2010_{xx}_county00.zip"
-                for xx in ['us', '60', '66', '69', '78']
+                for xx in _SUPPORTED_STATE_FILES
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")

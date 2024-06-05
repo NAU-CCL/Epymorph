@@ -22,7 +22,7 @@ from epymorph.cache import (CacheMiss, load_bundle_from_cache,
                             save_bundle_to_cache)
 from epymorph.error import GeographyError
 from epymorph.geography.scope import GeoScope
-from epymorph.util import prefix
+from epymorph.util import filter_unique, prefix
 
 CensusGranularityName = Literal['state', 'county', 'tract', 'block group', 'block']
 """The name of a supported Census granularity."""
@@ -257,6 +257,8 @@ DEFAULT_YEAR = 2020
 
 _GEOGRAPHY_CACHE_PATH = Path("geography")
 
+_CACHE_VERSION = 2
+
 ModelT = TypeVar('ModelT', bound=NamedTuple)
 
 
@@ -265,14 +267,14 @@ def _load_cached(relpath: str, on_miss: Callable[[], ModelT], on_hit: Callable[.
     # but Pylance seems to have problems tracking the return type properly with that implementation
     path = _GEOGRAPHY_CACHE_PATH.joinpath(relpath)
     try:
-        content = load_bundle_from_cache(path, 1)
+        content = load_bundle_from_cache(path, _CACHE_VERSION)
         with np.load(content['data.npz']) as data_npz:
             return on_hit(**data_npz)
     except CacheMiss:
         data = on_miss()
         data_bytes = BytesIO()
         np.savez_compressed(data_bytes, **data._asdict())
-        save_bundle_to_cache(path, 1, {'data.npz': data_bytes})
+        save_bundle_to_cache(path, _CACHE_VERSION, {'data.npz': data_bytes})
         return data
 
 
@@ -440,6 +442,23 @@ class CensusScope(GeoScope):
     @abstractmethod
     def get_node_ids(self) -> NDArray[np.str_]: ...
 
+    @abstractmethod
+    def raise_granularity(self) -> 'CensusScope':
+        """
+        Return a scope with granularity one level higher than this.
+        This may have the effect of widening the scope; for example,
+        raising a TractScope which is filtered to a set of tracts will
+        result in a CountyScope containing the counties that contained our
+        tracts. Raises GeographyError if the granularity cannot be raised.
+        """
+
+    @abstractmethod
+    def lower_granularity(self) -> 'CensusScope':
+        """
+        Return a scope with granularity one level lower than this.
+        Raises GeographyError if the granularity cannot be lowered.
+        """
+
 
 @dataclass(frozen=True)
 class StateScopeAll(CensusScope):
@@ -450,6 +469,13 @@ class StateScopeAll(CensusScope):
 
     def get_node_ids(self) -> NDArray[np.str_]:
         return get_us_states(self.year).geoid
+
+    def raise_granularity(self) -> CensusScope:
+        raise GeographyError("No granularity higher than state.")
+
+    def lower_granularity(self) -> 'CountyScope':
+        """Create and return CountyScope object with identical properties."""
+        return CountyScope('state', ['*'], self.year)
 
 
 @dataclass(frozen=True)
@@ -487,6 +513,13 @@ class StateScope(CensusScope):
         # As long as we enforce that fips codes will be checked and sorted on construction,
         # we can use the value of 'includes'.
         return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> CensusScope:
+        raise GeographyError("No granularity higher than state.")
+
+    def lower_granularity(self) -> 'CountyScope':
+        """Create and return CountyScope object with identical properties."""
+        return CountyScope(self.includes_granularity, self.includes, self.year)
 
 
 @dataclass(frozen=True)
@@ -537,6 +570,19 @@ class CountyScope(CensusScope):
             case 'county':
                 # return all counties in a list of counties
                 return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> StateScope:
+        """Create and return StateScope object with identical properties."""
+        raised_granularity = self.includes_granularity
+        raised_includes = self.includes
+        if raised_granularity == 'county':
+            raised_granularity = 'state'
+            raised_includes = filter_unique(fips[:-3] for fips in raised_includes)
+        return StateScope(raised_granularity, raised_includes, self.year)
+
+    def lower_granularity(self) -> 'TractScope':
+        """Create and return TractScope object with identical properties."""
+        return TractScope(self.includes_granularity, self.includes, self.year)
 
 
 @dataclass(frozen=True)
@@ -603,6 +649,19 @@ class TractScope(CensusScope):
             case 'tract':
                 # return all tracts in a list of tracts
                 return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> CountyScope:
+        """Create and return CountyScope object with identical properties."""
+        raised_granularity = self.includes_granularity
+        raised_includes = self.includes
+        if raised_granularity == 'tract':
+            raised_granularity = 'county'
+            raised_includes = filter_unique(fips[:-6] for fips in raised_includes)
+        return CountyScope(raised_granularity, raised_includes, self.year)
+
+    def lower_granularity(self) -> 'BlockGroupScope':
+        """Create and return BlockGroupScope object with identical properties."""
+        return BlockGroupScope(self.includes_granularity, self.includes, self.year)
 
 
 @dataclass(frozen=True)
@@ -685,3 +744,15 @@ class BlockGroupScope(CensusScope):
             case 'block group':
                 # return all block groups in a list of block groups
                 return np.array(self.includes, dtype=np.str_)
+
+    def raise_granularity(self) -> TractScope:
+        """Create and return TractScope object with identical properties."""
+        raised_granularity = self.includes_granularity
+        raised_includes = self.includes
+        if raised_granularity == 'block group':
+            raised_granularity = 'tract'
+            raised_includes = filter_unique(fips[:-1] for fips in raised_includes)
+        return TractScope(raised_granularity, raised_includes, self.year)
+
+    def lower_granularity(self) -> CensusScope:
+        raise GeographyError("No valid granularity lower than block group.")

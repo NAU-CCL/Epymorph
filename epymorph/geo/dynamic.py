@@ -64,7 +64,7 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
             # Make and store adrio.
             adrio = makers[maker_name].make_adrio(
                 adrio_attrib,
-                spec.geography,
+                spec.scope,
                 spec.time_period
             )
             adrios[attr.name] = adrio
@@ -79,7 +79,7 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
             raise ValueError("Geo must contain an attribute called 'label'.")
         self._adrios = adrios
         labels = self._adrios[LABEL.name].get_value()
-        super().__init__(spec, len(labels))
+        super().__init__(spec, labels.size)
 
         # events
         self.fetch_start = Event()

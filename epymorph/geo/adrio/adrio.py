@@ -7,7 +7,8 @@ from typing import Callable
 
 from numpy.typing import NDArray
 
-from epymorph.geo.spec import Geography, TimePeriod
+from epymorph.geo.spec import TimePeriod
+from epymorph.geography.scope import GeoScope
 from epymorph.simulation import AttributeDef
 
 
@@ -40,7 +41,7 @@ class ADRIOMaker(ABC):
     attributes: list[AttributeDef]
 
     @abstractmethod
-    def make_adrio(self, attrib: AttributeDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod) -> ADRIO:
         """Creates an ADRIO to fetch the specified attribute for the specified time and place."""
 
 

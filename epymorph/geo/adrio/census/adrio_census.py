@@ -1,40 +1,28 @@
 import os
-from copy import copy
-from dataclasses import dataclass
-from enum import Enum
+from collections import defaultdict
+from functools import partial
 
 import numpy as np
 from census import Census
 from geopandas import GeoDataFrame
 from numpy.typing import NDArray
-from pandas import DataFrame, read_excel
-from pygris import block_groups, counties, states, tracts
+from pandas import DataFrame, Series, concat, read_excel
+from shapely import area
 
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidDType
-from epymorph.error import GeoValidationException
+from epymorph.error import DataResourceException, GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.spec import Geography, TimePeriod, Year
+from epymorph.geo.spec import TimePeriod, Year
+from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
+                                          BlockGroupScope,
+                                          CensusGranularityName, CensusScope,
+                                          CountyScope, StateScope,
+                                          StateScopeAll, TractScope)
+from epymorph.geography.us_tiger import (get_block_groups_geo,
+                                         get_counties_geo, get_states_geo,
+                                         get_tracts_geo)
 from epymorph.simulation import AttributeDef, geo_attrib
-
-
-class Granularity(Enum):
-    """Enumeration of Census granularity levels."""
-    STATE = 0
-    COUNTY = 1
-    TRACT = 2
-    CBG = 3
-
-
-@dataclass
-class CensusGeography(Geography):
-    """Dataclass used to describe geographies for Census ADRIOs."""
-
-    granularity: Granularity
-    """The granularity level to fetch data from."""
-
-    filter: dict[str, list[str]]
-    """A list of locations to fetch data from as FIPS codes for relevant granularities."""
 
 
 class ADRIOMakerCensus(ADRIOMaker):
@@ -150,178 +138,91 @@ class ADRIOMakerCensus(ADRIOMaker):
             raise Exception(msg)
         self.census = Census(api_key)
 
-    def make_adrio(self, attrib: AttributeDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: TimePeriod) -> ADRIO:
         if attrib not in self.attributes:
             msg = f"{attrib.name} is not supported for the Census data source."
-            raise GeoValidationException(msg)
-        if not isinstance(geography, CensusGeography):
-            msg = f"Census ADRIO requires CensusGeography, given {type(geography)}."
             raise GeoValidationException(msg)
         if not isinstance(time_period, Year):
             msg = f"Census ADRIO requires Year (TimePeriod), given {type(time_period)}."
             raise GeoValidationException(msg)
 
-        granularity = geography.granularity.value
-        nodes = geography.filter
         year = time_period.year
 
         if attrib.name == 'geoid':
-            return self._make_geoid_adrio(granularity, nodes, year)
+            return self._make_geoid_adrio(scope, year)
         elif attrib.name == 'population_by_age':
-            return self._make_population_adrio(granularity, nodes, year, 3)
+            return self._make_population_adrio(scope, year, 3)
+        elif attrib.name == 'population_by_age_x6':
+            return self._make_population_adrio(scope, year, 6)
         elif attrib.name == 'dissimilarity_index':
-            return self._make_dissimilarity_index_adrio(granularity, nodes, year)
+            return self._make_dissimilarity_index_adrio(scope, year)
         elif attrib.name == 'gini_index':
-            return self._make_gini_index_adrio(granularity, nodes, year)
+            return self._make_gini_index_adrio(scope, year)
         elif attrib.name == 'pop_density_km2':
-            return self._make_pop_density_adrio(granularity, nodes, year)
+            return self._make_pop_density_adrio(scope, year)
         elif attrib.name == 'centroid':
-            return self._make_centroid_adrio(granularity, nodes, year)
+            return self._make_centroid_adrio(scope)
         elif attrib.name == 'tract_median_income':
-            return self._make_tract_med_income_adrio(nodes, year)
+            return self._make_tract_med_income_adrio(scope, year)
         elif attrib.name == 'commuters':
-            return self._make_commuter_adrio(granularity, nodes, year)
+            return self._make_commuter_adrio(scope, year)
         else:
-            return self._make_simple_adrios(attrib, granularity, nodes, year)
+            return self._make_simple_adrios(attrib, scope, year)
 
-    def fetch_acs5(self, variables: list[str], granularity: int, nodes: dict[str, list[str]], year: int) -> DataFrame:
-        """Utility function to fetch Census data by building queries from ADRIO data."""
-        # verify node types and convert to strings usable by census api
-        states = nodes.get('state')
-        counties = nodes.get('county')
-        tracts = nodes.get('tract')
-        cbg = nodes.get('block group')
-        if type(states) is list:
-            states = ','.join(states)
-        if type(counties) is list:
-            counties = ','.join(counties)
-        if type(tracts) is list:
-            tracts = ','.join(tracts)
-        if type(cbg) is list:
-            cbg = ','.join(cbg)
+    def fetch_acs5(self, variables: list[str], scope: CensusScope, year: int) -> DataFrame:
+        """Utility function to fetch Census data by building queries from ADRIO data and sorting the result."""
+        queries = self.make_acs5_queries(scope)
 
-        # fetch and sort data according to granularity
-        if granularity == Granularity.STATE.value:
-            data = self.census.acs5.get(
-                variables, {'for': f'state: {states}'}, year=year)
-            sort_param = ['state']
-        elif granularity == Granularity.COUNTY.value:
-            data = self.census.acs5.get(
-                variables, {'for': f'county: {counties}', 'in': f'state: {states}'}, year=year)
-            sort_param = ['state', 'county']
-        elif granularity == Granularity.TRACT.value:
-            data = self.census.acs5.get(variables, {
-                                        'for': f'tract: {tracts}', 'in': f'state: {states} county: {counties}'}, year=year)
-            sort_param = ['state', 'county', 'tract']
-        else:
-            data = self.census.acs5.get(variables, {
-                                        'for': f'block group: {cbg}', 'in': f'state: {states} county: {counties} tract: {tracts}'}, year=year)
-            sort_param = ['state', 'county', 'tract', 'block group']
+        # fetch and combine all queries
+        df = concat([
+            DataFrame.from_records(
+                self.census.acs5.get(variables, geo=query, year=year)
+            )
+            for query in queries
+        ])
 
-        data_df = DataFrame.from_records(data)
+        if df.empty:
+            msg = "ACS5 query returned empty. Ensure all geographies included in your scope are supported and try again."
+            raise DataResourceException(msg)
 
-        data_df = data_df.sort_values(by=sort_param)
-        data_df.reset_index(inplace=True)
+        df = self.concatenate_fips(df, scope.granularity)
 
-        # return data to adrio for processing
-        return data_df
+        return df
 
-    def fetch_sf(self, granularity: int, nodes: dict[str, list[str]], year: int) -> GeoDataFrame:
+    def fetch_sf(self, scope: CensusScope) -> GeoDataFrame:
         """Utility function to fetch shape files from Census for specified regions."""
-        state_fips = nodes.get('state')
-        county_fips = nodes.get('county')
-        tract_fips = nodes.get('tract')
-        cbg_fips = nodes.get('block group')
 
         # call appropriate pygris function based on granularity and sort result
-        if granularity == Granularity.STATE.value:
-            data_df = states(year=year)
-            data_df = data_df.rename(columns={'STATEFP': 'state'})
+        match scope:
+            case StateScopeAll() | StateScope():
+                df = get_states_geo(year=scope.year)
 
-            if state_fips is not None and state_fips[0] != '*':
-                data_df = data_df.loc[data_df['state'].isin(state_fips)]
+            case CountyScope():
+                df = get_counties_geo(year=scope.year)
 
-            sort_param = ['state']
+            case TractScope():
+                df = get_tracts_geo(year=scope.year)
 
-        elif granularity == Granularity.COUNTY.value:
-            if state_fips is None or '*' in state_fips:
-                data_df = counties(year=year)
-            else:
-                data_df = counties(state=state_fips, year=year)
-            data_df = data_df.rename(columns={'STATEFP': 'state', 'COUNTYFP': 'county'})
+            case BlockGroupScope():
+                df = get_block_groups_geo(year=scope.year)
 
-            if county_fips is not None and county_fips[0] != '*':
-                data_df = data_df.loc[data_df['county'].isin(county_fips)]
+            case _:
+                raise DataResourceException("Unsupported query.")
 
-            sort_param = ['state', 'county']
+        df = df.rename(columns={'GEOID': 'geoid'})
 
-        elif granularity == Granularity.TRACT.value:
-            if state_fips is not None and state_fips[0] != '*' and county_fips is not None and county_fips[0] != '*':
-                data_df = GeoDataFrame()
-                # tract and block group level files cannot be fetched using lists
-                # several queries must be made and merged instead
-                for i in range(len(state_fips)):
-                    for j in range(len(county_fips)):
-                        current_data = tracts(
-                            state=state_fips[i], county=county_fips[j], year=year)
+        df = df.loc[df['geoid'].isin(scope.get_node_ids())]
 
-                        if len(data_df.index) > 0:
-                            data_df = data_df.merge(
-                                current_data, on=['STATEFP', 'COUNTYFP', 'TRACTCE'])
-                        else:
-                            data_df = current_data
-            else:
-                msg = "Data could not be retrieved due to missing state or county fips codes. \
-                Wildcard specifier(*) cannot be used for tract level data."
-                raise Exception(msg)
+        return GeoDataFrame(df)
 
-            data_df = data_df.rename(
-                columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'TRACTCE': 'tract'})
-
-            if tract_fips is not None and tract_fips[0] != '*':
-                data_df = data_df.loc[data_df['tract'].isin(tract_fips)]
-
-            sort_param = ['state', 'county', 'tract']
-
-        else:
-            state_fips = nodes.get('state')
-            county_fips = nodes.get('county')
-            if state_fips is not None and state_fips[0] != '*' and county_fips is not None and county_fips[0] != '*':
-                data_df = GeoDataFrame()
-                for i in range(len(state_fips)):
-                    for j in range(len(county_fips)):
-                        current_data = block_groups(
-                            state=state_fips[i], county=county_fips[j], year=year)
-                        if len(data_df.index) > 0:
-                            data_df = data_df.merge(
-                                current_data, on=['STATEFP', 'COUNTYFP', 'TRACTCE', 'BLKGRPCE'])
-                        else:
-                            data_df = current_data
-            else:
-                msg = "Data could not be retrieved due to missing state or county fips codes. \
-                    Wildcard specifier(*) cannot be used for block group level data."
-                raise Exception(msg)
-
-            data_df = data_df.rename(
-                columns={'STATEFP': 'state', 'COUNTYFP': 'county', 'TRACTCE': 'tract', 'BLKGRPCE': 'block group'})
-            if cbg_fips is not None and cbg_fips[0] != '*':
-                data_df = data_df.iloc[data_df['block group'].isin(cbg_fips)]
-
-            sort_param = ['state', 'county', 'block group']
-
-        data_df = GeoDataFrame(data_df.sort_values(by=sort_param))
-        data_df.reset_index(drop=True, inplace=True)
-
-        return data_df
-
-    def fetch_commuters(self, granularity: int, nodes: dict[str, list[str]], year: int) -> DataFrame:
+    def fetch_commuters(self, scope: CensusScope, year: int) -> DataFrame:
         """
         Utility function to fetch commuting data from .xslx format filtered down to requested regions.
         """
         # check for invalid granularity
-        if granularity == Granularity.CBG.value or granularity == Granularity.TRACT.value:
-            msg = "Error: Commuting data cannot be retrieved for tract or block group granularities"
-            raise Exception(msg)
+        if isinstance(scope, TractScope) or isinstance(scope, BlockGroupScope):
+            msg = "Commuting data cannot be retrieved for tract or block group granularities"
+            raise DataResourceException(msg)
 
         # check for valid year
         if year not in [2010, 2015, 2020]:
@@ -335,13 +236,10 @@ class ADRIOMakerCensus(ADRIOMaker):
                 year = 2020
             else:
                 msg = "Invalid year. Communting data is only available for 2008-2022"
-                raise Exception(msg)
+                raise DataResourceException(msg)
 
             print(
                 f"Commuting data cannot be retrieved for {passed_year}, fetching {year} data instead.")
-
-        states = copy(nodes.get('state'))
-        counties = copy(nodes.get('county'))
 
         if year != 2010:
             url = f'https://www2.census.gov/programs-surveys/demo/tables/metro-micro/{year}/commuting-flows-{year}/table1.xlsx'
@@ -356,7 +254,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                          ['wrk_' + field for field in group_fields] + \
                          ['workers', 'moe']
 
-            header_num = 6
+            header_num = 7
 
         else:
             url = 'https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2010/commuting-employment-2010/table1.xlsx'
@@ -364,289 +262,380 @@ class ADRIOMakerCensus(ADRIOMaker):
             all_fields = ['res_state_code', 'res_county_code', 'wrk_state_code', 'wrk_county_code',
                           'workers', 'moe', 'res_state', 'res_county', 'wrk_state', 'wrk_county']
 
-            header_num = 3
+            header_num = 4
 
         # download communter data spreadsheet as a pandas dataframe
         data = read_excel(url, header=header_num, names=all_fields, dtype={
                           'res_state_code': str, 'wrk_state_code': str, 'res_county_code': str, 'wrk_county_code': str})
 
-        if states is not None:
-            # states specified
-            if states[0] != '*':
+        match scope:
+            case StateScopeAll():
+                # remove nodes not in acs5 data for all states case
+                data = data.loc[data['res_state_code'].isin(scope.get_node_ids())]
+                data = data.loc[data['wrk_state_code'].isin(
+                    '0' + x for x in scope.get_node_ids())]
+
+            case StateScope('state', includes) | CountyScope('state', includes):
+                states = list(includes)
                 data = data.loc[data['res_state_code'].isin(states)]
 
-                for i in range(len(states)):
-                    states[i] = states[i].zfill(3)
+                for state in range(len(states)):
+                    states[state] = states[state].zfill(3)
                 data = data.loc[data['wrk_state_code'].isin(states)]
 
-            # wildcard case
-            else:
-                data = data.loc[data['res_state_code'] < '57']
-                data = data.loc[data['res_state_code'] != '11']
-                data = data.loc[data['wrk_state_code'] < '057']
-                data = data.loc[data['wrk_state_code'] != '011']
+            case CountyScope('county', includes):
+                data['res_county_full'] = data['res_state_code'] + \
+                    data['res_county_code']
+                data['wrk_county_full'] = data['wrk_state_code'] + \
+                    data['wrk_county_code']
+                data = data.loc[data['res_county_full'].isin(includes)]
+                data = data.loc[data['wrk_county_full'].isin(
+                    ['0' + x for x in includes])]
 
-        if granularity == Granularity.COUNTY.value:
-            if counties is not None and counties[0] != '*':
-                data = data.loc[data['res_county_code'].isin(counties)]
-                data = data.loc[data['wrk_county_code'].isin(counties)]
+            case _:
+                raise DataResourceException("Unsupported query.")
 
         return data
 
-    def _make_geoid_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def make_acs5_queries(self, scope: CensusScope) -> list[dict[str, str]]:
+        """Formats scope geography information into dictionaries usable in census queries."""
+        match scope:
+            case StateScopeAll():
+                queries = [{"for": "state:*"}]
+
+            case StateScope('state', includes):
+                queries = [{"for": f"state:{','.join(includes)}"}]
+
+            case CountyScope('state', includes):
+                queries = [{
+                    "for": "county:*",
+                    "in": f"state:{','.join(includes)}",
+                }]
+
+            case CountyScope('county', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                for state, county in map(COUNTY.decompose, includes):
+                    counties_by_state[state].append(county)
+                queries = [
+                    {"for": f"county:{','.join(cs)}", "in": f"state:{s}"}
+                    for s, cs in counties_by_state.items()
+                ]
+
+            case TractScope('state', includes):
+                queries = [{
+                    "for": "tract:*",
+                    "in": f"state:{','.join(includes)} county:*",
+                }]
+
+            case TractScope('county', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                for state, county in map(COUNTY.decompose, includes):
+                    counties_by_state[state].append(county)
+                queries = [
+                    {"for": "tract:*",
+                        "in": f"state:{s} county:{','.join(cs)}"}
+                    for s, cs in counties_by_state.items()
+                ]
+
+            case TractScope('tract', includes):
+                tracts_by_county: dict[str, list[str]] = defaultdict(list)
+
+                for state, county, tract in map(TRACT.decompose, includes):
+                    tracts_by_county[state + county].append(tract)
+
+                queries = [
+                    {"for": f"tract:{','.join(tracts_by_county[state + county])}",
+                     "in": f"state:{state} county:{county}"}
+                    for state, county in [COUNTY.decompose(c) for c in tracts_by_county.keys()]
+                ]
+
+            case BlockGroupScope('state', includes):
+                # This wouldn't normally need to be multiple queries,
+                # but Census API won't let you fetch CBGs for multiple states.
+                states = {STATE.extract(x) for x in includes}
+                queries = [
+                    {"for": "block group:*", "in": f"state:{s} county:* tract:*"}
+                    for s in states
+                ]
+
+            case BlockGroupScope('county', includes):
+                counties_by_state: dict[str, list[str]] = defaultdict(list)
+                for state, county in map(COUNTY.decompose, includes):
+                    counties_by_state[state].append(county)
+                queries = [
+                    {"for": "block group:*",
+                        "in": f"state:{s} county:{','.join(cs)} tract:*"}
+                    for s, cs in counties_by_state.items()
+                ]
+
+            case BlockGroupScope('tract', includes):
+                tracts_by_county: dict[str, list[str]] = defaultdict(list)
+
+                for state, county, tract in map(TRACT.decompose, includes):
+                    tracts_by_county[state + county].append(tract)
+
+                queries = [
+                    {"for": f"block group:*",
+                     "in": f"state:{state} county:{county} tract:{','.join(tracts_by_county[state + county])}"}
+                    for state, county in [COUNTY.decompose(c) for c in tracts_by_county.keys()]
+                ]
+
+            case BlockGroupScope('block group', includes):
+                block_groups_by_tract: dict[str, list[str]] = defaultdict(list)
+
+                for state, county, tract, block_group in map(BLOCK_GROUP.decompose, includes):
+                    block_groups_by_tract[state + county + tract].append(block_group)
+
+                queries = [
+                    {"for": f"block group:{'.'.join(block_groups_by_tract[state + county + tract])}",
+                     "in": f"state:{state} county:{county} tract:{tract}"}
+                    for state, county, tract in [TRACT.decompose(t) for t in block_groups_by_tract.keys()]
+                ]
+
+            case _:
+                raise DataResourceException("Unsupported query.")
+
+        return queries
+
+    def concatenate_fips(self, df: DataFrame, granularity: CensusGranularityName) -> DataFrame:
+        """
+        Adds column to dataframe resulting from an acs5 query that is a concatination
+        of all component fips codes up to the specified granularity.
+        Returns dataframe sorted by new column named 'geoid'.
+        """
+        columns: list[str] = {
+            'state': ['state'],
+            'county': ['state', 'county'],
+            'tract': ['state', 'county', 'tract'],
+            'block group': ['state', 'county', 'tract', 'block group'],
+        }[granularity]
+        df['geoid'] = df[columns].apply(lambda xs: ''.join(xs), axis=1)
+        df = df.sort_values(by='geoid')
+
+        return df
+
+    def _validate_result(self, scope: CensusScope, data: Series):
+        """Ensures that data produced for an attribute contains exactly one entry for every node in the scope."""
+        if set(data) != set(scope.get_node_ids()):
+            msg = "Attribute result missing data for geographies in scope or contains data for geographies not supported by ACS5."
+            raise DataResourceException(msg)
+
+    def _make_geoid_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve GEOID."""
         def fetch() -> NDArray:
-            data_df = self.fetch_acs5(
-                self.attrib_vars['geoid'], granularity, nodes, year)
-            # strange interaction here - name field is fetched only because a field is required
-            data_df = data_df.drop(columns='NAME')
+            df = self.fetch_acs5(self.attrib_vars['geoid'], scope, year)
 
-            # concatenate individual fips codes to yield geoid
-            output = list()
-            for i in range(len(data_df.index)):
-                # state geoid is the same as fips code - no action required
-                if granularity == Granularity.STATE.value:
-                    output.append(str(data_df.loc[i, 'state']))
-                elif granularity == Granularity.COUNTY.value:
-                    output.append(str(data_df.loc[i, 'state']) +
-                                  str(data_df.loc[i, 'county']))
-                elif granularity == Granularity.TRACT.value:
-                    output.append(str(
-                        data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(data_df.loc[i, 'tract']))
-                else:
-                    output.append(str(data_df.loc[i, 'state']) + str(data_df.loc[i, 'county']) + str(
-                        data_df.loc[i, 'tract']) + str(data_df.loc[i, 'block group']))
+            self._validate_result(scope, df['geoid'])
 
-            return np.array(output, dtype=np.str_)
+            return df['geoid'].to_numpy(dtype=str)
         return ADRIO('geoid', fetch)
 
-    def _make_population_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int, num_groups: int) -> ADRIO:
+    def _make_population_adrio(self, scope: CensusScope, year: int, num_groups: int) -> ADRIO:
         """Makes an ADRIO to retrieve population data split into 3 or 6 age groups."""
         def fetch() -> NDArray:
-            data_df = self.fetch_acs5(self.population_query, granularity, nodes, year)
-            # calculate population of each age bracket and enter into a numpy array to return
-            output = np.zeros((len(data_df.index), num_groups), dtype=np.int64)
-            pop = [0, 0, 0, 0, 0, 0]
-            for i in range(len(data_df.index)):
-                for j in range(len(data_df.iloc[i].index)):
-                    if j >= 0 and j < 10:
-                        pop[0] += data_df.iloc[i].iloc[j]
-                    elif j >= 10 and j < 20:
-                        pop[1] += data_df.iloc[i].iloc[j]
-                    elif j >= 20 and j < 28:
-                        pop[2] += data_df.iloc[i].iloc[j]
-                    elif j >= 28 and j < 34:
-                        pop[3] += data_df.iloc[i].iloc[j]
-                    elif j >= 34 and j < 40:
-                        pop[4] += data_df.iloc[i].iloc[j]
-                    elif j < 47:
-                        pop[5] += data_df.iloc[i].iloc[j]
+            def group_cols(first: int, last: int, source: DataFrame) -> Series:
+                result = source[f"B01001_{first:03d}E"]
+                for line in range(first + 1, last + 1):
+                    result = result + source[f"B01001_{line:03d}E"]
+                return result
 
-                if num_groups == 3:
-                    output[i] = [pop[0], pop[1] + pop[2] + pop[3], pop[4] + pop[5]]
-                else:
-                    output[i] = pop
+            df = self.fetch_acs5(self.population_query, scope, year)
 
-            return output
+            self._validate_result(scope, df['geoid'])
+
+            group = partial(group_cols, source=df)
+
+            if num_groups == 3:
+                output = DataFrame({'pop_0-19': group(3, 7) + group(27, 31),
+                                    'pop_20-64': group(8, 19) + group(32, 43),
+                                    'pop_65+': group(20, 25) + group(44, 49)})
+            else:
+                output = DataFrame({'pop_0-19': group(3, 7) + group(27, 31),
+                                    'pop_20-34': group(8, 12) + group(32, 36),
+                                    'pop_35-54': group(13, 16) + group(37, 40),
+                                    'pop_55-64': group(17, 19) + group(41, 43),
+                                    'pop_65-75': group(20, 22) + group(44, 46),
+                                    'pop_75+': group(23, 25) + group(47, 49)})
+
+            return output.to_numpy(dtype=int)
 
         if num_groups == 3:
             return ADRIO('population_by_age', fetch)
         else:
             return ADRIO('population_by_age_x6', fetch)
 
-    def _make_dissimilarity_index_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_dissimilarity_index_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve dissimilarity index."""
+        if isinstance(scope, BlockGroupScope):
+            msg = "Dissimilarity index cannot be retreived for block group scope."
+            raise DataResourceException(msg)
+
         def fetch() -> NDArray:
-            data_df = self.fetch_acs5(
-                self.attrib_vars['dissimilarity_index'], granularity, nodes, year)
-            data_df2 = self.fetch_acs5(
-                self.attrib_vars['dissimilarity_index'], granularity + 1, nodes, year)
+            vars = self.attrib_vars['dissimilarity_index']
+            df = self.fetch_acs5(vars, scope, year)
+            df2 = self.fetch_acs5(vars, scope.lower_granularity(), year)
+            df2 = self.concatenate_fips(df2, scope.granularity)
 
-            output = np.zeros(len(data_df2.index), dtype=np.float64)
+            df['high_majority'] = df[vars[0]] + df[vars[1]]
+            df2['low_majority'] = df2[vars[0]] + df2[vars[1]]
+            df['high_minority'] = df[vars[2]] + df[vars[3]]
+            df2['low_minority'] = df2[vars[2]] + df2[vars[3]]
 
-            # loop for counties
-            j = 0
-            for i in range(len(data_df2.index)):
-                # assign county fip to variable
-                county_fip = data_df2.iloc[i][str(
-                    Granularity(granularity).name).lower()]
-                # loop for all tracts in county (while fip == variable)
-                sum = 0.0
-                while data_df.iloc[j][str(Granularity(granularity).name).lower()] == county_fip and j < len(data_df.index) - 1:
-                    # preliminary calculations
-                    tract_minority = data_df.iloc[j]['B03002_004E'] + \
-                        data_df.iloc[j]['B03002_014E']
-                    county_minority = data_df2.iloc[i]['B03002_004E'] + \
-                        data_df2.iloc[i]['B03002_014E']
-                    tract_majority = data_df.iloc[j]['B03002_003E'] + \
-                        data_df.iloc[j]['B03002_013E']
-                    county_majority = data_df2.iloc[i]['B03002_003E'] + \
-                        data_df2.iloc[i]['B03002_013E']
+            df3 = df.merge(df2, on='geoid')
 
-                    # run calculation sum += ( |minority(tract) / minority(county) - majority(tract) / majority(county)| )
-                    if county_minority != 0 and county_majority != 0:
-                        sum = sum + abs(tract_minority / county_minority -
-                                        tract_majority / county_majority)
-                    j += 1
+            df3['score'] = abs(df3['low_minority'] / df3['high_minority'] -
+                               df3['low_majority'] / df3['high_majority'])
+            df3 = df3.groupby('geoid').sum()
+            df3['score'] *= .5
+            df3['score'] = df3['score'].replace(0., 0.5)
+            df3 = df3.reset_index()
 
-                sum *= .5
-                if sum == 0.:
-                    sum = 0.5
+            self._validate_result(scope, df3['geoid'])
 
-                # assign current output element to sum
-                output[i] = sum
-
-            return output
+            return df3['score'].to_numpy(dtype=float)
         return ADRIO('dissimilarity_index', fetch)
 
-    def _make_gini_index_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_gini_index_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve gini index."""
         def fetch() -> NDArray:
-            data_df = self.fetch_acs5(
-                self.attrib_vars['gini_index'], granularity, nodes, year)
-            data_df2 = None
-            data_df['B19083_001E'] = data_df['B19083_001E'].astype(
-                np.float64).fillna(0.5).replace(-666666666, 0.5)
+            var = self.attrib_vars['gini_index']
+            df = self.fetch_acs5(var, scope, year)
+            df[var] = df[var].astype(np.float64).fillna(0.5).replace(-666666666, 0.5)
 
             # set cbg data to that of the parent tract if geo granularity = cbg
-            if granularity == Granularity.CBG.value:
+            if isinstance(scope, BlockGroupScope):
                 print(
-                    'Gini Index cannot be retrieved for block group level, fetching tract level data instead.')
-                data_df2 = self.fetch_acs5(
-                    self.attrib_vars['gini_index'], granularity - 1, nodes, year)
-                j = 0
-                for i in range(len(data_df.index)):
-                    tract_fip = data_df.loc[i, 'tract']
-                    while data_df2.loc[j, 'tract'] == tract_fip and j < len(data_df2.index) - 1:
-                        data_df2.loc[j, 'B01001_001E'] = data_df.loc[i, 'B19083_001E']
-                        j += 1
-                data_df = data_df2
-            return data_df[self.attrib_vars['gini_index']].to_numpy(dtype=np.float64).squeeze()
+                    "Gini Index cannot be retrieved for block group level, fetching tract level data instead.")
+                df2 = self.fetch_acs5(var, scope.raise_granularity(), scope.year)
+                df['merge_geoid'] = df['geoid'].apply(lambda x: x[:-1])
+                df = df.drop(columns=var)
+
+                df = df.merge(df2, left_on='merge_geoid',
+                              right_on='geoid', suffixes=(None, '_y'))
+
+            self._validate_result(scope, df['geoid'])
+
+            return df[var].to_numpy(dtype=float).squeeze()
         return ADRIO('gini_index', fetch)
 
-    def _make_pop_density_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_pop_density_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve population density per km2."""
         def fetch() -> NDArray:
-            data_df = self.fetch_acs5(
-                self.attrib_vars['pop_density_km2'], granularity, nodes, year)
-            geo_df = self.fetch_sf(granularity, nodes, year)
-            # merge census data with shapefile data
-            if granularity == Granularity.STATE.value:
-                geo_df = geo_df.merge(data_df, on=['state'])
-            elif granularity == Granularity.COUNTY.value:
-                geo_df = geo_df.merge(data_df, on=['state', 'county'])
-            elif granularity == Granularity.TRACT.value:
-                geo_df = geo_df.merge(data_df, on=['state', 'county', 'tract'])
-            else:
-                geo_df = geo_df.merge(
-                    data_df, on=['state', 'county', 'tract', 'block group'])
+            df = self.fetch_acs5(
+                self.attrib_vars['pop_density_km2'], scope, year)
+            geo_df = self.fetch_sf(scope)
 
-            # calculate population density, storing it in a numpy array to return
-            output = np.zeros(len(geo_df.index), dtype=np.float64)
-            for i in range(len(geo_df.index)):
-                output[i] = round(int(geo_df.iloc[i]['B01003_001E']) /
-                                  (geo_df.iloc[i]['ALAND'] / 1e6))
-            return output
+            geo_df = geo_df.merge(df, on='geoid')
+
+            self._validate_result(scope, geo_df['geoid'])
+
+            # calculate population density
+            output = geo_df['B01003_001E'] / (area(geo_df['geometry']) / 1e6)
+
+            return output.to_numpy(dtype=float)
         return ADRIO('pop_density_km2', fetch)
 
-    def _make_centroid_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int):
+    def _make_centroid_adrio(self, scope: CensusScope) -> ADRIO:
         """Makes an ADRIO to retrieve geographic centroid coordinates."""
         def fetch() -> NDArray:
-            data_df = self.fetch_sf(granularity, nodes, year)
-            # map node's name to its centroid in a numpy array and return
-            output = np.zeros(len(data_df.index), dtype=CentroidDType)
-            for i in range(len(data_df.index)):
-                output[i] = data_df.iloc[i]['geometry'].centroid.coords[0]
+            df = self.fetch_sf(scope)
 
-            return output
+            output = DataFrame(
+                {'geoid': df['geoid'], 'centroid': df['geometry'].apply(lambda x: x.centroid.coords[0])})
+
+            self._validate_result(scope, output['geoid'])
+
+            return output['centroid'].to_numpy(dtype=CentroidDType)
         return ADRIO('centroid', fetch)
 
-    def _make_tract_med_income_adrio(self, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_tract_med_income_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve median income at the Census tract level."""
         def fetch() -> NDArray:
-            data_df = self.fetch_acs5(
-                self.attrib_vars['median_income'], Granularity.TRACT.value, nodes, year)
-            data_df2 = self.fetch_acs5(
-                self.attrib_vars['median_income'], Granularity.CBG.value, nodes, year)
-            data_df = data_df.fillna(0).replace(-666666666, 0)
-            # set cbg data to that of the parent tract
-            j = 0
-            for i in range(len(data_df.index)):
-                tract_fip = data_df.loc[i, 'tract']
-                while data_df2.loc[j, 'tract'] == tract_fip and j < len(data_df2.index) - 1:
-                    data_df2.loc[j, 'B19013_001E'] = data_df.loc[i, 'B19013_001E']
-                    j += 1
-            data_df = data_df2
-            data_df = data_df.fillna(0).replace(-666666666, 0)
-            return data_df[self.attrib_vars['median_income']].to_numpy(dtype=np.int64).squeeze()
+            if isinstance(scope, BlockGroupScope):
+                var = self.attrib_vars['tract_median_income']
+                # query median income at cbg and tract level
+                df = self.fetch_acs5(['NAME'], scope, year)
+                df2 = self.fetch_acs5(var, scope.raise_granularity(), year)
+                df2 = df2.fillna(0).replace(-666666666, 0)
+
+                df['tract_geoid'] = df['geoid'].apply(lambda x: x[:-1])
+                df = df.merge(df2, left_on='tract_geoid',
+                              right_on='geoid', suffixes=(None, '_y'))
+
+                self._validate_result(scope, df['geoid'])
+
+                return df[var].to_numpy(dtype=int).squeeze()
+
+            else:
+                msg = "Tract median income can only be retrieved for block group scope."
+                raise DataResourceException(msg)
+
         return ADRIO('tract_median_income', fetch)
 
-    def _make_commuter_adrio(self, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_commuter_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve ACS commuting flow data."""
         def fetch() -> NDArray:
-            data_df = self.fetch_commuters(granularity, nodes, year)
+            df = self.fetch_commuters(scope, year)
             # state level
-            if granularity == Granularity.STATE.value:
+            if isinstance(scope, StateScope) or isinstance(scope, StateScopeAll):
                 # get unique state identifier
-                unique_states = ('0' + data_df['res_state_code']).unique()
+                unique_states = ('0' + df['res_state_code']).unique()
                 state_len = np.count_nonzero(unique_states)
 
                 # create dictionary to be used as array indices
                 states_enum = enumerate(unique_states)
-                states_dict = dict((j, i) for i, j in states_enum)
+                states_dict = dict((y, x) for x, y in states_enum)
 
                 # group and aggregate data
-                data_group = data_df.groupby(['res_state_code', 'wrk_state_code'])
-                data_df = data_group.agg({'workers': 'sum'})
+                data_group = df.groupby(['res_state_code', 'wrk_state_code'])
+                df = data_group.agg({'workers': 'sum'})
+                df = df.reset_index()
 
                 # create and return array for each state
-                output = np.zeros((state_len, state_len), dtype=np.int64)
+                output = np.zeros((state_len, state_len), dtype=int)
 
                 # fill array with commuting data
-                for i, row in data_df.iterrows():
-                    if type(i) is tuple:
-                        x = states_dict.get('0' + i[0])
-                        y = states_dict.get(i[1])
+                for state in range(len(df.index)):
+                    x = states_dict.get('0' + df.iloc[state]['res_state_code'])
+                    y = states_dict.get(df.iloc[state]['wrk_state_code'])
 
-                        output[x][y] = row['workers']
+                    output[x][y] = df.iloc[state]['workers']
 
             # county level
             else:
                 # get unique identifier for each county
-                geoid_df = DataFrame()
-                geoid_df['geoid'] = '0' + data_df['res_state_code'] + \
-                    data_df['res_county_code']
-                unique_counties = geoid_df['geoid'].unique()
+                df['res_geoid'] = '0' + df['res_state_code'] + df['res_county_code']
+                df['wrk_geoid'] = df['wrk_state_code'] + df['wrk_county_code']
+                unique_counties = df['res_geoid'].unique()
 
                 # create empty output array
                 county_len = np.count_nonzero(unique_counties)
-                output = np.zeros((county_len, county_len), dtype=np.int64)
+                output = np.zeros((county_len, county_len), dtype=int)
 
                 # create dictionary to be used as array indices
                 counties_enum = enumerate(unique_counties)
-                counties_dict = dict((j, i) for i, j in counties_enum)
+                counties_dict = dict((fips, index) for index, fips in counties_enum)
 
-                data_df.reset_index(drop=True, inplace=True)
+                df.reset_index(drop=True, inplace=True)
 
                 # fill array with commuting data
-                for i in range(len(data_df.index)):
-                    x = counties_dict.get('0' +
-                                          data_df.iloc[i]['res_state_code'] + data_df.iloc[i]['res_county_code'])
-                    y = counties_dict.get(
-                        data_df.iloc[i]['wrk_state_code'] + data_df.iloc[i]['wrk_county_code'])
+                for county in range(len(df.index)):
+                    x = counties_dict.get(df.iloc[county]['res_geoid'])
+                    y = counties_dict.get(df.iloc[county]['wrk_geoid'])
 
-                    output[x][y] = data_df.iloc[i]['workers']
+                    output[x][y] = df.iloc[county]['workers']
 
             return output
         return ADRIO('commuters', fetch)
 
-    def _make_simple_adrios(self, attrib: AttributeDef, granularity: int, nodes: dict[str, list[str]], year: int) -> ADRIO:
+    def _make_simple_adrios(self, attrib: AttributeDef, scope: CensusScope, year: int) -> ADRIO:
         """Makes ADRIOs for simple attributes that require no additional postprocessing."""
         def fetch() -> NDArray:
-            data_df = self.fetch_acs5(
-                self.attrib_vars[attrib.name], granularity, nodes, year)
-            if attrib.name == 'median_income' or attrib.name == 'median_age':
-                data_df = data_df.fillna(0).replace(-666666666, 0)
+            df = self.fetch_acs5(
+                self.attrib_vars[attrib.name], scope, year)
+            df = df.fillna(0).replace(-666666666, 0)
 
-            return data_df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype).squeeze()
+            self._validate_result(scope, df['geoid'])
+
+            return df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype).squeeze()
         return ADRIO(attrib.name, fetch)
