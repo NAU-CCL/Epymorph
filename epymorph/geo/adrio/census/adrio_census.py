@@ -489,7 +489,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                                df3['low_majority'] / df3['high_majority'])
             df3 = df3.groupby('geoid').sum()
             df3['score'] *= .5
-            df3['score'].replace(0., 0.5)
+            df3['score'] = df3['score'].replace(0., 0.5)
 
             return df3['score'].to_numpy(dtype=float)
         return ADRIO('dissimilarity_index', fetch)
@@ -586,24 +586,24 @@ class ADRIOMakerCensus(ADRIOMaker):
                 # group and aggregate data
                 data_group = df.groupby(['res_state_code', 'wrk_state_code'])
                 df = data_group.agg({'workers': 'sum'})
+                df = df.reset_index()
 
                 # create and return array for each state
                 output = np.zeros((state_len, state_len), dtype=int)
 
                 # fill array with commuting data
-                for index, row in df.iterrows():
-                    if type(index) is tuple:
-                        x = states_dict.get('0' + index[0])
-                        y = states_dict.get(index[1])
+                for state in range(len(df.index)):
+                    x = states_dict.get('0' + df.iloc[state]['res_state_code'])
+                    y = states_dict.get(df.iloc[state]['wrk_state_code'])
 
-                        output[x][y] = row['workers']
+                    output[x][y] = df.iloc[state]['workers']
 
             # county level
             else:
                 # get unique identifier for each county
-                geoid_df = DataFrame()
-                geoid_df['geoid'] = '0' + df['res_state_code'] + df['res_county_code']
-                unique_counties = geoid_df['geoid'].unique()
+                df['res_geoid'] = '0' + df['res_state_code'] + df['res_county_code']
+                df['wrk_geoid'] = df['wrk_state_code'] + df['wrk_county_code']
+                unique_counties = df['res_geoid'].unique()
 
                 # create empty output array
                 county_len = np.count_nonzero(unique_counties)
@@ -617,10 +617,8 @@ class ADRIOMakerCensus(ADRIOMaker):
 
                 # fill array with commuting data
                 for county in range(len(df.index)):
-                    x = counties_dict.get('0' +
-                                          df.iloc[county]['res_state_code'] + df.iloc[county]['res_county_code'])
-                    y = counties_dict.get(
-                        df.iloc[county]['wrk_state_code'] + df.iloc[county]['wrk_county_code'])
+                    x = counties_dict.get(df.iloc[county]['res_geoid'])
+                    y = counties_dict.get(df.iloc[county]['wrk_geoid'])
 
                     output[x][y] = df.iloc[county]['workers']
 
