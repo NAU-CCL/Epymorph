@@ -483,13 +483,14 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             df3 = df.merge(df2, on='geoid')
 
-            self._validate_result(scope, df3['geoid'])
-
             df3['score'] = abs(df3['low_minority'] / df3['high_minority'] -
                                df3['low_majority'] / df3['high_majority'])
             df3 = df3.groupby('geoid').sum()
             df3['score'] *= .5
             df3['score'] = df3['score'].replace(0., 0.5)
+            df3 = df3.reset_index()
+
+            self._validate_result(scope, df3['geoid'])
 
             return df3['score'].to_numpy(dtype=float)
         return ADRIO('dissimilarity_index', fetch)
@@ -501,17 +502,18 @@ class ADRIOMakerCensus(ADRIOMaker):
             df = self.fetch_acs5(var, scope, year)
             df[var] = df[var].astype(np.float64).fillna(0.5).replace(-666666666, 0.5)
 
-            self._validate_result(scope, df['geoid'])
-
             # set cbg data to that of the parent tract if geo granularity = cbg
             if isinstance(scope, BlockGroupScope):
                 print(
                     "Gini Index cannot be retrieved for block group level, fetching tract level data instead.")
                 df2 = self.fetch_acs5(var, scope.raise_granularity(), scope.year)
-                df['geoid'] = df['geoid'].apply(lambda x: x[:-1])
+                df['merge_geoid'] = df['geoid'].apply(lambda x: x[:-1])
                 df = df.drop(columns=var)
 
-                df = df.merge(df2, on='geoid')
+                df = df.merge(df2, left_on='merge_geoid',
+                              right_on='geoid', suffixes=(None, '_y'))
+
+            self._validate_result(scope, df['geoid'])
 
             return df[var].to_numpy(dtype=float).squeeze()
         return ADRIO('gini_index', fetch)
@@ -556,10 +558,11 @@ class ADRIOMakerCensus(ADRIOMaker):
                 df2 = self.fetch_acs5(var, scope.raise_granularity(), year)
                 df2 = df2.fillna(0).replace(-666666666, 0)
 
-                self._validate_result(scope, df['geoid'])
+                df['tract_geoid'] = df['geoid'].apply(lambda x: x[:-1])
+                df = df.merge(df2, left_on='tract_geoid',
+                              right_on='geoid', suffixes=(None, '_y'))
 
-                df['geoid'] = df['geoid'].apply(lambda x: x[:-1])
-                df = df.merge(df2, on='geoid')
+                self._validate_result(scope, df['geoid'])
 
                 return df[var].to_numpy(dtype=int).squeeze()
 
