@@ -28,12 +28,11 @@ class FileSpec(SourceSpec):
 @dataclass
 class FileSpecTime(FileSpec):
     time_key: str | int
-    time_type: TimePeriod
 
 
 class ADRIOMakerFile(ADRIOMaker):
 
-    def make_adrio(self, attrib: AttributeDef, geography: Geography, spec: FileSpec) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, geography: Geography, time_period: TimePeriod, spec: FileSpec) -> ADRIO:
         def fetch() -> NDArray:
             # check if file exists
             if os.path.exists(spec.file_path):
@@ -43,8 +42,8 @@ class ADRIOMakerFile(ADRIOMaker):
 
                 time_sort_key = 0
                 if isinstance(spec, FileSpecTime):
-                    if isinstance(spec.time_type, Year):
-                        time_sort_key = spec.time_type.year
+                    if isinstance(time_period, Year):
+                        time_sort_key = time_period.year
 
                 # read value from csv
                 if spec.file_type == 'csv':
