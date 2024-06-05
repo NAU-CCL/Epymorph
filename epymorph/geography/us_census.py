@@ -22,7 +22,7 @@ from epymorph.cache import (CacheMiss, load_bundle_from_cache,
                             save_bundle_to_cache)
 from epymorph.error import GeographyError
 from epymorph.geography.scope import GeoScope
-from epymorph.util import prefix
+from epymorph.util import filter_unique, prefix
 
 CensusGranularityName = Literal['state', 'county', 'tract', 'block group', 'block']
 """The name of a supported Census granularity."""
@@ -443,10 +443,21 @@ class CensusScope(GeoScope):
     def get_node_ids(self) -> NDArray[np.str_]: ...
 
     @abstractmethod
-    def raise_granularity(self) -> 'CensusScope': ...
+    def raise_granularity(self) -> 'CensusScope':
+        """
+        Return a scope with granularity one level higher than this.
+        This may have the effect of widening the scope; for example,
+        raising a TractScope which is filtered to a set of tracts will
+        result in a CountyScope containing the counties that contained our
+        tracts. Raises GeographyError if the granularity cannot be raised.
+        """
 
     @abstractmethod
-    def lower_granularity(self) -> 'CensusScope': ...
+    def lower_granularity(self) -> 'CensusScope':
+        """
+        Return a scope with granularity one level lower than this.
+        Raises GeographyError if the granularity cannot be lowered.
+        """
 
 
 @dataclass(frozen=True)
@@ -460,7 +471,7 @@ class StateScopeAll(CensusScope):
         return get_us_states(self.year).geoid
 
     def raise_granularity(self) -> CensusScope:
-        raise Exception("No granularity higher than state.")
+        raise GeographyError("No granularity higher than state.")
 
     def lower_granularity(self) -> 'CountyScope':
         """Create and return CountyScope object with identical properties."""
@@ -504,7 +515,7 @@ class StateScope(CensusScope):
         return np.array(self.includes, dtype=np.str_)
 
     def raise_granularity(self) -> CensusScope:
-        raise Exception("No granularity higher than state.")
+        raise GeographyError("No granularity higher than state.")
 
     def lower_granularity(self) -> 'CountyScope':
         """Create and return CountyScope object with identical properties."""
@@ -566,7 +577,7 @@ class CountyScope(CensusScope):
         raised_includes = self.includes
         if raised_granularity == 'county':
             raised_granularity = 'state'
-            raised_includes = [fips[:-3] for fips in raised_includes]
+            raised_includes = filter_unique(fips[:-3] for fips in raised_includes)
         return StateScope(raised_granularity, raised_includes, self.year)
 
     def lower_granularity(self) -> 'TractScope':
@@ -645,7 +656,7 @@ class TractScope(CensusScope):
         raised_includes = self.includes
         if raised_granularity == 'tract':
             raised_granularity = 'county'
-            raised_includes = [fips[:-6] for fips in raised_includes]
+            raised_includes = filter_unique(fips[:-6] for fips in raised_includes)
         return CountyScope(raised_granularity, raised_includes, self.year)
 
     def lower_granularity(self) -> 'BlockGroupScope':
@@ -740,8 +751,8 @@ class BlockGroupScope(CensusScope):
         raised_includes = self.includes
         if raised_granularity == 'block group':
             raised_granularity = 'tract'
-            raised_includes = [fips[:-1] for fips in raised_includes]
+            raised_includes = filter_unique(fips[:-1] for fips in raised_includes)
         return TractScope(raised_granularity, raised_includes, self.year)
 
     def lower_granularity(self) -> CensusScope:
-        raise Exception("No valid granularity lower than block group.")
+        raise GeographyError("No valid granularity lower than block group.")
