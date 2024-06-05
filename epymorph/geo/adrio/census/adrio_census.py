@@ -181,6 +181,10 @@ class ADRIOMakerCensus(ADRIOMaker):
             for query in queries
         ])
 
+        if df.empty:
+            msg = "ACS5 query returned empty. Ensure all geographies included in your scope are supported and try again."
+            raise DataResourceException(msg)
+
         df = self.concatenate_fips(df, scope.granularity)
 
         return df
@@ -207,11 +211,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
         df = df.rename(columns={'GEOID': 'geoid'})
 
-        if not isinstance(scope, StateScopeAll):
-            df = df.loc[df['geoid'].isin(scope.includes)]
-        # remove nodes not in acs5 data for all states case
-        else:
-            df = df.loc[df['geoid'].isin(scope.get_node_ids())]
+        df = df.loc[df['geoid'].isin(scope.get_node_ids())]
 
         return GeoDataFrame(df)
 
@@ -414,10 +414,18 @@ class ADRIOMakerCensus(ADRIOMaker):
 
         return df
 
+    def _validate_result(self, scope: CensusScope, data: Series):
+        """Ensures that data produced for an attribute contains exactly one entry for every node in the scope."""
+        if set(data) != set(scope.get_node_ids()):
+            msg = "Attribute result missing data for geographies in scope or contains data for geographies not supported by ACS5."
+            raise DataResourceException(msg)
+
     def _make_geoid_adrio(self, scope: CensusScope, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve GEOID."""
         def fetch() -> NDArray:
             df = self.fetch_acs5(self.attrib_vars['geoid'], scope, year)
+
+            self._validate_result(scope, df['geoid'])
 
             return df['geoid'].to_numpy(dtype=str)
         return ADRIO('geoid', fetch)
@@ -432,6 +440,8 @@ class ADRIOMakerCensus(ADRIOMaker):
                 return result
 
             df = self.fetch_acs5(self.population_query, scope, year)
+
+            self._validate_result(scope, df['geoid'])
 
             group = partial(group_cols, source=df)
 
@@ -472,6 +482,9 @@ class ADRIOMakerCensus(ADRIOMaker):
             df2['low_minority'] = df2[vars[2]] + df2[vars[3]]
 
             df3 = df.merge(df2, on='geoid')
+
+            self._validate_result(scope, df3['geoid'])
+
             df3['score'] = abs(df3['low_minority'] / df3['high_minority'] -
                                df3['low_majority'] / df3['high_majority'])
             df3 = df3.groupby('geoid').sum()
@@ -487,6 +500,8 @@ class ADRIOMakerCensus(ADRIOMaker):
             var = self.attrib_vars['gini_index']
             df = self.fetch_acs5(var, scope, year)
             df[var] = df[var].astype(np.float64).fillna(0.5).replace(-666666666, 0.5)
+
+            self._validate_result(scope, df['geoid'])
 
             # set cbg data to that of the parent tract if geo granularity = cbg
             if isinstance(scope, BlockGroupScope):
@@ -510,6 +525,8 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             geo_df = geo_df.merge(df, on='geoid')
 
+            self._validate_result(scope, geo_df['geoid'])
+
             # calculate population density
             output = geo_df['B01003_001E'] / (area(geo_df['geometry']) / 1e6)
 
@@ -520,10 +537,13 @@ class ADRIOMakerCensus(ADRIOMaker):
         """Makes an ADRIO to retrieve geographic centroid coordinates."""
         def fetch() -> NDArray:
             df = self.fetch_sf(scope)
-            # extract centroid coordinates from geometry object
-            output = df['geometry'].apply(lambda x: x.centroid.coords[0])
 
-            return output.to_numpy(dtype=CentroidDType)
+            output = DataFrame(
+                {'geoid': df['geoid'], 'centroid': df['geometry'].apply(lambda x: x.centroid.coords[0])})
+
+            self._validate_result(scope, output['geoid'])
+
+            return output['centroid'].to_numpy(dtype=CentroidDType)
         return ADRIO('centroid', fetch)
 
     def _make_tract_med_income_adrio(self, scope: CensusScope, year: int) -> ADRIO:
@@ -535,6 +555,8 @@ class ADRIOMakerCensus(ADRIOMaker):
                 df = self.fetch_acs5(['NAME'], scope, year)
                 df2 = self.fetch_acs5(var, scope.raise_granularity(), year)
                 df2 = df2.fillna(0).replace(-666666666, 0)
+
+                self._validate_result(scope, df['geoid'])
 
                 df['geoid'] = df['geoid'].apply(lambda x: x[:-1])
                 df = df.merge(df2, on='geoid')
@@ -611,6 +633,8 @@ class ADRIOMakerCensus(ADRIOMaker):
             df = self.fetch_acs5(
                 self.attrib_vars[attrib.name], scope, year)
             df = df.fillna(0).replace(-666666666, 0)
+
+            self._validate_result(scope, df['geoid'])
 
             return df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype).squeeze()
         return ADRIO(attrib.name, fetch)
