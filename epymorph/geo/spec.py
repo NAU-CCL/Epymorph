@@ -172,7 +172,7 @@ class StaticGeoSpec(GeoSpec):
 @dataclass
 class DynamicGeoSpec(GeoSpec):
     """The spec for a DynamicGeo."""
-    geography: Geography
+    scope: GeoScope
     source: dict[str, str | SourceSpec]
 
 
