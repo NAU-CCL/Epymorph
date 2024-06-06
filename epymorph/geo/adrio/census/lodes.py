@@ -23,31 +23,15 @@ from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import Geography, TimePeriod, Year
 from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
                                           CENSUS_GRANULARITY, COUNTY, STATE,
-                                          TRACT, state_fips_to_code)
+                                          TRACT, BlockGroupScope,
+                                          CensusGranularityName, CensusScope,
+                                          CountyScope, StateScope,
+                                          StateScopeAll, TractScope,
+                                          state_fips_to_code)
 from epymorph.geography.us_tiger import _fetch_url
 from epymorph.simulation import AttributeDef, geo_attrib
 
 _LODES_CACHE_PATH = Path("geo/adrio/census/lodes")
-
-
-class Granularity(Enum):
-    """Enumeration of LODES granularity levels."""
-    STATE = "state"
-    COUNTY = "county"
-    TRACT = "tract"
-    CBG = "block group"
-    BLOCK = "block"
-
-
-@dataclass
-class LodesGeography(Geography):
-    """Dataclass used to describe geographies for LODES ADRIOs/"""
-
-    granularity: Granularity
-    """The granularity level to fetch data from"""
-
-    filter: dict[str, list[str]]
-    """A list of locations to fetch data from as FIPS codes for relevant granularities"""
 
 
 class ADRIOMakerLODES(ADRIOMaker):
@@ -125,55 +109,50 @@ class ADRIOMakerLODES(ADRIOMaker):
         'federal_primary_jobs': ["JT05"]
     }
 
-    def make_adrio(self, attrib: AttributeDef, geography: Geography, time_period: TimePeriod) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: TimePeriod) -> ADRIO:
         if attrib not in self.attributes:
             msg = f"{attrib.name} is not supported for the LODES data source."
-            raise GeoValidationException(msg)
-        if not isinstance(geography, LodesGeography):
-            msg = f"LODES ADRIO requires LodesGeography, given {type(geography)}."
             raise GeoValidationException(msg)
         if not isinstance(time_period, Year):
             msg = f"LODES ADRIO requires Year (TimePeriod), given {type(time_period)}."
             raise GeoValidationException(msg)
 
-        granularity = geography.granularity.value
-        nodes = geography.filter
         year = time_period.year
 
         if attrib.name == 'primary_jobs':
-            return self._make_commuter_adrio(granularity, nodes, 'S000', "JT01", year)
+            return self._make_commuter_adrio(scope, 'S000', "JT01", year)
         elif attrib.name == 'all_private_jobs':
-            return self._make_commuter_adrio(granularity, nodes, 'S000', "JT02", year)
+            return self._make_commuter_adrio(scope, 'S000', "JT02", year)
         elif attrib.name == 'private_primary_jobs':
-            return self._make_commuter_adrio(granularity, nodes, 'S000', "JT03", year)
+            return self._make_commuter_adrio(scope, 'S000', "JT03", year)
         elif attrib.name == 'all_federal_jobs':
-            return self._make_commuter_adrio(granularity, nodes, 'S000', "JT04", year)
+            return self._make_commuter_adrio(scope, 'S000', "JT04", year)
         elif attrib.name == 'federal_primary_jobs':
-            return self._make_commuter_adrio(granularity, nodes, 'S000', "JT05", year)
+            return self._make_commuter_adrio(scope, 'S000', "JT05", year)
         elif attrib.name == 'commuters':
-            return self._make_commuter_adrio(granularity, nodes, 'S000', "JT00", year)
+            return self._make_commuter_adrio(scope, 'S000', "JT00", year)
         elif attrib.name == 'commuters_29_under':
-            return self._make_commuter_adrio(granularity, nodes, 'SA01', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SA01', "JT00", year)
         elif attrib.name == 'commuters_30_to_54':
-            return self._make_commuter_adrio(granularity, nodes, 'SA02', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SA02', "JT00", year)
         elif attrib.name == 'commuters_55_over':
-            return self._make_commuter_adrio(granularity, nodes, 'SA03', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SA03', "JT00", year)
         elif attrib.name == 'commuters_1250_under_earnings':
-            return self._make_commuter_adrio(granularity, nodes, 'SE01', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SE01', "JT00", year)
         elif attrib.name == 'commuters_1251_to_3333_earnings':
-            return self._make_commuter_adrio(granularity, nodes, 'SE02', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SE02', "JT00", year)
         elif attrib.name == 'commuters_3333_over_earnings':
-            return self._make_commuter_adrio(granularity, nodes, 'SE03', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SE03', "JT00", year)
         elif attrib.name == 'commuters_goods_producing_industry':
-            return self._make_commuter_adrio(granularity, nodes, 'SI01', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SI01', "JT00", year)
         elif attrib.name == 'commuters_trade_transport_utility_industry':
-            return self._make_commuter_adrio(granularity, nodes, 'SI02', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SI02', "JT00", year)
         elif attrib.name == 'commuters_other_industry':
-            return self._make_commuter_adrio(granularity, nodes, 'SI03', "JT00", year)
+            return self._make_commuter_adrio(scope, 'SI03', "JT00", year)
         elif attrib.name == 'name':
-            return self._make_name_adrio(granularity, nodes, "JT00", year)
+            return self._make_name_adrio(scope, "JT00", year)
         else:
-            return super().make_adrio(attrib, geography, time_period)
+            return super().make_adrio(attrib, scope, time_period)
 
     # fetch functions
     def _fetch_url(self, url: str) -> BytesIO:
@@ -184,7 +163,7 @@ class ADRIOMakerLODES(ADRIOMaker):
             file_buffer.seek(0)
             return file_buffer
 
-    def sort_geoids(self, granularity: str, list_geoids: list, geoids: tuple, data_frame: DataFrame):
+    def sort_geoids(self, scope: CensusScope, list_geoids: list, geoids: tuple, data_frame: DataFrame):
         data_frame['w_geocode'] = data_frame['w_geocode'].astype(str)
         data_frame['h_geocode'] = data_frame['h_geocode'].astype(str)
 
@@ -195,7 +174,6 @@ class ADRIOMakerLODES(ADRIOMaker):
             # if the file is a main file
             if w_prefix == h_prefix:
                 if not geoids:
-                    print("HERE")
                     # get the length depending on the granularity
                     if granularity == COUNTY.name:
                         length = COUNTY.length
@@ -230,7 +208,7 @@ class ADRIOMakerLODES(ADRIOMaker):
         return list_geoids
 
     # fetch files from LODES depending on the state, residence in/out of state, job type, and year
-    def fetch_commuters(self, granularity: str, nodes: dict[str, list[str]], job_type: str, year: int):
+    def fetch_commuters(self, scope: CensusScope, job_type: str, year: int):
 
         # file type is main (residence in state only) by default
         file_type = "main"
@@ -306,7 +284,7 @@ class ADRIOMakerLODES(ADRIOMaker):
             state_abbreviations.append(state_code)
 
         # get the current geoid
-        geoid = self.aggregate_geoid(granularity, nodes)
+        geoid = self.aggregate_geoid(scope)
         list_geoids = list(geoid)
 
         for states in state_abbreviations:
@@ -359,7 +337,7 @@ class ADRIOMakerLODES(ADRIOMaker):
                 data = pd.read_csv(file, compression="gzip", converters={
                                    'w_geocode': str, 'h_geocode': str})
 
-                list_geoids = self.sort_geoids(granularity, list_geoids, geoid, data)
+                list_geoids = self.sort_geoids(scope, list_geoids, geoid, data)
 
                 unfiltered_df.append(data)
 
@@ -381,20 +359,20 @@ class ADRIOMakerLODES(ADRIOMaker):
 
         return data_frames
 
-    def _make_name_adrio(self, granularity: str, nodes: dict[str, list[str]], job_type: str, year: int) -> ADRIO:
+    def _make_name_adrio(self, scope: CensusScope, job_type: str, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve home and work geocodes geoids."""
         def fetch() -> NDArray:
             # aggregate based on granularities
-            geoid = self.aggregate_geoid(granularity, nodes)
+            geoid = self.aggregate_geoid(scope)
 
             if geoid is None:
                 geoid = ()
             list_geoids = list(geoid)
 
-            data_frames = self.fetch_commuters(granularity, nodes, job_type, year)
+            data_frames = self.fetch_commuters(scope, job_type, year)
 
             for df in data_frames:
-                list_geoids = self.sort_geoids(granularity, list_geoids, geoid, df)
+                list_geoids = self.sort_geoids(scope, list_geoids, geoid, df)
 
             geoid = tuple(list_geoids)
 
@@ -408,19 +386,19 @@ class ADRIOMakerLODES(ADRIOMaker):
 
         return ADRIO('name', fetch)
 
-    def _make_commuter_adrio(self, granularity: str, nodes: dict[str, list[str]], worker_type: str, job_type: str, year: int) -> ADRIO:
+    def _make_commuter_adrio(self, scope: CensusScope, worker_type: str, job_type: str, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve LODES commuting flow data."""
         def fetch() -> NDArray:
             data_frames = self.fetch_commuters(granularity, nodes, job_type, year)
 
             # initialize variables
             aggregated_data = None
-            geoid = self.aggregate_geoid(granularity, nodes)
+            geoid = self.aggregate_geoid(scope)
             list_geoids = list(geoid)
 
             # loop through the data frames and search for invalid geocodes
             for data_df in data_frames:
-                list_geoids = self.sort_geoids(granularity, list_geoids, geoid, data_df)
+                list_geoids = self.sort_geoids(scope, list_geoids, geoid, data_df)
 
             geoid = tuple(list_geoids)
             n_geocode = len(geoid)
@@ -454,7 +432,7 @@ class ADRIOMakerLODES(ADRIOMaker):
 
         return ADRIO('commuters', fetch)
 
-    def aggregate_geoid(self, granularity: str, nodes: dict[str, list[str]]):
+    def aggregate_geoid(self, scope: CensusScope):
         # get the value of the state
         state = copy(nodes.get('state'))
 
