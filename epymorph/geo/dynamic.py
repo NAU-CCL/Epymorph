@@ -13,7 +13,7 @@ from numpy.typing import NDArray
 from epymorph.error import AttributeException, GeoValidationException
 from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
-from epymorph.geo.adrio.file.adrio_file import ADRIOMakerFile, FileSpec
+from epymorph.geo.adrio.file.adrio_file import ADRIOMakerCSV, FileSpec
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import LABEL, DynamicGeoSpec, validate_geo_values
 from epymorph.simulation import AttributeArray, geo_attrib
@@ -71,10 +71,10 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 adrios[attr.name] = adrio
 
             else:
-                maker = makers['File']
-                if isinstance(maker, ADRIOMakerFile) and isinstance(source, FileSpec):
+                maker = makers['CSV']
+                if isinstance(maker, ADRIOMakerCSV) and isinstance(source, FileSpec):
                     adrio = maker.make_adrio(
-                        adrio_attrib,
+                        attr,
                         spec.scope,
                         spec.time_period,
                         source

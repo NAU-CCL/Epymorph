@@ -191,7 +191,6 @@ class ADRIOMakerCensus(ADRIOMaker):
 
     def fetch_sf(self, scope: CensusScope) -> GeoDataFrame:
         """Utility function to fetch shape files from Census for specified regions."""
-
         # call appropriate pygris function based on granularity and sort result
         match scope:
             case StateScopeAll() | StateScope():
@@ -216,9 +215,7 @@ class ADRIOMakerCensus(ADRIOMaker):
         return GeoDataFrame(df)
 
     def fetch_commuters(self, scope: CensusScope, year: int) -> DataFrame:
-        """
-        Utility function to fetch commuting data from .xslx format filtered down to requested regions.
-        """
+        """Utility function to fetch commuting data from .xslx format filtered down to requested regions."""
         # check for invalid granularity
         if isinstance(scope, TractScope) or isinstance(scope, BlockGroupScope):
             msg = "Commuting data cannot be retrieved for tract or block group granularities"
@@ -578,54 +575,30 @@ class ADRIOMakerCensus(ADRIOMaker):
             df = self.fetch_commuters(scope, year)
             # state level
             if isinstance(scope, StateScope) or isinstance(scope, StateScopeAll):
-                # get unique state identifier
-                unique_states = ('0' + df['res_state_code']).unique()
-                state_len = np.count_nonzero(unique_states)
-
-                # create dictionary to be used as array indices
-                states_enum = enumerate(unique_states)
-                states_dict = dict((y, x) for x, y in states_enum)
-
                 # group and aggregate data
                 data_group = df.groupby(['res_state_code', 'wrk_state_code'])
                 df = data_group.agg({'workers': 'sum'})
-                df = df.reset_index()
+                df.reset_index(inplace=True)
 
-                # create and return array for each state
-                output = np.zeros((state_len, state_len), dtype=int)
+                df = df.pivot(index='res_state_code',
+                              columns='wrk_state_code', values='workers')
 
-                # fill array with commuting data
-                for state in range(len(df.index)):
-                    x = states_dict.get('0' + df.iloc[state]['res_state_code'])
-                    y = states_dict.get(df.iloc[state]['wrk_state_code'])
-
-                    output[x][y] = df.iloc[state]['workers']
+                return df.to_numpy(dtype=int)
 
             # county level
             else:
                 # get unique identifier for each county
                 df['res_geoid'] = '0' + df['res_state_code'] + df['res_county_code']
                 df['wrk_geoid'] = df['wrk_state_code'] + df['wrk_county_code']
-                unique_counties = df['res_geoid'].unique()
 
-                # create empty output array
-                county_len = np.count_nonzero(unique_counties)
-                output = np.zeros((county_len, county_len), dtype=int)
+                df.to_csv('./scratch/counties_commuters_2020.csv',
+                          columns=['res_geoid', 'wrk_geoid', 'workers'])
 
-                # create dictionary to be used as array indices
-                counties_enum = enumerate(unique_counties)
-                counties_dict = dict((fips, index) for index, fips in counties_enum)
+                df = df.pivot(index='res_geoid', columns='wrk_geoid', values='workers')
+                df.fillna(0, inplace=True)
 
-                df.reset_index(drop=True, inplace=True)
+                return df.to_numpy(dtype=int)
 
-                # fill array with commuting data
-                for county in range(len(df.index)):
-                    x = counties_dict.get(df.iloc[county]['res_geoid'])
-                    y = counties_dict.get(df.iloc[county]['wrk_geoid'])
-
-                    output[x][y] = df.iloc[county]['workers']
-
-            return output
         return ADRIO('commuters', fetch)
 
     def _make_simple_adrios(self, attrib: AttributeDef, scope: CensusScope, year: int) -> ADRIO:
