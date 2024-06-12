@@ -1,26 +1,20 @@
 from copy import copy
-from dataclasses import dataclass
-from enum import Enum
 from io import BytesIO
 from pathlib import Path
-from turtle import home
 from urllib.request import urlopen
 from warnings import warn
 
 import numpy as np
 import pandas as pd
-import plot_utils as pu
 from numpy.typing import NDArray
-from pandas import DataFrame, concat, read_excel
-from pygris import tracts
-from pygris.data import get_lodes
+from pandas import DataFrame
 
 from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
                             save_file_to_cache)
 from epymorph.data_shape import Shapes
 from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.spec import Geography, TimePeriod, Year
+from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
                                           CENSUS_GRANULARITY, COUNTY, STATE,
                                           TRACT, BlockGroupScope,
@@ -173,37 +167,37 @@ class ADRIOMakerLODES(ADRIOMaker):
 
             # if the file is a main file
             if w_prefix == h_prefix:
-                if not geoids:
-                    # get the length depending on the granularity
-                    if granularity == COUNTY.name:
-                        length = COUNTY.length
+                # if not geoids:
+                # get the length depending on the granularity
+                #   length = BLOCK.length
 
-                    elif granularity == TRACT.name:
-                        length = TRACT.length
+                #   if isinstance(scope, CountyScope):
+                #       length = COUNTY.length
+                #       print("len: ", length)
 
-                    elif granularity == BLOCK.name:
-                        length = BLOCK.length
+                #   elif isinstance(scope, TractScope):
+                #       length = TRACT.length
 
-                    elif granularity == BLOCK_GROUP.name:
-                        length = BLOCK_GROUP.length
+                #   elif isinstance(scope, BlockGroupScope):
+                #       length = BLOCK_GROUP.length
 
-                    unique_geoids = data_frame['w_geocode'].apply(
-                        lambda x: x[:length]).unique()
+                #   unique_geoids = data_frame['w_geocode'].apply(
+                #       lambda x: x[:length]).unique()
 
-                    for geos in unique_geoids:
-                        if geos not in list_geoids:
-                            list_geoids.append(geos)
+                #   for geos in unique_geoids:
+                #       if geos not in list_geoids:
+                #           list_geoids.append(geos)
 
-                    print(list_geoids)
+                #   print(list_geoids)
 
-                else:
+                # else:
 
-                    # if the state for the geoid matches the main file and the geoid is not in the file, remove from the list
-                    geoid_to_remove = [geo for geo in list_geoids if geo[:2] == w_prefix and not (
-                        data_frame['w_geocode'].str.startswith(geo).any() or data_frame['h_geocode'].str.startswith(geo).any())]
+                # if the state for the geoid matches the main file and the geoid is not in the file, remove from the list
+                geoid_to_remove = [geo for geo in list_geoids if geo[:2] == w_prefix and not (
+                    data_frame['w_geocode'].str.startswith(geo).any() or data_frame['h_geocode'].str.startswith(geo).any())]
 
-                    for geos in geoid_to_remove:
-                        list_geoids.remove(geos)
+                for geos in geoid_to_remove:
+                    list_geoids.remove(geos)
 
         return list_geoids
 
@@ -213,7 +207,15 @@ class ADRIOMakerLODES(ADRIOMaker):
         # file type is main (residence in state only) by default
         file_type = "main"
 
-        state = copy(nodes.get('state')) or []
+        # get the list of states
+        match scope:
+            case StateScope('state', includes) | CountyScope('state', includes) | TractScope('state', includes) | BlockGroupScope('state', includes):
+                print('here')
+                state = list(includes)
+
+        # temp, print test
+        for states in state:
+            print("First State:", states)
 
         # can change the lodes version, default is the most recent LODES8
         lodes_ver = "LODES8"
@@ -277,15 +279,16 @@ class ADRIOMakerLODES(ADRIOMaker):
 
         # translate state FIPS code to state to use in URL
             # note, the if statement doesn't seem to be needed but gets rid of the None type error
-        state_code_results = state_fips_to_code(2020)
-        state_abbreviations = []
-        for fips_code in state:
-            state_code = state_code_results.get(fips_code).lower()
-            state_abbreviations.append(state_code)
+        state_codes = state_fips_to_code(2020)
+        state_abbreviations = [state_codes.get(
+            fips).lower() for fips in state]
 
-        # get the current geoid
-        geoid = self.aggregate_geoid(scope)
-        list_geoids = list(geoid)
+        # temp testing::
+        for state in state_abbreviations:
+            print("STATE: ", state)
+
+        # geoscopes, make list of all instances of the granularities
+        geoid = scope.get_node_ids()
 
         for states in state_abbreviations:
 
@@ -331,18 +334,8 @@ class ADRIOMakerLODES(ADRIOMaker):
                         f"Cause: {e}"
                     warn(msg, CacheWarning)
 
-            unfiltered_df = []
-
-            for file in files:
-                data = pd.read_csv(file, compression="gzip", converters={
-                                   'w_geocode': str, 'h_geocode': str})
-
-                list_geoids = self.sort_geoids(scope, list_geoids, geoid, data)
-
-                unfiltered_df.append(data)
-
-            # geoid = tuple(list_geoids)
-            print(list_geoids, geoid)
+            unfiltered_df = [pd.read_csv(file, compression="gzip", converters={
+                'w_geocode': str, 'h_geocode': str}) for file in files]
 
             for df in unfiltered_df:
 
@@ -350,7 +343,7 @@ class ADRIOMakerLODES(ADRIOMaker):
 
                 # filter the rows on if they start with the prefix
                 filtered_rows = df[df['h_geocode'].str.startswith(
-                    tuple(list_geoids)) & df['w_geocode'].str.startswith(tuple(list_geoids))]
+                    tuple(geoid)) & df['w_geocode'].str.startswith(tuple(geoid))]
 
                 filtered_rows_list.append(filtered_rows)
 
@@ -363,18 +356,7 @@ class ADRIOMakerLODES(ADRIOMaker):
         """Makes an ADRIO to retrieve home and work geocodes geoids."""
         def fetch() -> NDArray:
             # aggregate based on granularities
-            geoid = self.aggregate_geoid(scope)
-
-            if geoid is None:
-                geoid = ()
-            list_geoids = list(geoid)
-
-            data_frames = self.fetch_commuters(scope, job_type, year)
-
-            for df in data_frames:
-                list_geoids = self.sort_geoids(scope, list_geoids, geoid, df)
-
-            geoid = tuple(list_geoids)
+            geoid = scope.get_node_ids()
 
             # put together array of geoids
             n_geocode = len(geoid)
@@ -389,18 +371,11 @@ class ADRIOMakerLODES(ADRIOMaker):
     def _make_commuter_adrio(self, scope: CensusScope, worker_type: str, job_type: str, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve LODES commuting flow data."""
         def fetch() -> NDArray:
-            data_frames = self.fetch_commuters(granularity, nodes, job_type, year)
+            data_frames = self.fetch_commuters(scope, job_type, year)
 
             # initialize variables
             aggregated_data = None
-            geoid = self.aggregate_geoid(scope)
-            list_geoids = list(geoid)
-
-            # loop through the data frames and search for invalid geocodes
-            for data_df in data_frames:
-                list_geoids = self.sort_geoids(scope, list_geoids, geoid, data_df)
-
-            geoid = tuple(list_geoids)
+            geoid = scope.get_node_ids()
             n_geocode = len(geoid)
             geocode_to_index = {geocode: i for i, geocode in enumerate(geoid)}
             geocode_len = len(geoid[0])
@@ -433,8 +408,12 @@ class ADRIOMakerLODES(ADRIOMaker):
         return ADRIO('commuters', fetch)
 
     def aggregate_geoid(self, scope: CensusScope):
-        # get the value of the state
-        state = copy(nodes.get('state'))
+        # Note: might not need this function overall, may be taken out
+
+        # get the value of the state (state definition below is a placeholder for now)
+        match scope:
+            case StateScope('state', includes):
+                state = list(includes)
 
         # if no value of state
         if state == '*':
@@ -447,58 +426,59 @@ class ADRIOMakerLODES(ADRIOMaker):
         if state:
             home_geoids.extend(str(x) for x in state)
 
-        # if the given aggregation is COUNTY
-        # note: probably a more efficient way of doing this, but basically checks if the ADRIO needs that granularity to make geoids
-        if granularity == Granularity.COUNTY.value or granularity != Granularity.STATE.value:
-            county = copy(nodes.get('county'))
+        match scope:
 
-            # check if the current value is empty, if it is, return an empty tuple
-            if county == ['*']:
-                return ()
+            # if the given aggregation is COUNTY
+            # note: probably a more efficient way of doing this, but basically checks if the ADRIO needs that granularity to make geoids
+            case CountyScope('county', includes):
+                county = list(includes)
 
-            if state and county:
-                # if there is only one state
-                home_geoids = [
-                    state_code + county_code for state_code in state for county_code in county]
+                # check if the current value is empty, if it is, return an empty tuple
+                if county == ['*']:
+                    return ()
 
-        # if the given aggregation is TRACT and that the tract value is not empty
-        if granularity == Granularity.TRACT.value or granularity == Granularity.CBG.value or granularity == Granularity.BLOCK.value:
-            tract = copy(nodes.get('tract'))
+                if state and county:
+                    # if there is only one state
+                    home_geoids = [
+                        state_code + county_code for state_code in state for county_code in county]
 
-            print("TRACT")
+            # if the given aggregation is TRACT and that the tract value is not empty
+            case TractScope('tract', includes):
+                tract = list(includes)
 
-            # check if the current value is empty
-            if tract == ['*']:
-                return ()
+                # check if the current value is empty
+                if tract == ['*']:
+                    return ()
 
-            if state and tract:
+                if state and tract:
 
-                home_geoids = [
-                    geoid_code + tract_code for geoid_code in home_geoids for tract_code in tract]
+                    home_geoids = [
+                        geoid_code + tract_code for geoid_code in home_geoids for tract_code in tract]
 
-        # if the given aggregation is CBG and that the CBG value is not empty
-        if granularity == Granularity.CBG.value or granularity == Granularity.BLOCK.value:
-            cbg = copy(nodes.get('block group'))
+            # if the given aggregation is CBG and that the CBG value is not empty
+            case BlockGroupScope('block group', includes):
+                cbg = list(includes)
 
-            # check if the current value is empty
-            if cbg == ['*']:
-                return ()
+                # check if the current value is empty
+                if cbg == ['*']:
+                    return ()
 
-            if state and cbg:
+                if state and cbg:
 
-                home_geoids = [
-                    geoid_code + cbg_code for geoid_code in home_geoids for cbg_code in cbg]
+                    home_geoids = [
+                        geoid_code + cbg_code for geoid_code in home_geoids for cbg_code in cbg]
 
-        # if the given aggregation is block and the block value is not empty
-        if granularity == Granularity.BLOCK.value:
-            block = copy(nodes.get('block'))
+            # if the given aggregation is block and the block value is not empty
+            case _:
+                # temp
+                block = []
 
-            # check if the current value is empty
-            if block == ['*']:
-                return ()
+                # check if the current value is empty
+                if block == ['*']:
+                    return ()
 
-            if state and block:
-                home_geoids = [
-                    geoid_code + block_code for geoid_code in home_geoids for block_code in block]
+                if state and block:
+                    home_geoids = [
+                        geoid_code + block_code for geoid_code in home_geoids for block_code in block]
 
         return tuple(home_geoids)
