@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import cached_property
 from types import MappingProxyType
-from typing import Self, cast
+from typing import Any, Self, cast
 
 import jsonpickle
 from numpy.typing import NDArray
@@ -27,13 +27,6 @@ LABEL = geo_attrib('label', dtype=str, shape=Shapes.N,
 Label is a required attribute of every geo.
 It is the source of truth for how many nodes are in the geo.
 """
-
-
-class SourceSpec(ABC):
-    """
-    Contains information needed by a data source to correctly fetch an attribute.
-    Type of information varies by data source, as well as if any is needed at all.
-    """
 
 
 class Geography(ABC):
@@ -173,7 +166,7 @@ class StaticGeoSpec(GeoSpec):
 class DynamicGeoSpec(GeoSpec):
     """The spec for a DynamicGeo."""
     scope: GeoScope
-    source: dict[str, str | SourceSpec]
+    source: dict[str, Any]
 
 
 def attrib(name: str, dtype: DataDType, shape: DataShape = Shapes.N, comment: str | None = None):
