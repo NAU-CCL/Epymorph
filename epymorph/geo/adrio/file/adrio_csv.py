@@ -49,7 +49,6 @@ class CSVSpecMatrix():
 @dataclass
 class CSVSpecMatrixTime(CSVSpecMatrix):
     """Dataclass to store parameters for time-series CSV ADRIO with data shape TxNxN."""
-
     time_col: int
 
 

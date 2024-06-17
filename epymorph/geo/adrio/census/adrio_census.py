@@ -191,6 +191,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
     def fetch_sf(self, scope: CensusScope) -> GeoDataFrame:
         """Utility function to fetch shape files from Census for specified regions."""
+
         # call appropriate pygris function based on granularity and sort result
         match scope:
             case StateScopeAll() | StateScope():
@@ -215,7 +216,9 @@ class ADRIOMakerCensus(ADRIOMaker):
         return GeoDataFrame(df)
 
     def fetch_commuters(self, scope: CensusScope, year: int) -> DataFrame:
-        """Utility function to fetch commuting data from .xslx format filtered down to requested regions."""
+        """
+        Utility function to fetch commuting data from .xslx format filtered down to requested regions.
+        """
         # check for invalid granularity
         if isinstance(scope, TractScope) or isinstance(scope, BlockGroupScope):
             msg = "Commuting data cannot be retrieved for tract or block group granularities"
