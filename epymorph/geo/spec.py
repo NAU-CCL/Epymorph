@@ -64,6 +64,20 @@ class DateRange(SpecificTimePeriod):
 
 
 @dataclass(frozen=True)
+class DateAndDuration(SpecificTimePeriod):
+    """TimePeriod representing a number of days starting on the given date."""
+    start_date: date
+
+    @property
+    def end_date(self) -> date:
+        """
+        Returns the date after the last included date, i.e., the non-inclusive end of the date range.
+        [start_date, end_date)
+        """
+        return self.start_date + timedelta(days=self.days)
+
+
+@dataclass(frozen=True)
 class Year(SpecificTimePeriod):
     """TimePeriod representing a specific year."""
     year: int
@@ -99,20 +113,6 @@ class NonspecificDuration(TimePeriod):
 
 
 NO_DURATION = NonspecificDuration(1)
-
-
-@dataclass(frozen=True)
-class DateAndDuration(NonspecificDuration):
-    """TimePeriod representing a number of days starting on the given date."""
-    start_date: date
-
-    @property
-    def end_date(self) -> date:
-        """
-        Returns the date after the last included date, i.e., the non-inclusive end of the date range.
-        [start_date, end_date)
-        """
-        return self.start_date + timedelta(days=self.days)
 
 
 @dataclass

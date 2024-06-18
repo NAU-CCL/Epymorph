@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 from functools import partial
+from typing import Any
 
 import numpy as np
 from census import Census
@@ -129,6 +130,10 @@ class ADRIOMakerCensus(ADRIOMaker):
 
     census: Census
     """Census API interface object."""
+
+    @staticmethod
+    def accepts_source(source: Any):
+        return False
 
     def __init__(self) -> None:
         """Initializer to create Census object."""

@@ -5,7 +5,7 @@ only the attributes needed by the simulation.
 """
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
-from typing import Self
+from typing import Any, Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -13,8 +13,6 @@ from numpy.typing import NDArray
 from epymorph.error import AttributeException, GeoValidationException
 from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
-from epymorph.geo.adrio.file.adrio_csv import (ADRIOMakerCSV, CSVSpec,
-                                               CSVSpecMatrix)
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import LABEL, DynamicGeoSpec, validate_geo_values
 from epymorph.simulation import AttributeArray, geo_attrib
@@ -41,6 +39,13 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
     @classmethod
     def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> Self:
         """Given an ADRIOMaker library, construct a DynamicGeo for the given spec."""
+        def get_maker_by_source(source: Any, makers: dict[str, type[ADRIOMaker]]) -> str | None:
+            for maker_name, maker_type in makers.items():
+                if maker_type.accepts_source(source):
+                    return maker_name
+
+            return None
+
         makers = _memoized_adrio_maker_library(adrio_maker_library)
 
         # loop through attributes and make adrios for each
@@ -72,15 +77,19 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 adrios[attr.name] = adrio
 
             else:
-                maker = makers['CSV']
-                if isinstance(maker, ADRIOMakerCSV) and (isinstance(source, CSVSpec) or isinstance(source, CSVSpecMatrix)):
-                    adrio = maker.make_adrio(
-                        attr,
-                        spec.scope,
-                        spec.time_period,
-                        source
-                    )
-                    adrios[attr.name] = adrio
+                maker_name = get_maker_by_source(source, adrio_maker_library)
+                if maker_name is None:
+                    msg = f"Unknown source for attribute: {attr.name}"
+                    raise GeoValidationException(msg)
+                maker = makers[maker_name]
+
+                adrio = maker.make_adrio(
+                    attr,
+                    spec.scope,
+                    spec.time_period,
+                    source
+                )
+                adrios[attr.name] = adrio
 
         return cls(spec, adrios)
 
