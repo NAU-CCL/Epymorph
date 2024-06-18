@@ -236,7 +236,7 @@ class ADRIOMakerCSV(ADRIOMaker):
             raise DataResourceException(msg)
 
         granularity = get_census_granularity(scope.granularity)
-        if not all([granularity.matches(x) for x in df[key_col]]):
+        if not all(granularity.matches(x) for x in df[key_col]):
             raise DataResourceException("Invalid geoid in key column.")
 
         df = df.loc[df[key_col].isin(scope.get_node_ids())]
