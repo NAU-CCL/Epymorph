@@ -1,3 +1,4 @@
+from copy import copy
 from io import BytesIO
 from pathlib import Path
 from urllib.request import urlopen
@@ -6,6 +7,7 @@ from warnings import warn
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from pandas import DataFrame
 
 from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
                             save_file_to_cache)
@@ -16,7 +18,6 @@ from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
                                           CENSUS_GRANULARITY, COUNTY, STATE,
                                           TRACT, BlockGroupScope,
-                                          CensusGranularity,
                                           CensusGranularityName, CensusScope,
                                           CountyScope, StateScope,
                                           StateScopeAll, TractScope,
@@ -32,11 +33,23 @@ class ADRIOMakerLODES(ADRIOMaker):
     LODES8 ADRIO template to serve as parent class and provide utility functions for LODES8-based ADRIOS.
     """
 
+    # origin-destination files query
+    employment_query = ["S000",  # all total jobs
+                        "SA01",  # jobs by age (29 or under, 30-54, 55+)
+                        "SA02",
+                        "SA03",
+                        # jobs by monthly earnings ($1250 or under, $1251-$3333, $3333+ )
+                        "SE01",
+                        "SE02",
+                        "SE03",
+                        # jobs by industry (Goods Producing, Trade+Transportation+Utilities, All others)
+                        "SI01",
+                        "SI02",
+                        "SI03"]
+
     attributes = [
         geo_attrib('name', dtype=str, shape=Shapes.N,
                    comment='The proper name of the place.'),
-        geo_attrib('geoid', dtype=str, shape=Shapes.N,
-                   comment='The matrix of geoids from states or the input.'),
         geo_attrib('commuters', dtype=int, shape=Shapes.NxN,
                    comment='The number of total commuters from the work geoid to the home geoid'),
         geo_attrib('commuters_29_under', dtype=int, shape=Shapes.NxN,
@@ -73,14 +86,12 @@ class ADRIOMakerLODES(ADRIOMaker):
 
     attrib_vars = {
         'name': ['NAME'],
-        'geoid': ["w_geocode"],
+        'home_geoid': ["h_geocode"],
+        'work_geoid': ['w_geocode'],
         'commuters': ["S000"],
         'commuters_29_under': ["SA01"],
         'commuters_30_to_54': ["SA02"],
         'commuters_55_over': ["SA03"],
-        'commuters_1250_under_earnings': ["SE01"],
-        'commuters_1251_to_3333_earnings': ["SE02"],
-        'commuters_3333_over_earnings': ["SE03"],
         'commuters_goods_producing_industry': ["SI01"],
         'commuters_trade_transport_utility_industry': ["SI02"],
         'commuters_other_industry': ["SI03"],
@@ -102,18 +113,93 @@ class ADRIOMakerLODES(ADRIOMaker):
 
         year = time_period.year
 
-        if attrib.name[:9] == "commuters":
-            sorting_type = self.attrib_vars[attrib.name][0]
-            return self._make_commuter_adrio(scope, sorting_type, "JT00", year)
-        elif attrib.name[-4:] == "jobs":
-            job_type = self.attrib_vars[attrib.name][0]
-            return self._make_commuter_adrio(scope, "S000", job_type, year)
+        if attrib.name == 'primary_jobs':
+            return self._make_commuter_adrio(scope, 'S000', "JT01", year)
+        elif attrib.name == 'all_private_jobs':
+            return self._make_commuter_adrio(scope, 'S000', "JT02", year)
+        elif attrib.name == 'private_primary_jobs':
+            return self._make_commuter_adrio(scope, 'S000', "JT03", year)
+        elif attrib.name == 'all_federal_jobs':
+            return self._make_commuter_adrio(scope, 'S000', "JT04", year)
+        elif attrib.name == 'federal_primary_jobs':
+            return self._make_commuter_adrio(scope, 'S000', "JT05", year)
+        elif attrib.name == 'commuters':
+            return self._make_commuter_adrio(scope, 'S000', "JT00", year)
+        elif attrib.name == 'commuters_29_under':
+            return self._make_commuter_adrio(scope, 'SA01', "JT00", year)
+        elif attrib.name == 'commuters_30_to_54':
+            return self._make_commuter_adrio(scope, 'SA02', "JT00", year)
+        elif attrib.name == 'commuters_55_over':
+            return self._make_commuter_adrio(scope, 'SA03', "JT00", year)
+        elif attrib.name == 'commuters_1250_under_earnings':
+            return self._make_commuter_adrio(scope, 'SE01', "JT00", year)
+        elif attrib.name == 'commuters_1251_to_3333_earnings':
+            return self._make_commuter_adrio(scope, 'SE02', "JT00", year)
+        elif attrib.name == 'commuters_3333_over_earnings':
+            return self._make_commuter_adrio(scope, 'SE03', "JT00", year)
+        elif attrib.name == 'commuters_goods_producing_industry':
+            return self._make_commuter_adrio(scope, 'SI01', "JT00", year)
+        elif attrib.name == 'commuters_trade_transport_utility_industry':
+            return self._make_commuter_adrio(scope, 'SI02', "JT00", year)
+        elif attrib.name == 'commuters_other_industry':
+            return self._make_commuter_adrio(scope, 'SI03', "JT00", year)
         elif attrib.name == 'name':
             return self._make_name_adrio(scope, "JT00", year)
-        elif attrib.name == 'geoid':
-            return self._make_geoid_adrio(scope, "JT00", year)
         else:
             return super().make_adrio(attrib, scope, time_period)
+
+    # fetch functions
+    def _fetch_url(self, url: str) -> BytesIO:
+        """Reads a file from a URL as a BytesIO."""
+        with urlopen(url) as f:
+            file_buffer = BytesIO()
+            file_buffer.write(f.read())
+            file_buffer.seek(0)
+            return file_buffer
+
+    def sort_geoids(self, scope: CensusScope, list_geoids: list, geoids: tuple, data_frame: DataFrame):
+        data_frame['w_geocode'] = data_frame['w_geocode'].astype(str)
+        data_frame['h_geocode'] = data_frame['h_geocode'].astype(str)
+
+        if not data_frame.empty:
+            w_prefix = data_frame['w_geocode'].iloc[0][:2]
+            h_prefix = data_frame['h_geocode'].iloc[0][:2]
+
+            # if the file is a main file
+            if w_prefix == h_prefix:
+                # if not geoids:
+                # get the length depending on the granularity
+                #   length = BLOCK.length
+
+                #   if isinstance(scope, CountyScope):
+                #       length = COUNTY.length
+                #       print("len: ", length)
+
+                #   elif isinstance(scope, TractScope):
+                #       length = TRACT.length
+
+                #   elif isinstance(scope, BlockGroupScope):
+                #       length = BLOCK_GROUP.length
+
+                #   unique_geoids = data_frame['w_geocode'].apply(
+                #       lambda x: x[:length]).unique()
+
+                #   for geos in unique_geoids:
+                #       if geos not in list_geoids:
+                #           list_geoids.append(geos)
+
+                #   print(list_geoids)
+
+                # else:
+
+                # if the state for the geoid matches the main file and the geoid is not in the file, remove from the list
+                geoid_to_remove = [geo for geo in list_geoids if geo[:2] == w_prefix and not (
+                    data_frame['w_geocode'].str.startswith(geo).any() or data_frame['h_geocode'].str.startswith(geo).any())]
+
+                for geos in geoid_to_remove:
+                    list_geoids.remove(geos)
+
+        return list_geoids
 
     # fetch files from LODES depending on the state, residence in/out of state, job type, and year
     def fetch_commuters(self, scope: CensusScope, job_type: str, year: int):
@@ -121,12 +207,15 @@ class ADRIOMakerLODES(ADRIOMaker):
         # file type is main (residence in state only) by default
         file_type = "main"
 
-        geoid = scope.get_node_ids()
+        # get the list of states
+        match scope:
+            case StateScope('state', includes) | CountyScope('state', includes) | TractScope('state', includes) | BlockGroupScope('state', includes):
+                print('here')
+                state = list(includes)
 
-        if scope.granularity != 'state':
-            states = STATE.truncate_list(geoid)
-        else:
-            states = geoid
+        # temp, print test
+        for states in state:
+            print("First State:", states)
 
         # can change the lodes version, default is the most recent LODES8
         lodes_ver = "LODES8"
@@ -134,13 +223,13 @@ class ADRIOMakerLODES(ADRIOMaker):
         data_frames = []
 
         # check for multiple states
-        if (len(states) > 1):
+        if (len(state) > 1):
             file_type = "aux"
 
         # check for valid years
         if year not in range(2002, 2022):
             passed_year = year
-            # adjust to closest year
+            # if before 2002 or after 2021, adjust to closest year
             if year in range(1999, 2002):
                 year = 2002
             elif year in range(2022, 2025):
@@ -152,36 +241,36 @@ class ADRIOMakerLODES(ADRIOMaker):
             print(
                 f"Commuting data cannot be retrieved for {passed_year}, fetching {year} data instead.")
 
-        # no federal jobs in given years
+        # if the year is between 2002-2009 and the job_type is JT04 or JT05
         if year in range(2002, 2010) and (job_type == "JT04" or job_type == "JT05"):
 
+            # invalid, no federal jobs
             msg = "Invalid year for job type, no federal jobs can be found between 2002 to 2009"
             raise Exception(msg)
 
-        # LODES year and state exceptions
         invalid_conditions = [
             (year in range(2002, 2010) and (job_type == "JT04" or job_type == "JT05"),
              "Invalid year for job type, no federal jobs can be found between 2002 to 2009"),
 
-            (('05' in states) and (year == 2002 or year in range(2019, 2022)),
+            (('05' in state) and (year == 2002 or year in range(2019, 2022)),
              "Invalid year for state, no commuters can be found for Arkansas in 2002 or between 2019-2021"),
 
-            (('04' in states) and (year == 2002 or year == 2003),
+            (('04' in state) and (year == 2002 or year == 2003),
              "Invalid year for state, no commuters can be found for Arizona in 2002 or 2003"),
 
-            (('11' in states) and (year in range(2002, 2010)),
+            (('11' in state) and (year in range(2002, 2010)),
              "Invalid year for state, no commuters can be found for DC in 2002 or between 2002-2009"),
 
-            (('25' in states) and (year in range(2002, 2011)),
+            (('25' in state) and (year in range(2002, 2011)),
              "Invalid year for state, no commuters can be found for Massachusetts between 2002-2010"),
 
-            (('28' in states) and (year in range(2002, 2004) or year in range(2019, 2022)),
+            (('28' in state) and (year in range(2002, 2004) or year in range(2019, 2022)),
              "Invalid year for state, no commuters can be found for Mississippi in 2002, 2003, or between 2019-2021"),
 
-            (('33' in states) and year == 2002,
+            (('33' in state) and year == 2002,
              "Invalid year for state, no commuters can be found for New Hampshire in 2002"),
 
-            (('02' in states) and year in range(2017, 2022),
+            (('02' in state) and year in range(2017, 2022),
              "Invalid year for state, no commuters can be found for Alaska in between 2017-2021")
         ]
         for condition, message in invalid_conditions:
@@ -189,11 +278,19 @@ class ADRIOMakerLODES(ADRIOMaker):
                 raise Exception(message)
 
         # translate state FIPS code to state to use in URL
+            # note, the if statement doesn't seem to be needed but gets rid of the None type error
         state_codes = state_fips_to_code(2020)
         state_abbreviations = [state_codes.get(
-            fips).lower() for fips in states]
+            fips).lower() for fips in state]
 
+        # temp testing::
         for state in state_abbreviations:
+            print("STATE: ", state)
+
+        # geoscopes, make list of all instances of the granularities
+        geoid = scope.get_node_ids()
+
+        for states in state_abbreviations:
 
             # construct the URL to fetch LODES data, reset to empty each time
             url_list = []
@@ -201,21 +298,28 @@ class ADRIOMakerLODES(ADRIOMaker):
             files = []
 
             # always get main file (in state residency)
-            url_main = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz'
+            url_main = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{states}/od/{states}_od_main_{job_type}_{year}.csv.gz'
+            # print for testing purposes
+            print(f"Fetching data from URL: {url_main}")
             url_list.append(url_main)
 
             # if there are more than one state in the input, get the aux files (out of state residence)
             if file_type == "aux":
-                url_aux = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz'
+                url_aux = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{states}/od/{states}_od_aux_{job_type}_{year}.csv.gz'
+                print(f"Fetching data from URL: {url_main}")
                 url_list.append(url_aux)
+            # list the urls
             cache_list = [_LODES_CACHE_PATH / Path(u).name for u in url_list]
 
             # try to load the urls from the cache
             try:
                 files = [load_file_from_cache(path) for path in cache_list]
+                print("Load from cache\n")
 
             # on except CacheMiss
             except CacheMiss:
+
+                print("Saving data to cache")
 
                 # fetch info from the urls
                 files = [_fetch_url(u) for u in url_list]
@@ -233,15 +337,18 @@ class ADRIOMakerLODES(ADRIOMaker):
             unfiltered_df = [pd.read_csv(file, compression="gzip", converters={
                 'w_geocode': str, 'h_geocode': str}) for file in files]
 
-            # go through dataframes, multiple if there are main and aux files
             for df in unfiltered_df:
 
+                filtered_rows_list = []
+
                 # filter the rows on if they start with the prefix
-                filtered_rows = [df[df['h_geocode'].str.startswith(
-                    tuple(geoid)) & df['w_geocode'].str.startswith(tuple(geoid))]]
+                filtered_rows = df[df['h_geocode'].str.startswith(
+                    tuple(geoid)) & df['w_geocode'].str.startswith(tuple(geoid))]
+
+                filtered_rows_list.append(filtered_rows)
 
                 # add the filtered dataframe to the list of dataframes
-                data_frames.append(pd.concat(filtered_rows))
+                data_frames.append(pd.concat(filtered_rows_list))
 
         return data_frames
 
@@ -250,8 +357,6 @@ class ADRIOMakerLODES(ADRIOMaker):
         def fetch() -> NDArray:
             # aggregate based on granularities
             geoid = scope.get_node_ids()
-
-            # need to find method of getting state and county names if that is the provided scope
 
             # put together array of geoids
             n_geocode = len(geoid)
@@ -262,20 +367,6 @@ class ADRIOMakerLODES(ADRIOMaker):
             return np.array(output)
 
         return ADRIO('name', fetch)
-
-    def _make_geoid_adrio(self, scope: CensusScope, job_type: str, year: int) -> ADRIO:
-        """Makes an ADRIO to retrieve home and work geocodes geoids."""
-        def fetch() -> NDArray:
-
-            geoid = scope.get_node_ids()
-            n_geocode = len(geoid)
-            output = np.empty((n_geocode), dtype=object)
-            for w_id, w_geocode in enumerate(geoid):
-                output[w_id] = (f"{w_geocode}")
-
-            return np.array(output)
-
-        return ADRIO('geoid', fetch)
 
     def _make_commuter_adrio(self, scope: CensusScope, worker_type: str, job_type: str, year: int) -> ADRIO:
         """Makes an ADRIO to retrieve LODES commuting flow data."""
@@ -316,10 +407,78 @@ class ADRIOMakerLODES(ADRIOMaker):
 
         return ADRIO('commuters', fetch)
 
-    # possibly make function that sets up the geoids to avoid repetition
+    def aggregate_geoid(self, scope: CensusScope):
+        # Note: might not need this function overall, may be taken out
 
-    # mini list:
-        # simplify!!!!! dont want them to think im dumb lol
-        # finish up name adrio maker
-        # try to get rid of NONE types
-        # user manual
+        # get the value of the state (state definition below is a placeholder for now)
+        match scope:
+            case StateScope('state', includes):
+                state = list(includes)
+
+        # if no value of state
+        if state == '*':
+            # raise error
+            msg = "Error: STATE value is not retrieved for state granularity"
+            raise Exception(msg)
+
+        home_geoids = []
+
+        if state:
+            home_geoids.extend(str(x) for x in state)
+
+        match scope:
+
+            # if the given aggregation is COUNTY
+            # note: probably a more efficient way of doing this, but basically checks if the ADRIO needs that granularity to make geoids
+            case CountyScope('county', includes):
+                county = list(includes)
+
+                # check if the current value is empty, if it is, return an empty tuple
+                if county == ['*']:
+                    return ()
+
+                if state and county:
+                    # if there is only one state
+                    home_geoids = [
+                        state_code + county_code for state_code in state for county_code in county]
+
+            # if the given aggregation is TRACT and that the tract value is not empty
+            case TractScope('tract', includes):
+                tract = list(includes)
+
+                # check if the current value is empty
+                if tract == ['*']:
+                    return ()
+
+                if state and tract:
+
+                    home_geoids = [
+                        geoid_code + tract_code for geoid_code in home_geoids for tract_code in tract]
+
+            # if the given aggregation is CBG and that the CBG value is not empty
+            case BlockGroupScope('block group', includes):
+                cbg = list(includes)
+
+                # check if the current value is empty
+                if cbg == ['*']:
+                    return ()
+
+                if state and cbg:
+
+                    home_geoids = [
+                        geoid_code + cbg_code for geoid_code in home_geoids for cbg_code in cbg]
+
+            # if the given aggregation is block and the block value is not empty
+            case _:
+                # temp
+                block = []
+
+                # check if the current value is empty
+                if block == ['*']:
+                    return ()
+
+                if state and block:
+                    home_geoids = [
+                        geoid_code + block_code for geoid_code in home_geoids for block_code in block]
+
+        return tuple(home_geoids)
