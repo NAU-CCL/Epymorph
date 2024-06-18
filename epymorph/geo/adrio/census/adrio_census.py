@@ -210,14 +210,14 @@ class ADRIOMakerCensus(ADRIOMaker):
 
         df = df.rename(columns={'GEOID': 'geoid'})
 
-        df = df.loc[df['geoid'].isin(scope.get_node_ids())]
+        df = df[df['geoid'].isin(scope.get_node_ids())]
 
         return GeoDataFrame(df)
 
     def fetch_commuters(self, scope: CensusScope, year: int) -> DataFrame:
         """Utility function to fetch commuting data from .xslx format filtered down to requested regions."""
         # check for invalid granularity
-        if isinstance(scope, TractScope) or isinstance(scope, BlockGroupScope):
+        if isinstance(scope, TractScope | BlockGroupScope):
             msg = "Commuting data cannot be retrieved for tract or block group granularities"
             raise DataResourceException(msg)
 
@@ -265,32 +265,23 @@ class ADRIOMakerCensus(ADRIOMaker):
         data = read_excel(url, header=header_num, names=all_fields, dtype={
                           'res_state_code': str, 'wrk_state_code': str, 'res_county_code': str, 'wrk_county_code': str})
 
-        match scope:
-            case StateScopeAll():
-                # remove nodes not in acs5 data for all states case
-                data = data.loc[data['res_state_code'].isin(scope.get_node_ids())]
-                data = data.loc[data['wrk_state_code'].isin(
-                    '0' + x for x in scope.get_node_ids())]
+        node_ids = scope.get_node_ids()
+        match scope.granularity:
+            case 'state':
+                data.rename(columns={'res_state_code': 'res_geoid',
+                            'wrk_state_code': 'wrk_geoid'}, inplace=True)
 
-            case StateScope('state', includes) | CountyScope('state', includes):
-                states = list(includes)
-                data = data.loc[data['res_state_code'].isin(states)]
-
-                for state in range(len(states)):
-                    states[state] = states[state].zfill(3)
-                data = data.loc[data['wrk_state_code'].isin(states)]
-
-            case CountyScope('county', includes):
-                data['res_county_full'] = data['res_state_code'] + \
+            case 'county':
+                data['res_geoid'] = data['res_state_code'] + \
                     data['res_county_code']
-                data['wrk_county_full'] = data['wrk_state_code'] + \
+                data['wrk_geoid'] = data['wrk_state_code'] + \
                     data['wrk_county_code']
-                data = data.loc[data['res_county_full'].isin(includes)]
-                data = data.loc[data['wrk_county_full'].isin(
-                    ['0' + x for x in includes])]
 
             case _:
                 raise DataResourceException("Unsupported query.")
+
+        data = data[data['res_geoid'].isin(node_ids)]
+        data = data[data['wrk_geoid'].isin(['0' + x for x in node_ids])]
 
         return data
 
@@ -573,29 +564,17 @@ class ADRIOMakerCensus(ADRIOMaker):
         """Makes an ADRIO to retrieve ACS commuting flow data."""
         def fetch() -> NDArray:
             df = self.fetch_commuters(scope, year)
-            # state level
-            if isinstance(scope, StateScope) or isinstance(scope, StateScopeAll):
+
+            if isinstance(scope, StateScope | StateScopeAll):
                 # group and aggregate data
-                data_group = df.groupby(['res_state_code', 'wrk_state_code'])
+                data_group = df.groupby(['res_geoid', 'wrk_geoid'])
                 df = data_group.agg({'workers': 'sum'})
                 df.reset_index(inplace=True)
 
-                df = df.pivot(index='res_state_code',
-                              columns='wrk_state_code', values='workers')
-                df.fillna(0, inplace=True)
+            df = df.pivot(index='res_geoid', columns='wrk_geoid', values='workers')
+            df.fillna(0, inplace=True)
 
-                return df.to_numpy(dtype=int)
-
-            # county level
-            else:
-                # get unique identifier for each county
-                df['res_geoid'] = '0' + df['res_state_code'] + df['res_county_code']
-                df['wrk_geoid'] = df['wrk_state_code'] + df['wrk_county_code']
-
-                df = df.pivot(index='res_geoid', columns='wrk_geoid', values='workers')
-                df.fillna(0, inplace=True)
-
-                return df.to_numpy(dtype=int)
+            return df.to_numpy(dtype=int)
 
         return ADRIO('commuters', fetch)
 
