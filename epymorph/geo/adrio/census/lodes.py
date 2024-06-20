@@ -1,6 +1,5 @@
-from io import BytesIO
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Any
 from urllib.request import urlopen
 from warnings import warn
 
@@ -11,20 +10,12 @@ from numpy.typing import NDArray
 from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
                             save_file_to_cache)
 from epymorph.data_shape import Shapes
-from epymorph.error import DataResourceException, GeoValidationException
+from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import TimePeriod, Year
-from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
-                                          CENSUS_GRANULARITY, COUNTY, STATE,
-                                          TRACT, BlockGroupScope,
-                                          CensusGranularity,
-                                          CensusGranularityName, CensusScope,
-                                          CountiesInfo, CountyScope,
-                                          StateScope, StateScopeAll,
-                                          StatesInfo, TractScope,
-                                          state_fips_to_code)
+from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
 from epymorph.geography.us_tiger import (_fetch_url, get_counties_info,
-                                         get_states_info, get_tracts_info)
+                                         get_states_info)
 from epymorph.simulation import AttributeDef, geo_attrib
 
 _LODES_CACHE_PATH = Path("geo/adrio/census/lodes")
@@ -34,6 +25,10 @@ class ADRIOMakerLODES(ADRIOMaker):
     """
     LODES8 ADRIO template to serve as parent class and provide utility functions for LODES8-based ADRIOS.
     """
+
+    @staticmethod
+    def accepts_source(source: Any):
+        return False
 
     attributes = [
         geo_attrib('name', dtype=str, shape=Shapes.N,
@@ -194,7 +189,7 @@ class ADRIOMakerLODES(ADRIOMaker):
         # translate state FIPS code to state to use in URL
         state_codes = state_fips_to_code(2020)
         state_abbreviations = [state_codes.get(
-            fips).lower() for fips in states]
+            fips, "").lower() for fips in states]
 
         for state in state_abbreviations:
 
@@ -252,14 +247,13 @@ class ADRIOMakerLODES(ADRIOMaker):
         """Makes an ADRIO to retrieve the names of the states or counties given."""
         def fetch() -> np.ndarray:
 
-            # can only fetch the name information for state or county granularity
+            # can only fetch the name information for state or county granularity, returns an empty array otherwise
             if scope.granularity == 'state':
                 name_info = get_states_info(2020)
             elif scope.granularity == 'county':
                 name_info = get_counties_info(2020)
             else:
-                msg = "Proper names cannot be retrieved for tract, block group, or block granularities"
-                raise DataResourceException(msg)
+                return np.array([], dtype=str)
 
             geoid = scope.get_node_ids()
 
@@ -267,7 +261,7 @@ class ADRIOMakerLODES(ADRIOMaker):
 
             county_names = [geoid_to_name.get(geo, "Unknown") for geo in geoid]
 
-            output = np.array(county_names, dtype=object)
+            output = np.array(county_names, dtype=str)
 
             return output
 
@@ -278,12 +272,9 @@ class ADRIOMakerLODES(ADRIOMaker):
         def fetch() -> NDArray:
 
             geoid = scope.get_node_ids()
-            n_geocode = len(geoid)
-            output = np.empty((n_geocode), dtype=object)
-            for w_id, w_geocode in enumerate(geoid):
-                output[w_id] = (f"{w_geocode}")
+            output = np.array(geoid, dtype=str)
 
-            return np.array(output)
+            return output
 
         return ADRIO('geoid', fetch)
 
@@ -317,7 +308,7 @@ class ADRIOMakerLODES(ADRIOMaker):
             output = np.zeros((n_geocode, n_geocode), dtype=np.int64)
 
             # loop through all of the grouped values and add to output
-            for (w_geocode, h_geocode), value in aggregated_data.items():
+            for (w_geocode, h_geocode), value in aggregated_data.items():  # type: ignore
                 w_index = geocode_to_index.get(w_geocode)
                 h_index = geocode_to_index.get(h_geocode)
                 output[w_index, h_index] += np.int64(value)
