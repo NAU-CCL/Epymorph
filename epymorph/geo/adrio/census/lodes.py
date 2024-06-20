@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from typing import Literal, NamedTuple
 from urllib.request import urlopen
 from warnings import warn
 
@@ -10,7 +11,7 @@ from numpy.typing import NDArray
 from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
                             save_file_to_cache)
 from epymorph.data_shape import Shapes
-from epymorph.error import GeoValidationException
+from epymorph.error import DataResourceException, GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
@@ -18,10 +19,12 @@ from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
                                           TRACT, BlockGroupScope,
                                           CensusGranularity,
                                           CensusGranularityName, CensusScope,
-                                          CountyScope, StateScope,
-                                          StateScopeAll, TractScope,
+                                          CountiesInfo, CountyScope,
+                                          StateScope, StateScopeAll,
+                                          StatesInfo, TractScope,
                                           state_fips_to_code)
-from epymorph.geography.us_tiger import _fetch_url
+from epymorph.geography.us_tiger import (_fetch_url, get_counties_info,
+                                         get_states_info, get_tracts_info)
 from epymorph.simulation import AttributeDef, geo_attrib
 
 _LODES_CACHE_PATH = Path("geo/adrio/census/lodes")
@@ -246,20 +249,27 @@ class ADRIOMakerLODES(ADRIOMaker):
         return data_frames
 
     def _make_name_adrio(self, scope: CensusScope, job_type: str, year: int) -> ADRIO:
-        """Makes an ADRIO to retrieve home and work geocodes geoids."""
-        def fetch() -> NDArray:
-            # aggregate based on granularities
+        """Makes an ADRIO to retrieve the names of the states or counties given."""
+        def fetch() -> np.ndarray:
+
+            # can only fetch the name information for state or county granularity
+            if scope.granularity == 'state':
+                name_info = get_states_info(2020)
+            elif scope.granularity == 'county':
+                name_info = get_counties_info(2020)
+            else:
+                msg = "Proper names cannot be retrieved for tract, block group, or block granularities"
+                raise DataResourceException(msg)
+
             geoid = scope.get_node_ids()
 
-            # need to find method of getting state and county names if that is the provided scope
+            geoid_to_name = dict(zip(name_info['GEOID'], name_info['NAME']))
 
-            # put together array of geoids
-            n_geocode = len(geoid)
-            output = np.empty((n_geocode), dtype=object)
-            for w_id, w_geocode in enumerate(geoid):
-                output[w_id] = (f"{w_geocode}")
+            county_names = [geoid_to_name.get(geo, "Unknown") for geo in geoid]
 
-            return np.array(output)
+            output = np.array(county_names, dtype=object)
+
+            return output
 
         return ADRIO('name', fetch)
 
