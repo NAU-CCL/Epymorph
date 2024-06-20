@@ -54,6 +54,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-05-03.ipynb | Tyler | ✓ | Integration test: loading US Census geography from TIGER |
 | 2024-05-22.ipynb | Sachin |  | Integrating particle filter with epymorph. Propagating the particles using epymorph simulation and plot the infection rates |
 | 2024-06-03.ipynb | Trevor |  | Integration test: using dynamic geos to fetch Census data |
+| 2024-06-12.ipynb | Trevor |  | Integration test: CSV file ADRIOs |
 
 ## Contributing
 

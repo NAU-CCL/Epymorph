@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import cached_property
 from types import MappingProxyType
-from typing import Self, cast
+from typing import Any, Self, cast
 
 import jsonpickle
 from numpy.typing import NDArray
@@ -64,6 +64,20 @@ class DateRange(SpecificTimePeriod):
 
 
 @dataclass(frozen=True)
+class DateAndDuration(SpecificTimePeriod):
+    """TimePeriod representing a number of days starting on the given date."""
+    start_date: date
+
+    @property
+    def end_date(self) -> date:
+        """
+        Returns the date after the last included date, i.e., the non-inclusive end of the date range.
+        [start_date, end_date)
+        """
+        return self.start_date + timedelta(days=self.days)
+
+
+@dataclass(frozen=True)
 class Year(SpecificTimePeriod):
     """TimePeriod representing a specific year."""
     year: int
@@ -99,20 +113,6 @@ class NonspecificDuration(TimePeriod):
 
 
 NO_DURATION = NonspecificDuration(1)
-
-
-@dataclass(frozen=True)
-class DateAndDuration(NonspecificDuration):
-    """TimePeriod representing a number of days starting on the given date."""
-    start_date: date
-
-    @property
-    def end_date(self) -> date:
-        """
-        Returns the date after the last included date, i.e., the non-inclusive end of the date range.
-        [start_date, end_date)
-        """
-        return self.start_date + timedelta(days=self.days)
 
 
 @dataclass
@@ -166,7 +166,7 @@ class StaticGeoSpec(GeoSpec):
 class DynamicGeoSpec(GeoSpec):
     """The spec for a DynamicGeo."""
     scope: GeoScope
-    source: dict[str, str]
+    source: dict[str, Any]
 
 
 def attrib(name: str, dtype: DataDType, shape: DataShape = Shapes.N, comment: str | None = None):

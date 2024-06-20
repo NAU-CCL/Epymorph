@@ -3,10 +3,9 @@ A dynamic geo is capable of fetching data from arbitrary external data sources
 via the use of ADRIO implementations. It may fetch this data lazily, loading
 only the attributes needed by the simulation.
 """
-import dataclasses
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
-from typing import Self
+from typing import Any, Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -16,8 +15,7 @@ from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import LABEL, DynamicGeoSpec, validate_geo_values
-from epymorph.simulation import AttributeArray
-from epymorph.sympy_shim import to_symbol
+from epymorph.simulation import AttributeArray, geo_attrib
 from epymorph.util import Event, MemoDict
 
 
@@ -41,6 +39,13 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
     @classmethod
     def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> Self:
         """Given an ADRIOMaker library, construct a DynamicGeo for the given spec."""
+        def get_maker_by_source(source: Any, makers: dict[str, type[ADRIOMaker]]) -> str | None:
+            for maker_name, maker_type in makers.items():
+                if maker_type.accepts_source(source):
+                    return maker_name
+
+            return None
+
         makers = _memoized_adrio_maker_library(adrio_maker_library)
 
         # loop through attributes and make adrios for each
@@ -51,23 +56,40 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 msg = f"Missing source for attribute: {attr.name}."
                 raise GeoValidationException(msg)
 
-            # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
-            # the geo wants to use a different name than the one the maker uses;
-            # no problem, just provide a modified AttributeDef to the maker.
-            maker_name = source
-            adrio_attrib = attr
-            if ":" in source:
-                maker_name, adrio_attrib_name = source.split(":")[0:2]
-                adrio_attrib = dataclasses.replace(
-                    attr, name=adrio_attrib_name, symbol=to_symbol(adrio_attrib_name))
+            if isinstance(source, str):
+                maker_name = source
+                adrio_attrib = attr
 
-            # Make and store adrio.
-            adrio = makers[maker_name].make_adrio(
-                adrio_attrib,
-                spec.scope,
-                spec.time_period
-            )
-            adrios[attr.name] = adrio
+                # If source is formatted like "<adrio_maker_name>:<attribute_name>" then
+                # the geo wants to use a different name than the one the maker uses;
+                # no problem, just provide a modified AttribDef to the maker.
+                if ":" in source:
+                    maker_name, adrio_attrib_name = source.split(":")[0:2]
+                    adrio_attrib = geo_attrib(
+                        adrio_attrib_name, attr.dtype, attr.shape)
+
+                # Make and store adrio.
+                adrio = makers[maker_name].make_adrio(
+                    adrio_attrib,
+                    spec.scope,
+                    spec.time_period
+                )
+                adrios[attr.name] = adrio
+
+            else:
+                maker_name = get_maker_by_source(source, adrio_maker_library)
+                if maker_name is None:
+                    msg = f"Unknown source for attribute: {attr.name}"
+                    raise GeoValidationException(msg)
+                maker = makers[maker_name]
+
+                adrio = maker.make_adrio(
+                    attr,
+                    spec.scope,
+                    spec.time_period,
+                    source
+                )
+                adrios[attr.name] = adrio
 
         return cls(spec, adrios)
 
