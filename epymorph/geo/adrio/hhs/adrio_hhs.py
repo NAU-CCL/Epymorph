@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from numpy.typing import NDArray
@@ -6,7 +7,7 @@ from pandas import read_csv
 from epymorph.data_shape import Shapes
 from epymorph.error import GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
-from epymorph.geo.spec import TimePeriod
+from epymorph.geo.spec import SpecificTimePeriod, TimePeriod
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (STATE, CountyScope, StateScope,
                                           StateScopeAll)
@@ -35,9 +36,16 @@ class ADRIOMakerHHS(ADRIOMaker):
             fips = '\'' + '\',\''.join(scope.get_node_ids()) + '\''
             col_name = self.attribute_cols[attrib.name]
 
-            url = f"https://healthdata.gov/resource/anag-cw7u.csv?$select=fips_code,{col_name}&$where=fips_code%20in({fips})&$limit=1045406"
+            url = f"https://healthdata.gov/resource/anag-cw7u.csv?$select=collection_week,fips_code,{col_name}&$where=fips_code%20in({fips})&$limit=1045406"
 
             df = read_csv(url, dtype={'fips_code': str})
+
+            df['collection_week'] = [datetime.fromisoformat(
+                week.replace('/', '-')).date() for week in df['collection_week']]
+
+            if isinstance(time_period, SpecificTimePeriod):
+                df = df[df['collection_week'] >= time_period.start_date]
+                df = df[df['collection_week'] < time_period.end_date]
 
             if isinstance(scope, StateScopeAll) or scope.includes_granularity == 'state':
                 df['fips_code'] = [STATE.extract(x) for x in df['fips_code']]
