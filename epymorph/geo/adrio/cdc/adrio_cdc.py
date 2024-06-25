@@ -15,18 +15,34 @@ from epymorph.simulation import AttributeDef, geo_attrib
 
 
 class ADRIOMakerCDC(ADRIOMaker):
+    """
+    CDC ADRIO template to serve as a parent class for ADRIOs that fetch data from various 
+    HealthData and CDC datasets.
+    """
 
     attributes = [
-        geo_attrib("covid_cases_100k", int, Shapes.N),
+        geo_attrib("covid_cases_per_100k", int, Shapes.N),
+        geo_attrib("covid_hospitalizations_per_100k", int, Shapes.N),
         geo_attrib("covid_hospitalization_avg", float, Shapes.N),
-        geo_attrib("vaccinations", int, Shapes.N),
+        geo_attrib("covid_hospitalization_sum", int, Shapes.N),
+        geo_attrib("influenza_hospitalization_avg", float, Shapes.N),
+        geo_attrib("influenza_hospitalization_sum", int, Shapes.N),
+        geo_attrib("full_covid_vaccinations", int, Shapes.N),
+        geo_attrib("one_dose_covid_vaccinations", int, Shapes.N),
+        geo_attrib("covid_booster_doses", int, Shapes.N),
         geo_attrib("covid_deaths", int, Shapes.N)
     ]
 
     attribute_cols = {
-        "covid_cases_100k": "covid_cases_per_100k",
-        "covid_hospitalization_avg": "inpatient_beds_used_covid_7_day_avg",
-        "vaccinations": "series_complete_yes",
+        "covid_cases_per_100k": "covid_cases_per_100k",
+        "covid_hospitalizations_per_100k": "covid_hospital_addmissions_per_100k",
+        "covid_hospitalization_avg": "total_adult_patients_hospitalized_confirmed_covid_7_day_avg",
+        "covid_hospitalization_sum": "total_adult_patients_hospitalized_confirmed_covid_7_day_sum",
+        "influenza_hospitalization_avg": "total_patients_hospitalized_confirmed_influenza_7_day_avg",
+        "influenza_hospitalization_sum": "total_patients_hospitalized_confirmed_influenza_7_day_sum",
+        "full_covid_vaccinations": "series_complete_yes",
+        "one_dose_covid_vaccinations": "administered_dose1_recip",
+        "covid_booster_doses": "booster_doses",
         "covid_deaths": "covid_19_deaths"
     }
 
@@ -38,11 +54,11 @@ class ADRIOMakerCDC(ADRIOMaker):
             msg = "CDC data requires a CensusScope object and can only be retrieved for state and county granularities."
             raise GeoValidationException(msg)
 
-        if attrib.name == "covid_cases_100k":
+        if attrib.name in ["covid_cases_per_100k", "covid_hospitalizations_per_100k"]:
             return self._make_cases_adrio(attrib, scope, time_period)
-        elif attrib.name == "covid_hospitalization_avg":
+        elif attrib.name in ["covid_hospitalization_avg", "covid_hospitalization_sum", "influenza_hospitalization_avg", "influenza_hospitalization_sum"]:
             return self._make_hospitalization_adrio(attrib, scope, time_period)
-        elif attrib.name == "vaccinations":
+        elif attrib.name in ["full_covid_vaccinations", "one_dose_covid_vaccinations", "covid_booster_doses"]:
             return self._make_vaccination_adrio(attrib, scope, time_period)
         elif attrib.name == "covid_deaths":
             return self._make_deaths_adrio(attrib, scope, time_period)
@@ -50,6 +66,10 @@ class ADRIOMakerCDC(ADRIOMaker):
             raise GeoValidationException(f"Invalid attribute: {attrib.name}.")
 
     def _make_cases_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: TimePeriod) -> ADRIO:
+        """
+        Makes ADRIOs for HealthData dataset reporting COVID-19 cases per 100k population.
+        https://healthdata.gov/dataset/United-States-COVID-19-Community-Levels-by-County/nn5b-j5u9/about_data
+        """
         def fetch() -> NDArray:
             col_name = self.attribute_cols[attrib.name]
             if scope.granularity == 'state':
@@ -65,14 +85,16 @@ class ADRIOMakerCDC(ADRIOMaker):
             df['date_updated'] = [datetime.fromisoformat(
                 week).date() for week in df['date_updated']]
 
+            df.rename(columns={'county_fips': 'fips'}, inplace=True)
+
             if isinstance(time_period, SpecificTimePeriod):
                 df = df[df['date_updated'] >= time_period.start_date]
                 df = df[df['date_updated'] < time_period.end_date]
 
             if scope.granularity == 'state':
-                df['county_fips'] = [STATE.extract(x) for x in df['county_fips']]
+                df['fips'] = [STATE.extract(x) for x in df['fips']]
 
-            df = df.groupby('county_fips')
+            df = df.groupby('fips')
             df = df.agg({col_name: 'sum'})
             df.reset_index(inplace=True)
 
@@ -81,6 +103,11 @@ class ADRIOMakerCDC(ADRIOMaker):
         return ADRIO(attrib.name, fetch)
 
     def _make_hospitalization_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: TimePeriod) -> ADRIO:
+        """
+        Makes ADRIOs for HealthData dataset reporting number of people hospitalized for COVID-19 
+        and other respiratory illnesses.
+        https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data
+        """
         def fetch() -> NDArray:
             col_name = self.attribute_cols[attrib.name]
 
@@ -115,6 +142,10 @@ class ADRIOMakerCDC(ADRIOMaker):
         return ADRIO(attrib.name, fetch)
 
     def _make_vaccination_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: TimePeriod) -> ADRIO:
+        """
+        Makes ADRIOs for CDC dataset reporting total COVID-19 vaccination numbers.
+        https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh/about_data
+        """
         def fetch() -> NDArray:
             col_name = self.attribute_cols[attrib.name]
 
@@ -124,21 +155,30 @@ class ADRIOMakerCDC(ADRIOMaker):
                         for state in fips]
                 df = concat(read_csv(url, dtype={'fips': str}) for url in urls)
                 df['fips'] = [STATE.extract(x) for x in df['fips']]
-                df = df.groupby('fips')
+                df = df.groupby(['date', 'fips'])
                 df = df.agg({col_name: 'sum'})
                 df.reset_index(inplace=True)
             else:
                 fips = '\'' + '\',\''.join(scope.get_node_ids()) + '\''
                 url = f"https://data.cdc.gov/resource/8xkx-amqh.csv?$select=date,fips,{col_name}&$where=fips%20in({fips})&$limit=1962781"
-                df = read_csv(url, dtype={'fips_code': str})
+                df = read_csv(url, dtype={'fips': str})
 
-            # TODO: time filtering, verify correct aggregation
+            df['date'] = [datetime.fromisoformat(
+                week.replace('/', '-')).date() for week in df['date']]
+
+            if isinstance(time_period, SpecificTimePeriod):
+                df = df[df['date'] >= time_period.start_date]
+                df = df[df['date'] < time_period.end_date]
 
             return df[col_name].to_numpy(dtype=attrib.dtype)
 
         return ADRIO(attrib.name, fetch)
 
     def _make_deaths_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: TimePeriod) -> ADRIO:
+        """
+        Makes ADRIOs for CDC dataset reporting number of deaths from COVID-19.
+        https://data.cdc.gov/NCHS/AH-COVID-19-Death-Counts-by-County-and-Week-2020-p/ite7-j2w7/about_data
+        """
         if not isinstance(scope, StateScope | StateScopeAll | CountyScope):
             msg = "Deaths data requires a CensusScope object and can only be retrieved for state and county granularities."
             raise GeoValidationException(msg)
