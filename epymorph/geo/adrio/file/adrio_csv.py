@@ -30,6 +30,7 @@ class _BaseCSVSpec():
 @dataclass
 class CSVSpec(_BaseCSVSpec):
     """Dataclass to store parameters for CSV ADRIO with data shape N."""
+    time_col: int | None
 
 
 @dataclass
@@ -51,23 +52,18 @@ class _BaseCSVSpecMatrix():
 @dataclass
 class CSVSpecMatrix(_BaseCSVSpecMatrix):
     """Dataclass to store parameters for CSV ADRIO with data shape NxN."""
-
-
-@dataclass
-class CSVSpecMatrixTime(_BaseCSVSpecMatrix):
-    """Dataclass to store parameters for time-series CSV ADRIO with data shape TxNxN."""
-    time_col: int
+    time_col: int | None
 
 
 class ADRIOMakerCSV(ADRIOMaker):
     @staticmethod
     def accepts_source(source: Any) -> bool:
-        if isinstance(source, CSVSpec | CSVSpecTime | CSVSpecMatrix | CSVSpecMatrixTime):
+        if isinstance(source, CSVSpec | CSVSpecTime | CSVSpecMatrix):
             return True
         else:
             return False
 
-    def make_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix | CSVSpecMatrixTime) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix) -> ADRIO:
         if isinstance(spec, CSVSpec | CSVSpecTime):
             return self._make_single_column_adrio(attrib, scope, time_period, spec)
         else:
@@ -78,21 +74,26 @@ class ADRIOMakerCSV(ADRIOMaker):
         def fetch() -> NDArray:
             df = self._load_from_file(spec, time_period, scope)
 
-            df.rename(columns={spec.key_col: 'key'}, inplace=True)
-            df.sort_values(by='key', inplace=True)
-
-            data_values = df[spec.data_col]
-
             # check for null values (missing data in file)
-            if data_values.isnull().any():
+            if df[spec.data_col].isnull().any():
                 msg = f"Data for required geographies missing from {attrib.name} attribute file or could not be found."
                 raise DataResourceException(msg)
 
-            return df[spec.data_col].to_numpy(dtype=attrib.dtype)
+            if isinstance(spec, CSVSpec):
+                df.rename(columns={spec.key_col: 'key'}, inplace=True)
+                df.sort_values(by='key', inplace=True)
+                return df[spec.data_col].to_numpy(dtype=attrib.dtype)
+            else:
+                df.rename(columns={spec.key_col: 'key', spec.data_col: 'data',
+                          spec.time_col: 'time'}, inplace=True)
+                df.sort_values(by=['time', 'key'], inplace=True)
+                df = df.pivot(index='time', columns='key',
+                              values='data')
+                return df.to_numpy(dtype=attrib.dtype)
 
         return ADRIO(attrib.name, fetch)
 
-    def _make_matrix_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpecMatrix | CSVSpecMatrixTime) -> ADRIO:
+    def _make_matrix_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpecMatrix) -> ADRIO:
         """Makes an ADRIO to fetch data from a single column within a .csv file and converts it to matrix format."""
         def fetch() -> NDArray:
             df = self._load_from_file(spec, time_period, scope)
@@ -109,7 +110,7 @@ class ADRIOMakerCSV(ADRIOMaker):
 
         return ADRIO(attrib.name, fetch)
 
-    def _load_from_file(self, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix | CSVSpecMatrixTime, time_period: TimePeriod, scope: GeoScope) -> DataFrame:
+    def _load_from_file(self, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix, time_period: TimePeriod, scope: GeoScope) -> DataFrame:
         """
         Loads .csv at path location into a pandas DataFrame, filtering out data outside of the specified
         geographic scope and time period.
@@ -131,12 +132,12 @@ class ADRIOMakerCSV(ADRIOMaker):
                     df = read_csv(path, header=None, dtype={
                                   spec.from_key_col: str, spec.to_key_col: str})
 
-            if isinstance(spec, CSVSpecTime | CSVSpecMatrixTime):
+            if spec.time_col is not None:
                 df[spec.time_col] = df[spec.time_col].apply(date.fromisoformat)
 
                 if isinstance(time_period, SpecificTimePeriod):
-                    df = df.loc[df[spec.time_col] >= time_period.start_date]
-                    df = df.loc[df[spec.time_col] < time_period.end_date]
+                    df = df[df[spec.time_col] >= time_period.start_date]
+                    df = df[df[spec.time_col] < time_period.end_date]
                 else:
                     raise DataResourceException("Unsupported time period.")
 
@@ -182,9 +183,9 @@ class ADRIOMakerCSV(ADRIOMaker):
             df[key_col] = [state_mapping.get(x) for x in df[key_col]]
             if df[key_col].isnull().any():
                 raise DataResourceException("Invalid state code in key column.")
-            df = df.loc[df[key_col].isin(scope.get_node_ids())]
+            df = df[df[key_col].isin(scope.get_node_ids())]
             if key_col2 is not None:
-                df = df.loc[df[key_col2].isin(scope.get_node_ids())]
+                df = df[df[key_col2].isin(scope.get_node_ids())]
             return df
 
         else:
@@ -239,9 +240,9 @@ class ADRIOMakerCSV(ADRIOMaker):
         if not all(granularity.matches(x) for x in df[key_col]):
             raise DataResourceException("Invalid geoid in key column.")
 
-        df = df.loc[df[key_col].isin(scope.get_node_ids())]
+        df = df[df[key_col].isin(scope.get_node_ids())]
         if key_col2 is not None:
-            df = df.loc[df[key_col2].isin(scope.get_node_ids())]
+            df = df[df[key_col2].isin(scope.get_node_ids())]
 
         return df
 
