@@ -218,6 +218,47 @@ class ADRIOMakerCDC(ADRIOMaker):
 
         return ADRIO(attrib.name, fetch)
 
+    def _make_state_hospitalization_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: SpecificTimePeriod) -> ADRIO:
+        """
+        Makes ADRIOs for CDC dataset reporting number of people hospitalized for COVID-19 
+        and other respiratory illnesses at state level during manditory and voluntary reporting periods.
+        Available from 1/4/2020 to present at state granularity. Data reported voluntarily past 5/1/2024.
+        https://data.cdc.gov/Public-Health-Surveillance/Weekly-United-States-Hospitalization-Metrics-by-Ju/aemt-mg7g/about_data
+        """
+        if scope.granularity != 'state':
+            msg = "State level hospitalization data can only be retrieved for state granularity."
+            raise DataResourceException(msg)
+        if time_period.start_date <= date(2019, 12, 29):
+            msg = "State level hospitalization data is only available starting 1/4/2020."
+            raise DataResourceException(msg)
+
+        def fetch() -> NDArray:
+            if time_period.end_date >= date(2024, 5, 1):
+                print("State level hospitalization data is voluntary past 5/1/2024.")
+
+            state_mapping = state_fips_to_code(scope.year)
+            fips = scope.get_node_ids()
+            state_codes = '\'' + '\',\''.join([state_mapping[x] for x in fips]) + '\''
+            col_name = self.attribute_cols[attrib.name]
+
+            url = f"https://data.cdc.gov/resource/aemt-mg7g.csv?$select=week_end_date,jurisdiction,{col_name}&$where=jurisdiction%20in({state_codes})&$limit=11514"
+            df = read_csv(url)
+
+            df['week_end_date'] = [datetime.fromisoformat(
+                week).date() for week in df['week_end_date']]
+
+            df = df[df['week_end_date'] >= time_period.start_date]
+            df = df[df['week_end_date'] < time_period.end_date]
+
+            df = df.groupby(['week_end_date', 'jurisdiction']).sum()
+            df.reset_index(inplace=True)
+            df = df.pivot(index='week_end_date',
+                          columns='jurisdiction', values=col_name)
+
+            return df.to_numpy(dtype=attrib.dtype)
+
+        return ADRIO(attrib.name, fetch)
+
     def _make_vaccination_adrio(self, attrib: AttributeDef, scope: CensusScope, time_period: SpecificTimePeriod) -> ADRIO:
         """
         Makes ADRIOs for CDC dataset reporting total COVID-19 vaccination numbers.
