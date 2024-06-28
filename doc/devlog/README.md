@@ -52,8 +52,10 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-04-16.ipynb | Izaac | | Showing error handling for common ipm errors (NEW!)|
 | 2024-04-25.ipynb | Tyler | ✓ | Integration test: epymorph cache utilities |
 | 2024-05-03.ipynb | Tyler | ✓ | Integration test: loading US Census geography from TIGER |
+| 2024-05-09-lodes-adrio-demo.ipynb | Meaghan | | A full geo spec for testing LODES ADRIOs |
 | 2024-05-22.ipynb | Sachin |  | Integrating particle filter with epymorph. Propagating the particles using epymorph simulation and plot the infection rates |
 | 2024-06-03.ipynb | Trevor |  | Integration test: using dynamic geos to fetch Census data |
+| 2024-06-05.ipynb | Meaghan | | A user manual and basic demonstrations of calling LODES ADRIOs |
 | 2024-06-12.ipynb | Trevor |  | Integration test: CSV file ADRIOs |
 
 ## Contributing

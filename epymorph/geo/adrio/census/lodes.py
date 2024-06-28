@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Any
-from urllib.request import urlopen
 from warnings import warn
 
 import numpy as np
@@ -14,8 +13,7 @@ from epymorph.error import DataResourceException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
-from epymorph.geography.us_tiger import (_fetch_url, get_counties_info,
-                                         get_states_info)
+from epymorph.geography.us_tiger import _fetch_url
 from epymorph.simulation import AttributeDef, geo_attrib
 
 _LODES_CACHE_PATH = Path("geo/adrio/census/lodes")
@@ -198,8 +196,13 @@ class ADRIOMakerLODES(ADRIOMaker):
                 if condition:
                     raise DataResourceException(message)
 
+            # check if the CensusScope year is the current LODES geography: 2020
+            if scope.year != 2020:
+                msg = f"GeoScope year does not match the LODES geography year."
+                raise DataResourceException(msg)
+
             # translate state FIPS code to state to use in URL
-            state_codes = state_fips_to_code(year)
+            state_codes = state_fips_to_code(scope.year)
             state_abbreviations = [state_codes.get(
                 fips, "").lower() for fips in states]
 
