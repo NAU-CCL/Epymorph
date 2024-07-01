@@ -11,7 +11,7 @@ from epymorph.geo.spec import SpecificTimePeriod, TimePeriod
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (STATE, CensusScope, CountyScope,
                                           StateScope, StateScopeAll,
-                                          state_fips_to_code)
+                                          get_us_states, state_fips_to_code)
 from epymorph.simulation import AttributeDef, geo_attrib
 
 
@@ -83,6 +83,8 @@ class ADRIOMakerCDC(ADRIOMaker):
             return self._make_vaccination_adrio(attrib, scope, time_period)
         elif attrib.name == "covid_deaths_county":
             return self._make_deaths_adrio_county(attrib, scope, time_period)
+        elif attrib.name in ["covid_deaths_state", "influenza_deaths"]:
+            return self._make_deaths_adrio_state(attrib, scope, time_period)
         else:
             raise GeoValidationException(f"Invalid attribute: {attrib.name}.")
 
@@ -257,7 +259,7 @@ class ADRIOMakerCDC(ADRIOMaker):
         https://data.cdc.gov/NCHS/AH-COVID-19-Death-Counts-by-County-and-Week-2020-p/ite7-j2w7/about_data
         """
         if time_period.start_date <= date(2019, 12, 28) or time_period.end_date >= date(2024, 4, 12):
-            msg = "COVID deaths data is only available between 1/4/2020 and 4/5/2024."
+            msg = "County level deaths data is only available between 1/4/2020 and 4/5/2024."
             raise DataResourceException(msg)
 
         def fetch() -> NDArray:
@@ -292,9 +294,37 @@ class ADRIOMakerCDC(ADRIOMaker):
 
         return ADRIO(attrib.name, fetch)
 
-    def make_deaths_adrio_state(self, attrib: AttributeDef, scope: CensusScope, time_period: SpecificTimePeriod) -> ADRIO:
+    def _make_deaths_adrio_state(self, attrib: AttributeDef, scope: CensusScope, time_period: SpecificTimePeriod) -> ADRIO:
         """
         Makes ADRIOs for CDC dataset reporting number of deaths from COVID-19 and other respiratory illnesses.
         Available from 1/4/2020 to present at state granularity.
         https://data.cdc.gov/NCHS/Provisional-COVID-19-Death-Counts-by-Week-Ending-D/r8kw-7aab/about_data
         """
+        if time_period.start_date <= date(2019, 12, 29):
+            msg = "State level deaths data is only available starting 1/4/2020."
+            raise DataResourceException(msg)
+
+        def fetch() -> NDArray:
+            fips = scope.get_node_ids()
+            states = get_us_states(scope.year)
+            state_mapping = dict(zip(states.geoid, states.name))
+            state_names = '\'' + '\',\''.join(state_mapping[x] for x in fips) + '\''
+            col_name = self.attribute_cols[attrib.name]
+
+            url = f"https://data.cdc.gov/resource/r8kw-7aab.csv?$select=end_date,state,{col_name}&$where=state%20in({state_names})&$limit=15822"
+
+            df = read_csv(url)
+
+            df['end_date'] = [datetime.fromisoformat(
+                week.replace('/', '-')).date() for week in df['end_date']]
+
+            df = df[df['end_date'] >= time_period.start_date]
+            df = df[df['end_date'] < time_period.end_date]
+
+            df = df.groupby(['end_date', 'state']).sum()
+            df.reset_index(inplace=True)
+            df = df.pivot(index='end_date', columns='state', values=col_name)
+
+            return df.to_numpy(dtype=attrib.dtype)
+
+        return ADRIO(attrib.name, fetch)
