@@ -6,7 +6,7 @@ from typing import Any, Literal
 from numpy.typing import NDArray
 from pandas import DataFrame, Series, read_csv
 
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceException, GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import AttributeDef, SpecificTimePeriod, TimePeriod
 from epymorph.geography.scope import GeoScope
@@ -53,49 +53,64 @@ class CSVSpecMatrix(_BaseCSVSpecMatrix):
     """Dataclass to store parameters for CSV ADRIO with data shape NxN."""
 
 
-@dataclass
-class CSVSpecMatrixTime(_BaseCSVSpecMatrix):
-    """Dataclass to store parameters for time-series CSV ADRIO with data shape TxNxN."""
-    time_col: int
-
-
 class ADRIOMakerCSV(ADRIOMaker):
     @staticmethod
     def accepts_source(source: Any) -> bool:
-        if isinstance(source, CSVSpec | CSVSpecTime | CSVSpecMatrix | CSVSpecMatrixTime):
+        if isinstance(source, CSVSpec | CSVSpecTime | CSVSpecMatrix):
             return True
         else:
             return False
 
-    def make_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix | CSVSpecMatrixTime) -> ADRIO:
+    def make_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix) -> ADRIO:
         if isinstance(spec, CSVSpec | CSVSpecTime):
             return self._make_single_column_adrio(attrib, scope, time_period, spec)
         else:
-            return self._make_matrix_adrio(attrib, scope, time_period, spec)
+            return self._make_matrix_adrio(attrib, scope, spec)
 
     def _make_single_column_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpec | CSVSpecTime) -> ADRIO:
         """Makes an ADRIO to fetch data from a single relevant column in a .csv file."""
+        if spec.key_col == spec.data_col:
+            msg = "Key column and data column must not be the same."
+            raise GeoValidationException(msg)
+
         def fetch() -> NDArray:
-            df = self._load_from_file(spec, time_period, scope)
-
-            df.rename(columns={spec.key_col: 'key'}, inplace=True)
-            df.sort_values(by='key', inplace=True)
-
-            data_values = df[spec.data_col]
+            df = self._load_from_file(spec, scope)
 
             # check for null values (missing data in file)
-            if data_values.isnull().any():
+            if df[spec.data_col].isnull().any():
                 msg = f"Data for required geographies missing from {attrib.name} attribute file or could not be found."
                 raise DataResourceException(msg)
 
-            return df[spec.data_col].to_numpy(dtype=attrib.dtype)
+            if isinstance(spec, CSVSpec):
+                df.rename(columns={spec.key_col: 'key'}, inplace=True)
+                df.sort_values(by='key', inplace=True)
+                return df[spec.data_col].to_numpy(dtype=attrib.dtype)
+            else:
+                if not isinstance(time_period, SpecificTimePeriod):
+                    raise GeoValidationException("Unsupported time period.")
+
+                df[spec.time_col] = df[spec.time_col].apply(date.fromisoformat)
+
+                if any(df[spec.time_col] < time_period.start_date) or any(df[spec.time_col] > time_period.end_date):
+                    msg = "Found time column value(s) outside of geo's date range."
+                    raise DataResourceException(msg)
+
+                df.rename(columns={spec.key_col: 'key', spec.data_col: 'data',
+                          spec.time_col: 'time'}, inplace=True)
+                df.sort_values(by=['time', 'key'], inplace=True)
+                df = df.pivot(index='time', columns='key', values='data')
+                return df.to_numpy(dtype=attrib.dtype)
 
         return ADRIO(attrib.name, fetch)
 
-    def _make_matrix_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod, spec: CSVSpecMatrix | CSVSpecMatrixTime) -> ADRIO:
+    def _make_matrix_adrio(self, attrib: AttributeDef, scope: GeoScope, spec: CSVSpecMatrix) -> ADRIO:
         """Makes an ADRIO to fetch data from a single column within a .csv file and converts it to matrix format."""
+        if len({spec.from_key_col, spec.to_key_col, spec.data_col}) != 3:
+            msg = "From key column, to key column, and data column must all be unique."
+            raise GeoValidationException(msg)
+
         def fetch() -> NDArray:
-            df = self._load_from_file(spec, time_period, scope)
+            df = self._load_from_file(spec, scope)
 
             df = df.pivot(index=spec.from_key_col, columns=spec.to_key_col,
                           values=spec.data_col)
@@ -109,7 +124,7 @@ class ADRIOMakerCSV(ADRIOMaker):
 
         return ADRIO(attrib.name, fetch)
 
-    def _load_from_file(self, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix | CSVSpecMatrixTime, time_period: TimePeriod, scope: GeoScope) -> DataFrame:
+    def _load_from_file(self, spec: CSVSpec | CSVSpecTime | CSVSpecMatrix, scope: GeoScope) -> DataFrame:
         """
         Loads .csv at path location into a pandas DataFrame, filtering out data outside of the specified
         geographic scope and time period.
@@ -130,15 +145,6 @@ class ADRIOMakerCSV(ADRIOMaker):
                 else:
                     df = read_csv(path, header=None, dtype={
                                   spec.from_key_col: str, spec.to_key_col: str})
-
-            if isinstance(spec, CSVSpecTime | CSVSpecMatrixTime):
-                df[spec.time_col] = df[spec.time_col].apply(date.fromisoformat)
-
-                if isinstance(time_period, SpecificTimePeriod):
-                    df = df.loc[df[spec.time_col] >= time_period.start_date]
-                    df = df.loc[df[spec.time_col] < time_period.end_date]
-                else:
-                    raise DataResourceException("Unsupported time period.")
 
             if isinstance(spec, CSVSpec | CSVSpecTime):
                 df = self._parse_label(spec.key_type, scope, df, spec.key_col)
@@ -182,9 +188,9 @@ class ADRIOMakerCSV(ADRIOMaker):
             df[key_col] = [state_mapping.get(x) for x in df[key_col]]
             if df[key_col].isnull().any():
                 raise DataResourceException("Invalid state code in key column.")
-            df = df.loc[df[key_col].isin(scope.get_node_ids())]
+            df = df[df[key_col].isin(scope.get_node_ids())]
             if key_col2 is not None:
-                df = df.loc[df[key_col2].isin(scope.get_node_ids())]
+                df = df[df[key_col2].isin(scope.get_node_ids())]
             return df
 
         else:
@@ -239,9 +245,9 @@ class ADRIOMakerCSV(ADRIOMaker):
         if not all(granularity.matches(x) for x in df[key_col]):
             raise DataResourceException("Invalid geoid in key column.")
 
-        df = df.loc[df[key_col].isin(scope.get_node_ids())]
+        df = df[df[key_col].isin(scope.get_node_ids())]
         if key_col2 is not None:
-            df = df.loc[df[key_col2].isin(scope.get_node_ids())]
+            df = df[df[key_col2].isin(scope.get_node_ids())]
 
         return df
 
