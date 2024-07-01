@@ -105,7 +105,7 @@ class ADRIOMakerCSV(ADRIOMaker):
 
     def _make_matrix_adrio(self, attrib: AttributeDef, scope: GeoScope, spec: CSVSpecMatrix) -> ADRIO:
         """Makes an ADRIO to fetch data from a single column within a .csv file and converts it to matrix format."""
-        if len(set([spec.from_key_col, spec.to_key_col, spec.data_col])) != 3:
+        if len({spec.from_key_col, spec.to_key_col, spec.data_col}) != 3:
             msg = "From key column, to key column, and data column must all be unique."
             raise GeoValidationException(msg)
 
