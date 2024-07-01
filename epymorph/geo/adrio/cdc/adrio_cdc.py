@@ -12,10 +12,16 @@ from epymorph.error import DataResourceException, GeoValidationException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import SpecificTimePeriod, TimePeriod
 from epymorph.geography.scope import GeoScope
+<<<<<<< HEAD
 from epymorph.geography.us_census import (STATE, CensusGranularityName,
                                           CensusScope, CountyScope, StateScope,
                                           StateScopeAll, get_us_states,
                                           state_fips_to_code)
+=======
+from epymorph.geography.us_census import (STATE, CensusScope, CountyScope,
+                                          StateScope, StateScopeAll,
+                                          get_us_states, state_fips_to_code)
+>>>>>>> b7f9250 (Added ILI deaths dataset.)
 from epymorph.simulation import AttributeDef, geo_attrib
 
 
@@ -333,6 +339,7 @@ class ADRIOMakerCDC(ADRIOMaker):
             fips = scope.get_node_ids()
             states = get_us_states(scope.year)
             state_mapping = dict(zip(states.geoid, states.name))
+<<<<<<< HEAD
             state_names = np.array([state_mapping[x] for x in fips])
 
             info = QueryInfo("https://data.cdc.gov/resource/r8kw-7aab.csv?",
@@ -399,3 +406,25 @@ class ADRIOMakerCDC(ADRIOMaker):
         df[info.date_col] = df[info.date_col].apply(lambda x: str(x)[:10])
         df = df.sort_values(by=[info.date_col, info.fips_col])
         return df
+=======
+            state_names = '\'' + '\',\''.join(state_mapping[x] for x in fips) + '\''
+            col_name = self.attribute_cols[attrib.name]
+
+            url = f"https://data.cdc.gov/resource/r8kw-7aab.csv?$select=end_date,state,{col_name}&$where=state%20in({state_names})&$limit=15822"
+
+            df = read_csv(url)
+
+            df['end_date'] = [datetime.fromisoformat(
+                week.replace('/', '-')).date() for week in df['end_date']]
+
+            df = df[df['end_date'] >= time_period.start_date]
+            df = df[df['end_date'] < time_period.end_date]
+
+            df = df.groupby(['end_date', 'state']).sum()
+            df.reset_index(inplace=True)
+            df = df.pivot(index='end_date', columns='state', values=col_name)
+
+            return df.to_numpy(dtype=attrib.dtype)
+
+        return ADRIO(attrib.name, fetch)
+>>>>>>> b7f9250 (Added ILI deaths dataset.)
