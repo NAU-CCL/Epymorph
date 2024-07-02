@@ -22,27 +22,43 @@ class ADRIOMakerCDC(ADRIOMaker):
     """
 
     attributes = [
-        geo_attrib("covid_cases_per_100k", int, Shapes.TxN),
-        geo_attrib("covid_hospitalizations_per_100k", int, Shapes.TxN),
-        geo_attrib("covid_hospitalization_avg_facility", float, Shapes.TxN),
-        geo_attrib("covid_hospitalization_sum_facility", int, Shapes.TxN),
-        geo_attrib("influenza_hospitalization_avg_facility", float, Shapes.TxN),
-        geo_attrib("influenza_hospitalization_sum_facility", int, Shapes.TxN),
-        geo_attrib("covid_hospitalization_avg_state", float, Shapes.TxN),
-        geo_attrib("covid_hospitalization_sum_state", int, Shapes.TxN),
-        geo_attrib("influenza_hospitalization_avg_state", float, Shapes.TxN),
-        geo_attrib("influenza_hospitalization_sum_state", int, Shapes.TxN),
-        geo_attrib("full_covid_vaccinations", int, Shapes.TxN),
-        geo_attrib("one_dose_covid_vaccinations", int, Shapes.TxN),
-        geo_attrib("covid_booster_doses", int, Shapes.TxN),
-        geo_attrib("covid_deaths_county", int, Shapes.TxN),
-        geo_attrib("covid_deaths_state", int, Shapes.TxN),
-        geo_attrib("influenza_deaths", int, Shapes.TxN)
+        geo_attrib("covid_cases_per_100k", int, Shapes.TxN,
+                   comment='Number of COVID-19 cases per 100k population.'),
+        geo_attrib("covid_hospitalizations_per_100k", int, Shapes.TxN,
+                   comment='Number of COVID-19 hospitalizations per 100k population.'),
+        geo_attrib("covid_hospitalization_avg_facility", float, Shapes.TxN,
+                   comment='Weekly averages of COVID-19 hospitalizations from facility level dataset.'),
+        geo_attrib("covid_hospitalization_sum_facility", int, Shapes.TxN,
+                   comment='Weekly sums of all COVID-19 hospitalizations from facility level dataset.'),
+        geo_attrib("influenza_hospitalization_avg_facility", float, Shapes.TxN,
+                   comment='Weekly averages of influenza hospitalizations from facility level dataset.'),
+        geo_attrib("influenza_hospitalization_sum_facility", int, Shapes.TxN,
+                   comment='Weekly sums of influenza hospitalizations from facility level dataset.'),
+        geo_attrib("covid_hospitalization_avg_state", float, Shapes.TxN,
+                   comment='Weekly averages of COVID-19 hospitalizations from state level dataset.'),
+        geo_attrib("covid_hospitalization_sum_state", int, Shapes.TxN,
+                   comment='Weekly sums of COVID-19 hospitalizations from state level dataset.'),
+        geo_attrib("influenza_hospitalization_avg_state", float, Shapes.TxN,
+                   comment='Weekly averages of influenza hospitalizations from state level dataset.'),
+        geo_attrib("influenza_hospitalization_sum_state", int, Shapes.TxN,
+                   comment='Weekly sums of influenza hospitalizations from state level dataset.'),
+        geo_attrib("full_covid_vaccinations", int, Shapes.TxN,
+                   comment='Cumulative total number of individuals fully vaccinated for COVID-19.'),
+        geo_attrib("one_dose_covid_vaccinations", int, Shapes.TxN,
+                   comment='Cumulative total number of individuals with at least one dose of COVID-19 vaccination.'),
+        geo_attrib("covid_booster_doses", int, Shapes.TxN,
+                   comment='Cumulative total number of COVID-19 booster doses administered.'),
+        geo_attrib("covid_deaths_county", int, Shapes.TxN,
+                   comment='Weekly total COVID-19 deaths from county level dataset.'),
+        geo_attrib("covid_deaths_state", int, Shapes.TxN,
+                   comment='Weekly total COVID-19 deaths from state level dataset.'),
+        geo_attrib("influenza_deaths", int, Shapes.TxN,
+                   comment='Weekly total influenza deaths from state level dataset.')
     ]
 
     attribute_cols = {
         "covid_cases_per_100k": "covid_cases_per_100k",
-        "covid_hospitalizations_per_100k": "covid_hospital_addmissions_per_100k",
+        "covid_hospitalizations_per_100k": "covid_hospital_admissions_per_100k",
         "covid_hospitalization_avg_facility": "total_adult_patients_hospitalized_confirmed_covid_7_day_avg",
         "covid_hospitalization_sum_facility": "total_adult_patients_hospitalized_confirmed_covid_7_day_sum",
         "influenza_hospitalization_avg_facility": "total_patients_hospitalized_confirmed_influenza_7_day_avg",
@@ -59,7 +75,8 @@ class ADRIOMakerCDC(ADRIOMaker):
         "influenza_deaths": "influenza_deaths"
     }
 
-    def accepts_source(self, source: Any) -> bool:
+    @staticmethod
+    def accepts_source(source: Any) -> bool:
         return False
 
     def make_adrio(self, attrib: AttributeDef, scope: GeoScope, time_period: TimePeriod) -> ADRIO:
@@ -163,11 +180,12 @@ class ADRIOMakerCDC(ADRIOMaker):
             if scope.granularity == 'state':
                 df['fips_code'] = [STATE.extract(x) for x in df['fips_code']]
 
-            df.replace(-999999, 0, inplace=True)
-
             df = df.groupby(['collection_week', 'fips_code']).sum()
             df.reset_index(inplace=True)
             df = df.pivot(index='collection_week', columns='fips_code', values=col_name)
+
+            df[df < 0] = -999999
+            df.fillna(0, inplace=True)
 
             return df.to_numpy(dtype=attrib.dtype)
 
@@ -245,6 +263,8 @@ class ADRIOMakerCDC(ADRIOMaker):
 
             df = df[df['date'] >= time_period.start_date]
             df = df[df['date'] < time_period.end_date]
+
+            df.fillna(0, inplace=True)
 
             df = df.pivot(index='date', columns='fips', values=col_name)
 
