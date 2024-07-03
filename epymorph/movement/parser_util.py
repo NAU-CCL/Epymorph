@@ -137,12 +137,13 @@ def marshal_base_dtype(results: P.ParseResults):
     """Convert a pyparsing result to dtype object."""
     match results[0]:
         case 'int':
-            result = int
+            return int
         case 'float':
-            result = float
+            return float
         case 'str':
-            result = str
-    return result
+            return str
+        case x:
+            return P.ParseException(f"Unable to parse '{x}' as a dtype.")
 
 
 struct_dtype_field = _('(') + name('name') + _(',') + base_dtype('dtype') + _(')')

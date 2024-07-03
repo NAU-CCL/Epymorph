@@ -434,7 +434,8 @@ def validate_state_codes_as_fips(year: int, codes: Sequence[str]) -> Sequence[st
 # Census GeoScopes
 
 
-class CensusScope(GeoScope):
+@dataclass(frozen=True)
+class CensusScope(ABC, GeoScope):
     """A GeoScope using US Census delineations."""
 
     year: int
@@ -484,7 +485,7 @@ class StateScopeAll(CensusScope):
 
     def lower_granularity(self) -> 'CountyScope':
         """Create and return CountyScope object with identical properties."""
-        return CountyScope('state', ['*'], self.year)
+        return CountyScope(self.year, 'state', self.get_node_ids().tolist())
 
 
 @dataclass(frozen=True)
@@ -507,7 +508,7 @@ class StateScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('state', year, states_fips)
-        return StateScope('state', states_fips, year)
+        return StateScope(includes_granularity='state', includes=states_fips, year=year)
 
     @staticmethod
     def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'StateScope':
@@ -516,7 +517,7 @@ class StateScope(CensusScope):
         Raise GeographyError if any postal code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return StateScope('state', states_fips, year)
+        return StateScope(includes_granularity='state', includes=states_fips, year=year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         # As long as we enforce that fips codes will be checked and sorted on construction,
@@ -528,7 +529,7 @@ class StateScope(CensusScope):
 
     def lower_granularity(self) -> 'CountyScope':
         """Create and return CountyScope object with identical properties."""
-        return CountyScope(self.includes_granularity, self.includes, self.year)
+        return CountyScope(self.year, self.includes_granularity, self.includes)
 
 
 @dataclass(frozen=True)
@@ -546,7 +547,7 @@ class CountyScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('state', year, states_fips)
-        return CountyScope('state', states_fips, year)
+        return CountyScope(includes_granularity='state', includes=states_fips, year=year)
 
     @staticmethod
     def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
@@ -556,7 +557,7 @@ class CountyScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return CountyScope('state', states_fips, year)
+        return CountyScope(includes_granularity='state', includes=states_fips, year=year)
 
     @staticmethod
     def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
@@ -565,7 +566,7 @@ class CountyScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('county', year, counties_fips)
-        return CountyScope('county', counties_fips, year)
+        return CountyScope(includes_granularity='county', includes=counties_fips, year=year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
@@ -587,11 +588,11 @@ class CountyScope(CensusScope):
         if raised_granularity == 'county':
             raised_granularity = 'state'
             raised_includes = filter_unique(fips[:-3] for fips in raised_includes)
-        return StateScope(raised_granularity, raised_includes, self.year)
+        return StateScope(self.year, raised_granularity, raised_includes)
 
     def lower_granularity(self) -> 'TractScope':
         """Create and return TractScope object with identical properties."""
-        return TractScope(self.includes_granularity, self.includes, self.year)
+        return TractScope(self.year, self.includes_granularity, self.includes)
 
 
 @dataclass(frozen=True)
@@ -609,7 +610,7 @@ class TractScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('state', year, states_fips)
-        return TractScope('state', states_fips, year)
+        return TractScope(includes_granularity='state', includes=states_fips, year=year)
 
     @staticmethod
     def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
@@ -619,7 +620,7 @@ class TractScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return TractScope('state', states_fips, year)
+        return TractScope(includes_granularity='state', includes=states_fips, year=year)
 
     @staticmethod
     def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
@@ -628,7 +629,7 @@ class TractScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('county', year, counties_fips)
-        return TractScope('county', counties_fips, year)
+        return TractScope(includes_granularity='county', includes=counties_fips, year=year)
 
     @staticmethod
     def in_tracts(tract_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
@@ -637,7 +638,7 @@ class TractScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('tract', year, tract_fips)
-        return TractScope('tract', tract_fips, year)
+        return TractScope(includes_granularity='tract', includes=tract_fips, year=year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
@@ -666,11 +667,11 @@ class TractScope(CensusScope):
         if raised_granularity == 'tract':
             raised_granularity = 'county'
             raised_includes = filter_unique(fips[:-6] for fips in raised_includes)
-        return CountyScope(raised_granularity, raised_includes, self.year)
+        return CountyScope(self.year, raised_granularity, raised_includes)
 
     def lower_granularity(self) -> 'BlockGroupScope':
         """Create and return BlockGroupScope object with identical properties."""
-        return BlockGroupScope(self.includes_granularity, self.includes, self.year)
+        return BlockGroupScope(self.year, self.includes_granularity, self.includes)
 
 
 @dataclass(frozen=True)
@@ -688,7 +689,7 @@ class BlockGroupScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('state', year, states_fips)
-        return BlockGroupScope('state', states_fips, year)
+        return BlockGroupScope(includes_granularity='state', includes=states_fips, year=year)
 
     @staticmethod
     def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
@@ -698,7 +699,7 @@ class BlockGroupScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return BlockGroupScope('state', states_fips, year)
+        return BlockGroupScope(includes_granularity='state', includes=states_fips, year=year)
 
     @staticmethod
     def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
@@ -707,7 +708,7 @@ class BlockGroupScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('county', year, counties_fips)
-        return BlockGroupScope('county', counties_fips, year)
+        return BlockGroupScope(includes_granularity='county', includes=counties_fips, year=year)
 
     @staticmethod
     def in_tracts(tract_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
@@ -716,7 +717,7 @@ class BlockGroupScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('tract', year, tract_fips)
-        return BlockGroupScope('tract', tract_fips, year)
+        return BlockGroupScope(includes_granularity='tract', includes=tract_fips, year=year)
 
     @staticmethod
     def in_block_groups(block_group_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
@@ -725,7 +726,7 @@ class BlockGroupScope(CensusScope):
         Raise GeographyError if any FIPS code is invalid.
         """
         verify_fips('block group', year, block_group_fips)
-        return BlockGroupScope('block group', block_group_fips, year)
+        return BlockGroupScope(includes_granularity='block group', includes=block_group_fips, year=year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
@@ -761,7 +762,7 @@ class BlockGroupScope(CensusScope):
         if raised_granularity == 'block group':
             raised_granularity = 'tract'
             raised_includes = filter_unique(fips[:-1] for fips in raised_includes)
-        return TractScope(raised_granularity, raised_includes, self.year)
+        return TractScope(self.year, raised_granularity, raised_includes)
 
     def lower_granularity(self) -> CensusScope:
         raise GeographyError("No valid granularity lower than block group.")

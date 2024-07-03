@@ -32,7 +32,7 @@ class SimulationEvents(Protocol):
     """
     Protocol for Simulations that support lifecycle events.
     For correct operation, ensure that `on_start` is fired first,
-    then `on_tick` any number of times, then finally `on_end`.
+    then `on_tick` any number of times, then finally `on_finish`.
     """
 
     on_start: Event[OnStart]
@@ -47,9 +47,7 @@ class SimulationEvents(Protocol):
     and the percentage complete (a float).
     """
 
-    # TODO: rename `on_end` to `on_finish`.
-
-    on_end: Event[None]
+    on_finish: Event[None]
     """
     Event fires after a simulation run is complete.
     """
@@ -61,13 +59,13 @@ class SimulationEventsMixin(SimulationEvents):
     def __init__(self):
         self.on_start = Event()
         self.on_tick = Event()
-        self.on_end = Event()
+        self.on_finish = Event()
 
     def has_subscribers(self) -> bool:
         """True if there is at least one subscriber on any simulation event."""
         return self.on_start.has_subscribers \
             or self.on_tick.has_subscribers \
-            or self.on_end.has_subscribers
+            or self.on_finish.has_subscribers
 
 
 # Movement Events
@@ -172,7 +170,7 @@ class FetchStart(NamedTuple):
 class AdrioStart(NamedTuple):
     """The payload of a DynamicGeo adrio_start event."""
     attribute: str
-    index: int | None
+    adrio_index: int | None
     """An index assigned to this ADRIO if fetching ADRIOs as a batch."""
     adrio_len: int | None
     """The total number of ADRIOs being fetched if fetching ADRIOs as a batch."""

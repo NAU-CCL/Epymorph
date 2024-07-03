@@ -4,12 +4,11 @@ import unittest
 from pyparsing import ParseBaseException
 
 from epymorph.data_shape import Shapes
-from epymorph.data_type import CentroidDType
+from epymorph.data_type import CentroidType
 from epymorph.movement.parser import (DailyClause, MoveSteps, attribute, daily,
                                       move_steps)
 from epymorph.movement.parser_util import Duration
 from epymorph.simulation import AttributeDef
-from epymorph.sympy_shim import to_symbol
 
 
 class TestMoveSteps(unittest.TestCase):
@@ -46,23 +45,18 @@ class TestMoveSteps(unittest.TestCase):
 class TestAttribute(unittest.TestCase):
     def test_successful(self):
         cases = [
-            '[attrib: source=geo; name=commuters; shape=NxN; dtype=int; default_value=None; comment="hey1"]',
-            '[attrib: source=params; name=move_control; shape=TxN; dtype=float; default_value=42; comment="hey2"]',
-            '[attrib: source=params; name=move_control; shape=TxN; dtype=float; default_value=-32.7;\n    comment="hey3"]',
-            '[attrib:\nsource=params;\nname=theta;\nshape=S;\ndtype=str;\ndefault_value="hi";\ncomment="hey4"]',
-            '[attrib: source=geo; name=centroids; shape=N; dtype=[(longitude, float), (latitude, float)]; default_value=(1.0, 2.0); comment="hey5"]',
+            '[attrib: name=commuters; type=int; shape=NxN; default_value=None; comment="hey1"]',
+            '[attrib: name=move_control; type=float; shape=TxN; default_value=42; comment="hey2"]',
+            '[attrib: name=move_control; type=float; shape=TxN; default_value=-32.7;\n    comment="hey3"]',
+            '[attrib:\nname=theta;\ntype=str;\nshape=S;\ndefault_value="hi";\ncomment="hey4"]',
+            '[attrib: name=centroids; type=[(longitude, float), (latitude, float)]; shape=N; default_value=(1.0, 2.0); comment="hey5"]',
         ]
         exps = [
-            AttributeDef('commuters', 'geo', int, Shapes.NxN,
-                         to_symbol('commuters'), None, 'hey1'),
-            AttributeDef('move_control', 'params', float, Shapes.TxN,
-                         to_symbol('move_control'), 42.0, 'hey2'),
-            AttributeDef('move_control', 'params', float, Shapes.TxN,
-                         to_symbol('move_control'), -32.7, 'hey3'),
-            AttributeDef('theta', 'params', str, Shapes.S,
-                         to_symbol('theta'), 'hi', 'hey4'),
-            AttributeDef('centroids', 'geo', CentroidDType, Shapes.N,
-                         to_symbol('centroids'), (1.0, 2.0), 'hey5'),
+            AttributeDef('commuters', int, Shapes.NxN, None, 'hey1'),
+            AttributeDef('move_control', float, Shapes.TxN, 42.0, 'hey2'),
+            AttributeDef('move_control', float, Shapes.TxN, -32.7, 'hey3'),
+            AttributeDef('theta', str, Shapes.S, 'hi', 'hey4'),
+            AttributeDef('centroids', CentroidType, Shapes.N, (1.0, 2.0), 'hey5'),
         ]
         for c, e in zip(cases, exps):
             a = attribute.parse_string(c)[0]
@@ -70,9 +64,9 @@ class TestAttribute(unittest.TestCase):
 
     def test_failures(self):
         cases = [
-            '[attrib: source=blah; name=commuters; shape=NxN; dtype=int; default_value=23; comment="hey1"]',
-            '[attrib: source=params; name=move_control; shape=TxN; dtype=uint8; default_value=1; comment="hey2"]',
-            '[attrib: source=params; name=move_control; shape=TxA; dtype=float; default_value=27.3; comment="hey3"]',
+            '[attrib: name=commuters; type=int; shape=NxN; default_value=23; comment="hey1"]',
+            '[attrib: name=move_control; type=uint8; shape=TxN; default_value=1; comment="hey2"]',
+            '[attrib: name=move_control; type=float; shape=TxA; default_value=27.3; comment="hey3"]',
         ]
         for c in cases:
             with self.assertRaises(ParseBaseException):

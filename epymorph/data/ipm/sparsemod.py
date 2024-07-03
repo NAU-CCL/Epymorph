@@ -6,7 +6,7 @@ from epymorph.compartment_model import (CompartmentModel, compartment,
                                         fork)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.simulation import params_attrib as param
+from epymorph.simulation import AttributeDef
 
 
 @registry.ipm('sparsemod')
@@ -27,26 +27,26 @@ def load() -> CompartmentModel:
             compartment('R', description='recovered')
         ],
         attributes=[
-            param('beta', dtype=float, shape=Shapes.TxN, symbolic_name='beta_1'),
-            param('omega', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='omega_1'),
-            param('omega', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='omega_2'),
-            param('delta', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='delta_1'),
-            param('delta', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='delta_2'),
-            param('delta', dtype=float, shape=Shapes.TxNxA(2), symbolic_name='delta_3'),
-            param('delta', dtype=float, shape=Shapes.TxNxA(3), symbolic_name='delta_4'),
-            param('delta', dtype=float, shape=Shapes.TxNxA(4), symbolic_name='delta_5'),
-            param('gamma', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='gamma_a'),
-            param('gamma', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='gamma_b'),
-            param('gamma', dtype=float, shape=Shapes.TxNxA(2), symbolic_name='gamma_c'),
-            param('rho', dtype=float, shape=Shapes.TxNxA(0), symbolic_name='rho_1'),
-            param('rho', dtype=float, shape=Shapes.TxNxA(1), symbolic_name='rho_2'),
-            param('rho', dtype=float, shape=Shapes.TxNxA(2), symbolic_name='rho_3'),
-            param('rho', dtype=float, shape=Shapes.TxNxA(3), symbolic_name='rho_4'),
-            param('rho', dtype=float, shape=Shapes.TxNxA(4), symbolic_name='rho_5'),
+            AttributeDef('beta', type=float, shape=Shapes.TxN),
+            AttributeDef('omega_1', type=float, shape=Shapes.TxN),
+            AttributeDef('omega_2', type=float, shape=Shapes.TxN),
+            AttributeDef('delta_1', type=float, shape=Shapes.TxN),
+            AttributeDef('delta_2', type=float, shape=Shapes.TxN),
+            AttributeDef('delta_3', type=float, shape=Shapes.TxN),
+            AttributeDef('delta_4', type=float, shape=Shapes.TxN),
+            AttributeDef('delta_5', type=float, shape=Shapes.TxN),
+            AttributeDef('gamma_a', type=float, shape=Shapes.TxN),
+            AttributeDef('gamma_b', type=float, shape=Shapes.TxN),
+            AttributeDef('gamma_c', type=float, shape=Shapes.TxN),
+            AttributeDef('rho_1', type=float, shape=Shapes.TxN),
+            AttributeDef('rho_2', type=float, shape=Shapes.TxN),
+            AttributeDef('rho_3', type=float, shape=Shapes.TxN),
+            AttributeDef('rho_4', type=float, shape=Shapes.TxN),
+            AttributeDef('rho_5', type=float, shape=Shapes.TxN),
         ])
 
     [S, E, Ia, Ip, Is, Ib, Ih, Ic1, Ic2, D, R] = symbols.compartment_symbols
-    [beta_1, omega_1, omega_2, delta_1, delta_2, delta_3, delta_4, delta_5,
+    [beta, omega_1, omega_2, delta_1, delta_2, delta_3, delta_4, delta_5,
         gamma_a, gamma_b, gamma_c, rho_1, rho_2, rho_3, rho_4, rho_5] = symbols.attribute_symbols
 
     # formulate the divisor so as to avoid dividing by zero;
@@ -58,7 +58,7 @@ def load() -> CompartmentModel:
     return create_model(
         symbols=symbols,
         transitions=[
-            edge(S, E, rate=beta_1 * lambda_1 * S),
+            edge(S, E, rate=beta * lambda_1 * S),
             fork(
                 edge(E, Ia, rate=E * delta_1 * rho_1),
                 edge(E, Ip, rate=E * delta_1 * (1 - rho_1))

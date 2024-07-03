@@ -10,47 +10,32 @@ from typing import Callable, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data_type import SimDType
-from epymorph.error import (AttributeException, MmSimException,
-                            MmValidationException)
-from epymorph.simulation import (AttributeDef, DataSource, GeoData, ParamsData,
+from epymorph.data_type import AttributeArray, SimDType
+from epymorph.error import AttributeException, MmSimException
+from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
                                  SimDimensions, Tick, TickDelta)
-from epymorph.util import NumpyTypeError
 
 
 class MovementContext(Protocol):
     """The subset of the RumeContext that the movement model clauses need."""
-    # This machine avoids circular deps.
+
     @property
+    @abstractmethod
     def dim(self) -> SimDimensions:
-        """The simulation's dimensionality."""
-        raise NotImplementedError
+        """The simulation dimensions."""
 
     @property
-    def geo(self) -> GeoData:
-        """The geo data."""
-        raise NotImplementedError
-
-    @property
-    def params(self) -> ParamsData:
-        """The parameter data."""
-        raise NotImplementedError
-
-    @property
+    @abstractmethod
     def rng(self) -> np.random.Generator:
-        """The random number generator."""
-        raise NotImplementedError
+        """The simulation's random number generator."""
 
     @property
-    def version(self) -> int:
-        """
-        `version` indicates when changes have been made to the context.
-        If `version` hasn't changed, no other changes have been made.
-        """
-        raise NotImplementedError
+    @abstractmethod
+    def data(self) -> NamespacedAttributeResolver:
+        """The resolver for simulation data."""
 
 
-PredefData = ParamsData
+PredefData = dict[str, AttributeArray]
 PredefClause = Callable[[MovementContext], PredefData]
 
 
@@ -64,7 +49,7 @@ class TravelClause(ABC):
         """Should this clause apply this tick?"""
 
     @abstractmethod
-    def requested(self, ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
+    def requested(self, ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
         """Evaluate this clause for the given tick, returning a requested movers array (N,N)."""
 
     @abstractmethod
@@ -75,7 +60,7 @@ class TravelClause(ABC):
 MovementPredicate = Callable[[MovementContext, Tick], bool]
 """A predicate which decides if a clause should fire this tick."""
 
-MovementFunction = Callable[[MovementContext, PredefData, Tick], NDArray[SimDType]]
+MovementFunction = Callable[[MovementContext, Tick], NDArray[SimDType]]
 """
 A function which calculates the requested number of individuals to move due to this clause this tick.
 Returns an (N,N) array of integers.
@@ -110,9 +95,9 @@ class DynamicTravelClause(TravelClause):
     def predicate(self, ctx: MovementContext, tick: Tick) -> bool:
         return self._move(ctx, tick)
 
-    def requested(self, ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
+    def requested(self, ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
         try:
-            return self._requested(ctx, predef, tick)
+            return self._requested(ctx, tick)
         except KeyError as e:
             # NOTE: catching KeyError here will be necessary (to get nice error messages)
             # until we can properly validate the MM clauses.
@@ -145,79 +130,5 @@ class MovementModel:
     predef: PredefClause
     """The predef clause for this movement model."""
 
-    predef_context_hash: Callable[[MovementContext], int]
-    """
-    A hash function which determines if the given MovementContext has changed in a way that would
-    necessitate the predef be re-calculated.
-    """
-
     clauses: list[TravelClause]
     """The clauses which express the movement model"""
-
-
-# Validation
-
-
-def validate_mm(
-    mm_attribs: list[AttributeDef],
-    dim: SimDimensions,
-    geo_data: DataSource,  # GeoData
-    params_data: DataSource,  # ParamsData
-) -> None:
-    """Validate that the MM has all required attributes."""
-
-    def _validate_attr(attr: AttributeDef) -> Exception | None:
-        try:
-            name = attr.name
-            match attr.source:
-                case 'geo':
-                    if not name in geo_data:
-                        msg = f"Missing geo attribute '{name}'"
-                        raise AttributeException(msg)
-                    value = geo_data[name]
-                case 'params':
-                    if not name in params_data:
-                        msg = f"Missing params attribute '{name}'"
-                        raise AttributeException(msg)
-                    value = params_data[name]
-
-            # NOTE: Movement Model currently DOES NOT allow shape polymorphism.
-            # It doesn't have an infrastructure to adapt input arrays like the IPM does.
-            # The goal is to support this, but I want to delay to 0.5 so as to contain
-            # the scope of changes in 0.4. Until then, you have to provide exact shape matches,
-            # both in the attributes declaration and in the submitted parameters (which has been the case).
-
-            if not attr.shape.matches(dim, value, False):
-                msg = f"Attribute '{attr.name}' was expected to be an array of shape {attr.shape} " + \
-                    f"-- got {value.shape}."
-                raise AttributeException(msg)
-
-            # if attr.dtype == int:
-            #     dtype = np.dtype(np.int64)
-            # elif attr.dtype == float:
-            #     dtype = np.dtype(np.float64)
-            # elif attr.dtype == str:
-            #     dtype = np.dtype(np.str_)
-            # else:
-            #     raise ValueError(f"Unsupported dtype: {attr.dtype}")
-
-            if not np.can_cast(value.dtype, attr.dtype):
-                msg = f"Attribute '{attr.name}' was expected to be an array of type {attr.dtype} " + \
-                    f"-- got {value.dtype}."
-                raise AttributeException(msg)
-
-            return None
-        except NumpyTypeError as e:
-            msg = f"Attribute '{attr.name}' is not properly specified. {e}"
-            return AttributeException(msg)
-        except AttributeException as e:
-            return e
-
-    # Collect all attribute errors to raise as a group.
-    errors = [x for x in (_validate_attr(attr) for attr in mm_attribs)
-              if x is not None]
-
-    if len(errors) > 0:
-        msg = "MM attribute requirements were not met. See errors:" + \
-            "".join(f"\n- {e}" for e in errors)
-        raise MmValidationException(msg)

@@ -1,6 +1,7 @@
 # pylint: disable=missing-docstring
 import unittest
-from functools import partial
+from math import inf
+from typing import cast
 
 import numpy as np
 
@@ -10,10 +11,10 @@ from epymorph.compartment_model import (CompartmentModel, compartment,
 from epymorph.error import (IpmSimInvalidProbsException,
                             IpmSimLessThanZeroException, IpmSimNaNException,
                             MmSimException)
-from epymorph.geo.spec import NO_DURATION, StaticGeoSpec
 from epymorph.geo.static import StaticGeo
-from epymorph.initializer import single_location
-from epymorph.simulation import geo_attrib, params_attrib
+from epymorph.geography.scope import CustomScope
+from epymorph.geography.us_census import StateScope
+from epymorph.simulation import AttributeDef
 
 
 class SimulateTest(unittest.TestCase):
@@ -23,23 +24,38 @@ class SimulateTest(unittest.TestCase):
     for epymorph's correctness.
     """
 
+    def _pei_scope(self) -> StateScope:
+        pei_states = ["FL", "GA", "MD", "NC", "SC", "VA"]
+        return StateScope.in_states_by_code(pei_states, 2010)
+
+    def _pei_geo(self) -> StaticGeo:
+        return cast(StaticGeo, geo_library['pei']())
+
     def test_pei(self):
-        sim = StandardSimulation(
-            geo=geo_library['pei'](),
+
+        geo = self._pei_geo()
+        rume = Rume.single_strata(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
-            params={
-                'infection_duration': 1 / 4,
-                'immunity_duration': 1 / 90,
-                'move_control': 0.9,
-                'theta': 0.1,
-            },
+            init=init.SingleLocation(location=0, seed_size=10_000),
+            scope=self._pei_scope(),
             time_frame=TimeFrame.of("2015-01-01", 10),
-            initializer=partial(single_location, location=0, seed_size=10_000),
-            rng=default_rng(42)
+            params={
+                'ipm::infection_duration': 4,
+                'ipm::immunity_duration': 90,
+                'mm::move_control': 0.9,
+                'mm::theta': 0.1,
+                '*::population': geo.values['population'],
+                '*::humidity': geo.values['humidity'],
+                '*::commuters': geo.values['commuters'],
+            },
         )
 
-        out1 = sim.run()
+        sim = BasicSimulator(rume)
+
+        out1 = sim.run(
+            rng_factory=default_rng(42),
+        )
 
         np.testing.assert_array_equal(
             out1.initial[:, 1],
@@ -65,7 +81,9 @@ class SimulateTest(unittest.TestCase):
         self.assertGreaterEqual(out1.incidence.min(), 0,
                                 "Incidence can never be less than zero.")
 
-        out2 = sim.run()
+        out2 = sim.run(
+            rng_factory=default_rng(42),
+        )
 
         np.testing.assert_array_equal(
             out1.incidence,
@@ -79,25 +97,71 @@ class SimulateTest(unittest.TestCase):
             "Running the sim twice with the same RNG should yield the same prevalence."
         )
 
-    def test_less_than_zero_err(self):
-        """Test exception handling for a negative rate value due to a negative parameter"""
-        sim = StandardSimulation(
-            geo=geo_library['pei'](),
+    def test_override_params(self):
+        geo = self._pei_geo()
+        rume = Rume.single_strata(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
-            params={
-                'infection_duration': 1 / 4,
-                'immunity_duration': -1 / 100,  # notice the negative parameter
-                'move_control': 0.9,
-                'theta': 0.1,
-            },
+            init=init.SingleLocation(location=0, seed_size=10_000),
+            scope=self._pei_scope(),
             time_frame=TimeFrame.of("2015-01-01", 10),
-            initializer=partial(single_location, location=0, seed_size=10_000),
-            rng=default_rng(42)
+            params={
+                'ipm::infection_duration': 4,
+                'ipm::immunity_duration': 90,
+                'mm::move_control': 0.9,
+                'mm::theta': 0.1,
+                '*::population': geo.values['population'],
+                '*::humidity': geo.values['humidity'],
+                '*::commuters': geo.values['commuters'],
+            },
         )
 
+        sim = BasicSimulator(rume)
+        rng_factory = default_rng(42)
+
+        # Run once with immunity_duration = 90
+        out1 = sim.run(
+            rng_factory=rng_factory,
+        )
+        # And again with immunity_duration = inf
+        out2 = sim.run(
+            params={'ipm::immunity_duration': inf},
+            rng_factory=rng_factory,
+        )
+
+        # We expect in the first result, some people do make the R->S transition,
+        self.assertFalse(np.all(out1.incidence[:, 0, 2] == 0))
+        # while in the second result, no one does.
+        self.assertTrue(np.all(out2.incidence[:, 0, 2] == 0))
+
+    def test_less_than_zero_err(self):
+        """Test exception handling for a negative rate value due to a negative parameter"""
+
+        geo = self._pei_geo()
+        rume = Rume.single_strata(
+            ipm=ipm_library['pei'](),
+            mm=mm_library['pei'](),
+            init=init.SingleLocation(location=0, seed_size=10_000),
+            scope=self._pei_scope(),
+            time_frame=TimeFrame.of("2015-01-01", 10),
+            params={
+                'ipm::infection_duration': 4,
+                'ipm::immunity_duration': -100,  # notice the negative parameter
+                'mm::move_control': 0.9,
+                'mm::theta': 0.1,
+                '*::population': geo.values['population'],
+                '*::humidity': geo.values['humidity'],
+                '*::commuters': geo.values['commuters'],
+            },
+        )
+
+        # geo = geo_library['pei']()
+        sim = BasicSimulator(rume)
+
         with self.assertRaises(IpmSimLessThanZeroException) as e:
-            sim.run()
+            sim.run(
+                rng_factory=default_rng(42),
+            )
 
         err_msg = str(e.exception)
 
@@ -106,8 +170,8 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("S: ", err_msg)
         self.assertIn("I: ", err_msg)
         self.assertIn("R: ", err_msg)
-        self.assertIn("infection_duration: 0.25", err_msg)
-        self.assertIn("immunity_duration: -0.01", err_msg)
+        self.assertIn("infection_duration: 4.0", err_msg)
+        self.assertIn("immunity_duration: -100.0", err_msg)
         self.assertIn("humidity: 0.01003", err_msg)
 
     def test_divide_by_zero_err(self):
@@ -121,57 +185,45 @@ class SimulateTest(unittest.TestCase):
                     compartment('R'),
                 ],
                 attributes=[
-                    params_attrib('beta', dtype=float, shape=Shapes.TxN),  # infectivity
-                    # progression from infected to recovered
-                    params_attrib('gamma', dtype=float, shape=Shapes.TxN),
-                    # progression from recovered to susceptible
-                    params_attrib('xi', dtype=float, shape=Shapes.TxN)
+                    AttributeDef('beta', type=float, shape=Shapes.TxN),
+                    AttributeDef('gamma', type=float, shape=Shapes.TxN),
+                    AttributeDef('xi', type=float, shape=Shapes.TxN)
                 ])
 
             [S, I, R] = symbols.compartment_symbols
             [β, γ, ξ] = symbols.attribute_symbols
 
             # N is NOT protected by Max(1, ...) here
-            N = S + I + R
+            N = S + I + R  # type: ignore
 
             return create_model(
                 symbols=symbols,
                 transitions=[
-                    edge(S, I, rate=β * S * I / N),
-                    edge(I, R, rate=γ * I),
-                    edge(R, S, rate=ξ * R)
+                    edge(S, I, rate=β * S * I / N),  # type: ignore
+                    edge(I, R, rate=γ * I),  # type: ignore
+                    edge(R, S, rate=ξ * R),  # type: ignore
                 ])
 
-        my_geo = StaticGeo(
-            spec=StaticGeoSpec(
-                attributes=[
-                    geo_attrib('label', dtype=str, shape=Shapes.N),
-                    geo_attrib('population', dtype=str, shape=Shapes.N),
-                ],
-                time_period=NO_DURATION,
-            ),
-            values={
-                'label': np.array(['a', 'b', 'c']),
-                'population': np.array([0, 10, 20], dtype=np.int64),
-            },
-        )
-        sim = StandardSimulation(
-            geo=my_geo,
+        rume = Rume.single_strata(
             ipm=load_ipm(),
             mm=mm_library['no'](),
-            params={
-                'phi': 40.0,
-                'beta': 0.4,
-                'gamma': 1 / 5,
-                'xi': 1 / 100,
-            },
+            init=init.SingleLocation(location=1, seed_size=5),
+            scope=CustomScope(np.array(['a', 'b', 'c'])),
             time_frame=TimeFrame.of("2015-01-01", 150),
-            initializer=partial(single_location, location=1, seed_size=5),
-            rng=default_rng(1)
+            params={
+                '*::mm::phi': 40.0,
+                '*::ipm::beta': 0.4,
+                '*::ipm::gamma': 1 / 5,
+                '*::ipm::xi': 1 / 100,
+                '*::*::population': np.array([0, 10, 20], dtype=np.int64),
+            },
         )
 
+        sim = BasicSimulator(rume)
         with self.assertRaises(IpmSimNaNException) as e:
-            sim.run()
+            sim.run(
+                rng_factory=default_rng(1),
+            )
 
         err_msg = str(e.exception)
 
@@ -187,24 +239,28 @@ class SimulateTest(unittest.TestCase):
 
     def test_negative_probs_error(self):
         """Test for handling negative probability error"""
-        sim = StandardSimulation(
-            geo=geo_library['pei'](),
+        geo = self._pei_geo()
+        rume = Rume.single_strata(
             ipm=ipm_library['sirh'](),
             mm=mm_library['no'](),
+            init=init.SingleLocation(location=1, seed_size=5),
+            scope=self._pei_scope(),
+            time_frame=TimeFrame.of("2015-01-01", 150),
             params={
                 'beta': 0.4,
                 'gamma': 1 / 5,
                 'xi': 1 / 100,
                 'hospitalization_prob': -1 / 5,
-                'hospitalization_duration': 15
+                'hospitalization_duration': 15,
+                'population': geo.values['population'],
             },
-            time_frame=TimeFrame.of("2015-01-01", 150),
-            initializer=partial(single_location, location=1, seed_size=5),
-            rng=default_rng(1)
         )
 
+        sim = BasicSimulator(rume)
         with self.assertRaises(IpmSimInvalidProbsException) as e:
-            sim.run()
+            sim.run(
+                rng_factory=default_rng(1),
+            )
 
         err_msg = str(e.exception)
 
@@ -226,24 +282,29 @@ class SimulateTest(unittest.TestCase):
     def test_mm_clause_error(self):
         """Test for handling invalid movement model clause application"""
 
-        sim = StandardSimulation(
-            geo=geo_library['pei'](),
+        geo = self._pei_geo()
+        rume = Rume.single_strata(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
+            init=init.SingleLocation(location=1, seed_size=5),
+            scope=self._pei_scope(),
+            time_frame=TimeFrame.of("2015-01-01", 150),
             params={
                 'infection_duration': 40.0,
                 'immunity_duration': 0.4,
                 'humidity': 20.2,
                 'move_control': 0.4,
-                'theta': -5
+                'theta': -5.0,
+                'population': geo.values['population'],
+                'commuters': geo.values['commuters'],
             },
-            time_frame=TimeFrame.of("2015-01-01", 150),
-            initializer=partial(single_location, location=1, seed_size=5),
-            rng=default_rng(1)
         )
 
+        sim = BasicSimulator(rume)
         with self.assertRaises(MmSimException) as e:
-            sim.run()
+            sim.run(
+                rng_factory=default_rng(1),
+            )
 
         err_msg = str(e.exception)
 

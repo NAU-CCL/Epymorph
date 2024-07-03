@@ -3,7 +3,7 @@ Compilation of movement models.
 """
 import ast
 from functools import wraps
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Protocol, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -51,20 +51,10 @@ def compile_spec(
             trns_ast = transformer.visit_and_fix(orig_ast)
             predef_f = compile_function(trns_ast, global_namespace)
 
-        def predef_context_hash(ctx: MovementContext) -> int:
-            # NOTE: This is a placeholder predef hash function
-            # that will recalculate the predef if any change is made to the context.
-            # Fine for now, but we could go finer-grained than that
-            # and only recalc if something changes that the predef code
-            # actually uses. For this we'll have to extract references
-            # from the predef AST.
-            return hash(ctx.version)
-
         return MovementModel(
             tau_steps=spec.steps.step_lengths,
             attributes=spec.attributes,
             predef=predef_f,
-            predef_context_hash=predef_context_hash,
             clauses=[_compile_clause(c, spec.attributes, global_namespace, name_override)
                      for c in spec.clauses]
         )
@@ -151,33 +141,33 @@ def _adapt_move_function(fn: Callable, fn_ast: ast.FunctionDef) -> MovementFunct
     f(tick); f(tick, src); or f(tick, src, dst).
     """
     match len(fn_ast.args.args):
-        # Remember `fn` has been transformed, so if the user gave 1 arg we added 2 for a total of 3.
-        case 3:
+        # Remember `fn` has been transformed, so if the user gave 1 arg we added 1 for a total of 2.
+        case 2:
             @wraps(fn)
-            def fn_arity1(ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
-                requested = fn(ctx, predef, tick)
+            def fn_arity1(ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
+                requested = fn(ctx, tick)
                 np.fill_diagonal(requested, 0)
                 return requested
             return fn_arity1
 
-        case 4:
+        case 3:
             @wraps(fn)
-            def fn_arity2(ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
+            def fn_arity2(ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
                 N = ctx.dim.nodes
                 requested = np.zeros((N, N), dtype=SimDType)
                 for n in range(N):
-                    requested[n, :] = fn(ctx, predef, tick, n)
+                    requested[n, :] = fn(ctx, tick, n)
                 np.fill_diagonal(requested, 0)
                 return requested
             return fn_arity2
 
-        case 5:
+        case 4:
             @wraps(fn)
-            def fn_arity3(ctx: MovementContext, predef: PredefData, tick: Tick) -> NDArray[SimDType]:
+            def fn_arity3(ctx: MovementContext, tick: Tick) -> NDArray[SimDType]:
                 N = ctx.dim.nodes
                 requested = np.zeros((N, N), dtype=SimDType)
                 for i, j in np.ndindex(N, N):
-                    requested[i, j] = fn(ctx, predef, tick, i, j)
+                    requested[i, j] = fn(ctx, tick, i, j)
                 np.fill_diagonal(requested, 0)
                 return requested
             return fn_arity3
@@ -188,6 +178,9 @@ def _adapt_move_function(fn: Callable, fn_ast: ast.FunctionDef) -> MovementFunct
 
 
 # Code transformers
+
+class HasLineNo(Protocol):
+    lineno: int
 
 
 class _MovementCodeTransformer(ast.NodeTransformer):
@@ -200,17 +193,7 @@ class _MovementCodeTransformer(ast.NodeTransformer):
     check_attributes: bool
     attributes: Mapping[str, AttributeDef]
 
-    geo_remapping: Callable[[str], str]
-    params_remapping: Callable[[str], str]
-    predef_remapping: Callable[[str], str]
-
-    def __init__(
-        self,
-        attributes: Sequence[AttributeDef],
-        geo_remapping: Callable[[str], str] = identity,
-        params_remapping: Callable[[str], str] = identity,
-        predef_remapping: Callable[[str], str] = identity,
-    ):
+    def __init__(self, attributes: Sequence[AttributeDef]):
         # NOTE: for the sake of backwards compatibility, MovementModel attribute declarations
         # are optional; so our approach will be that attributes will only be checked if at least
         # one attribute declaration is provided.
@@ -221,40 +204,21 @@ class _MovementCodeTransformer(ast.NodeTransformer):
             self.check_attributes = True
             self.attributes = {a.name: a for a in attributes}
 
-        # NOTE: When I added the remapping capability I thought that would be our
-        # approach to handling multi-strata movement models. As development
-        # of that feature continued, I decided not to use it in favor of remapping
-        # the source data itself instead. Nevertheless, it could be a useful feature
-        # to have here, so I'm leaving the code in place.
-        self.geo_remapping = geo_remapping
-        self.params_remapping = params_remapping
-        self.predef_remapping = predef_remapping
-
-    def _report_line(self, node: ast.AST):
+    def _report_line(self, node: HasLineNo):
         return f"Line: {node.lineno}"
 
     def visit_Subscript(self, node: ast.Subscript) -> Any:
-        """Modify references to dictionaries that should be in context."""
-        modified = False
-        if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant):
+        """Modify references to data and predef pseudo-dictionaries."""
+
+        if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant) and node.value.id in ['data', 'predef']:
             source = node.value.id
             attr_name = node.slice.value
 
-            # Check attributes against declarations.
-            if self.check_attributes and source in ['geo', 'params']:
-                if not attr_name in self.attributes:
-                    msg = f"Movement model is using an undeclared attribute: `{source}[{attr_name}]`. "\
-                        f"Please add a suitable attribute declaration. ({self._report_line(node)})"
-                    raise MmCompileException(msg)
-
-                attr = self.attributes[attr_name]
-                if source != attr.source:
-                    msg = "Movement model is using an attribute from a source other than the one that's declared. "\
-                        f"It's trying to access `{source}[{attr_name}]` "\
-                        f"but the attribute declaration says this should come from {attr.source}. "\
-                        "Please correct either the attribute declaration or the model function code. "\
-                        f"({self._report_line(node)})"
-                    raise MmCompileException(msg)
+            # Check data attributes against declarations (but ignore predefs).
+            if self.check_attributes and source == 'data' and attr_name not in self.attributes:
+                msg = f"Movement model is using an undeclared attribute: `data[{attr_name}]`. "\
+                    f"Please add a suitable attribute declaration. ({self._report_line(node)})"
+                raise MmCompileException(msg)
 
             # NOTE: what we are *NOT* doing is checking if usage of predef attributes are
             # actually provided by the predef function. Doing this at compile time would be
@@ -262,29 +226,22 @@ class _MovementCodeTransformer(ast.NodeTransformer):
             # the returned dictionary's keys. In simple cases this might be straight-forward, but not
             # in the general case. For the time being, this will remain a simulation-time error.
 
-            # Remap the attribute name (slice.value) based on source.
-            if source in ['geo', 'params', 'predef']:
-                match source:
-                    case 'geo':
-                        attr_rename = self.geo_remapping(attr_name)
-                    case 'params':
-                        attr_rename = self.params_remapping(attr_name)
-                    case 'predef':
-                        attr_rename = self.predef_remapping(attr_name)
-                node.slice = ast.Constant(value=attr_rename)
-                modified = True
-
-            # Geo and params are in the context (predef is not).
-            # Rewrite to access via the context.
-            if source in ['geo', 'params']:
-                node.value = ast.Attribute(
-                    value=ast.Name(id='ctx', ctx=ast.Load()),
-                    attr=source,
+            # Rewrite to access via context resolver.
+            return ast.Call(
+                func=ast.Attribute(
+                    value=ast.Attribute(
+                        value=ast.Name(id='ctx', ctx=ast.Load()),
+                        attr='data',
+                        ctx=ast.Load(),
+                    ),
+                    attr='resolve_name',
                     ctx=ast.Load(),
-                )
-                modified = True
+                ),
+                args=[node.slice],
+                keywords=[],
+            )
 
-        return node if modified else self.generic_visit(node)
+        return self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> Any:
         """Modify references to objects that should be in context."""
@@ -316,8 +273,8 @@ class PredefFunctionTransformer(_MovementCodeTransformer):
     as the first parameter.
     """
 
-    def _report_line(self, node: ast.AST):
-        return f"Predef line: {node.lineno}"
+    def _report_line(self, node: HasLineNo):
+        return f"predef line: {node.lineno}"
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
         """Modify function parameters."""
@@ -344,26 +301,26 @@ class ClauseFunctionTransformer(_MovementCodeTransformer):
 
     def commuters(t):
         typical = np.minimum(
-            geo['population'][:],
-            predef['commuters_by_node'],
+            data['population'][:],
+            data['commuters_by_node'],
         )
-        actual = np.binomial(typical, param['move_control'])
+        actual = np.binomial(typical, data['move_control'])
         return np.multinomial(actual, predef['commuting_probability'])
 
     Will be rewritten as:
 
-    def commuters(ctx, predef, t):
+    def commuters(ctx, t):
         typical = np.minimum(
-            ctx.geo['population'][:],
-            predef['commuters_by_node'],
+            ctx.data.resolve_name('population')[:],
+            ctx.data.resolve_name('commuters_by_node'),
         )
-        actual = np.binomial(typical, ctx.param['move_control'])
-        return np.multinomial(actual, predef['commuting_probability'])
+        actual = np.binomial(typical, ctx.data.resolve_name('move_control'))
+        return np.multinomial(actual, ctx.data.resolve_name('commuting_probability'))
     """
 
     clause_name: str = "<unknown clause>"
 
-    def _report_line(self, node: ast.AST):
+    def _report_line(self, node: HasLineNo):
         return f"{self.clause_name} line: {node.lineno}"
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
@@ -375,9 +332,5 @@ class ClauseFunctionTransformer(_MovementCodeTransformer):
                 arg='ctx',
                 annotation=ast.Name(id='MovementContext', ctx=ast.Load()),
             )
-            predef_arg = ast.arg(
-                arg='predef',
-                annotation=ast.Name(id='PredefData', ctx=ast.Load()),
-            )
-            new_node.args.args = [ctx_arg, predef_arg, *new_node.args.args]
+            new_node.args.args = [ctx_arg, *new_node.args.args]
         return new_node

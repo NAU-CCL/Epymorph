@@ -3,10 +3,11 @@ import numpy as np
 
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.data_type import CentroidDType
+from epymorph.data_type import CentroidDType, CentroidType
 from epymorph.geo.spec import LABEL, NO_DURATION, StaticGeoSpec
 from epymorph.geo.static import StaticGeo
-from epymorph.simulation import geo_attrib as attrib
+from epymorph.geography.us_census import StateScope
+from epymorph.simulation import AttributeDef
 
 
 @registry.geo('single_pop')
@@ -15,11 +16,12 @@ def load() -> StaticGeo:
     spec = StaticGeoSpec(
         attributes=[
             LABEL,
-            attrib('geoid', dtype=str),
-            attrib('centroid', dtype=CentroidDType),
-            attrib('population', dtype=int),
-            attrib('commuters', dtype=int, shape=Shapes.NxN),
+            AttributeDef('geoid', type=str, shape=Shapes.N),
+            AttributeDef('centroid', type=CentroidType, shape=Shapes.N),
+            AttributeDef('population', type=int, shape=Shapes.N),
+            AttributeDef('commuters', type=int, shape=Shapes.NxN),
         ],
+        scope=StateScope.in_states_by_code(['AZ'], year=2020),
         time_period=NO_DURATION
     )
     return StaticGeo(spec, {

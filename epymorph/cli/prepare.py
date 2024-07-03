@@ -82,11 +82,11 @@ def prepare_run_toml(out_path: str,
     mm = mm_library[mm_name]()
 
     attributes = {
-        attrib.name: _placeholder_value(attrib.dtype_as_np)
+        attrib.name: _placeholder_value(attrib.type)
         for attrib in ipm.attributes
         if attrib.source == 'params'
     } | {
-        attrib.name: _placeholder_value(attrib.dtype)
+        attrib.name: _placeholder_value(attrib.type)
         for attrib in mm.attributes
         if attrib.source == 'params'
     }

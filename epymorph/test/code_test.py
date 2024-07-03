@@ -102,27 +102,41 @@ class TestScrubFunction(unittest.TestCase):
         self.assertEqual(ast.dump(a0), ast.dump(a1))
 
     def test_scrub_imports(self):
+        empty_args = ast.arguments(
+            posonlyargs=[],
+            args=[],
+            kwonlyargs=[],
+            kw_defaults=[],
+            defaults=[],
+        )
+
         f0 = ast.FunctionDef(
             name='my_function',
+            args=empty_args,
             body=[
-                ast.Import(names=['os']),
+                ast.Import(names=[ast.alias(name='os')]),
                 ast.Return(value=ast.Constant(value=42)),
             ],
+            decorator_list=[],
         )
 
         f1 = ast.FunctionDef(
             name='my_function',
+            args=empty_args,
             body=[
-                ast.ImportFrom(module='os', names=['getenv']),
+                ast.ImportFrom(module='os', names=[ast.alias(name='getenv')], level=0),
                 ast.Return(value=ast.Constant(value=42, kind=None)),
             ],
+            decorator_list=[],
         )
 
         exp = ast.FunctionDef(
             name='my_function',
+            args=empty_args,
             body=[
                 ast.Return(value=ast.Constant(value=42)),
             ],
+            decorator_list=[],
         )
 
         self.assertAstEqual(scrub_function(f0), exp)

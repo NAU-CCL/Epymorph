@@ -6,8 +6,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.data_type import SimDType
-from epymorph.engine.world import World
 from epymorph.simulation import Tick
+from epymorph.simulator.world import World
 
 
 class Cohort:
@@ -156,7 +156,7 @@ class ListWorld(World):
                 if cohort.return_tick == ListWorld.HOME_TICK:
                     # locals are already where they need to be
                     continue
-                elif cohort.return_tick == tick.index:
+                elif cohort.return_tick == tick.sim_index:
                     # cohort ready to go home, merge with locals
                     j = cohort.return_location
                     next_locations[j][0].compartments += cohort.compartments

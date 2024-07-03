@@ -1,38 +1,33 @@
 """
 IPM executor classes handle the logic for processing the IPM step of the simulation.
 """
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar, Protocol
+from typing import ClassVar, Generator, Iterable, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
-from epymorph.data_shape import SimDimensions
-from epymorph.data_type import AttributeScalar, SimArray, SimDType
-from epymorph.engine.world import World
+from epymorph.data_type import (AttributeArray, AttributeValue, SimArray,
+                                SimDType)
+from epymorph.database import Database
 from epymorph.error import (IpmSimInvalidProbsException,
                             IpmSimLessThanZeroException, IpmSimNaNException)
-from epymorph.simulation import AttributeDef, Tick
+from epymorph.rume import Rume
+from epymorph.simulation import AttributeResolver, Tick
+from epymorph.simulator.world import World
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
 
 
-class IpmExecutor(ABC):
-    """
-    Abstract interface responsible for advancing the simulation state due to the IPM.
-    """
+class Result(NamedTuple):
+    """The result from executing a single IPM step."""
 
-    @abstractmethod
-    def apply(self, world: World, tick: Tick) -> tuple[SimArray, SimArray]:
-        """
-        Applies the IPM for this tick, mutating the world state.
-        Returns the tick's values of incidence and prevalence:
-        - events that happened this tick (an (N,E) array), and
-        - updated prevalence as a result of these events (an (N,C) array).
-        """
+    events: SimArray
+    """events that happened this tick (an (N,E) array)"""
+    prevalence: SimArray
+    """updated prevalence as a result of these events (an (N,C) array)."""
 
 
 ############################################################
@@ -41,21 +36,39 @@ class IpmExecutor(ABC):
 
 
 @dataclass(frozen=True)
-class _IndependentTrx:
+class CompiledEdge:
     """Lambdified EdgeDef (no fork). Effectively: `poisson(rate * tau)`"""
     size: ClassVar[int] = 1
     rate_lambda: SympyLambda
 
 
 @dataclass(frozen=True)
-class _ForkedTrx:
+class CompiledFork:
     """Lambdified ForkDef. Effectively: `multinomial(poisson(rate * tau), prob)`"""
     size: int
     rate_lambda: SympyLambda
     prob_lambda: SympyLambda
 
 
-_Trx = _IndependentTrx | _ForkedTrx
+CompiledTransition = CompiledEdge | CompiledFork
+
+
+def _compile_transitions(model: CompartmentModel) -> list[CompiledTransition]:
+    # The parameters to pass to all rate lambdas
+    rate_params = [*model.symbols.compartment_symbols, *model.symbols.attribute_symbols]
+
+    def f(transition: TransitionDef) -> CompiledTransition:
+        match transition:
+            case EdgeDef(rate, _, _):
+                rate_lambda = lambdify(rate_params, rate)
+                return CompiledEdge(rate_lambda)
+            case ForkDef(rate, edges, prob):
+                size = len(edges)
+                rate_lambda = lambdify(rate_params, rate)
+                prob_lambda = lambdify_list(rate_params, prob)
+                return CompiledFork(size, rate_lambda, prob_lambda)
+
+    return [f(t) for t in model.transitions]
 
 
 def _make_apply_matrix(ipm: CompartmentModel) -> SimArray:
@@ -67,7 +80,7 @@ def _make_apply_matrix(ipm: CompartmentModel) -> SimArray:
     either add or subtract from the model but not both. By nature, they
     alter the number of individuals in the model. Matrix values are {+1, 0, -1}.
     """
-    csymbols = [c.symbol for c in ipm.compartments]
+    csymbols = ipm.symbols.compartment_symbols
     matrix_size = (ipm.num_events, ipm.num_compartments)
     apply_matrix = np.zeros(matrix_size, dtype=SimDType)
     for eidx, e in enumerate(ipm.events):
@@ -78,32 +91,19 @@ def _make_apply_matrix(ipm: CompartmentModel) -> SimArray:
     return apply_matrix
 
 
-class IpmContext(Protocol):
-    """The subset of RumeContext that the IPM executor needs."""
-    @property
-    def dim(self) -> SimDimensions:
-        """The simulation's dimensionality."""
-        raise NotImplementedError
-
-    @property
-    def rng(self) -> np.random.Generator:
-        """The random number generator."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_attribute(self, attr: AttributeDef, tick: Tick, node: int) -> AttributeScalar:
-        """Get an attribute value at a specific tick and node."""
-        raise NotImplementedError
-
-
-class StandardIpmExecutor(IpmExecutor):
+class IpmExecutor:
     """The standard implementation of compartment model IPM execution."""
 
-    _ctx: IpmContext
-    """the sim context"""
-    _ipm: CompartmentModel
-    """the IPM"""
-    _trxs: list[_Trx]
+    _rume: Rume
+    """the RUME"""
+    _world: World
+    """the world state"""
+    _data: Database[AttributeArray]
+    """resolver for simulation data"""
+    _rng: np.random.Generator
+    """the simulation RNG"""
+
+    _trxs: list[CompiledTransition]
     """compiled transitions"""
     _apply_matrix: NDArray[SimDType]
     """a matrix defining how each event impacts each compartment (subtracting or adding individuals)"""
@@ -111,77 +111,71 @@ class StandardIpmExecutor(IpmExecutor):
     """mapping from compartment index to the list of event indices which source from that compartment"""
     _source_compartment_for_event: list[int]
     """mapping from event index to the compartment index it sources from"""
+    _attribute_values_txn: Generator[Iterable[AttributeValue], None, None]
+    """a generator for the list of arguments (from attributes) needed to evaluate transition functions"""
 
-    def __init__(self, ctx: IpmContext, ipm: CompartmentModel):
+    def __init__(self, rume: Rume, world: World, data: Database[AttributeArray], rng: np.random.Generator):
+        ipm = rume.ipm
+        csymbols = ipm.symbols.compartment_symbols
+
         # Calc list of events leaving each compartment (each may have 0, 1, or more)
         events_leaving_compartment = [[eidx
                                        for eidx, e in enumerate(ipm.events)
-                                       if e.compartment_from == c.symbol]
-                                      for c in ipm.compartments]
+                                       if e.compartment_from == c]
+                                      for c in csymbols]
 
         # Calc the source compartment for each event
-        csymbols = [c.symbol for c in ipm.compartments]
         source_compartment_for_event = [index_of(csymbols, e.compartment_from)
                                         for e in ipm.events]
 
-        # The parameters to pass to all rate lambdas
-        rate_params = [*csymbols, *(a.symbol for a in ipm.attributes)]
+        self._rume = rume
+        self._world = world
+        self._data = data
+        self._rng = rng
 
-        def compile_transition(transition: TransitionDef) -> _Trx:
-            match transition:
-                case EdgeDef(rate, _, _):
-                    rate_lambda = lambdify(rate_params, rate)
-                    return _IndependentTrx(rate_lambda)
-                case ForkDef(rate, edges, prob):
-                    size = len(edges)
-                    rate_lambda = lambdify(rate_params, rate)
-                    prob_lambda = lambdify_list(rate_params, prob)
-                    return _ForkedTrx(size, rate_lambda, prob_lambda)
-
-        self._ctx = ctx
-        self._ipm = ipm
-        self._trxs = [compile_transition(t) for t in ipm.transitions]
+        self._trxs = _compile_transitions(ipm)
         self._apply_matrix = _make_apply_matrix(ipm)
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
+        self._attribute_values_txn = AttributeResolver(data, rume.dim)\
+            .resolve_txn_series(list(ipm.attributes.items()))
 
-    def apply(self, world: World, tick: Tick) -> tuple[NDArray[SimDType], NDArray[SimDType]]:
+    def apply(self, tick: Tick) -> Result:
         """
         Applies the IPM for this tick, mutating the world state.
         Returns the location-specific events that happened this tick (an (N,E) array) and the new
         prevalence resulting from these events (an (N,C) array).
         """
-        _, N, C, E = self._ctx.dim.TNCE
+        _, N, C, E = self._rume.dim.TNCE
         tick_events = np.zeros((N, E), dtype=SimDType)
         tick_prevalence = np.zeros((N, C), dtype=SimDType)
 
         for node in range(N):
-            cohorts = world.get_cohort_array(node)
+            cohorts = self._world.get_cohort_array(node)
             effective = cohorts.sum(axis=0, dtype=SimDType)
 
-            occurrences = self._events(node, tick, effective)
+            occurrences = self._events(tick, node, effective)
             cohort_deltas = self._distribute(cohorts, occurrences)
-            world.apply_cohort_delta(node, cohort_deltas)
+            self._world.apply_cohort_delta(node, cohort_deltas)
 
             location_delta = cohort_deltas.sum(axis=0, dtype=SimDType)
 
             tick_events[node] = occurrences
             tick_prevalence[node] = effective + location_delta
 
-        return tick_events, tick_prevalence
+        return Result(tick_events, tick_prevalence)
 
-    def _events(self, node: int, tick: Tick, effective_pop: NDArray[SimDType]) -> NDArray[SimDType]:
+    def _events(self, tick: Tick, node: int, effective_pop: SimArray) -> SimArray:
         """Calculate how many events will happen this tick, correcting for the possibility of overruns."""
-        rate_args = [*effective_pop,
-                     *(self._ctx.get_attribute(a, tick, node)  # attribs
-                       for a in self._ipm.attributes)]
+
+        rate_args = [*effective_pop, *next(self._attribute_values_txn)]
 
         # Evaluate the event rates and do random draws for all transition events.
-        occur = np.zeros(self._ctx.dim.events, dtype=SimDType)
+        occur = np.zeros(self._rume.dim.events, dtype=SimDType)
         index = 0
         for t in self._trxs:
             match t:
-                case _IndependentTrx(rate_lambda):
+                case CompiledEdge(rate_lambda):
                     # get rate from lambda expression, catch divide by zero error
                     try:
                         rate = rate_lambda(rate_args)
@@ -195,8 +189,8 @@ class StandardIpmExecutor(IpmExecutor):
                         raise IpmSimLessThanZeroException(
                             self._get_default_error_args(rate_args, node, tick)
                         )
-                    occur[index] = self._ctx.rng.poisson(rate * tick.tau)
-                case _ForkedTrx(size, rate_lambda, prob_lambda):
+                    occur[index] = self._rng.poisson(rate * tick.tau)
+                case CompiledFork(size, rate_lambda, prob_lambda):
                     # get rate from lambda expression, catch divide by zero error
                     try:
                         rate = rate_lambda(rate_args)
@@ -210,7 +204,7 @@ class StandardIpmExecutor(IpmExecutor):
                         raise IpmSimLessThanZeroException(
                             self._get_default_error_args(rate_args, node, tick)
                         )
-                    base = self._ctx.rng.poisson(rate * tick.tau)
+                    base = self._rng.poisson(rate * tick.tau)
                     prob = prob_lambda(rate_args)
                     # check for negative probs
                     if any(n < 0 for n in prob):
@@ -218,7 +212,7 @@ class StandardIpmExecutor(IpmExecutor):
                             self._get_invalid_prob_args(rate_args, node, tick, t)
                         )
                     stop = index + size
-                    occur[index:stop] = self._ctx.rng.multinomial(
+                    occur[index:stop] = self._rng.multinomial(
                         base, prob)
             index += t.size
 
@@ -238,7 +232,7 @@ class StandardIpmExecutor(IpmExecutor):
                 # use hypergeo to select which events "actually" happened.
                 desired0, desired1 = occur[eidxs]
                 if desired0 + desired1 > available:
-                    drawn0 = self._ctx.rng.hypergeometric(
+                    drawn0 = self._rng.hypergeometric(
                         desired0, desired1, available)
                     occur[eidxs] = [drawn0, available - drawn0]
             else:
@@ -246,7 +240,7 @@ class StandardIpmExecutor(IpmExecutor):
                 # use multivariate hypergeometric to select which events "actually" happened.
                 desired = occur[eidxs]
                 if np.sum(desired) > available:
-                    occur[eidxs] = self._ctx.rng.multivariate_hypergeometric(
+                    occur[eidxs] = self._rng.multivariate_hypergeometric(
                         desired, available)
         return occur
 
@@ -254,22 +248,26 @@ class StandardIpmExecutor(IpmExecutor):
         arg_list = []
         arg_list.append(("Node : Timestep", {node: tick.step}))
         arg_list.append(("compartment values", {
-            name: value for (name, value) in zip(self._ipm.compartment_names,
-                                                 rate_attrs[:self._ctx.dim.compartments])
+            name: value
+            for name, value
+            in zip([c.name for c in self._rume.ipm.compartments],
+                   rate_attrs[:self._rume.dim.compartments])
         }))
         arg_list.append(("ipm params", {
-            attribute.name: value for (attribute, value) in zip(self._ipm.attributes,
-                                                                rate_attrs[self._ctx.dim.compartments:])
+            attribute.name: value
+            for attribute, value
+            in zip(self._rume.ipm.attributes.values(),
+                   rate_attrs[self._rume.dim.compartments:])
         }))
 
         return arg_list
 
     def _get_invalid_prob_args(self, rate_attrs: list, node: int, tick: Tick,
-                               transition: _ForkedTrx) -> list[tuple[str, dict]]:
+                               transition: CompiledFork) -> list[tuple[str, dict]]:
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
-        corr_transition = self._ipm.transitions[transition_index]
+        corr_transition = self._rume.ipm.transitions[transition_index]
         if isinstance(corr_transition, ForkDef):
             to_compartments = ", ".join([str(edge.compartment_to)
                                         for edge in corr_transition.edges])
@@ -283,11 +281,11 @@ class StandardIpmExecutor(IpmExecutor):
         return arg_list
 
     def _get_zero_division_args(self, rate_attrs: list, node: int, tick: Tick,
-                                transition: _IndependentTrx | _ForkedTrx) -> list[tuple[str, dict]]:
+                                transition: CompiledEdge | CompiledFork) -> list[tuple[str, dict]]:
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
-        corr_transition = self._ipm.transitions[transition_index]
+        corr_transition = self._rume.ipm.transitions[transition_index]
         if isinstance(corr_transition, EdgeDef):
             arg_list.append(("corresponding transition", {
                             f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate}))
@@ -303,7 +301,7 @@ class StandardIpmExecutor(IpmExecutor):
     def _distribute(self, cohorts: NDArray[SimDType], events: NDArray[SimDType]) -> NDArray[SimDType]:
         """Distribute all events across a location's cohorts and return the compartment deltas for each."""
         x = cohorts.shape[0]
-        e = self._ctx.dim.events
+        e = self._rume.dim.events
         occurrences = np.zeros((x, e), dtype=SimDType)
         for eidx in range(e):
             occur: int = events[eidx]  # type: ignore
@@ -313,7 +311,7 @@ class StandardIpmExecutor(IpmExecutor):
                 occurrences[:, eidx] = occur
             else:
                 # event is coming from a modeled compartment
-                selected = self._ctx.rng.multivariate_hypergeometric(
+                selected = self._rng.multivariate_hypergeometric(
                     cohorts[:, cidx],
                     occur
                 ).astype(SimDType)

@@ -1,14 +1,18 @@
 # epymorph
 
-Prototype EpiMoRPH system written in Python. It is usable as a CLI program and also as a code library; for instance you may want to use it from within a Jupyter Notebook (see: `USAGE.ipynb`).
+Prototype EpiMoRPH system written in Python. It is usable as a code library, for instance, from within a Jupyter Notebook (see: `USAGE.ipynb`).
 
-The `epymorph/data` directory is the model library, containing named implementations of IPMs, MMs, and GEOs. Ultimately our goal is to allow users to bring-their-own models by loading specification files, but for now they need to be registered in the model library.
+The `epymorph/data` directory is the model library, containing named implementations of IPMs, MMs, and GEOs. Ultimately our goal is to allow users to bring their own models by loading specification files, but for now they need to be registered in the model library.
 
 The `doc/devlog` directory contains Jupyter Notebooks demonstrating features of epymorph and general development progress.
 
 Beware: much of this code structure is experimental and subject to change!
 
-## Project setup
+## Basic usage
+
+See the `USAGE.ipynb` Notebook for a simple usage example.
+
+## Development setup
 
 For starters, you should have Python 3.11 installed and we'll assume it's accessible via the command `python3.11`.
 
@@ -18,7 +22,7 @@ You may need to install additional system packages for virtual environments and 
 sudo apt install python3.11-venv python3.11-tk
 ```
 
-Using VS Code, install the project's recommended IDE extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install all dependencies (including `dev`).
+If you are using VS Code, install the project's recommended IDE extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install all dependencies (including `dev`).
 
 Or you can set up from the command line:
 
@@ -29,64 +33,14 @@ cd $PROJECT_DIRECTORY
 python3.11 -m venv .venv
 
 # activate it (after which `python` should be bound to the venv python)
+# NOTE: activating venv on Windows is different; see documentation
 source .venv/bin/activate
 
 # then install the project in editable mode
 python -m pip install --editable ".[dev]"
 ```
 
-(The quotes in the last command are necessary on some platforms, but if the quotes give you issues you can also try without them.)
-
-## Running from the command line
-
-The most basic task epymorph can perform is to run a spatial, compartmental disease simulation and output the time-series data of compartment populations (prevalence) as well as new events (incidence).
-
-A commonly-cited model was proposed by [Sen Pei, et al. in 2018](https://www.pnas.org/doi/10.1073/pnas.1708856115), modeling influenza in six 
-southern US states. epymorph has an intra-population model (IPM), movement model (MM), and geographic model (GEO) that closely mimics Pei's experiment.
-
-To run a simulation, first we need an input file that describes the simulation and all its parameters. Thankfully epymorph has a subcommand to help us create such a file. This example will store files in a `scratch` folder within the project (this is just for convenience, you can opt to put the input files anywhere you like).
-
-```bash
-cd $PROJECT_DIRECTORY
-
-# Activate the venv (if it's not already):
-source .venv/bin/activate
-
-# scratch is a convenient place to put all sorts of temp files because our .gitignore excludes it
-mkdir scratch
-
-# Prepare the simulation input file:
-python -m epymorph prepare --ipm pei --mm pei --geo pei ./scratch/my-experiment.toml
-
-# Now we need to edit the input file to specify the parameters needed by our combo of IPM and MM:
-# (I'll use `cat` for this but you can use any text editor of course.)
-cat << EOF >> ./scratch/my-experiment.toml
-theta = 0.1
-move_control = 0.9
-infection_duration = 4.0
-immunity_duration = 90.0
-EOF
-
-# Now we can run the simulation:
-python -m epymorph run ./scratch/my-experiment.toml --out ./scratch/output.csv
-
-# Now if I open that csv file I see:
-# - for each time-step (t) and population (p)
-#   - prevalence data by compartment (c0, c1, c2)
-#   - incidence data by event (e0, e1, e2)
-
-# You can also run to display a chart:
-python -m epymorph run ./scratch/my-experiment.toml --chart p0
-```
-
-To learn more about these and all other commands, you can always consult the CLI help:
-
-```bash
-python -m epymorph --help
-
-# or for a specific subcommand
-python -m epymorph run --help
-```
+Make sure you have correctly configured auto-formatting in your development environment. We're currently using autopep8 and isort. These formatting tools should run every time you save a file.
 
 ### Other command-line tasks
 
@@ -94,18 +48,4 @@ Run all unit tests:
 
 ```bash
 python -m unittest discover -v -s ./epymorph -p '*_test.py'
-```
-
-Run a simulation with the pdb debugger:
-
-```bash
-python -m pdb -m epymorph run ./scratch/my-experiment.toml
-```
-
-Profile the simulation and show the results in `snakeviz`:
-
-```bash
-TMP=$(mktemp /tmp/py-XXXXXXXX.prof)
-python -m cProfile -o $TMP -m epymorph run ./scratch/my-experiment.toml --profile
-snakeviz $TMP
 ```

@@ -70,6 +70,10 @@ class MmValidationException(ValidationException):
     """Exception for invalid MM."""
 
 
+class InitValidationException(ValidationException):
+    """Exception for invalid Init."""
+
+
 class SimValidationException(ValidationException):
     """
     Exception for cases where a simulation is invalid as configured,
@@ -96,14 +100,6 @@ class SimulationException(Exception):
 
 class InitException(SimulationException):
     """Exception for invalid initialization."""
-
-    @classmethod
-    def for_arg(cls, name: str, addendum: str | None = None) -> Self:
-        """Init is invalid due to improper/missing argument."""
-        if addendum is None:
-            return cls(f"Invalid argument '{name}'.")
-        else:
-            return cls(f"Invalid argument '{name}': {addendum}")
 
 
 class IpmSimException(SimulationException):

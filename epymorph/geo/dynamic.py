@@ -3,6 +3,7 @@ A dynamic geo is capable of fetching data from arbitrary external data sources
 via the use of ADRIO implementations. It may fetch this data lazily, loading
 only the attributes needed by the simulation.
 """
+import dataclasses
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Any, Self
@@ -15,7 +16,7 @@ from epymorph.event import AdrioStart, DynamicGeoEvents, FetchStart
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker, ADRIOMakerLibrary
 from epymorph.geo.geo import Geo
 from epymorph.geo.spec import LABEL, DynamicGeoSpec, validate_geo_values
-from epymorph.simulation import AttributeArray, geo_attrib
+from epymorph.simulation import AttributeArray
 from epymorph.util import Event, MemoDict
 
 
@@ -65,8 +66,7 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
                 # no problem, just provide a modified AttribDef to the maker.
                 if ":" in source:
                     maker_name, adrio_attrib_name = source.split(":")[0:2]
-                    adrio_attrib = geo_attrib(
-                        adrio_attrib_name, attr.dtype, attr.shape)
+                    adrio_attrib = dataclasses.replace(attr, name=adrio_attrib_name)
 
                 # Make and store adrio.
                 adrio = makers[maker_name].make_adrio(

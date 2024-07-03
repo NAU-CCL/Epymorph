@@ -26,7 +26,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2023-07-20-movement-probs.ipynb | Tyler | | Analyzing statistical correctness of our movement processing algorithms. |
 | 2023-07-24.ipynb | Tyler | | Experiments with adapting an IPM by "attaching" a function to an IPM parameter. This approach has been superseded by a design for direct support for functional parameters. |
 | 2023-08-11.ipynb | Tyler | | Demonstrates performance differences between the Basic and Hypercube movement engines. A pending refactor will make the concept of movement engines obsolete. |
-| 2023-08-17.ipynb | Tyler | ✓ | Demonstrates the newly-added Initializer functions, including library examples and custom initializers. |
+| 2023-08-17.ipynb | Tyler | | (Obsolete) Demonstrates the newly-added Initializer functions, including library examples and custom initializers. |
 | 2023-08-23.ipynb | Tyler | | Describes what IPM attribute broadcasting is and why it's useful. Introduces our concept of data shapes. |
 | 2023-09-22-adrio-demo.ipynb | Trevor | | Demonstrates the newly-added ADRIOs functionality by fetching data from the US Census ACS5. |
 | 2023-09-29.ipynb | Tyler | | Experiments in representing exogenous births and deaths in the existing compartment IPM system. |
@@ -54,10 +54,11 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-05-03.ipynb | Tyler | ✓ | Integration test: loading US Census geography from TIGER |
 | 2024-05-09-lodes-adrio-demo.ipynb | Meaghan | | A full geo spec for testing LODES ADRIOs |
 | 2024-05-22.ipynb | Sachin |  | Integrating particle filter with epymorph. Propagating the particles using epymorph simulation and plot the infection rates |
-| 2024-06-03.ipynb | Trevor |  | Integration test: using dynamic geos to fetch Census data |
-| 2024-06-05.ipynb | Meaghan | | A user manual and basic demonstrations of calling LODES ADRIOs |
-| 2024-06-12.ipynb | Trevor |  | Integration test: CSV file ADRIOs |
-| 2024-06-12.ipynb | Trevor | ✓ | Integration test: Census ADRIOs |
+| 2024-06-03.ipynb | Trevor | ✓ | Integration test: using dynamic geos to fetch Census data |
+| 2024-06-05.ipynb | Meaghan | ✓ | A user manual and basic demonstrations of calling LODES ADRIOs |
+| 2024-06-12.ipynb | Trevor | ✓ | Integration test: CSV file ADRIOs |
+| 2024-07-08.ipynb | Tyler | ✓ | Demonstrates the updated Initializers system, including library examples and custom initializers. |
+| 2024-07-10.ipynb | Trevor | ✓ | Integration test: Census ADRIOs |
 
 ## Contributing
 

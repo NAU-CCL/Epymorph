@@ -7,7 +7,6 @@ from pyparsing import pyparsing_common as PC
 import epymorph.movement.parser_util as p
 from epymorph.error import MmParseException
 from epymorph.simulation import AttributeDef
-from epymorph.sympy_shim import to_symbol
 
 # A MovementSpec has the following object structure:
 #
@@ -47,10 +46,9 @@ def marshal_move_steps(results: P.ParseResults):
 
 
 attribute: P.ParserElement = p.tag('attrib', [
-    p.field('source', P.one_of('geo params')),
     p.field('name', p.name),
+    p.field('type', p.dtype),
     p.field('shape', p.shape),
-    p.field('dtype', p.dtype),
     p.field('default_value', p.scalar_value | p.none),
     p.field('comment', p.quoted),
 ])
@@ -60,19 +58,17 @@ attribute: P.ParserElement = p.tag('attrib', [
 def marshal_attribute(results: P.ParseResults):
     """Convert a pyparsing result to an Attribute."""
     fields = results.as_dict()
-    dtype = fields['dtype'][0]
+    field_type = fields['type'][0]
     default_value = fields['default_value'][0]
 
     # We can coerce integers to floats for convenience.
-    if dtype == float and isinstance(default_value, int):
+    if field_type == float and isinstance(default_value, int):
         default_value = float(default_value)
 
     return AttributeDef(
         name=fields['name'],
-        source=fields['source'],
-        dtype=dtype,
+        type=field_type,
         shape=fields['shape'],
-        symbol=to_symbol(fields['name']),
         default_value=default_value,
         comment=fields['comment'],
     )
