@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
-                    OrderedDict, TypeVar)
+                    Mapping, OrderedDict, Self, TypeVar)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -42,6 +42,16 @@ def or_raise(value: T | None, message: str) -> T:
     return value
 
 
+def not_none(value: T | None) -> T:
+    """
+    Assert that a value could never be None (or else raise a generic exception).
+    Be very careful using this!
+    """
+    if value is None:
+        raise Exception("You asserted a value would never be None, but it was!")
+    return value
+
+
 # collection utilities
 
 
@@ -77,6 +87,16 @@ def list_not_none(it: Iterable[T]) -> list[T]:
     return [x for x in it if x is not None]
 
 
+def are_unique(xs: Iterable[T]) -> bool:
+    """Returns True if all items in the iterable are unique."""
+    xset = set[T]()
+    for x in xs:
+        if x in xset:
+            return False
+        xset.add(x)
+    return True
+
+
 def filter_unique(xs: Iterable[T]) -> list[T]:
     """Convert an iterable to a list, keeping only the unique values and maintaining the order as first-seen."""
     xset = set[T]()
@@ -100,6 +120,15 @@ V = TypeVar('V')
 def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
     """Returns a sorted OrderedDict of the given dict."""
     return OrderedDict(sorted(x.items()))
+
+
+A = TypeVar('A')
+B = TypeVar('B')
+
+
+def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
+    """Maps the values of a Mapping into a dict by applying the given function."""
+    return {k: f(v) for k, v in xs.items()}
 
 
 class MemoDict(dict[K, V]):
@@ -239,44 +268,11 @@ class NumpyTypeError(Exception):
 
 def dtype_name(d: np.dtype) -> str:
     """Tries to return the most-human-readable name for a numpy dtype."""
-    return d.name if d.isbuiltin else str(d)
-
-
-def check_ndarray(
-    value: Any,
-    dtype: list[DTypeLike] | None = None,
-    shape: tuple[int, ...] | list[tuple[int, ...]] | None = None,
-    dimensions: int | list[int] | None = None,
-) -> None:
-    """
-    Checks that a value is a numpy array of the given dtype and shape.
-    (If you pass a list of dtypes or shapes, they will be matched as though combined with an "or".)
-    Raises a NumpyTypeError if check doesn't pass.
-    """
-    if value is None:
-        raise NumpyTypeError('Value is None.')
-    if not isinstance(value, np.ndarray):
-        raise NumpyTypeError('Not a numpy array.')
-    if shape is not None:
-        shape = as_list(shape)
-        if not value.shape in shape:
-            msg = f"Not a numpy shape match: got {value.shape}, expected {shape}"
-            raise NumpyTypeError(msg)
-    if dtype is not None:
-        npdtypes = [np.dtype(x) for x in dtype]
-        is_subtype = map(lambda x: np.issubdtype(value.dtype, x), npdtypes)
-        if not any(is_subtype):
-            if len(npdtypes) == 1:
-                dtype_names = dtype_name(npdtypes[0])
-            else:
-                dtype_names = f"one of ({', '.join(map(dtype_name, npdtypes))})"
-            msg = f"Not a numpy dtype match; got {value.dtype}, required {dtype_names}"
-            raise NumpyTypeError(msg)
-    if dimensions is not None:
-        dimensions = as_list(dimensions)
-        if not len(value.shape) in dimensions:
-            msg = f"Not a numpy dimensional match: got {len(value.shape)} dimensions, expected {dimensions}"
-            raise NumpyTypeError(msg)
+    if np.issubdtype(d, np.str_):
+        return "str_"
+    if d.isbuiltin:
+        return d.name
+    return str(d)
 
 
 T_contra = TypeVar('T_contra', contravariant=True)
@@ -286,6 +282,9 @@ class Matcher(Generic[T_contra], ABC):
     """
     A generic matcher. Returns True if a match, False otherwise.
     """
+    # Note: Matchers are contravariant: you can substitute a Matcher of a broader type
+    # when something asks for a Matcher of a more specific type.
+    # For example, a Matcher[Any] can be provided in place of a Matcher[str].
 
     @abstractmethod
     def expected(self) -> str:
@@ -357,6 +356,26 @@ class MatchDType(Matcher[DTypeLike]):
         return any((np.issubdtype(value, x) for x in self._acceptable))
 
 
+class MatchDTypeCast(Matcher[DTypeLike]):
+    """Matches one or more numpy dtypes using `np.can_cast(casting='safe')`."""
+
+    _acceptable: list[np.dtype]
+
+    def __init__(self, *acceptable: DTypeLike):
+        if len(acceptable) == 0:
+            raise ValueError("Cannot match against no dtypes.")
+        self._acceptable = [np.dtype(x) for x in acceptable]
+
+    def expected(self) -> str:
+        if len(self._acceptable) == 1:
+            return dtype_name(self._acceptable[0])
+        else:
+            return f"one of [{', '.join((dtype_name(x) for x in self._acceptable))}]"
+
+    def __call__(self, value: DTypeLike) -> bool:
+        return any((np.can_cast(value, x, casting='safe') for x in self._acceptable))
+
+
 @dataclass(frozen=True)
 class _Matchers:
     """Convenience constructors for various matchers."""
@@ -376,12 +395,16 @@ class _Matchers:
         """Creates a MatchDType instance."""
         return MatchDType(*dtypes)
 
+    def dtype_cast(self, *dtypes: DTypeLike) -> Matcher[DTypeLike]:
+        """Creates a MatchDTypeCast instance."""
+        return MatchDTypeCast(*dtypes)
+
 
 match = _Matchers()
 """Convenience constructors for various matchers."""
 
 
-def check_ndarray_2(
+def check_ndarray(
     value: Any, *,
     dtype: Matcher[DTypeLike] = MatchAny(),
     shape: Matcher[NDArray] = MatchAny(),
@@ -397,7 +420,7 @@ def check_ndarray_2(
         raise NumpyTypeError('Not a numpy array.')
 
     if not dtype(value.dtype):
-        msg = f"Not a numpy dtype match; got {value.dtype}, required {dtype.expected()}"
+        msg = f"Not a numpy dtype match; got {dtype_name(value.dtype)}, required {dtype.expected()}"
         raise NumpyTypeError(msg)
 
     if not shape(value):
@@ -477,3 +500,59 @@ def subscriptions() -> Generator[Subscriber, None, None]:
     sub = Subscriber()
     yield sub
     sub.unsubscribe()
+
+
+# string builders
+
+
+class StringBuilder:
+    _lines: list[str]
+    _indent: str
+
+    def __init__(self, indent: str = ""):
+        self._lines = []
+        self._indent = indent
+
+    def line(self, line: str = "") -> Self:
+        self._lines.append(line)
+        return self
+
+    def line_if(self, condition: bool, line: str = "") -> Self:
+        if condition:
+            self._lines.append(line)
+        return self
+
+    def lines(self, lines: Iterable[str]) -> Self:
+        self._lines.extend(lines)
+        return self
+
+    @contextmanager
+    def block(self, indent: str = "    ", *, opener: str | None = None, closer: str | None = None) -> Generator['StringBuilder', None, None]:
+        if opener is not None:
+            # opener is printed at the parent's indent level
+            self.line(opener)
+
+        new_indent = f"{self._indent}{indent}"
+        s = StringBuilder(new_indent)
+        yield s
+        self._lines.extend((f"{new_indent}{line}" for line in s.to_lines()))
+
+        if closer is not None:
+            # closer is printed at the parent's indent level
+            self.line(closer)
+
+    def build(self) -> str:
+        return "\n".join(self._lines)
+
+    def to_lines(self) -> Iterable[str]:
+        return self._lines
+
+
+@contextmanager
+def string_builder(indent: str = "", *, opener: str | None = None, closer: str | None = None) -> Generator[StringBuilder, None, None]:
+    s = StringBuilder(indent)
+    if opener is not None:
+        s.line(opener)
+    yield s
+    if closer is not None:
+        s.line(closer)

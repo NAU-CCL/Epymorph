@@ -55,11 +55,11 @@ _FORBIDDEN_NAMES = frozenset({
 class SecureTransformer(ast.NodeTransformer):
     """AST transformer for applying basic security mitigations."""
 
-    def visit_Import(self, _node: ast.Import) -> Any:
+    def visit_Import(self, node: ast.Import) -> Any:  # pylint: disable=unused-argument
         """Silently remove imports."""
         return None
 
-    def visit_ImportFrom(self, _node: ast.ImportFrom) -> Any:
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:  # pylint: disable=unused-argument
         """Silently remove imports."""
         return None
 
@@ -104,7 +104,7 @@ def compile_function(function_def: ast.FunctionDef, global_namespace: dict[str, 
     if global_namespace is None:
         global_namespace = base_namespace()
     local_namespace = dict[str, Any]()
-    exec(code, global_namespace, local_namespace)
+    exec(code, global_namespace, local_namespace)  # pylint: disable=exec-used
     # Now our function is defined in the local namespace, retrieve it.
     function = local_namespace[function_def.name]
     if not isinstance(function, Callable):

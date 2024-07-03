@@ -8,10 +8,10 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import merge as pd_merge
 
-from epymorph.engine.output import Output
 from epymorph.geo.geo import Geo
 from epymorph.geography import us_tiger
 from epymorph.geography.us_census import STATE
+from epymorph.simulator.basic.output import Output
 
 
 def plot_event(out: Output, event_idx: int) -> None:

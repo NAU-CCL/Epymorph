@@ -14,7 +14,7 @@ from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
 from epymorph.geography.us_tiger import _fetch_url
-from epymorph.simulation import AttributeDef, geo_attrib
+from epymorph.simulation import AttributeDef
 
 _LODES_CACHE_PATH = Path("geo/adrio/census/lodes")
 
@@ -29,40 +29,40 @@ class ADRIOMakerLODES(ADRIOMaker):
         return False
 
     attributes = [
-        geo_attrib('geoid', dtype=str, shape=Shapes.N,
-                   comment='The matrix of geoids from states or the input.'),
-        geo_attrib('commuters', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters from the work geoid to the home geoid'),
-        geo_attrib('commuters_29_under', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters ages 29 and under from the work geoid to the home geoid'),
-        geo_attrib('commuters_30_to_54', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters between ages 30 to 54 from the work geoid to the home geoid'),
-        geo_attrib('commuters_55_over', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters ages 55 and over from the work geoid to the home geoid'),
-        geo_attrib('commuters_1250_under_earnings', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that earn $1250 or under monthly from the work geoid to the home geoid'),
-        geo_attrib('commuters_1251_to_3333_earnings', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that earn between $1251 to $3333 monthly from the work geoid to the home geoid'),
-        geo_attrib('commuters_3333_over_earnings', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that earn more than $3333 monthly from the work geoid to the home geoid'),
-        geo_attrib('commuters_goods_producing_industry', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that work in the goods producing industry from the work geoid to the home geoid'),
-        geo_attrib('commuters_trade_transport_utility_industry', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that work in trade, transport, or utility industries from the work geoid to the home geoid'),
-        geo_attrib('commuters_other_industry', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that work in any other industry than goods and producing, or trade, transport, or utilities from the work geoid to the home geoid'),
-        geo_attrib('all_jobs', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that work in any type of job from the work geoid to the home geoid'),
-        geo_attrib('primary_jobs', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that work only in primary jobs from the work geoid to the home geoid'),
-        geo_attrib('all_private_jobs', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters, all from private jobs, from the work geoid to the home geoid'),
-        geo_attrib('private_primary_jobs', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that work in private primary jobs from the work geoid to the home geoid'),
-        geo_attrib('all_federal_jobs', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters, all from federal jobs, from the work geoid to the home geoid'),
-        geo_attrib('federal_primary_jobs', dtype=int, shape=Shapes.NxN,
-                   comment='The number of total commuters that work in federal primary jobs from the work geoid to the home geoid')
+        AttributeDef('geoid', type=str, shape=Shapes.N,
+                     comment='The matrix of geoids from states or the input.'),
+        AttributeDef('commuters', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters from the work geoid to the home geoid'),
+        AttributeDef('commuters_29_under', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters ages 29 and under from the work geoid to the home geoid'),
+        AttributeDef('commuters_30_to_54', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters between ages 30 to 54 from the work geoid to the home geoid'),
+        AttributeDef('commuters_55_over', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters ages 55 and over from the work geoid to the home geoid'),
+        AttributeDef('commuters_1250_under_earnings', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that earn $1250 or under monthly from the work geoid to the home geoid'),
+        AttributeDef('commuters_1251_to_3333_earnings', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that earn between $1251 to $3333 monthly from the work geoid to the home geoid'),
+        AttributeDef('commuters_3333_over_earnings', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that earn more than $3333 monthly from the work geoid to the home geoid'),
+        AttributeDef('commuters_goods_producing_industry', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that work in the goods producing industry from the work geoid to the home geoid'),
+        AttributeDef('commuters_trade_transport_utility_industry', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that work in trade, transport, or utility industries from the work geoid to the home geoid'),
+        AttributeDef('commuters_other_industry', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that work in any other industry than goods and producing, or trade, transport, or utilities from the work geoid to the home geoid'),
+        AttributeDef('all_jobs', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that work in any type of job from the work geoid to the home geoid'),
+        AttributeDef('primary_jobs', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that work only in primary jobs from the work geoid to the home geoid'),
+        AttributeDef('all_private_jobs', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters, all from private jobs, from the work geoid to the home geoid'),
+        AttributeDef('private_primary_jobs', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that work in private primary jobs from the work geoid to the home geoid'),
+        AttributeDef('all_federal_jobs', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters, all from federal jobs, from the work geoid to the home geoid'),
+        AttributeDef('federal_primary_jobs', type=int, shape=Shapes.NxN,
+                     comment='The number of total commuters that work in federal primary jobs from the work geoid to the home geoid')
     ]
 
     attrib_vars = {
@@ -198,7 +198,7 @@ class ADRIOMakerLODES(ADRIOMaker):
 
             # check if the CensusScope year is the current LODES geography: 2020
             if scope.year != 2020:
-                msg = f"GeoScope year does not match the LODES geography year."
+                msg = "GeoScope year does not match the LODES geography year."
                 raise DataResourceException(msg)
 
             # translate state FIPS code to state to use in URL

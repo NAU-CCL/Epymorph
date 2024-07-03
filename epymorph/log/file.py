@@ -50,7 +50,7 @@ def file_log(
     def on_tick(tick: OnTick) -> None:
         sim_log.info("Completed simulation tick %d", tick.tick_index)
 
-    def on_end(_: None) -> None:
+    def on_finish(_: None) -> None:
         sim_log.info('Complete.')
         end_time = perf_counter()
         if start_time is not None:
@@ -82,7 +82,7 @@ def file_log(
         # Simulation logging
         subs.subscribe(sim.on_start, on_start)
         subs.subscribe(sim.on_tick, on_tick)
-        subs.subscribe(sim.on_end, on_end)
+        subs.subscribe(sim.on_finish, on_finish)
 
         # Geo logging will be attached if it makes sense.
         sim_geo = getattr(sim, 'geo', None)

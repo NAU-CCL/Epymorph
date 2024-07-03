@@ -107,73 +107,6 @@ class DataShape(unittest.TestCase):
         ttt(np.arange(90), True)
         fff(np.arange(90), False)
 
-    def test_arbitrary(self):
-        self.assertTrue(
-            Shapes.A(0).matches(_dim, np.array([1, 2, 3]), False)
-        )
-        self.assertTrue(
-            Shapes.A(1).matches(_dim, np.array([1, 2, 3]), False)
-        )
-        self.assertTrue(
-            Shapes.A(2).matches(_dim, np.array([1, 2, 3]), False)
-        )
-        self.assertFalse(
-            Shapes.A(3).matches(_dim, np.asarray(1), False)
-        )
-        self.assertFalse(
-            Shapes.A(3).matches(_dim, np.array([1, 2, 3]), False)
-        )
-        self.assertFalse(
-            Shapes.A(1).matches(_dim, np.arange(9).reshape((3, 3)), False)
-        )
-
-    def test_time_and_arbitrary(self):
-        self.assertTrue(
-            Shapes.TxA(2).matches(_dim, np.arange(90 * 3).reshape((90, 3)), False)
-        )
-        self.assertTrue(
-            Shapes.TxA(2).matches(_dim, np.arange(90 * 6).reshape((90, 6)), False)
-        )
-        self.assertFalse(
-            Shapes.TxA(2).matches(_dim, np.arange(90 * 2).reshape((90, 2)), False)
-        )
-        self.assertFalse(
-            Shapes.TxA(2).matches(_dim, np.arange(90), False)
-        )
-        self.assertFalse(
-            Shapes.TxA(2).matches(_dim, np.arange(
-                90 * 3 * 3).reshape((90, 3, 3)), False)
-        )
-
-    def test_node_and_arbitrary(self):
-        self.assertTrue(
-            Shapes.NxA(2).matches(_dim, np.arange(6 * 3).reshape((6, 3)), False)
-        )
-        self.assertTrue(
-            Shapes.NxA(2).matches(_dim, np.arange(6 * 6).reshape((6, 6)), False)
-        )
-        self.assertFalse(
-            Shapes.NxA(2).matches(_dim, np.arange(6 * 2).reshape((6, 2)), False)
-        )
-        self.assertFalse(
-            Shapes.NxA(2).matches(_dim, np.arange(6), False)
-        )
-        self.assertFalse(
-            Shapes.NxA(2).matches(_dim, np.arange(6 * 3 * 3).reshape((6, 3, 3)), False)
-        )
-
-    def test_time_and_node_and_arbitrary(self):
-        self.assertTrue(
-            Shapes.TxNxA(0).matches(
-                _dim, np.arange(90 * 6 * 2).reshape((90, 6, 2)), False
-            )
-        )
-        self.assertFalse(
-            Shapes.TxNxA(4).matches(
-                _dim, np.arange(90 * 6 * 2).reshape((90, 6, 2)), False
-            )
-        )
-
     def adapt_test_framework(self, shape, cases):
         for i, (input_value, broadcast, expected) in enumerate(cases):
             error = f"Failure in test case {i}: ({shape}, {input_value}, {broadcast}, {expected})"
@@ -308,142 +241,23 @@ class DataShape(unittest.TestCase):
             (np.arange(27).reshape((3, 3, 3)), False, None),
         ])
 
-    def test_adapt_abitrary(self):
-        # NOTE: A(2) is expecting to be able to access index 2 (as in `values[2]`)
-        # which implies our data must have at least 3 items.
-        self.adapt_test_framework(Shapes.A(2), [
-            # Test S
-            (np.asarray(42.0), True, None),
-            (np.asarray(42.0), False, None),
-            # Test 3
-            (np.array([42.0, 43.0, 44.0]), True, np.array([42.0, 43.0, 44.0])),
-            (np.array([42.0, 43.0, 44.0]), False, np.array([42.0, 43.0, 44.0])),
-            # Test 4
-            (np.array([42.0, 43.0, 44.0, 45.0]), True,
-             np.array([42.0, 43.0, 44.0, 45.0])),
-            (np.array([42.0, 43.0, 44.0, 45.0]), False,
-             np.array([42.0, 43.0, 44.0, 45.0])),
-            # Test higher dimensions
-            (np.arange(9).reshape((3, 3)), True, None),
-            (np.arange(9).reshape((3, 3)), False, None),
-            (np.arange(27).reshape((3, 3, 3)), True, None),
-            (np.arange(27).reshape((3, 3, 3)), False, None),
-        ])
-
-    def test_adapt_node_and_abitrary(self):
-        self.adapt_test_framework(Shapes.NxA(2), [
-            # Test S
-            (np.asarray(42.0), True, None),
-            (np.asarray(42.0), False, None),
-            # Test 3
-            (np.array([42.0, 43.0, 44.0]), True, np.tile(
-                np.array([42.0, 43.0, 44.0]), (_dim.nodes, 1))),
-            (np.array([42.0, 43.0, 44.0]), False, None),
-            # Test 4
-            (np.array([42.0, 43.0, 44.0, 45.0]), True, np.tile(
-                np.array([42.0, 43.0, 44.0, 45.0]), (_dim.nodes, 1))),
-            (np.array([42.0, 43.0, 44.0, 45.0]), False, None),
-            # Test other dimensions
-            (np.arange(9).reshape((3, 3)), True, None),
-            (np.arange(9).reshape((3, 3)), False, None),
-            (np.arange(27).reshape((3, 3, 3)), True, None),
-            (np.arange(27).reshape((3, 3, 3)), False, None),
-        ])
-
-    def test_adapt_time_and_abitrary(self):
-        tx3_values = np.arange(3 * _dim.days).reshape((_dim.days, 3))
-        self.adapt_test_framework(Shapes.TxA(2), [
-            # Test S
-            (np.asarray(42.0), True, None),
-            (np.asarray(42.0), False, None),
-            # Test 2
-            (np.arange(2), True, None),
-            (np.arange(2), False, None),
-            # Test 3
-            (np.arange(3), True, np.tile(np.arange(3), (_dim.days, 1))),
-            (np.arange(3), False, None),
-            # Test 4
-            (np.arange(4), True, np.tile(np.arange(4), (_dim.days, 1))),
-            (np.arange(4), False, None),
-            # Test Tx3
-            (tx3_values, True, tx3_values),
-            (tx3_values, False, tx3_values),
-            # Test (>T)x3
-            (np.arange(300 * 3).reshape((300, 3)), True, tx3_values),
-            (np.arange(300 * 3).reshape((300, 3)), False, tx3_values),
-            # Test other dimensions
-            (np.arange(9).reshape((3, 3)), True, None),
-            (np.arange(9).reshape((3, 3)), False, None),
-            (np.arange(27).reshape((3, 3, 3)), True, None),
-            (np.arange(27).reshape((3, 3, 3)), False, None),
-        ])
-
-    def test_adapt_time_and_node_and_abitrary(self):
-        txnx3_values = shaped_arange((_dim.days, _dim.nodes, 3))
-        self.adapt_test_framework(Shapes.TxNxA(2), [
-            # Test S
-            (np.asarray(42.0), True, None),
-            (np.asarray(42.0), False, None),
-            # Test 2
-            (np.arange(2), True, None),
-            (np.arange(2), False, None),
-            # Test 3
-            (np.arange(3), True, np.tile(np.arange(3), (_dim.days, _dim.nodes, 1))),
-            (np.arange(3), False, None),
-            # Test 4
-            (np.arange(4), True, np.tile(np.arange(4), (_dim.days, _dim.nodes, 1))),
-            (np.arange(4), False, None),
-            # Test Tx3
-            (txnx3_values, True, txnx3_values),
-            (txnx3_values, False, txnx3_values),
-            # Test (>T)x3
-            (shaped_arange((300, 3)), True, np.tile(
-                shaped_arange((_dim.days, 1, 3)), (1, _dim.nodes, 1))),
-            (shaped_arange((300, 3)), False, None),
-            # Test Nx3
-            (shaped_arange((_dim.nodes, 3)), True, np.tile(
-                shaped_arange((_dim.nodes, 3)), (_dim.days, 1, 1))),
-            (shaped_arange((_dim.nodes, 3)), False, None),
-            # Test (>N)x3
-            (shaped_arange((10, 3)), True, None),
-            (shaped_arange((10, 3)), False, None),
-            # Test (>T)xNx3
-            (shaped_arange((300, _dim.nodes, 3)), True, txnx3_values),
-            (shaped_arange((300, _dim.nodes, 3)), False, txnx3_values),
-            # Test Tx(>N)x3
-            (shaped_arange((_dim.days, 10, 3)), True, None),
-            (shaped_arange((_dim.days, 10, 3)), False, None),
-            # Test other dimensions
-            (shaped_arange((3, 3, 3, 3)), True, None),
-            (shaped_arange((3, 3, 3, 3)), False, None),
-        ])
-
 
 class TestParseShape(unittest.TestCase):
     def test_successful(self):
         eq = self.assertEqual
         eq(parse_shape('S'), Shapes.S)
-        eq(parse_shape('0'), Shapes.A(0))
-        eq(parse_shape('2'), Shapes.A(2))
-        eq(parse_shape('3'), Shapes.A(3))
-        eq(parse_shape('13'), Shapes.A(13))
         eq(parse_shape('T'), Shapes.T)
-        eq(parse_shape('Tx9'), Shapes.TxA(9))
         eq(parse_shape('N'), Shapes.N)
         eq(parse_shape('NxN'), Shapes.NxN)
-        eq(parse_shape('Nx20'), Shapes.NxA(20))
         eq(parse_shape('TxN'), Shapes.TxN)
-        eq(parse_shape('TxNx2'), Shapes.TxNxA(2))
-        eq(parse_shape('Tx0'), Shapes.TxA(0))
-        eq(parse_shape('Tx1'), Shapes.TxA(1))
-        eq(parse_shape('Nx1'), Shapes.NxA(1))
-        eq(parse_shape('TxNx1'), Shapes.TxNxA(1))
 
     def test_failure(self):
         def test(s):
             with self.assertRaises(ValueError):
                 parse_shape(s)
 
+        test('A')
+        test('TxA')
         test('NxNx32')
         test('TxNxN')
         test('TxNxNx4')

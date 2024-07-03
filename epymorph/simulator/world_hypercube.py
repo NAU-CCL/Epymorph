@@ -8,9 +8,9 @@ from typing_extensions import deprecated
 
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.engine.world import World
 from epymorph.error import InitException
 from epymorph.simulation import Tick
+from epymorph.simulator.world import World
 
 
 def to_gib(n_bytes: int) -> float:

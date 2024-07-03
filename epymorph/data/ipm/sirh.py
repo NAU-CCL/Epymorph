@@ -6,7 +6,7 @@ from epymorph.compartment_model import (CompartmentModel, compartment,
                                         fork)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.simulation import params_attrib as param
+from epymorph.simulation import AttributeDef
 
 
 @registry.ipm('sirh')
@@ -20,16 +20,16 @@ def load() -> CompartmentModel:
             compartment('H', tags=['immobile'])
         ],
         attributes=[
-            param('beta', dtype=float, shape=Shapes.TxN,
-                  comment='infectivity'),
-            param('gamma', dtype=float, shape=Shapes.TxN,
-                  comment='recovery rate'),
-            param('xi', dtype=float, shape=Shapes.TxN,
-                  comment='immune waning rate'),
-            param('hospitalization_prob', dtype=float, shape=Shapes.TxN,
-                  comment='a ratio of cases which are expected to require hospitalization'),
-            param('hospitalization_duration', dtype=float, shape=Shapes.TxN,
-                  comment='the mean duration of hospitalization, in days')
+            AttributeDef('beta', type=float, shape=Shapes.TxN,
+                         comment='infectivity'),
+            AttributeDef('gamma', type=float, shape=Shapes.TxN,
+                         comment='recovery rate'),
+            AttributeDef('xi', type=float, shape=Shapes.TxN,
+                         comment='immune waning rate'),
+            AttributeDef('hospitalization_prob', type=float, shape=Shapes.TxN,
+                         comment='a ratio of cases which are expected to require hospitalization'),
+            AttributeDef('hospitalization_duration', type=float, shape=Shapes.TxN,
+                         comment='the mean duration of hospitalization, in days')
         ])
 
     [S, I, R, H] = symbols.compartment_symbols

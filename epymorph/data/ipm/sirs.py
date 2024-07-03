@@ -5,7 +5,7 @@ from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.simulation import params_attrib as param
+from epymorph.simulation import AttributeDef
 
 
 @registry.ipm('sirs')
@@ -18,12 +18,12 @@ def load() -> CompartmentModel:
             compartment('R'),
         ],
         attributes=[
-            param('beta', dtype=float, shape=Shapes.TxN,
-                  comment='infectivity'),
-            param('gamma', dtype=float, shape=Shapes.TxN,
-                  comment='progression from infected to recovered'),
-            param('xi', dtype=float, shape=Shapes.TxN,
-                  comment='progression from recovered to susceptible'),
+            AttributeDef('beta', type=float, shape=Shapes.TxN,
+                         comment='infectivity'),
+            AttributeDef('gamma', type=float, shape=Shapes.TxN,
+                         comment='progression from infected to recovered'),
+            AttributeDef('xi', type=float, shape=Shapes.TxN,
+                         comment='progression from recovered to susceptible'),
         ])
 
     [S, I, R] = symbols.compartment_symbols

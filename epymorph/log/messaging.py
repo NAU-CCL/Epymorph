@@ -47,7 +47,7 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
     def on_tick(tick: OnTick) -> None:
         print(progress(tick.percent_complete), end='\r')
 
-    def on_end(_: None) -> None:
+    def on_finish(_: None) -> None:
         end_time = perf_counter()
         print(progress(1.0))
         if start_time is not None:
@@ -61,7 +61,7 @@ def sim_messaging(sim: SimulationEvents, geo_messaging=False) -> Generator[None,
     with subscriptions() as subs:
         subs.subscribe(sim.on_start, on_start)
         subs.subscribe(sim.on_tick, on_tick)
-        subs.subscribe(sim.on_end, on_end)
+        subs.subscribe(sim.on_finish, on_finish)
         if geo_messaging and isinstance(sim_geo, DynamicGeoEvents):
             print("Geo not loaded from cache; "
                   "attributes will be lazily loaded during simulation run.")
@@ -87,8 +87,8 @@ def dynamic_geo_messaging(dyn: DynamicGeoEvents) -> Generator[None, None, None]:
 
     def adrio_start(event: AdrioStart) -> None:
         msg = f"Fetching {event.attribute}..."
-        if event.index is not None and event.adrio_len is not None:
-            msg = f"{msg} [{event.index + 1}/{event.adrio_len}]"
+        if event.adrio_index is not None and event.adrio_len is not None:
+            msg = f"{msg} [{event.adrio_index + 1}/{event.adrio_len}]"
         print(msg)
 
     def fetch_end(_: None) -> None:

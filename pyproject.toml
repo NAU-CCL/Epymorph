@@ -71,6 +71,9 @@ exclude = [
   "**/.*",
   "build",
 ]
+# Pyright doesn't seem to be able to handle sympy operators,
+# so until that's fixed ignore operator errors.
+reportOperatorIssue = "none"
 
 [tool.pylint.basic]
 max-line-length = 120

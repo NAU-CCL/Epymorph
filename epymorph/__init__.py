@@ -3,18 +3,19 @@
 from numpy import seterr
 
 import epymorph.compartment_model as IPM
+import epymorph.initializer as init
 from epymorph.data import geo_library, ipm_library, mm_library
 from epymorph.data_shape import Shapes
-from epymorph.data_type import CentroidDType, SimDType
+from epymorph.data_type import CentroidType, SimDType
 from epymorph.draw import render, render_and_save
-from epymorph.engine.standard_sim import StandardSimulation
 from epymorph.log.messaging import sim_messaging
 from epymorph.plots import plot_event, plot_pop
-from epymorph.proxy import dim, geo
-from epymorph.simulation import TimeFrame, default_rng
+from epymorph.rume import Gpm, Rume, RumeSymbols
+from epymorph.simulation import AttributeDef, TimeFrame, default_rng
+from epymorph.simulator.basic.basic_simulator import BasicSimulator
 
-# set numpy errors to raise exceptions instead of warnings, useful for catching
-# simulation errrors
+# set numpy errors to raise exceptions instead of warnings;
+# useful for catching simulation errors
 seterr(all='raise')
 
 __all__ = [
@@ -22,20 +23,20 @@ __all__ = [
     'ipm_library',
     'mm_library',
     'geo_library',
+    'SimDType',
+    'CentroidType',
     'Shapes',
-    'StandardSimulation',
-    # TODO: the names 'geo' and 'dim' are so widely used
-    # that this export winds up causing problems.
-    # We should require the user to import proxies intentionally.
-    'geo',
-    'dim',
+    'TimeFrame',
+    'AttributeDef',
+    'init',
+    'Rume',
+    'Gpm',
+    'RumeSymbols',
+    'BasicSimulator',
+    'sim_messaging',
     'plot_event',
     'plot_pop',
-    'SimDType',
-    'CentroidDType',
-    'TimeFrame',
     'default_rng',
-    'sim_messaging',
     'render',
     'render_and_save'
 ]

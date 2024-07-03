@@ -20,13 +20,14 @@ from epymorph.geo.spec import LABEL, StaticGeoSpec, validate_geo_values
 from epymorph.simulation import AttributeArray, AttributeDef
 from epymorph.util import NDIndices, as_sorted_dict
 
+_STATIC_GEO_CACHE_VERSION = 2
+
 
 class StaticGeo(Geo[StaticGeoSpec]):
     """A Geo implementation which contains all of data pre-fetched and in-memory."""
 
     values: dict[str, AttributeArray]
 
-    # def __init__(self, spec: StaticGeoSpec, values: dict[str, AttributeArray]):
     def __init__(self, spec: StaticGeoSpec, values: dict[str, NDArray]):
         if not LABEL.name in values or not np.issubdtype(values[LABEL.name].dtype, np.str_):
             msg = "Geo must contain an attribute called 'label' of type string."
@@ -68,22 +69,16 @@ class StaticGeo(Geo[StaticGeoSpec]):
             match attrib.shape:
                 # it's possible not all of these shapes really make sense in a geo,
                 # but not too painful to support them anyway
-                case shape.Arbitrary(_):
-                    return arr
                 case shape.Node():
                     return arr[selection]
                 case shape.NodeAndNode():
                     return arr[selection[:, np.newaxis], selection]
+                case shape.NodeAndCompartment():
+                    return arr[selection, :]
                 case shape.Time():
                     return arr
                 case shape.TimeAndNode():
                     return arr[:, selection]
-                case shape.NodeAndArbitrary(_):
-                    return arr[selection, :]
-                case shape.TimeAndArbitrary(_):
-                    return arr
-                case shape.TimeAndNodeAndArbitrary(_):
-                    return arr[:, selection, :]
                 case x:
                     raise ValueError(f"Unsupported shape {x}")
 
@@ -151,7 +146,7 @@ class StaticGeoFileOps:
 
         save_bundle(
             to_path=file,
-            version=1,
+            version=_STATIC_GEO_CACHE_VERSION,
             files={
                 "data.npz": npz_file,
                 "spec.geo": geo_file,
@@ -162,8 +157,7 @@ class StaticGeoFileOps:
     def load_from_archive(file: PathLike) -> StaticGeo:
         """Load a StaticGeo from its tar format."""
         try:
-            # allow version -1 so this is backwards compatible with geos that didn't have version
-            files = load_bundle(file, version_at_least=-1)
+            files = load_bundle(file, version_at_least=_STATIC_GEO_CACHE_VERSION)
             if "data.npz" not in files or "spec.geo" not in files:
                 msg = 'Archive is incomplete: missing data, spec, and/or checksum files.'
                 raise GeoValidationException(msg)

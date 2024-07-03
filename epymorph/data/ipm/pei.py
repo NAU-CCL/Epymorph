@@ -5,8 +5,7 @@ from epymorph.compartment_model import (CompartmentModel, compartment,
                                         create_model, create_symbols, edge)
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.simulation import geo_attrib as geo
-from epymorph.simulation import params_attrib as param
+from epymorph.simulation import AttributeDef
 
 
 @registry.ipm('pei')
@@ -19,9 +18,9 @@ def load() -> CompartmentModel:
             compartment('R'),
         ],
         attributes=[
-            param('infection_duration', float, Shapes.TxN, 'D'),
-            param('immunity_duration', float, Shapes.TxN, 'L'),
-            geo('humidity', float, Shapes.TxN, 'H'),
+            AttributeDef('infection_duration', float, Shapes.TxN),
+            AttributeDef('immunity_duration', float, Shapes.TxN),
+            AttributeDef('humidity', float, Shapes.TxN),
         ])
 
     [S, I, R] = symbols.compartment_symbols

@@ -1,4 +1,3 @@
-# type: ignore
 # pylint: disable=missing-docstring
 import unittest
 
@@ -6,9 +5,9 @@ from epymorph.compartment_model import (BIRTH, DEATH, CompartmentDef,
                                         compartment, create_model,
                                         create_symbols, edge)
 from epymorph.data_shape import Shapes
+from epymorph.database import AbsoluteName
 from epymorph.error import IpmValidationException
 from epymorph.simulation import AttributeDef
-from epymorph.simulation import params_attrib as param
 from epymorph.sympy_shim import to_symbol
 
 
@@ -22,9 +21,9 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta', float),
-                param('gamma', float),
-            ]
+                AttributeDef('beta', float, Shapes.N),
+                AttributeDef('gamma', float, Shapes.N),
+            ],
         )
 
         [S, I, R] = symbols.compartment_symbols
@@ -46,15 +45,25 @@ class CompartmentModelTest(unittest.TestCase):
             edge(I, R, rate=gamma * I),
         ])
         self.assertEqual(model.compartments, [
-            CompartmentDef(S, 'S', ['test_tag']),
-            CompartmentDef(I, 'I', []),
-            CompartmentDef(R, 'R', []),
+            CompartmentDef('S', ['test_tag']),
+            CompartmentDef('I', []),
+            CompartmentDef('R', []),
         ])
-        self.assertEqual(model.attributes, [
-            AttributeDef('beta', source='params', dtype=float,
-                         shape=Shapes.S, symbol=beta),
-            AttributeDef('gamma', source='params', dtype=float,
-                         shape=Shapes.S, symbol=gamma),
+        self.assertEqual(list(model.attributes.keys()), [
+            AbsoluteName("gpm:all", "ipm", "beta"),
+            AbsoluteName("gpm:all", "ipm", "gamma"),
+        ])
+        self.assertEqual(list(model.attributes.values()), [
+            AttributeDef('beta', type=float, shape=Shapes.N),
+            AttributeDef('gamma', type=float, shape=Shapes.N),
+        ])
+
+        [S, I, R] = model.symbols.compartment_symbols
+        [beta, gamma] = model.symbols.attribute_symbols
+
+        self.assertEqual(model.transitions, [
+            edge(S, I, rate=beta * S * I),
+            edge(I, R, rate=gamma * I),
         ])
 
     def test_create_02(self):
@@ -65,11 +74,11 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta', float),
-                param('gamma', float),
-                param('b', float),  # birth rate
-                param('d', float),  # death rate
-            ]
+                AttributeDef('beta', float, Shapes.N),
+                AttributeDef('gamma', float, Shapes.N),
+                AttributeDef('b', float, Shapes.N),  # birth rate
+                AttributeDef('d', float, Shapes.N),  # death rate
+            ],
         )
 
         [S, I, R] = symbols.compartment_symbols
@@ -99,9 +108,9 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta', float),
-                param('gamma', float),
-            ]
+                AttributeDef('beta', float, Shapes.N),
+                AttributeDef('gamma', float, Shapes.N),
+            ],
         )
 
         [S, I, R] = symbols.compartment_symbols
@@ -126,9 +135,9 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta', float),
-                param('gamma', float),
-            ]
+                AttributeDef('beta', float, Shapes.N),
+                AttributeDef('gamma', float, Shapes.N),
+            ],
         )
 
         [S, I, R] = symbols.compartment_symbols
@@ -152,9 +161,9 @@ class CompartmentModelTest(unittest.TestCase):
                 compartment('R'),
             ],
             attributes=[
-                param('beta', float),
-                param('gamma', float),
-            ]
+                AttributeDef('beta', float, Shapes.N),
+                AttributeDef('gamma', float, Shapes.N),
+            ],
         )
 
         [S, I, R] = symbols.compartment_symbols
@@ -175,9 +184,9 @@ class CompartmentModelTest(unittest.TestCase):
         symbols = create_symbols(
             compartments=[],
             attributes=[
-                param('beta', float),
-                param('gamma', float),
-            ]
+                AttributeDef('beta', float, Shapes.N),
+                AttributeDef('gamma', float, Shapes.N),
+            ],
         )
 
         with self.assertRaises(IpmValidationException):

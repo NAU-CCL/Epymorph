@@ -6,7 +6,7 @@ import numpy as np
 from epymorph.error import GeographyError
 from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
                                           CENSUS_GRANULARITY, COUNTY, STATE,
-                                          TRACT)
+                                          TRACT, StateScope)
 
 
 class TestCensusGranularity(unittest.TestCase):
@@ -117,3 +117,18 @@ class TestCensusGranularity(unittest.TestCase):
         self.assertSetEqual(set(expected.keys()), set(actual.keys()))
         np.testing.assert_array_equal(expected["04004"], actual["04004"])
         np.testing.assert_array_equal(expected["04013"], actual["04013"])
+
+
+class StateScopeTest(unittest.TestCase):
+
+    def test_state_scope_in_states(self):
+        scope = StateScope.in_states(['04', '35', '08'])
+        self.assertTrue(scope.granularity, 'state')
+        self.assertTrue(scope.includes, ['04', '08', '35'])
+        self.assertTrue(scope.includes_granularity, 'state')
+
+    def test_state_scope_in_states_by_code(self):
+        scope = StateScope.in_states_by_code(['AZ', 'NM', 'CO'])
+        self.assertTrue(scope.granularity, 'state')
+        self.assertTrue(scope.includes, ['04', '08', '35'])
+        self.assertTrue(scope.includes_granularity, 'state')

@@ -1,4 +1,5 @@
 """Epymorph unit testing utilities."""
+from typing import Any, Sequence
 from unittest import TestCase
 
 import numpy as np
@@ -29,3 +30,9 @@ arrays not equal
 - a2: {sig2}
 {str(a2)}"""
             self.fail(msg)
+
+    def assertListAlmostEqual(self, list1: Sequence[float], list2: Sequence[float], msg: str | None = None) -> None:
+        """Check that two lists of numbers are approximately equal."""
+        self.assertEqual(len(list1), len(list2), msg=msg)
+        for a, b in zip(list1, list2):
+            self.assertAlmostEqual(a, b, msg=msg)

@@ -5,7 +5,7 @@ import numpy as np
 
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.engine.world_hypercube import HypercubeWorld
+from epymorph.simulator.world_hypercube import HypercubeWorld
 from epymorph.test import EpymorphTestCase
 
 

@@ -10,6 +10,7 @@ def convert_to_static_geo(geo: DynamicGeo) -> StaticGeo:
     """
     spec = StaticGeoSpec(
         attributes=geo.spec.attributes,
+        scope=geo.spec.scope,
         time_period=geo.spec.time_period,
     )
     geo.fetch_all()

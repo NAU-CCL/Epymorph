@@ -11,7 +11,7 @@ from pandas import DataFrame, Series, concat, read_excel
 from shapely import area
 
 from epymorph.data_shape import Shapes
-from epymorph.data_type import CentroidDType
+from epymorph.data_type import CentroidDType, CentroidType
 from epymorph.error import (DataResourceException, GeographyError,
                             GeoValidationException)
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
@@ -24,7 +24,7 @@ from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
 from epymorph.geography.us_tiger import (get_block_groups_geo,
                                          get_counties_geo, get_states_geo,
                                          get_tracts_geo, is_tiger_year)
-from epymorph.simulation import AttributeDef, geo_attrib
+from epymorph.simulation import AttributeDef
 
 
 class ADRIOMakerCensus(ADRIOMaker):
@@ -80,35 +80,36 @@ class ADRIOMakerCensus(ADRIOMaker):
                         'B01001_049E']
 
     attributes = [
-        geo_attrib('name', dtype=str, shape=Shapes.N,
-                   comment='The proper name of the place.'),
-        geo_attrib('population', dtype=int, shape=Shapes.N,
-                   comment='The number of residents of the place.'),
-        geo_attrib('population_by_age', dtype=int, shape=Shapes.NxA(3),
-                   comment='The number of residents, divided into three age categories: 0-19, 20-64, 65+'),
-        geo_attrib('population_by_age_x6', dtype=int, shape=Shapes.NxA(6),
-                   comment='The number of residents, divided into six age categories: 0-19, 20-34, 35-54, 55-64, 65-75, 75+'),
-        geo_attrib('centroid', dtype=CentroidDType, shape=Shapes.N,
-                   comment='A geographic centroid for the place, in longitude/latitude.'),
-        geo_attrib('geoid', dtype=str, shape=Shapes.N,
-                   comment='The GEOID (in many cases synonymous with FIPS code) for the place.'),
-        geo_attrib('average_household_size', dtype=int, shape=Shapes.N,
-                   comment='Average household size within the place.'),
-        geo_attrib('dissimilarity_index', dtype=float, shape=Shapes.N,
-                   comment='An index describing the amount of racial segregation in the place, from 0 to 1.'),
-        geo_attrib('commuters', dtype=int, shape=Shapes.NxN,
-                   comment='The number of commuters between places, as reported by the ACS Commuting Flows data.'),
-        geo_attrib('gini_index', dtype=float, shape=Shapes.N,
-                   comment='An index describing wealth inequality in the place, from 0 to 1.'),
-        geo_attrib('median_age', dtype=int, shape=Shapes.N,
-                   comment='The median age of residents in the place.'),
-        geo_attrib('median_income', dtype=int, shape=Shapes.N,
-                   comment='The median income of residents in the place.'),
-        geo_attrib('tract_median_income', dtype=int, shape=Shapes.N,
-                   comment='The median income according to the Census Tract which encloses this place.'
-                   'This attribute is only valid if the geo granularity is below tract.'),
-        geo_attrib('pop_density_km2', dtype=float, shape=Shapes.N,
-                   comment='The population density of this place by square kilometer.'),
+        AttributeDef('name', type=str, shape=Shapes.N,
+                     comment='The proper name of the place.'),
+        AttributeDef('population', type=int, shape=Shapes.N,
+                     comment='The number of residents of the place.'),
+        # TODO: arbitrary dimensions are no longer supported; have to figure out what to do with these
+        # AttributeDef('population_by_age', type=int, shape=Shapes.NxA(3),
+        #              comment='The number of residents, divided into three age categories: 0-19, 20-64, 65+'),
+        # AttributeDef('population_by_age_x6', type=int, shape=Shapes.NxA(6),
+        #              comment='The number of residents, divided into six age categories: 0-19, 20-34, 35-54, 55-64, 65-75, 75+'),
+        AttributeDef('centroid', type=CentroidType, shape=Shapes.N,
+                     comment='A geographic centroid for the place, in longitude/latitude.'),
+        AttributeDef('geoid', type=str, shape=Shapes.N,
+                     comment='The GEOID (in many cases synonymous with FIPS code) for the place.'),
+        AttributeDef('average_household_size', type=int, shape=Shapes.N,
+                     comment='Average household size within the place.'),
+        AttributeDef('dissimilarity_index', type=float, shape=Shapes.N,
+                     comment='An index describing the amount of racial segregation in the place, from 0 to 1.'),
+        AttributeDef('commuters', type=int, shape=Shapes.NxN,
+                     comment='The number of commuters between places, as reported by the ACS Commuting Flows data.'),
+        AttributeDef('gini_index', type=float, shape=Shapes.N,
+                     comment='An index describing wealth inequality in the place, from 0 to 1.'),
+        AttributeDef('median_age', type=int, shape=Shapes.N,
+                     comment='The median age of residents in the place.'),
+        AttributeDef('median_income', type=int, shape=Shapes.N,
+                     comment='The median income of residents in the place.'),
+        AttributeDef('tract_median_income', type=int, shape=Shapes.N,
+                     comment='The median income according to the Census Tract which encloses this place.'
+                     'This attribute is only valid if the geo granularity is below tract.'),
+        AttributeDef('pop_density_km2', type=float, shape=Shapes.N,
+                     comment='The population density of this place by square kilometer.'),
     ]
 
     attrib_vars = {
@@ -302,16 +303,16 @@ class ADRIOMakerCensus(ADRIOMaker):
             case StateScopeAll():
                 queries = [{"for": "state:*"}]
 
-            case StateScope('state', includes):
+            case StateScope(includes_granularity='state', includes=includes):
                 queries = [{"for": f"state:{','.join(includes)}"}]
 
-            case CountyScope('state', includes):
+            case CountyScope(includes_granularity='state', includes=includes):
                 queries = [{
                     "for": "county:*",
                     "in": f"state:{','.join(includes)}",
                 }]
 
-            case CountyScope('county', includes):
+            case CountyScope(includes_granularity='county', includes=includes):
                 counties_by_state: dict[str, list[str]] = defaultdict(list)
                 for state, county in map(COUNTY.decompose, includes):
                     counties_by_state[state].append(county)
@@ -320,13 +321,13 @@ class ADRIOMakerCensus(ADRIOMaker):
                     for s, cs in counties_by_state.items()
                 ]
 
-            case TractScope('state', includes):
+            case TractScope(includes_granularity='state', includes=includes):
                 queries = [{
                     "for": "tract:*",
                     "in": f"state:{','.join(includes)} county:*",
                 }]
 
-            case TractScope('county', includes):
+            case TractScope(includes_granularity='county', includes=includes):
                 counties_by_state: dict[str, list[str]] = defaultdict(list)
                 for state, county in map(COUNTY.decompose, includes):
                     counties_by_state[state].append(county)
@@ -336,7 +337,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                     for s, cs in counties_by_state.items()
                 ]
 
-            case TractScope('tract', includes):
+            case TractScope(includes_granularity='tract', includes=includes):
                 tracts_by_county: dict[str, list[str]] = defaultdict(list)
 
                 for state, county, tract in map(TRACT.decompose, includes):
@@ -348,7 +349,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                     for state, county in [COUNTY.decompose(c) for c in tracts_by_county.keys()]
                 ]
 
-            case BlockGroupScope('state', includes):
+            case BlockGroupScope(includes_granularity='state', includes=includes):
                 # This wouldn't normally need to be multiple queries,
                 # but Census API won't let you fetch CBGs for multiple states.
                 states = {STATE.extract(x) for x in includes}
@@ -357,7 +358,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                     for s in states
                 ]
 
-            case BlockGroupScope('county', includes):
+            case BlockGroupScope(includes_granularity='county', includes=includes):
                 counties_by_state: dict[str, list[str]] = defaultdict(list)
                 for state, county in map(COUNTY.decompose, includes):
                     counties_by_state[state].append(county)
@@ -367,7 +368,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                     for s, cs in counties_by_state.items()
                 ]
 
-            case BlockGroupScope('tract', includes):
+            case BlockGroupScope(includes_granularity='tract', includes=includes):
                 tracts_by_county: dict[str, list[str]] = defaultdict(list)
 
                 for state, county, tract in map(TRACT.decompose, includes):
@@ -379,7 +380,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                     for state, county in [COUNTY.decompose(c) for c in tracts_by_county.keys()]
                 ]
 
-            case BlockGroupScope('block group', includes):
+            case BlockGroupScope(includes_granularity='block group', includes=includes):
                 block_groups_by_tract: dict[str, list[str]] = defaultdict(list)
 
                 for state, county, tract, block_group in map(BLOCK_GROUP.decompose, includes):
@@ -598,5 +599,5 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             self._validate_result(scope, df['geoid'])
 
-            return df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.dtype).squeeze()
+            return df[self.attrib_vars[attrib.name]].to_numpy(dtype=attrib.type).squeeze()
         return ADRIO(attrib.name, fetch)

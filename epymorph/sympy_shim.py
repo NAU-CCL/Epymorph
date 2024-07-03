@@ -1,6 +1,6 @@
 """Provide typed shims for the sympy functions we're using."""
 
-from typing import Any, Callable, cast
+from typing import Any, Callable, Mapping, cast
 
 import sympy as sy
 
@@ -45,3 +45,11 @@ def lambdify_list(params: list[Any], exprs: list[sy.Expr]) -> SympyLambda:
     taking the given parameters and returning a list of results.
     """
     return cast(SympyLambda, sy.lambdify([params], exprs))
+
+
+def substitute(expr: sy.Expr, symbol_mapping: Mapping[sy.Symbol, sy.Symbol]) -> sy.Expr:
+    """
+    Substitute symbols in one expression according to the given mapping,
+    and return a new expression.
+    """
+    return cast(sy.Expr, expr.subs(symbol_mapping))
