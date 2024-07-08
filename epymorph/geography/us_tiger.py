@@ -5,7 +5,7 @@ and handles quirks and differences between the supported census years.
 """
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Sequence, TypeGuard
 from urllib.request import urlopen
 from warnings import warn
 
@@ -40,8 +40,13 @@ from epymorph.error import GeographyError
 # Below there are some commented-code remnants which demonstrate what it takes to support the additional
 # territories, in case we ever want to reverse this choice.
 
-TigerYear = Literal[2000, 2010, 2020]
+TigerYear = Literal[2000, 2009, 2010, 2011, 2012, 2013, 2014,
+                    2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
 """A supported TIGER file year."""
+
+TIGER_YEARS: Sequence[TigerYear] = (2000, 2009, 2010, 2011, 2012, 2013, 2014,
+                                    2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023)
+"""All supported TIGER file years."""
 
 _TIGER_URL = "https://www2.census.gov/geo/tiger"
 
@@ -137,6 +142,11 @@ def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataF
     return df[df['GEOID'].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)]
 
 
+def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
+    """A type-guard function to ensure a year is a supported TIGER year."""
+    return year in TIGER_YEARS
+
+
 ##########
 # STATES #
 ##########
@@ -145,16 +155,21 @@ def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataF
 def _get_states_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (states)."""
     match year:
-        case 2020:
+        case year if year in range(2011, 2024):
             cols = ["GEOID", "NAME", "STUSPS"]
             urls = [
-                f"{_TIGER_URL}/TIGER2020/STATE/tl_2020_us_state.zip"
+                f"{_TIGER_URL}/TIGER{year}/STATE/tl_{year}_us_state.zip"
             ]
         case 2010:
             cols = ["GEOID10", "NAME10", "STUSPS10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/STATE/2010/tl_2010_{xx}_state10.zip"
                 for xx in _SUPPORTED_STATE_FILES
+            ]
+        case 2009:
+            cols = ["STATEFP00", "NAME00", "STUSPS00"]
+            urls = [
+                f"{_TIGER_URL}/TIGER2009/tl_2009_us_state00.zip"
             ]
         case 2000:
             cols = ["STATEFP00", "NAME00", "STUSPS00"]
@@ -185,16 +200,21 @@ def get_states_info(year: TigerYear) -> DataFrame:
 def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (counties)."""
     match year:
-        case 2020:
+        case year if year in range(2011, 2024):
             cols = ["GEOID", "NAME"]
             urls = [
-                f"{_TIGER_URL}/TIGER2020/COUNTY/tl_2020_us_county.zip"
+                f"{_TIGER_URL}/TIGER{year}/COUNTY/tl_{year}_us_county.zip"
             ]
         case 2010:
             cols = ["GEOID10", "NAME10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/COUNTY/2010/tl_2010_{xx}_county10.zip"
                 for xx in _SUPPORTED_STATE_FILES
+            ]
+        case 2009:
+            cols = ["CNTYIDFP00", "NAME00"]
+            urls = [
+                f"{_TIGER_URL}/TIGER2009/tl_2009_us_county00.zip"
             ]
         case 2000:
             cols = ["CNTYIDFP00", "NAME00"]
@@ -224,25 +244,34 @@ def get_counties_info(year: TigerYear) -> DataFrame:
 
 def _get_tracts_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (tracts)."""
-    states = get_states_info(year)["GEOID"]
+    states = get_states_info(year)
     match year:
-        case 2020:
+        case year if year in range(2011, 2024):
             cols = ["GEOID"]
             urls = [
-                f"{_TIGER_URL}/TIGER2020/TRACT/tl_2020_{xx}_tract.zip"
-                for xx in states
+                f"{_TIGER_URL}/TIGER{year}/TRACT/tl_{year}_{xx}_tract.zip"
+                for xx in states["GEOID"]
             ]
         case 2010:
             cols = ["GEOID10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/TRACT/2010/tl_2010_{xx}_tract10.zip"
-                for xx in states
+                for xx in states["GEOID"]
+            ]
+        case 2009:
+            def state_folder(fips, name):
+                return f"{fips}_{name.upper().replace(' ', '_')}"
+
+            cols = ["CTIDFP00"]
+            urls = [
+                f"{_TIGER_URL}/TIGER2009/{state_folder(xx, name)}/tl_2009_{xx}_tract00.zip"
+                for xx, name in zip(states["GEOID"], states["NAME"])
             ]
         case 2000:
             cols = ["CTIDFP00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/TRACT/2000/tl_2010_{xx}_tract00.zip"
-                for xx in states
+                for xx in states["GEOID"]
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
@@ -266,25 +295,34 @@ def get_tracts_info(year: TigerYear) -> DataFrame:
 
 def _get_block_groups_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (block groups)."""
-    states = get_states_info(year)["GEOID"]
+    states = get_states_info(year)
     match year:
-        case 2020:
+        case year if year in range(2011, 2024):
             cols = ["GEOID"]
             urls = [
-                f"{_TIGER_URL}/TIGER2020/BG/tl_2020_{xx}_bg.zip"
-                for xx in states
+                f"{_TIGER_URL}/TIGER{year}/BG/tl_{year}_{xx}_bg.zip"
+                for xx in states["GEOID"]
             ]
         case 2010:
             cols = ["GEOID10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/BG/2010/tl_2010_{xx}_bg10.zip"
-                for xx in states
+                for xx in states["GEOID"]
+            ]
+        case 2009:
+            def state_folder(fips, name):
+                return f"{fips}_{name.upper().replace(' ', '_')}"
+
+            cols = ["BKGPIDFP00"]
+            urls = [
+                f"{_TIGER_URL}/TIGER2009/{state_folder(xx, name)}/tl_2009_{xx}_bg00.zip"
+                for xx, name in zip(states["GEOID"], states["NAME"])
             ]
         case 2000:
             cols = ["BKGPIDFP00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/BG/2000/tl_2010_{xx}_bg00.zip"
-                for xx in states
+                for xx in states["GEOID"]
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")

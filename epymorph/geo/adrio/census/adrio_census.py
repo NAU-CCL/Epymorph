@@ -12,7 +12,8 @@ from shapely import area
 
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidDType
-from epymorph.error import DataResourceException, GeoValidationException
+from epymorph.error import (DataResourceException, GeographyError,
+                            GeoValidationException)
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
@@ -22,7 +23,7 @@ from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
                                           StateScopeAll, TractScope)
 from epymorph.geography.us_tiger import (get_block_groups_geo,
                                          get_counties_geo, get_states_geo,
-                                         get_tracts_geo)
+                                         get_tracts_geo, is_tiger_year)
 from epymorph.simulation import AttributeDef, geo_attrib
 
 
@@ -197,18 +198,22 @@ class ADRIOMakerCensus(ADRIOMaker):
     def fetch_sf(self, scope: CensusScope) -> GeoDataFrame:
         """Utility function to fetch shape files from Census for specified regions."""
         # call appropriate pygris function based on granularity and sort result
+        scope_year = scope.year
+        if not is_tiger_year(scope_year):
+            raise GeographyError(f"Unsupported year: {scope_year}")
+
         match scope:
             case StateScopeAll() | StateScope():
-                df = get_states_geo(year=scope.year)
+                df = get_states_geo(year=scope_year)
 
             case CountyScope():
-                df = get_counties_geo(year=scope.year)
+                df = get_counties_geo(year=scope_year)
 
             case TractScope():
-                df = get_tracts_geo(year=scope.year)
+                df = get_tracts_geo(year=scope_year)
 
             case BlockGroupScope():
-                df = get_block_groups_geo(year=scope.year)
+                df = get_block_groups_geo(year=scope_year)
 
             case _:
                 raise DataResourceException("Unsupported query.")

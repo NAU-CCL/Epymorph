@@ -250,9 +250,6 @@ def get_census_granularity(name: CensusGranularityName) -> CensusGranularity:
 # Census data loading and caching
 
 
-CensusYear = Literal[2000, 2010, 2020]
-"""A supported Census delineation year."""
-
 DEFAULT_YEAR = 2020
 
 _GEOGRAPHY_CACHE_PATH = Path("geography")
@@ -288,8 +285,11 @@ class StatesInfo(NamedTuple):
     """The US postal code for the state."""
 
 
-def get_us_states(year: CensusYear) -> StatesInfo:
+def get_us_states(year: int) -> StatesInfo:
     """Loads US States information (assumed to be invariant for all supported years)."""
+    if not us_tiger.is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
     def _get_us_states() -> StatesInfo:
         df = us_tiger.get_states_info(year)
         df.sort_values("GEOID", inplace=True)
@@ -309,8 +309,11 @@ class CountiesInfo(NamedTuple):
     """The typical name of the county (does not include state)."""
 
 
-def get_us_counties(year: CensusYear) -> CountiesInfo:
+def get_us_counties(year: int) -> CountiesInfo:
     """Loads US Counties information for the given year."""
+    if not us_tiger.is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
     def _get_us_counties() -> CountiesInfo:
         df = us_tiger.get_counties_info(year)
         df.sort_values("GEOID", inplace=True)
@@ -327,8 +330,11 @@ class TractsInfo(NamedTuple):
     """The GEOID (aka FIPS code) of the tract."""
 
 
-def get_us_tracts(year: CensusYear) -> TractsInfo:
+def get_us_tracts(year: int) -> TractsInfo:
     """Loads US Census Tracts information for the given year."""
+    if not us_tiger.is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
     def _get_us_tracts() -> TractsInfo:
         df = us_tiger.get_tracts_info(year)
         df.sort_values("GEOID", inplace=True)
@@ -344,8 +350,11 @@ class BlockGroupsInfo(NamedTuple):
     """The GEOID (aka FIPS code) of the block group."""
 
 
-def get_us_block_groups(year: CensusYear) -> BlockGroupsInfo:
+def get_us_block_groups(year: int) -> BlockGroupsInfo:
     """Loads US Census Block Group information for the given year."""
+    if not us_tiger.is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
     def _get_us_cbgs() -> BlockGroupsInfo:
         df = us_tiger.get_block_groups_info(year)
         df.sort_values("GEOID", inplace=True)
@@ -362,7 +371,7 @@ T = TypeVar('T')
 P = ParamSpec('P')
 
 
-def verify_fips(granularity: CensusGranularityName, year: CensusYear, fips: Sequence[str]) -> None:
+def verify_fips(granularity: CensusGranularityName, year: int, fips: Sequence[str]) -> None:
     """
     Validates a list of FIPS codes are valid for the given granularity and year.
     If any FIPS code is found to be invalid, raises GeographyError.
@@ -393,20 +402,20 @@ def verify_fips(granularity: CensusGranularityName, year: CensusYear, fips: Sequ
 
 
 @cache
-def state_code_to_fips(year: CensusYear) -> Mapping[str, str]:
+def state_code_to_fips(year: int) -> Mapping[str, str]:
     """Mapping from state postal code to FIPS code."""
     states = get_us_states(year)
     return dict(zip(states.code, states.geoid))
 
 
 @cache
-def state_fips_to_code(year: CensusYear) -> Mapping[str, str]:
+def state_fips_to_code(year: int) -> Mapping[str, str]:
     """Mapping from state FIPS code to postal code."""
     states = get_us_states(year)
     return dict(zip(states.geoid, states.code))
 
 
-def validate_state_codes_as_fips(year: CensusYear, codes: Sequence[str]) -> Sequence[str]:
+def validate_state_codes_as_fips(year: int, codes: Sequence[str]) -> Sequence[str]:
     """
     Validates a list of US state postal codes (two-letter abbreviations) and
     returns them as a sorted list of FIPS codes.
@@ -428,7 +437,7 @@ def validate_state_codes_as_fips(year: CensusYear, codes: Sequence[str]) -> Sequ
 class CensusScope(GeoScope):
     """A GeoScope using US Census delineations."""
 
-    year: CensusYear
+    year: int
     """
     The Census delineation year.
     With every decennial census, the Census Department can (and does) define
@@ -464,7 +473,7 @@ class CensusScope(GeoScope):
 class StateScopeAll(CensusScope):
     """GeoScope including all US states and state-equivalents."""
     # NOTE: for the Census API, we need to handle "all states" as a special case.
-    year: CensusYear
+    year: int
     granularity: Literal['state'] = field(init=False, default='state')
 
     def get_node_ids(self) -> NDArray[np.str_]:
@@ -483,16 +492,16 @@ class StateScope(CensusScope):
     """GeoScope at the State granularity."""
     includes_granularity: Literal['state']
     includes: Sequence[str]
-    year: CensusYear
+    year: int
     granularity: Literal['state'] = field(init=False, default='state')
 
     @staticmethod
-    def all(year: CensusYear = DEFAULT_YEAR) -> StateScopeAll:
+    def all(year: int = DEFAULT_YEAR) -> StateScopeAll:
         """Create a scope including all US states and state-equivalents."""
         return StateScopeAll(year)
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'StateScope':
+    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'StateScope':
         """
         Create a scope including a set of US states/state-equivalents, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
@@ -501,7 +510,7 @@ class StateScope(CensusScope):
         return StateScope('state', states_fips, year)
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'StateScope':
+    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'StateScope':
         """
         Create a scope including a set of US states/state-equivalents, by postal code (two-letter abbreviation).
         Raise GeographyError if any postal code is invalid.
@@ -527,11 +536,11 @@ class CountyScope(CensusScope):
     """GeoScope at the County granularity."""
     includes_granularity: Literal['state', 'county']
     includes: Sequence[str]
-    year: CensusYear
+    year: int
     granularity: Literal['county'] = field(init=False, default='county')
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'CountyScope':
+    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
         """
         Create a scope including all counties in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
@@ -540,7 +549,7 @@ class CountyScope(CensusScope):
         return CountyScope('state', states_fips, year)
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'CountyScope':
+    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
         """
         Create a scope including all counties in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
@@ -550,7 +559,7 @@ class CountyScope(CensusScope):
         return CountyScope('state', states_fips, year)
 
     @staticmethod
-    def in_counties(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'CountyScope':
+    def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
         """
         Create a scope including a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
@@ -590,11 +599,11 @@ class TractScope(CensusScope):
     """GeoScope at the Tract granularity."""
     includes_granularity: Literal['state', 'county', 'tract']
     includes: Sequence[str]
-    year: CensusYear
+    year: int
     granularity: Literal['tract'] = field(init=False, default='tract')
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
+    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including all tracts in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
@@ -603,7 +612,7 @@ class TractScope(CensusScope):
         return TractScope('state', states_fips, year)
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
+    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including all tracts in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
@@ -613,7 +622,7 @@ class TractScope(CensusScope):
         return TractScope('state', states_fips, year)
 
     @staticmethod
-    def in_counties(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
+    def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including all tracts in a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
@@ -622,7 +631,7 @@ class TractScope(CensusScope):
         return TractScope('county', counties_fips, year)
 
     @staticmethod
-    def in_tracts(tract_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'TractScope':
+    def in_tracts(tract_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
         """
         Create a scope including a set of US tracts, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
@@ -669,11 +678,11 @@ class BlockGroupScope(CensusScope):
     """GeoScope at the Block Group granularity."""
     includes_granularity: Literal['state', 'county', 'tract', 'block group']
     includes: Sequence[str]
-    year: CensusYear
+    year: int
     granularity: Literal['block group'] = field(init=False, default='block group')
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block groups in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
@@ -682,7 +691,7 @@ class BlockGroupScope(CensusScope):
         return BlockGroupScope('state', states_fips, year)
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block groups in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
@@ -692,7 +701,7 @@ class BlockGroupScope(CensusScope):
         return BlockGroupScope('state', states_fips, year)
 
     @staticmethod
-    def in_counties(counties_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block groups in a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
@@ -701,7 +710,7 @@ class BlockGroupScope(CensusScope):
         return BlockGroupScope('county', counties_fips, year)
 
     @staticmethod
-    def in_tracts(tract_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_tracts(tract_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including all block gropus in a set of US tracts, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
@@ -710,7 +719,7 @@ class BlockGroupScope(CensusScope):
         return BlockGroupScope('tract', tract_fips, year)
 
     @staticmethod
-    def in_block_groups(block_group_fips: Sequence[str], year: CensusYear = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_block_groups(block_group_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
         """
         Create a scope including a set of US block groups, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
