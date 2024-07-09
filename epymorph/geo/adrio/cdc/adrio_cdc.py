@@ -1,8 +1,9 @@
 from datetime import date, datetime
 from typing import Any
+from warnings import warn
 
 from numpy.typing import NDArray
-from pandas import concat, read_csv
+from pandas import concat, read_csv, to_datetime
 
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException, GeoValidationException
@@ -119,21 +120,15 @@ class ADRIOMakerCDC(ADRIOMaker):
             col_name = self.attribute_cols[attrib.name]
             if scope.granularity == 'state':
                 fips = scope.get_node_ids()
-                urls = [f"https://data.cdc.gov/resource/3nnm-4jni.csv?$select=date_updated,county_fips,{col_name}&$where=starts_with(county_fips,\'{state}\')&$limit=206334"
+                urls = [f"https://data.cdc.gov/resource/3nnm-4jni.csv?$select=date_updated,county_fips,{col_name}&$where=starts_with(county_fips,'{state}')%20AND%20date_updated%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=206334"
                         for state in fips]
                 df = concat(read_csv(url, dtype={'county_fips': str}) for url in urls)
             else:
-                fips = '\'' + '\',\''.join(scope.get_node_ids()) + '\''
-                url = f"https://data.cdc.gov/resource/3nnm-4jni.csv?$select=date_updated,county_fips,{col_name}&$where=county_fips%20in({fips})&$limit=206334"
+                fips = "'" + "','".join(scope.get_node_ids()) + "'"
+                url = f"https://data.cdc.gov/resource/3nnm-4jni.csv?$select=date_updated,county_fips,{col_name}&$where=county_fips%20in({fips})%20AND%20date_updated%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=206334"
                 df = read_csv(url, dtype={'county_fips': str})
 
-            df['date_updated'] = [datetime.fromisoformat(
-                week).date() for week in df['date_updated']]
-
             df.rename(columns={'county_fips': 'fips'}, inplace=True)
-
-            df = df[df['date_updated'] >= time_period.start_date]
-            df = df[df['date_updated'] < time_period.end_date]
 
             if scope.granularity == 'state':
                 df['fips'] = [STATE.extract(x) for x in df['fips']]
@@ -163,19 +158,13 @@ class ADRIOMakerCDC(ADRIOMaker):
 
             if scope.granularity == 'state':
                 fips = scope.get_node_ids()
-                urls = [f"https://healthdata.gov/resource/anag-cw7u.csv?$select=collection_week,fips_code,{col_name}&$where=starts_with(fips_code,\'{state}\')&$limit=1045406"
+                urls = [f"https://healthdata.gov/resource/anag-cw7u.csv?$select=collection_week,fips_code,{col_name}&$where=starts_with(fips_code,'{state}')%20AND%20collection_week%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=1045406"
                         for state in fips]
                 df = concat(read_csv(url, dtype={'fips_code': str}) for url in urls)
             else:
-                fips = '\'' + '\',\''.join(scope.get_node_ids()) + '\''
-                url = f"https://healthdata.gov/resource/anag-cw7u.csv?$select=collection_week,fips_code,{col_name}&$where=fips_code%20in({fips})&$limit=1045406"
+                fips = "'" + "','".join(scope.get_node_ids()) + "'"
+                url = f"https://healthdata.gov/resource/anag-cw7u.csv?$select=collection_week,fips_code,{col_name}&$where=fips_code%20in({fips})%20AND%20collection_week%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=1045406"
                 df = read_csv(url, dtype={'fips_code': str})
-
-            df['collection_week'] = [datetime.fromisoformat(
-                week.replace('/', '-')).date() for week in df['collection_week']]
-
-            df = df[df['collection_week'] >= time_period.start_date]
-            df = df[df['collection_week'] < time_period.end_date]
 
             if scope.granularity == 'state':
                 df['fips_code'] = [STATE.extract(x) for x in df['fips_code']]
@@ -207,21 +196,15 @@ class ADRIOMakerCDC(ADRIOMaker):
 
         def fetch() -> NDArray:
             if time_period.end_date >= date(2024, 5, 1):
-                print("State level hospitalization data is voluntary past 5/1/2024.")
+                warn("State level hospitalization data is voluntary past 5/1/2024.")
 
             state_mapping = state_fips_to_code(scope.year)
             fips = scope.get_node_ids()
-            state_codes = '\'' + '\',\''.join([state_mapping[x] for x in fips]) + '\''
+            state_codes = ",".join(f"'{state_mapping[x]}'" for x in fips)
             col_name = self.attribute_cols[attrib.name]
 
-            url = f"https://data.cdc.gov/resource/aemt-mg7g.csv?$select=week_end_date,jurisdiction,{col_name}&$where=jurisdiction%20in({state_codes})&$limit=11514"
+            url = f"https://data.cdc.gov/resource/aemt-mg7g.csv?$select=week_end_date,jurisdiction,{col_name}&$where=jurisdiction%20in({state_codes})%20AND%20week_end_date%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=11514"
             df = read_csv(url)
-
-            df['week_end_date'] = [datetime.fromisoformat(
-                week).date() for week in df['week_end_date']]
-
-            df = df[df['week_end_date'] >= time_period.start_date]
-            df = df[df['week_end_date'] < time_period.end_date]
 
             df = df.groupby(['week_end_date', 'jurisdiction']).sum()
             df.reset_index(inplace=True)
@@ -247,22 +230,16 @@ class ADRIOMakerCDC(ADRIOMaker):
 
             if scope.granularity == 'state':
                 fips = scope.get_node_ids()
-                urls = [f"https://data.cdc.gov/resource/8xkx-amqh.csv?$select=date,fips,{col_name}&$where=starts_with(fips,\'{state}\')&$limit=1962781"
+                urls = [f"https://data.cdc.gov/resource/8xkx-amqh.csv?$select=date,fips,{col_name}&$where=starts_with(fips,'{state}')%20AND%20date%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=1962781"
                         for state in fips]
                 df = concat(read_csv(url, dtype={'fips': str}) for url in urls)
                 df['fips'] = [STATE.extract(x) for x in df['fips']]
                 df = df.groupby(['date', 'fips']).sum()
                 df.reset_index(inplace=True)
             else:
-                fips = '\'' + '\',\''.join(scope.get_node_ids()) + '\''
-                url = f"https://data.cdc.gov/resource/8xkx-amqh.csv?$select=date,fips,{col_name}&$where=fips%20in({fips})&$limit=1962781"
+                fips = "'" + "','".join(scope.get_node_ids()) + "'"
+                url = f"https://data.cdc.gov/resource/8xkx-amqh.csv?$select=date,fips,{col_name}&$where=fips%20in({fips})%20AND%20date%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=1962781"
                 df = read_csv(url, dtype={'fips': str})
-
-            df['date'] = [datetime.fromisoformat(
-                week.replace('/', '-')).date() for week in df['date']]
-
-            df = df[df['date'] >= time_period.start_date]
-            df = df[df['date'] < time_period.end_date]
 
             df.fillna(0, inplace=True)
 
@@ -292,15 +269,9 @@ class ADRIOMakerCDC(ADRIOMaker):
 
             data_col = self.attribute_cols[attrib.name]
 
-            url = f"https://data.cdc.gov/resource/ite7-j2w7.csv?$select=week_ending_date,{fips_col},{data_col}&$where={fips_col}%20in({fips})&$limit=534140"
+            url = f"https://data.cdc.gov/resource/ite7-j2w7.csv?$select=week_ending_date,{fips_col},{data_col}&$where={fips_col}%20in({fips})%20AND%20week_ending_date%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=534140"
 
             df = read_csv(url)
-
-            df['week_ending_date'] = [datetime.fromisoformat(
-                week.replace('/', '-')).date() for week in df['week_ending_date']]
-
-            df = df[df['week_ending_date'] >= time_period.start_date]
-            df = df[df['week_ending_date'] < time_period.end_date]
 
             df.fillna(0, inplace=True)
 
@@ -328,18 +299,12 @@ class ADRIOMakerCDC(ADRIOMaker):
             fips = scope.get_node_ids()
             states = get_us_states(scope.year)
             state_mapping = dict(zip(states.geoid, states.name))
-            state_names = '\'' + '\',\''.join(state_mapping[x] for x in fips) + '\''
+            state_names = ",".join(f"'{state_mapping[x]}'" for x in fips)
             col_name = self.attribute_cols[attrib.name]
 
-            url = f"https://data.cdc.gov/resource/r8kw-7aab.csv?$select=end_date,state,{col_name}&$where=state%20in({state_names})&$limit=15822"
+            url = f"https://data.cdc.gov/resource/r8kw-7aab.csv?$select=end_date,state,{col_name}&$where=state%20in({state_names})%20AND%20end_date%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=15822"
 
             df = read_csv(url)
-
-            df['end_date'] = [datetime.fromisoformat(
-                week.replace('/', '-')).date() for week in df['end_date']]
-
-            df = df[df['end_date'] >= time_period.start_date]
-            df = df[df['end_date'] < time_period.end_date]
 
             df = df.groupby(['end_date', 'state']).sum()
             df.reset_index(inplace=True)
