@@ -4,11 +4,6 @@ from argparse import ArgumentParser
 from importlib.metadata import version
 
 from epymorph.cli.cache import define_argparser as def_cache
-from epymorph.cli.prepare import define_argparser as def_prepare
-from epymorph.cli.run import define_argparser as def_run
-from epymorph.cli.validate import define_argparser as def_validate
-
-# from epymorph.cli.verify import define_argparser as def_verify
 
 
 def define_argparser() -> ArgumentParser:
@@ -29,13 +24,7 @@ def define_argparser() -> ArgumentParser:
         dest="command",
         required=True)
 
-    def_run(command_parser)
-    def_prepare(command_parser)
     def_cache(command_parser)
-    def_validate(command_parser)
-
-    # let's hide `verify` for now, until it's more fully-featured
-    # def_verify(command_parser)
 
     return cli_parser
 
