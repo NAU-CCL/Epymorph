@@ -93,10 +93,9 @@ def export(geo_name: str,
 
     # if geo uncached or spec file passed, fetch and export
     elif geo_name in geo_library_dynamic or os.path.exists(geo_path):
-        if geo_name in geo_library_dynamic:
-            geo_load = geo_library_dynamic.get(geo_name)
-            if geo_load is not None:
-                geo = geo_load()
+        geo_loader = geo_library_dynamic.get(geo_name)
+        if geo_loader is not None:
+            geo = geo_loader()
         else:
             geo = DF.load_from_spec(geo_path, adrio_maker_library)
         with dynamic_geo_messaging(geo):
