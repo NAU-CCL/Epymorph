@@ -236,18 +236,24 @@ class ADRIOMakerCDC(ADRIOMaker):
             if time_period.end_date >= date(2024, 5, 1):
                 warn("State level hospitalization data is voluntary past 5/1/2024.")
 
+            info = QueryInfo("https://data.cdc.gov/resource/aemt-mg7g.csv?",
+                             "week_end_date", "jurisdiction", self.attribute_cols[attrib.name], True)
+
             state_mapping = state_fips_to_code(scope.year)
             fips = scope.get_node_ids()
-            state_codes = ",".join(f"'{state_mapping[x]}'" for x in fips)
-            col_name = self.attribute_cols[attrib.name]
+            # state_codes = ",".join(f"'{state_mapping[x]}'" for x in fips)
+            state_codes = np.array([state_mapping[x] for x in fips])
+            # col_name = self.attribute_cols[attrib.name]
 
-            url = f"https://data.cdc.gov/resource/aemt-mg7g.csv?$select=week_end_date,jurisdiction,{col_name}&$where=jurisdiction%20in({state_codes})%20AND%20week_end_date%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=11514"
-            df = read_csv(url)
+            df = self._api_query(info, state_codes, time_period, scope.granularity)
+
+            # url = f"https://data.cdc.gov/resource/aemt-mg7g.csv?$select=week_end_date,jurisdiction,{col_name}&$where=jurisdiction%20in({state_codes})%20AND%20week_end_date%20between%20'{time_period.start_date}T00:00:00'%20and%20'{time_period.end_date}T00:00:00'&$limit=11514"
+            # df = read_csv(url)
 
             df = df.groupby(['week_end_date', 'jurisdiction']).sum()
             df.reset_index(inplace=True)
             df = df.pivot(index='week_end_date',
-                          columns='jurisdiction', values=col_name)
+                          columns='jurisdiction', values=info.data_col)
 
             return df.to_numpy(dtype=attrib.dtype)
 
