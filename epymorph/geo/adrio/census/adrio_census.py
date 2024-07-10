@@ -198,7 +198,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
     def fetch_sf(self, scope: CensusScope) -> GeoDataFrame:
         """Utility function to fetch shape files from Census for specified regions."""
-        # call appropriate pygris function based on granularity and sort result
+        # call appropriate us_tiger function based on granularity and sort result
         scope_year = scope.year
         if not is_tiger_year(scope_year):
             raise GeographyError(f"Unsupported year: {scope_year}")
