@@ -426,7 +426,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             self._validate_result(scope, df['geoid'])
 
-            return df['geoid'].to_numpy(dtype=str).squeeze()
+            return df['geoid'].to_numpy(dtype=str)
         return ADRIO('geoid', fetch)
 
     def _make_population_adrio(self, scope: CensusScope, year: int, num_groups: int) -> ADRIO:
@@ -456,7 +456,7 @@ class ADRIOMakerCensus(ADRIOMaker):
                                     'pop_65-75': group(20, 22) + group(44, 46),
                                     'pop_75+': group(23, 25) + group(47, 49)})
 
-            return output.to_numpy(dtype=int).squeeze()
+            return output.to_numpy(dtype=int)
 
         if num_groups == 3:
             return ADRIO('population_by_age', fetch)
@@ -491,7 +491,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             self._validate_result(scope, df3['geoid'])
 
-            return df3['score'].to_numpy(dtype=float).squeeze()
+            return df3['score'].to_numpy(dtype=float)
         return ADRIO('dissimilarity_index', fetch)
 
     def _make_gini_index_adrio(self, scope: CensusScope, year: int) -> ADRIO:
@@ -531,7 +531,7 @@ class ADRIOMakerCensus(ADRIOMaker):
             # calculate population density
             output = geo_df['B01003_001E'] / (area(geo_df['geometry']) / 1e6)
 
-            return output.to_numpy(dtype=float).squeeze()
+            return output.to_numpy(dtype=float)
         return ADRIO('pop_density_km2', fetch)
 
     def _make_centroid_adrio(self, scope: CensusScope) -> ADRIO:
@@ -544,7 +544,7 @@ class ADRIOMakerCensus(ADRIOMaker):
 
             self._validate_result(scope, output['geoid'])
 
-            return output['centroid'].to_numpy(dtype=CentroidDType).squeeze()
+            return output['centroid'].to_numpy(dtype=CentroidDType)
         return ADRIO('centroid', fetch)
 
     def _make_tract_med_income_adrio(self, scope: CensusScope, year: int) -> ADRIO:
