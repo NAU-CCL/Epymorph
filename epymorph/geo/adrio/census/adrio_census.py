@@ -221,6 +221,7 @@ class ADRIOMakerCensus(ADRIOMaker):
         df = df.rename(columns={'GEOID': 'geoid'})
 
         df = df[df['geoid'].isin(scope.get_node_ids())]
+        df = df.sort_values(by='geoid')
 
         return GeoDataFrame(df)
 
