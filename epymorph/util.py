@@ -376,6 +376,25 @@ class MatchDTypeCast(Matcher[DTypeLike]):
         return any((np.can_cast(value, x, casting='safe') for x in self._acceptable))
 
 
+class MatchShapeLiteral(Matcher[NDArray]):
+    """
+    Matches a numpy array shape to a known literal value.
+    (For matching relative to simulation dimensions, you want DataShapeMatcher.)
+    """
+
+    _acceptable: tuple[int, ...]
+
+    def __init__(self, acceptable: tuple[int, ...]):
+        self._acceptable = acceptable
+
+    def expected(self) -> str:
+        """Describes what the expected value is."""
+        return str(self._acceptable)
+
+    def __call__(self, value: NDArray) -> bool:
+        return self._acceptable == value.shape
+
+
 @dataclass(frozen=True)
 class _Matchers:
     """Convenience constructors for various matchers."""
@@ -398,6 +417,10 @@ class _Matchers:
     def dtype_cast(self, *dtypes: DTypeLike) -> Matcher[DTypeLike]:
         """Creates a MatchDTypeCast instance."""
         return MatchDTypeCast(*dtypes)
+
+    def shape_literal(self, shape: tuple[int, ...]) -> Matcher[NDArray]:
+        """Creates a MatchShapeLiteral instance."""
+        return MatchShapeLiteral(shape)
 
 
 match = _Matchers()

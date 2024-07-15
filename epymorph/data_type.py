@@ -1,35 +1,26 @@
 """
 Types for source data and attributes in epymorph.
 """
+from datetime import date
 from typing import Any, Sequence
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
-# _DataPyBasic = int | float | str
-# _DataPyTuple = tuple[_DataPyBasic, ...]
-# support recursively-nested lists
-# _DataPyList = Sequence[Union[_DataPyBasic, _DataPyTuple, '_DataPyList']]
-# _DataPy = _DataPyBasic | _DataPyTuple | _DataPyList
-
-# DataPyScalar = _DataPyBasic | _DataPyTuple
-# DataScalar = _DataPyBasic | _DataPyTuple | _DataNpScalar
-# """The allowed scalar types (either python or numpy equivalents)."""
-
 # Types for attribute declarations:
 # these are expressed as Python types for simplicity.
 
-ScalarType = type[int | float | str]
+ScalarType = type[int | float | str | date]
 StructType = Sequence[tuple[str, ScalarType]]
 AttributeType = ScalarType | StructType
 """The allowed type declarations for epymorph attributes."""
 
-ScalarValue = int | float | str
+ScalarValue = int | float | str | date
 StructValue = tuple[ScalarValue, ...]
 AttributeValue = ScalarValue | StructValue
 """The allowed types for epymorph attribute values (specifically: default values)."""
 
-ScalarDType = np.int64 | np.float64 | np.str_
+ScalarDType = np.int64 | np.float64 | np.str_ | np.datetime64
 StructDType = np.void
 AttributeDType = ScalarDType | StructDType
 """The subset of numpy dtypes for use in epymorph: these map 1:1 with AttributeType."""
@@ -45,10 +36,19 @@ def dtype_as_np(dtype: AttributeType) -> np.dtype:
         return np.dtype(np.float64)
     if dtype == str:
         return np.dtype(np.str_)
-    if isinstance(dtype, list):
-        return np.dtype(dtype)
+    if dtype == date:
+        return np.dtype(np.datetime64)
     if isinstance(dtype, Sequence):
-        return np.dtype(list(dtype))
+        dtype = list(dtype)
+        if len(dtype) == 0:
+            raise ValueError(f"Unsupported dtype: {dtype}")
+        try:
+            return np.dtype([
+                (field_name, dtype_as_np(field_dtype))
+                for field_name, field_dtype in dtype
+            ])
+        except TypeError:
+            raise ValueError(f"Unsupported dtype: {dtype}") from None
     raise ValueError(f"Unsupported dtype: {dtype}")
 
 
@@ -60,51 +60,44 @@ def dtype_str(dtype: AttributeType) -> str:
         return "float"
     if dtype == str:
         return "str"
+    if dtype == date:
+        return "date"
     if isinstance(dtype, Sequence):
-        values = (f"({x[0]}, {dtype_str(x[1])})" for x in dtype)
-        return f"[{', '.join(values)}]"
+        dtype = list(dtype)
+        if len(dtype) == 0:
+            raise ValueError(f"Unsupported dtype: {dtype}")
+        try:
+            values = [
+                f"({field_name}, {dtype_str(field_dtype)})"
+                for field_name, field_dtype in dtype
+            ]
+            return f"[{', '.join(values)}]"
+        except TypeError:
+            raise ValueError(f"Unsupported dtype: {dtype}") from None
     raise ValueError(f"Unsupported dtype: {dtype}")
 
 
 def dtype_check(dtype: AttributeType, value: Any) -> bool:
     """Checks that a value conforms to a given dtype. (Python types only.)"""
-    if dtype in (int, float, str):
+    if dtype in (int, float, str, date):
         return isinstance(value, dtype)
     if isinstance(dtype, Sequence):
+        dtype = list(dtype)
         if not isinstance(value, tuple):
             return False
         if len(value) != len(dtype):
             return False
         return all((
-            dtype_check(vtype, v)
-            for ((_, vtype), v) in zip(dtype, value)
+            dtype_check(field_dtype, field_value)
+            for ((_, field_dtype), field_value) in zip(dtype, value)
         ))
     raise ValueError(f"Unsupported dtype: {dtype}")
 
 
-# ParamFunction = Callable[[int, int], DataScalar]
-# """
-# Params may be defined as functions of time (day) and geo node (index),
-# returning a python or numpy scalar value.
-# """
-
-# RawParam = _DataPy | _DataNp | ParamFunction
-# """
-# Types for raw parameter values. Users can supply any of these forms when constructing
-# simulation parameters.
-# """
-
-# AttributeScalar = _DataNpScalar
-# AttributeArray = _DataNpArray
-# """
-# The type of all data attributes, whether in geo or params (after normalization).
-# """
-
-
 CentroidType: AttributeType = [('longitude', float), ('latitude', float)]
 """Structured epymorph type declaration for long/lat coordinates."""
-CentroidDType: DTypeLike = [('longitude', float), ('latitude', float)]
-"""Structured numpy dtype for long/lat coordinates."""
+CentroidDType: DTypeLike = [('longitude', np.float64), ('latitude', np.float64)]
+"""The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates)."""
 
 # SimDType being centrally-located means we can change it reliably.
 SimDType = np.int64
