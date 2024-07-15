@@ -97,7 +97,7 @@ def dtype_check(dtype: AttributeType, value: Any) -> bool:
 CentroidType: AttributeType = [('longitude', float), ('latitude', float)]
 """Structured epymorph type declaration for long/lat coordinates."""
 CentroidDType: DTypeLike = [('longitude', np.float64), ('latitude', np.float64)]
-"""Structured numpy dtype for long/lat coordinates."""
+"""The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates)."""
 
 # SimDType being centrally-located means we can change it reliably.
 SimDType = np.int64

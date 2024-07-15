@@ -141,6 +141,12 @@ class AttributeKey(Generic[AttributeT]):
     shape: DataShape
 
     def __post_init__(self):
+        try:
+            dtype_as_np(self.type)
+        except Exception as e:
+            msg = f"AttributeDef's type is not correctly specified: {self.type}\n" \
+                + "See documentation for appropriate type designations."
+            raise ValueError(msg) from e
         object.__setattr__(self, 'attribute_name', AttributeName(self.name))
 
     @overload
@@ -168,6 +174,12 @@ class AttributeDef(AttributeKey[AttributeT]):
     comment: str | None = field(default=None, compare=False)
 
     def __post_init__(self):
+        try:
+            dtype_as_np(self.type)
+        except Exception as e:
+            msg = f"AttributeDef's type is not correctly specified: {self.type}\n" \
+                + "See documentation for appropriate type designations."
+            raise ValueError(msg) from e
         if self.default_value is not None and not dtype_check(self.type, self.default_value):
             msg = "AttributeDef's default value does not align with its dtype."
             raise ValueError(msg)
