@@ -146,11 +146,11 @@ class ADRIOMakerCDC(ADRIOMaker):
             df = df.pivot(index='date_updated', columns='fips', values=info.data_col)
 
             array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', object), ('data', object)])
+                             ('date', 'datetime64[D]'), ('data', object)])
 
             return np.array(
                 [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', object), ('data', attrib.dtype)]
+                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
             )
 
         return ADRIO(attrib.name, fetch)
@@ -185,11 +185,11 @@ class ADRIOMakerCDC(ADRIOMaker):
             df.fillna(0, inplace=True)
 
             array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', object), ('data', object)])
+                             ('date', 'datetime64[D]'), ('data', object)])
 
             return np.array(
                 [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', object), ('data', attrib.dtype)]
+                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
             )
 
         return ADRIO(attrib.name, fetch)
@@ -227,11 +227,11 @@ class ADRIOMakerCDC(ADRIOMaker):
                           columns='jurisdiction', values=info.data_col)
 
             array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', object), ('data', object)])
+                             ('date', 'datetime64[D]'), ('data', object)])
 
             return np.array(
                 [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', object), ('data', attrib.dtype)]
+                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
             )
 
         return ADRIO(attrib.name, fetch)
@@ -258,11 +258,11 @@ class ADRIOMakerCDC(ADRIOMaker):
             df = df.pivot(index='date', columns='fips', values=info.data_col)
 
             array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', object), ('data', object)])
+                             ('date', 'datetime64[D]'), ('data', object)])
 
             return np.array(
                 [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', object), ('data', attrib.dtype)]
+                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
             )
 
         return ADRIO(attrib.name, fetch)
@@ -279,12 +279,11 @@ class ADRIOMakerCDC(ADRIOMaker):
 
         def fetch() -> NDArray:
             if scope.granularity == 'state':
-                fips_col = 'stfips'
+                info = QueryInfo("https://data.cdc.gov/resource/ite7-j2w7.csv?",
+                                 "week_ending_date", "stfips", self.attribute_cols[attrib.name], True)
             else:
-                fips_col = 'fips_code'
-
-            info = QueryInfo("https://data.cdc.gov/resource/ite7-j2w7.csv?",
-                             "week_ending_date", fips_col, self.attribute_cols[attrib.name])
+                info = QueryInfo("https://data.cdc.gov/resource/ite7-j2w7.csv?",
+                                 "week_ending_date", "fips_code", self.attribute_cols[attrib.name])
 
             df = self._api_query(info, scope.get_node_ids(),
                                  time_period, scope.granularity)
@@ -292,18 +291,18 @@ class ADRIOMakerCDC(ADRIOMaker):
             df.fillna(0, inplace=True)
 
             if scope.granularity == 'state':
-                df = df.groupby(['week_ending_date', fips_col]).sum()
+                df = df.groupby(['week_ending_date', info.fips_col]).sum()
                 df.reset_index(inplace=True)
 
             df = df.pivot(index='week_ending_date',
-                          columns=fips_col, values=info.data_col)
+                          columns=info.fips_col, values=info.data_col)
 
             array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', object), ('data', object)])
+                             ('date', 'datetime64[D]'), ('data', object)])
 
             return np.array(
                 [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', object), ('data', attrib.dtype)]
+                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
             )
 
         return ADRIO(attrib.name, fetch)
@@ -334,11 +333,11 @@ class ADRIOMakerCDC(ADRIOMaker):
             df = df.pivot(index='end_date', columns='state', values=info.data_col)
 
             array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', object), ('data', object)])
+                             ('date', 'datetime64[D]'), ('data', object)])
 
             return np.array(
                 [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', object), ('data', attrib.dtype)]
+                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
             )
 
         return ADRIO(attrib.name, fetch)
@@ -366,31 +365,33 @@ class ADRIOMakerCDC(ADRIOMaker):
             + f"between '{time_period.start_date}T00:00:00' " \
             + f"and '{time_period.end_date}T00:00:00'"
 
+        df = concat([self._query_location(info, loc_clause, date_clause)
+                    for loc_clause in location_clauses])
+
+        df = df.sort_values(by=[info.date_col, info.fips_col])
+        return df
+
+    def _query_location(self, info: QueryInfo, loc_clause: str, date_clause: str) -> DataFrame:
+        """
+        Helper function for _api_query() that builds and sends queries for individual locations.
+        """
         current_return = 10000
         total_returned = 0
         df = DataFrame()
         while current_return == 10000:
-            urls = [
-                info.url_base + urlencode(
-                    quote_via=quote,
-                    safe=",()'$:",
-                    query={
-                        '$select': f'{info.date_col},{info.fips_col},{info.data_col}',
-                        '$where': f"{loc_clause} AND {date_clause}",
-                        '$limit': 10000,
-                        '$offset': total_returned
-                    })
-                for loc_clause in location_clauses
-            ]
+            url = info.url_base + urlencode(
+                quote_via=quote,
+                safe=",()'$:",
+                query={
+                    '$select': f'{info.date_col},{info.fips_col},{info.data_col}',
+                    '$where': f"{loc_clause} AND {date_clause}",
+                    '$limit': 10000,
+                    '$offset': total_returned
+                })
 
-            df = concat([df] + [
-                read_csv(url, dtype={info.fips_col: str})
-                for url in urls]
-            )
+            df = concat([df, + read_csv(url, dtype={info.fips_col: str})])
 
             current_return = len(df.index) - total_returned
             total_returned += current_return
 
-        df[info.date_col] = df[info.date_col].apply(lambda x: str(x)[:10])
-        df = df.sort_values(by=[info.date_col, info.fips_col])
         return df
