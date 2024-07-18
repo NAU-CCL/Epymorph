@@ -389,7 +389,7 @@ class ADRIOMakerCDC(ADRIOMaker):
                     '$offset': total_returned
                 })
 
-            df = concat([df, + read_csv(url, dtype={info.fips_col: str})])
+            df = concat([df, read_csv(url, dtype={info.fips_col: str})])
 
             current_return = len(df.index) - total_returned
             total_returned += current_return
