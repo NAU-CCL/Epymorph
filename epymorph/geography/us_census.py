@@ -405,14 +405,14 @@ def verify_fips(granularity: CensusGranularityName, year: int, fips: Sequence[st
 def state_code_to_fips(year: int) -> Mapping[str, str]:
     """Mapping from state postal code to FIPS code."""
     states = get_us_states(year)
-    return dict(zip(states.code, states.geoid))
+    return dict(zip(states.code.tolist(), states.geoid.tolist()))
 
 
 @cache
 def state_fips_to_code(year: int) -> Mapping[str, str]:
     """Mapping from state FIPS code to postal code."""
     states = get_us_states(year)
-    return dict(zip(states.geoid, states.code))
+    return dict(zip(states.geoid.tolist(), states.code.tolist()))
 
 
 def validate_state_codes_as_fips(year: int, codes: Sequence[str]) -> Sequence[str]:

@@ -107,6 +107,34 @@ class DataShape(unittest.TestCase):
         ttt(np.arange(90), True)
         fff(np.arange(90), False)
 
+    def test_node_and_arbitrary(self):
+        ttt, fff = self.as_bool_asserts(
+            lambda x, bc=False: Shapes.NxA.matches(_dim, x, bc)
+        )
+
+        ttt(np.arange(6 * 111).reshape((6, 111)))
+        ttt(np.arange(6 * 222).reshape((6, 222)))
+
+        fff(np.arange(6 * 111).reshape((111, 6)))
+        fff(np.arange(6 * 222).reshape((222, 6)))
+
+        fff(np.arange(4 * 111).reshape((4, 111)))
+        fff(np.arange(4 * 222).reshape((4, 222)))
+
+    def test_arbitrary_and_node(self):
+        ttt, fff = self.as_bool_asserts(
+            lambda x, bc=False: Shapes.AxN.matches(_dim, x, bc)
+        )
+
+        ttt(np.arange(6 * 111).reshape((111, 6)))
+        ttt(np.arange(6 * 222).reshape((222, 6)))
+
+        fff(np.arange(6 * 111).reshape((6, 111)))
+        fff(np.arange(6 * 222).reshape((6, 222)))
+
+        fff(np.arange(4 * 111).reshape((111, 4)))
+        fff(np.arange(4 * 222).reshape((222, 4)))
+
     def adapt_test_framework(self, shape, cases):
         for i, (input_value, broadcast, expected) in enumerate(cases):
             error = f"Failure in test case {i}: ({shape}, {input_value}, {broadcast}, {expected})"
@@ -241,6 +269,42 @@ class DataShape(unittest.TestCase):
             (np.arange(27).reshape((3, 3, 3)), False, None),
         ])
 
+    def test_adapt_node_and_arbitrary(self):
+        arr1 = np.arange(6 * 111).reshape((6, 111))
+        arr2 = np.arange(6 * 222).reshape((6, 222))
+        arr3 = np.arange(6 * 333).reshape((6, 333))
+
+        arr4 = np.arange(5 * 111).reshape((5, 111))
+        arr5 = np.arange(111)
+        arr6 = np.arange(6)
+
+        self.adapt_test_framework(Shapes.NxA, [
+            (arr1, True, arr1),
+            (arr2, True, arr2),
+            (arr3, True, arr3),
+            (arr4, True, None),
+            (arr5, True, None),
+            (arr6, True, None),
+        ])
+
+    def test_adapt_arbitrary_and_node(self):
+        arr1 = np.arange(6 * 111).reshape((111, 6))
+        arr2 = np.arange(6 * 222).reshape((222, 6))
+        arr3 = np.arange(6 * 333).reshape((333, 6))
+
+        arr4 = np.arange(5 * 111).reshape((111, 5))
+        arr5 = np.arange(111)
+        arr6 = np.arange(6)
+
+        self.adapt_test_framework(Shapes.AxN, [
+            (arr1, True, arr1),
+            (arr2, True, arr2),
+            (arr3, True, arr3),
+            (arr4, True, None),
+            (arr5, True, None),
+            (arr6, True, None),
+        ])
+
 
 class TestParseShape(unittest.TestCase):
     def test_successful(self):
@@ -250,6 +314,8 @@ class TestParseShape(unittest.TestCase):
         eq(parse_shape('N'), Shapes.N)
         eq(parse_shape('NxN'), Shapes.NxN)
         eq(parse_shape('TxN'), Shapes.TxN)
+        eq(parse_shape('AxN'), Shapes.AxN)
+        eq(parse_shape('NxA'), Shapes.NxA)
 
     def test_failure(self):
         def test(s):

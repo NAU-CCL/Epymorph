@@ -28,7 +28,9 @@ class CustomScope(GeoScope):
 
     _nodes: NDArray[np.str_]
 
-    def __init__(self, nodes: NDArray[np.str_]):
+    def __init__(self, nodes: NDArray[np.str_] | list[str]):
+        if isinstance(nodes, list):
+            nodes = np.array(nodes, dtype=np.str_)
         self._nodes = nodes
 
     def get_node_ids(self) -> NDArray[np.str_]:

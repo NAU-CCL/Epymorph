@@ -229,15 +229,46 @@ class TimeAndNode(DataShape):
         return "TxN"
 
 
+class NodeAndArbitrary(DataShape):
+    """An array of size exactly-N by any dimension."""
+
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+        if value.ndim == 2 and value.shape[0] == dim.nodes:
+            return True
+        return False
+
+    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+        return value if self.matches(dim, value, allow_broadcast) else None
+
+    def __str__(self):
+        return "NxA"
+
+
+class ArbitraryAndNode(DataShape):
+    """An array of size any dimension by exactly-N."""
+
+    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+        if value.ndim == 2 and value.shape[1] == dim.nodes:
+            return True
+        return False
+
+    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+        return value if self.matches(dim, value, allow_broadcast) else None
+
+    def __str__(self):
+        return "AxN"
+
+
 @dataclass(frozen=True)
 class Shapes:
     """Static instances for all available shapes."""
 
     # Data can be in any of these shapes, where:
     # - S is a single scalar value
-    # - T is the number of ticks
+    # - T is the number of days
     # - N is the number of nodes
     # - C is the number of IPM compartments
+    # - A is any length (arbitrary; this dimension is effectively unchecked)
 
     S = Scalar()
     T = Time()
@@ -245,6 +276,8 @@ class Shapes:
     NxC = NodeAndCompartment()
     NxN = NodeAndNode()
     TxN = TimeAndNode()
+    NxA = NodeAndArbitrary()
+    AxN = ArbitraryAndNode()
 
 
 def parse_shape(shape: str) -> DataShape:
@@ -262,6 +295,10 @@ def parse_shape(shape: str) -> DataShape:
             return Shapes.NxN
         case "TxN":
             return Shapes.TxN
+        case "NxA":
+            return Shapes.NxA
+        case "AxN":
+            return Shapes.AxN
         case _:
             raise ValueError(f"'{shape}' is not a valid shape specification.")
 

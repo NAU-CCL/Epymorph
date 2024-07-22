@@ -329,6 +329,9 @@ class NamespacedAttributeResolver(_BaseAttributeResolver):
 T_co = TypeVar('T_co', bound=np.generic, covariant=True)
 """The result type of a SimulationFunction."""
 
+_DeferredT = TypeVar('_DeferredT', bound=np.generic)
+"""The result type of a SimulationFunction during deference."""
+
 
 class _Context:
     def data(self, attribute: AttributeKey) -> NDArray:
@@ -387,7 +390,7 @@ class _RealContext(_Context):
         """The simulation's random number generator."""
         return self._rng
 
-    def defer(self, other: 'SimulationFunction[T_co]') -> NDArray[T_co]:
+    def defer(self, other: 'SimulationFunction[_DeferredT]') -> NDArray[_DeferredT]:
         """Defer processing to another similarly-typed instance of a SimulationFunction."""
         return other(self._data, self._dim, self._rng)
 
@@ -450,6 +453,6 @@ class SimulationFunction(ABC, Generic[T_co]):
         return self._ctx.rng
 
     @final
-    def defer(self, other: 'SimulationFunction[T_co]') -> NDArray[T_co]:
+    def defer(self, other: 'SimulationFunction[_DeferredT]') -> NDArray[_DeferredT]:
         """Defer processing to another similarly-typed instance of a SimulationFunction."""
         return self._ctx.defer(other)
