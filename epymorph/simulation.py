@@ -18,6 +18,7 @@ from epymorph.data_type import (AttributeArray, AttributeType, AttributeValue,
 from epymorph.database import (AbsoluteName, AttributeName, Database,
                                ModuleNamespace)
 from epymorph.error import AttributeException
+from epymorph.geography.scope import GeoScope
 
 
 def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:
@@ -344,6 +345,11 @@ class _Context:
         raise ValueError("Invalid access of function context.")
 
     @property
+    def scope(self) -> GeoScope:
+        """The simulation GeoScope."""
+        raise ValueError("Invalid access of function context.")
+
+    @property
     def rng(self) -> np.random.Generator:
         """The simulation's random number generator."""
         raise ValueError("Invalid access of function context.")
@@ -365,12 +371,14 @@ class _RealContext(_Context):
     _cache: dict[AttributeKey, AttributeArray]
     _data: NamespacedAttributeResolver
     _dim: SimDimensions
+    _scope: GeoScope
     _rng: np.random.Generator
 
-    def __init__(self, data: NamespacedAttributeResolver, dim: SimDimensions, rng: np.random.Generator):
+    def __init__(self, data: NamespacedAttributeResolver, dim: SimDimensions, scope: GeoScope, rng: np.random.Generator):
         self._cache = {}
         self._data = data
         self._dim = dim
+        self._scope = scope
         self._rng = rng
 
     def data(self, attribute: AttributeKey) -> NDArray:
@@ -386,13 +394,18 @@ class _RealContext(_Context):
         return self._dim
 
     @property
+    def scope(self) -> GeoScope:
+        """The simulation GeoScope."""
+        return self._scope
+
+    @property
     def rng(self) -> np.random.Generator:
         """The simulation's random number generator."""
         return self._rng
 
     def defer(self, other: 'SimulationFunction[_DeferredT]') -> NDArray[_DeferredT]:
         """Defer processing to another similarly-typed instance of a SimulationFunction."""
-        return other(self._data, self._dim, self._rng)
+        return other(self._data, self._dim, self._scope, self._rng)
 
 
 class SimulationFunction(ABC, Generic[T_co]):
@@ -410,10 +423,11 @@ class SimulationFunction(ABC, Generic[T_co]):
         self,
         data: NamespacedAttributeResolver,
         dim: SimDimensions,
+        scope: GeoScope,
         rng: np.random.Generator,
     ) -> NDArray[T_co]:
         try:
-            self._ctx = _RealContext(data, dim, rng)
+            self._ctx = _RealContext(data, dim, scope, rng)
             return self.evaluate()
         finally:
             self._ctx = _EMPTY_CONTEXT
@@ -446,6 +460,11 @@ class SimulationFunction(ABC, Generic[T_co]):
     def dim(self) -> SimDimensions:
         """The simulation dimensions."""
         return self._ctx.dim
+
+    @property
+    def scope(self) -> GeoScope:
+        """The simulation GeoScope."""
+        return self._ctx.scope
 
     @property
     def rng(self) -> np.random.Generator:

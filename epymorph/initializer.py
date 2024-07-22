@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
 from epymorph.data_type import SimArray, SimDType
 from epymorph.error import InitException
+from epymorph.geography.scope import GeoScope
 from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
                                  SimulationFunction)
 from epymorph.util import NumpyTypeError, check_ndarray, match, not_none
@@ -25,8 +26,8 @@ class Initializer(SimulationFunction[np.int64], ABC):
     of populations by IPM compartment for every simulation node.
     """
 
-    def __call__(self, data: NamespacedAttributeResolver, dim: SimDimensions, rng: np.random.Generator) -> SimArray:
-        result = super().__call__(data, dim, rng)
+    def __call__(self, data: NamespacedAttributeResolver, dim: SimDimensions, scope: GeoScope, rng: np.random.Generator) -> SimArray:
+        result = super().__call__(data, dim, scope, rng)
 
         # Result validation: it must be an NxC array of integers where no value is less than zero.
         try:

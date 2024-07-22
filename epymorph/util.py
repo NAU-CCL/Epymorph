@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
-                    Mapping, OrderedDict, Self, TypeVar)
+                    Mapping, OrderedDict, Self, TypeGuard, TypeVar)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -13,6 +13,8 @@ from typing_extensions import deprecated
 
 
 T = TypeVar('T')
+A = TypeVar('A')
+B = TypeVar('B')
 
 
 def identity(x: T) -> T:
@@ -108,6 +110,21 @@ def filter_unique(xs: Iterable[T]) -> list[T]:
     return ys
 
 
+def filter_with_mask(xs: Iterable[A], predicate: Callable[[A], TypeGuard[B]]) -> tuple[list[B], list[bool]]:
+    """
+    Filters the given iterable for items which match `predicate`, and also
+    returns a boolean mask the same length as the iterable with the results of `predicate` for each item.
+    """
+    matched = list[B]()
+    mask = list[bool]()
+    for x in xs:
+        is_match = predicate(x)
+        mask.append(is_match)
+        if is_match:
+            matched.append(x)
+    return matched, mask
+
+
 def as_list(x: T | list[T]) -> list[T]:
     """If `x` is a list, return it unchanged. If it's a single value, wrap it in a list."""
     return x if isinstance(x, list) else [x]
@@ -120,10 +137,6 @@ V = TypeVar('V')
 def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
     """Returns a sorted OrderedDict of the given dict."""
     return OrderedDict(sorted(x.items()))
-
-
-A = TypeVar('A')
-B = TypeVar('B')
 
 
 def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:

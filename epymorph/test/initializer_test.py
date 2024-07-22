@@ -10,20 +10,22 @@ from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import SimDType
 from epymorph.database import Database, ModuleNamespace, NamePattern
 from epymorph.error import AttributeException, InitException
+from epymorph.geography.scope import CustomScope
 from epymorph.simulation import AttributeDef, NamespacedAttributeResolver
 
 
 def test_context(additional_data: dict[str, NDArray] | None = None):
+    scope = CustomScope(list("ABCDE"))
     dim = SimDimensions.build(
         tau_step_lengths=[1 / 3, 2 / 3],
         start_date=date(2020, 1, 1),
         days=100,
-        nodes=5,
+        nodes=scope.nodes,
         compartments=3,
         events=3,
     )
     params = {
-        'label': np.array(list('ABCDE'), dtype=np.str_),
+        'label': scope.get_node_ids(),
         'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
         'foosball_championships': np.array([2, 4, 1, 9, 6]),
         **(additional_data or {}),
@@ -36,7 +38,7 @@ def test_context(additional_data: dict[str, NDArray] | None = None):
         dim=dim,
         namespace=ModuleNamespace("gpm:all", "init"),
     )
-    return (data, dim, np.random.default_rng(1))
+    return (data, dim, scope, np.random.default_rng(1))
 
 
 _FOOSBALL_CHAMPIONSHIPS = AttributeDef("foosball_championships", int, Shapes.N)

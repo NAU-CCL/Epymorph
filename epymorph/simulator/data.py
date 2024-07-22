@@ -10,6 +10,7 @@ from epymorph.database import (AbsoluteName, Database, DatabaseWithFallback,
                                DatabaseWithStrataFallback, ModuleNamespace,
                                NamePattern)
 from epymorph.error import AttributeException, InitException
+from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.params import (ParamExpressionTimeAndNode, ParamFunction,
                              ParamValue)
 from epymorph.rume import GEO_LABELS, Gpm, Rume
@@ -123,7 +124,7 @@ def _evaluation_context(
                 raise AttributeException(msg) from None
 
         # Otherwise, evaluate and store the parameter based on its type.
-        if isinstance(raw_value, ParamFunction):
+        if isinstance(raw_value, ParamFunction | Adrio):
             # ParamFunction: first evaluate all dependencies of this function (recursively),
             # then evaluate the function itself.
             namespace = name.to_namespace()
@@ -131,7 +132,7 @@ def _evaluation_context(
                 dep_name = namespace.to_absolute(dependency.name)
                 evaluate(dep_name, [*chain, name], dependency.default_value)
             data = NamespacedAttributeResolver(attr_db, rume.dim, namespace)
-            value = raw_value(data, rume.dim, rng)
+            value = raw_value(data, rume.dim, rume.scope, rng)
         elif isinstance(raw_value, type) and issubclass(raw_value, ParamFunction):
             msg = f"Invalid parameter: '{format_name(match_pattern)}' "\
                 "is a ParamFunction class instead of an instance."
@@ -268,7 +269,7 @@ def initialize_rume(
             gpm.ipm.num_events,
         )
         strata_data = NamespacedAttributeResolver(data, strata_dim, namespace)
-        return gpm.init(strata_data, strata_dim, rng)
+        return gpm.init(strata_data, strata_dim, rume.scope, rng)
 
     try:
         return np.column_stack([

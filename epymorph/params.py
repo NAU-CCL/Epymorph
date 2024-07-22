@@ -12,6 +12,7 @@ from sympy import Expr, Symbol
 
 from epymorph.data_type import (AttributeValue, ScalarDType, ScalarValue,
                                 StructDType, StructValue)
+from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
 
@@ -184,6 +185,6 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
 
 
 ListValue = Sequence[Union[ScalarValue, StructValue, 'ListValue']]
-ParamValue = ScalarValue | StructValue | ListValue | ParamFunction | Expr \
+ParamValue = ScalarValue | StructValue | ListValue | ParamFunction | Adrio | Expr \
     | NDArray[ScalarDType | StructDType]
 """All acceptable input forms for parameter values."""
