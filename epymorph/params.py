@@ -12,6 +12,7 @@ from sympy import Expr, Symbol
 
 from epymorph.data_type import (AttributeValue, ScalarDType, ScalarValue,
                                 StructDType, StructValue)
+from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
 
@@ -19,7 +20,7 @@ T_co = TypeVar('T_co', bound=np.generic, covariant=True)
 """The result type of a ParamFunction."""
 
 
-class ParamFunction(SimulationFunction[T_co], ABC):
+class ParamFunction(SimulationFunction[NDArray[T_co]], ABC):
     """Parameter functions can be specified in a variety of forms; this class describe the common elements."""
 
 
@@ -152,7 +153,7 @@ def simulation_symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
 class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
     """A param function based on a sympy expression for a time-by-node matrix of data."""
 
-    attributes = ()
+    requirements = ()
 
     _expr: Expr
 
@@ -184,6 +185,6 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
 
 
 ListValue = Sequence[Union[ScalarValue, StructValue, 'ListValue']]
-ParamValue = ScalarValue | StructValue | ListValue | ParamFunction | Expr \
+ParamValue = ScalarValue | StructValue | ListValue | ParamFunction | Adrio | Expr \
     | NDArray[ScalarDType | StructDType]
 """All acceptable input forms for parameter values."""

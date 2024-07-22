@@ -387,7 +387,7 @@ class Rume:
                 strata_name = f"gpm:{strata}"
                 for a in gpm.mm.attributes:
                     yield AbsoluteName(strata_name, "mm", a.name), a
-                for a in gpm.init.attributes:
+                for a in gpm.init.requirements:
                     yield AbsoluteName(strata_name, "init", a.name), a
         return dict(generate_items())
 

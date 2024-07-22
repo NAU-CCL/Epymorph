@@ -195,7 +195,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Beta(ParamFunctionTimeAndNode):
             GAMMA = AttributeDef('gamma', float, Shapes.TxN)
 
-            attributes = [GAMMA]
+            requirements = [GAMMA]
 
             r_0: float
 
@@ -227,7 +227,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Xi(ParamFunctionNode):
             BETA = AttributeDef('beta', float, Shapes.TxN)
 
-            attributes = [BETA]
+            requirements = [BETA]
 
             def evaluate1(self, node_index: int) -> float:
                 beta = self.data(self.BETA)[0, node_index]
@@ -249,7 +249,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Gamma(ParamFunctionScalar):
             BETA = AttributeDef('beta', float, Shapes.S)
 
-            attributes = [BETA]
+            requirements = [BETA]
 
             def evaluate1(self) -> float:
                 return float(self.data(self.BETA)) / 4.0
@@ -258,7 +258,7 @@ class EvaluateParamsTest(unittest.TestCase):
             ALPHA = AttributeDef('alpha', float, Shapes.S)
             GAMMA = AttributeDef('gamma', float, Shapes.S)
 
-            attributes = [ALPHA, GAMMA]
+            requirements = [ALPHA, GAMMA]
 
             def evaluate(self) -> NDArray[np.float64]:
                 alpha = self.data(self.ALPHA)
@@ -283,7 +283,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Gamma(ParamFunctionNumpy):
             XI = AttributeDef('xi', float, Shapes.S)
 
-            attributes = [XI]
+            requirements = [XI]
 
             def evaluate(self) -> NDArray[np.float64]:
                 return np.array(0)
@@ -291,7 +291,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Xi(ParamFunctionNumpy):
             GAMMA = AttributeDef('gamma', float, Shapes.S)
 
-            attributes = [GAMMA]
+            requirements = [GAMMA]
 
             def evaluate(self) -> NDArray[np.float64]:
                 return np.array(0)

@@ -10,20 +10,22 @@ from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import SimDType
 from epymorph.database import Database, ModuleNamespace, NamePattern
 from epymorph.error import AttributeException, InitException
+from epymorph.geography.scope import CustomScope
 from epymorph.simulation import AttributeDef, NamespacedAttributeResolver
 
 
 def test_context(additional_data: dict[str, NDArray] | None = None):
+    scope = CustomScope(list("ABCDE"))
     dim = SimDimensions.build(
         tau_step_lengths=[1 / 3, 2 / 3],
         start_date=date(2020, 1, 1),
         days=100,
-        nodes=5,
+        nodes=scope.nodes,
         compartments=3,
         events=3,
     )
     params = {
-        'label': np.array(list('ABCDE'), dtype=np.str_),
+        'label': scope.get_node_ids(),
         'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
         'foosball_championships': np.array([2, 4, 1, 9, 6]),
         **(additional_data or {}),
@@ -36,7 +38,7 @@ def test_context(additional_data: dict[str, NDArray] | None = None):
         dim=dim,
         namespace=ModuleNamespace("gpm:all", "init"),
     )
-    return (data, dim, np.random.default_rng(1))
+    return (data, dim, scope, np.random.default_rng(1))
 
 
 _FOOSBALL_CHAMPIONSHIPS = AttributeDef("foosball_championships", int, Shapes.N)
@@ -53,7 +55,7 @@ class TestExplicitInitializer(unittest.TestCase):
             [0, 0, 500],
         ])
         exp = initials.copy()
-        act = init.Explicit(initials)(*test_context())
+        act = init.Explicit(initials).evaluate_in_context(*test_context())
         np.testing.assert_array_equal(act, exp)
 
 
@@ -88,7 +90,7 @@ class TestProportionalInitializer(unittest.TestCase):
 
         exp = ratios1.copy()
         for ratios in [ratios1, ratios2, ratios3]:
-            act = init.Proportional(ratios)(*test_context())
+            act = init.Proportional(ratios).evaluate_in_context(*test_context())
             np.testing.assert_array_equal(act, exp)
 
     def test_bad_args(self):
@@ -101,7 +103,7 @@ class TestProportionalInitializer(unittest.TestCase):
                 [300, 100, 0],
                 [0, 0, 500],
             ])
-            init.Proportional(ratios)(*test_context())
+            init.Proportional(ratios).evaluate_in_context(*test_context())
 
         with self.assertRaises(InitException):
             # row sums to negative!
@@ -112,7 +114,7 @@ class TestProportionalInitializer(unittest.TestCase):
                 [300, 100, 0],
                 [0, 0, 500],
             ])
-            init.Proportional(ratios)(*test_context())
+            init.Proportional(ratios).evaluate_in_context(*test_context())
 
 
 class TestIndexedInitializer(unittest.TestCase):
@@ -121,7 +123,7 @@ class TestIndexedInitializer(unittest.TestCase):
         out = init.IndexedLocations(
             selection=np.array([1, -2], dtype=np.intp),  # Negative indices work, too.
             seed_size=100,
-        )(*test_context())
+        ).evaluate_in_context(*test_context())
         # Make sure only the selected locations get infected.
         act = out[:, 1] > 0
         exp = np.array([False, True, False, True, False])
@@ -135,19 +137,19 @@ class TestIndexedInitializer(unittest.TestCase):
             init.IndexedLocations(
                 selection=np.array([[1], [3]], dtype=np.intp),
                 seed_size=100,
-            )(*test_context())
+            ).evaluate_in_context(*test_context())
         with self.assertRaises(InitException):
             # indices must be in range (positive)
             init.IndexedLocations(
                 selection=np.array([1, 8], dtype=np.intp),
                 seed_size=100,
-            )(*test_context())
+            ).evaluate_in_context(*test_context())
         with self.assertRaises(InitException):
             # indices must be in range (negative)
             init.IndexedLocations(
                 selection=np.array([1, -8], dtype=np.intp),
                 seed_size=100,
-            )(*test_context())
+            ).evaluate_in_context(*test_context())
 
 
 class TestLabeledInitializer(unittest.TestCase):
@@ -156,7 +158,7 @@ class TestLabeledInitializer(unittest.TestCase):
         out = init.LabeledLocations(
             labels=np.array(["B", "D"]),
             seed_size=100,
-        )(*test_context())
+        ).evaluate_in_context(*test_context())
         # Make sure only the selected locations get infected.
         act = out[:, 1] > 0
         exp = np.array([False, True, False, True, False])
@@ -169,7 +171,7 @@ class TestLabeledInitializer(unittest.TestCase):
             init.LabeledLocations(
                 labels=np.array(["A", "B", "Z"]),
                 seed_size=100,
-            )(*test_context())
+            ).evaluate_in_context(*test_context())
 
 
 class TestSingleInitializer(unittest.TestCase):
@@ -185,7 +187,7 @@ class TestSingleInitializer(unittest.TestCase):
         act = init.SingleLocation(
             location=2,
             seed_size=99,
-        )(*test_context())
+        ).evaluate_in_context(*test_context())
         np.testing.assert_array_equal(act, exp)
 
 
@@ -196,7 +198,7 @@ class TestTopInitializer(unittest.TestCase):
             top_attribute=_FOOSBALL_CHAMPIONSHIPS,
             num_locations=3,
             seed_size=100,
-        )(*test_context())
+        ).evaluate_in_context(*test_context())
         act = out[:, 1] > 0
         exp = np.array([False, True, False, True, True])
         np.testing.assert_array_equal(act, exp)
@@ -209,7 +211,7 @@ class TestTopInitializer(unittest.TestCase):
                 num_locations=3,
                 seed_size=100,
             )
-            i(*test_context())
+            i.evaluate_in_context(*test_context())
 
     def test_wrong_type_attribute(self):
         with self.assertRaises(AttributeException):
@@ -219,7 +221,7 @@ class TestTopInitializer(unittest.TestCase):
                 num_locations=3,
                 seed_size=100,
             )
-            i(*test_context({
+            i.evaluate_in_context(*test_context({
                 "quidditch_championships": np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64),
             }))
 
@@ -231,7 +233,7 @@ class TestTopInitializer(unittest.TestCase):
                 num_locations=3,
                 seed_size=100,
             )
-            i(*test_context({
+            i.evaluate_in_context(*test_context({
                 "quidditch_relative_rank": np.arange(25, dtype=np.float64).reshape((5, 5)),
             }))
 
@@ -243,7 +245,7 @@ class TestBottomInitializer(unittest.TestCase):
             bottom_attribute=_FOOSBALL_CHAMPIONSHIPS,
             num_locations=3,
             seed_size=100,
-        )(*test_context())
+        ).evaluate_in_context(*test_context())
         act = out[:, 1] > 0
         exp = np.array([True, True, True, False, False])
         np.testing.assert_array_equal(act, exp)
@@ -256,7 +258,7 @@ class TestBottomInitializer(unittest.TestCase):
                 num_locations=3,
                 seed_size=100,
             )
-            i(*test_context())
+            i.evaluate_in_context(*test_context())
 
     def test_invalid_size_attribute(self):
         with self.assertRaises(InitException):
@@ -267,6 +269,6 @@ class TestBottomInitializer(unittest.TestCase):
                 num_locations=3,
                 seed_size=100,
             )
-            i(*test_context({
+            i.evaluate_in_context(*test_context({
                 "quidditch_relative_rank": np.arange(25, dtype=np.float64).reshape((5, 5)),
             }))
