@@ -35,37 +35,37 @@ class ADRIOMakerCDC(ADRIOMaker):
     """
 
     attributes = [
-        AttributeDef("covid_cases_per_100k", int, Shapes.TxN,
+        AttributeDef("covid_cases_per_100k", float, Shapes.TxN,
                      comment='Number of COVID-19 cases per 100k population.'),
-        AttributeDef("covid_hospitalizations_per_100k", int, Shapes.TxN,
+        AttributeDef("covid_hospitalizations_per_100k", float, Shapes.TxN,
                      comment='Number of COVID-19 hospitalizations per 100k population.'),
         AttributeDef("covid_hospitalization_avg_facility", float, Shapes.TxN,
                      comment='Weekly averages of COVID-19 hospitalizations from facility level dataset.'),
-        AttributeDef("covid_hospitalization_sum_facility", int, Shapes.TxN,
+        AttributeDef("covid_hospitalization_sum_facility", float, Shapes.TxN,
                      comment='Weekly sums of all COVID-19 hospitalizations from facility level dataset.'),
         AttributeDef("influenza_hospitalization_avg_facility", float, Shapes.TxN,
                      comment='Weekly averages of influenza hospitalizations from facility level dataset.'),
-        AttributeDef("influenza_hospitalization_sum_facility", int, Shapes.TxN,
+        AttributeDef("influenza_hospitalization_sum_facility", float, Shapes.TxN,
                      comment='Weekly sums of influenza hospitalizations from facility level dataset.'),
         AttributeDef("covid_hospitalization_avg_state", float, Shapes.TxN,
                      comment='Weekly averages of COVID-19 hospitalizations from state level dataset.'),
-        AttributeDef("covid_hospitalization_sum_state", int, Shapes.TxN,
+        AttributeDef("covid_hospitalization_sum_state", float, Shapes.TxN,
                      comment='Weekly sums of COVID-19 hospitalizations from state level dataset.'),
         AttributeDef("influenza_hospitalization_avg_state", float, Shapes.TxN,
                      comment='Weekly averages of influenza hospitalizations from state level dataset.'),
-        AttributeDef("influenza_hospitalization_sum_state", int, Shapes.TxN,
+        AttributeDef("influenza_hospitalization_sum_state", float, Shapes.TxN,
                      comment='Weekly sums of influenza hospitalizations from state level dataset.'),
-        AttributeDef("full_covid_vaccinations", int, Shapes.TxN,
+        AttributeDef("full_covid_vaccinations", float, Shapes.TxN,
                      comment='Cumulative total number of individuals fully vaccinated for COVID-19.'),
-        AttributeDef("one_dose_covid_vaccinations", int, Shapes.TxN,
+        AttributeDef("one_dose_covid_vaccinations", float, Shapes.TxN,
                      comment='Cumulative total number of individuals with at least one dose of COVID-19 vaccination.'),
-        AttributeDef("covid_booster_doses", int, Shapes.TxN,
+        AttributeDef("covid_booster_doses", float, Shapes.TxN,
                      comment='Cumulative total number of COVID-19 booster doses administered.'),
-        AttributeDef("covid_deaths_county", int, Shapes.TxN,
+        AttributeDef("covid_deaths_county", float, Shapes.TxN,
                      comment='Weekly total COVID-19 deaths from county level dataset.'),
-        AttributeDef("covid_deaths_state", int, Shapes.TxN,
+        AttributeDef("covid_deaths_state", float, Shapes.TxN,
                      comment='Weekly total COVID-19 deaths from state level dataset.'),
-        AttributeDef("influenza_deaths", int, Shapes.TxN,
+        AttributeDef("influenza_deaths", float, Shapes.TxN,
                      comment='Weekly total influenza deaths from state level dataset.')
     ]
 
@@ -145,13 +145,12 @@ class ADRIOMakerCDC(ADRIOMaker):
 
             df = df.pivot(index='date_updated', columns='fips', values=info.data_col)
 
-            array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', 'datetime64[D]'), ('data', object)])
+            dates = df.index.to_numpy(dtype='datetime64[D]')
 
-            return np.array(
-                [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
-            )
+            return np.array([
+                list(zip(dates, df[col]))
+                for col in df.columns
+            ], dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]).T
 
         return ADRIO(attrib.name, fetch)
 
@@ -176,21 +175,22 @@ class ADRIOMakerCDC(ADRIOMaker):
             if scope.granularity == 'state':
                 df['fips_code'] = [STATE.extract(x) for x in df['fips_code']]
 
-            df = df.groupby(['collection_week', 'fips_code']).sum()
+            # if the sentinel value '-999999' appears in the data, ensure aggregated value is also -999999
+            df['is_sentinel'] = df[info.data_col] == -999999
+            df = df.groupby(['collection_week', 'fips_code']).agg(
+                {info.data_col: 'sum', 'is_sentinel': any})
+            df.loc[df['is_sentinel'], info.data_col] = -999999
+
             df.reset_index(inplace=True)
             df = df.pivot(index='collection_week',
                           columns='fips_code', values=info.data_col)
 
-            df[df < 0] = -999999
-            df.fillna(0, inplace=True)
+            dates = df.index.to_numpy(dtype='datetime64[D]')
 
-            array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', 'datetime64[D]'), ('data', object)])
-
-            return np.array(
-                [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
-            )
+            return np.array([
+                list(zip(dates, df[col]))
+                for col in df.columns
+            ], dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]).T
 
         return ADRIO(attrib.name, fetch)
 
@@ -226,13 +226,12 @@ class ADRIOMakerCDC(ADRIOMaker):
             df = df.pivot(index='week_end_date',
                           columns='jurisdiction', values=info.data_col)
 
-            array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', 'datetime64[D]'), ('data', object)])
+            dates = df.index.to_numpy(dtype='datetime64[D]')
 
-            return np.array(
-                [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
-            )
+            return np.array([
+                list(zip(dates, df[col]))
+                for col in df.columns
+            ], dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]).T
 
         return ADRIO(attrib.name, fetch)
 
@@ -253,17 +252,14 @@ class ADRIOMakerCDC(ADRIOMaker):
             df = self._api_query(info, scope.get_node_ids(),
                                  time_period, scope.granularity)
 
-            df.fillna(0, inplace=True)
-
             df = df.pivot(index='date', columns='fips', values=info.data_col)
 
-            array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', 'datetime64[D]'), ('data', object)])
+            dates = df.index.to_numpy(dtype='datetime64[D]')
 
-            return np.array(
-                [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
-            )
+            return np.array([
+                list(zip(dates, df[col]))
+                for col in df.columns
+            ], dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]).T
 
         return ADRIO(attrib.name, fetch)
 
@@ -288,8 +284,6 @@ class ADRIOMakerCDC(ADRIOMaker):
             df = self._api_query(info, scope.get_node_ids(),
                                  time_period, scope.granularity)
 
-            df.fillna(0, inplace=True)
-
             if scope.granularity == 'state':
                 df = df.groupby(['week_ending_date', info.fips_col]).sum()
                 df.reset_index(inplace=True)
@@ -297,13 +291,12 @@ class ADRIOMakerCDC(ADRIOMaker):
             df = df.pivot(index='week_ending_date',
                           columns=info.fips_col, values=info.data_col)
 
-            array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', 'datetime64[D]'), ('data', object)])
+            dates = df.index.to_numpy(dtype='datetime64[D]')
 
-            return np.array(
-                [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
-            )
+            return np.array([
+                list(zip(dates, df[col]))
+                for col in df.columns
+            ], dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]).T
 
         return ADRIO(attrib.name, fetch)
 
@@ -332,13 +325,12 @@ class ADRIOMakerCDC(ADRIOMaker):
             df.reset_index(inplace=True)
             df = df.pivot(index='end_date', columns='state', values=info.data_col)
 
-            array = np.array(list(zip(df.index.values, df.to_numpy(dtype=attrib.dtype))), dtype=[
-                             ('date', 'datetime64[D]'), ('data', object)])
+            dates = df.index.to_numpy(dtype='datetime64[D]')
 
-            return np.array(
-                [[(tick[0], node) for node in tick[1]] for tick in array],
-                dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]
-            )
+            return np.array([
+                list(zip(dates, df[col]))
+                for col in df.columns
+            ], dtype=[('date', 'datetime64[D]'), ('data', attrib.dtype)]).T
 
         return ADRIO(attrib.name, fetch)
 
