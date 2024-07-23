@@ -57,6 +57,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-06-03.ipynb | Trevor | ✓ | Integration test: using dynamic geos to fetch Census data |
 | 2024-06-05.ipynb | Meaghan | ✓ | A user manual and basic demonstrations of calling LODES ADRIOs |
 | 2024-06-12.ipynb | Trevor | ✓ | Integration test: CSV file ADRIOs |
+| 2024-07-03.ipynb | Trevor |  | Demonstration of CDC ADRIO functionality and attributes. |
 | 2024-07-08.ipynb | Tyler | ✓ | Demonstrates the updated Initializers system, including library examples and custom initializers. |
 | 2024-07-10.ipynb | Trevor | ✓ | Integration test: Census ADRIOs |
 
