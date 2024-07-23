@@ -40,6 +40,8 @@ from epymorph.error import GeographyError
 # Below there are some commented-code remnants which demonstrate what it takes to support the additional
 # territories, in case we ever want to reverse this choice.
 
+# NOTE: TIGER files express areas in meters-squared.
+
 TigerYear = Literal[2000, 2009, 2010, 2011, 2012, 2013, 2014,
                     2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
 """A supported TIGER file year."""
@@ -156,30 +158,33 @@ def _get_states_config(year: TigerYear) -> tuple[list[str], list[str], list[str]
     """Produce the args for _get_info or _get_geo (states)."""
     match year:
         case year if year in range(2011, 2024):
-            cols = ["GEOID", "NAME", "STUSPS"]
+            cols = ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [
                 f"{_TIGER_URL}/TIGER{year}/STATE/tl_{year}_us_state.zip"
             ]
         case 2010:
-            cols = ["GEOID10", "NAME10", "STUSPS10"]
+            cols = ["GEOID10", "NAME10", "STUSPS10",
+                    "ALAND10", "INTPTLAT10", "INTPTLON10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/STATE/2010/tl_2010_{xx}_state10.zip"
                 for xx in _SUPPORTED_STATE_FILES
             ]
         case 2009:
-            cols = ["STATEFP00", "NAME00", "STUSPS00"]
+            cols = ["STATEFP00", "NAME00", "STUSPS00",
+                    "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2009/tl_2009_us_state00.zip"
             ]
         case 2000:
-            cols = ["STATEFP00", "NAME00", "STUSPS00"]
+            cols = ["STATEFP00", "NAME00", "STUSPS00",
+                    "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/STATE/2000/tl_2010_{xx}_state00.zip"
                 for xx in _SUPPORTED_STATE_FILES
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID", "NAME", "STUSPS"]
+    return cols, urls, ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
 def get_states_geo(year: TigerYear) -> GeoDataFrame:
@@ -201,30 +206,31 @@ def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[st
     """Produce the args for _get_info or _get_geo (counties)."""
     match year:
         case year if year in range(2011, 2024):
-            cols = ["GEOID", "NAME"]
+            cols = ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [
                 f"{_TIGER_URL}/TIGER{year}/COUNTY/tl_{year}_us_county.zip"
             ]
         case 2010:
-            cols = ["GEOID10", "NAME10"]
+            cols = ["GEOID10", "NAME10", "ALAND10", "INTPTLAT10", "INTPTLON10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/COUNTY/2010/tl_2010_{xx}_county10.zip"
                 for xx in _SUPPORTED_STATE_FILES
             ]
         case 2009:
-            cols = ["CNTYIDFP00", "NAME00"]
+            cols = ["CNTYIDFP00", "NAME00", "ALAND00",
+                    "AWATER00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2009/tl_2009_us_county00.zip"
             ]
         case 2000:
-            cols = ["CNTYIDFP00", "NAME00"]
+            cols = ["CNTYIDFP00", "NAME00", "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/COUNTY/2000/tl_2010_{xx}_county00.zip"
                 for xx in _SUPPORTED_STATE_FILES
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID", "NAME"]
+    return cols, urls, ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
 def get_counties_geo(year: TigerYear) -> GeoDataFrame:
@@ -247,13 +253,13 @@ def _get_tracts_config(year: TigerYear) -> tuple[list[str], list[str], list[str]
     states = get_states_info(year)
     match year:
         case year if year in range(2011, 2024):
-            cols = ["GEOID"]
+            cols = ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [
                 f"{_TIGER_URL}/TIGER{year}/TRACT/tl_{year}_{xx}_tract.zip"
                 for xx in states["GEOID"]
             ]
         case 2010:
-            cols = ["GEOID10"]
+            cols = ["GEOID10", "ALAND10", "INTPTLAT10", "INTPTLON10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/TRACT/2010/tl_2010_{xx}_tract10.zip"
                 for xx in states["GEOID"]
@@ -262,20 +268,20 @@ def _get_tracts_config(year: TigerYear) -> tuple[list[str], list[str], list[str]
             def state_folder(fips, name):
                 return f"{fips}_{name.upper().replace(' ', '_')}"
 
-            cols = ["CTIDFP00"]
+            cols = ["CTIDFP00", "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2009/{state_folder(xx, name)}/tl_2009_{xx}_tract00.zip"
                 for xx, name in zip(states["GEOID"], states["NAME"])
             ]
         case 2000:
-            cols = ["CTIDFP00"]
+            cols = ["CTIDFP00", "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/TRACT/2000/tl_2010_{xx}_tract00.zip"
                 for xx in states["GEOID"]
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID"]
+    return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
 def get_tracts_geo(year: TigerYear) -> GeoDataFrame:
@@ -298,13 +304,13 @@ def _get_block_groups_config(year: TigerYear) -> tuple[list[str], list[str], lis
     states = get_states_info(year)
     match year:
         case year if year in range(2011, 2024):
-            cols = ["GEOID"]
+            cols = ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [
                 f"{_TIGER_URL}/TIGER{year}/BG/tl_{year}_{xx}_bg.zip"
                 for xx in states["GEOID"]
             ]
         case 2010:
-            cols = ["GEOID10"]
+            cols = ["GEOID10", "ALAND10", "INTPTLAT10", "INTPTLON10"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/BG/2010/tl_2010_{xx}_bg10.zip"
                 for xx in states["GEOID"]
@@ -313,20 +319,20 @@ def _get_block_groups_config(year: TigerYear) -> tuple[list[str], list[str], lis
             def state_folder(fips, name):
                 return f"{fips}_{name.upper().replace(' ', '_')}"
 
-            cols = ["BKGPIDFP00"]
+            cols = ["BKGPIDFP00", "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2009/{state_folder(xx, name)}/tl_2009_{xx}_bg00.zip"
                 for xx, name in zip(states["GEOID"], states["NAME"])
             ]
         case 2000:
-            cols = ["BKGPIDFP00"]
+            cols = ["BKGPIDFP00", "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/BG/2000/tl_2010_{xx}_bg00.zip"
                 for xx in states["GEOID"]
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID"]
+    return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
 def get_block_groups_geo(year: TigerYear) -> GeoDataFrame:
