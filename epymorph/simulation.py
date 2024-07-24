@@ -457,15 +457,24 @@ class SimulationFunctionClass(ABCMeta):
                 raise TypeError(
                     f"Invalid requirements in {name}: requirement names must be unique."
                 )
-
-            # Add the requirements lookup dict
-            dct["_requirements_by_name"] = {r.name: r for r in reqs}
+            # Make requirements list immutable
+            dct["requirements"] = tuple(reqs)
 
         # Check serializable
         if not is_picklable(name, mcs):
             raise TypeError(
                 f"Invalid simulation function {name}: classes must be serializable (using jsonpickle)."
             )
+
+        # NOTE: is_picklable() is misleading here; it does not guarantee that instances of a class are picklable,
+        # nor (if you called it against an instance) that all of the instance's attributes are picklable.
+        # jsonpickle simply ignores unpicklable fields, decoding objects into attribute swiss cheese.
+        # It will be more effective to check that all of the attributes of an object are picklable before we try to
+        # serialize it... Thus I don't think we can guarantee picklability at class definition time.
+        # Something like:
+        #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]
+        # Why worry? Lambda functions are probably the most likely problem; they're not picklable by default.
+        # But a simple workaround is to use a def function and, if needed, partial function application.
 
         return super().__new__(mcs, name, bases, dct)
 
@@ -480,7 +489,6 @@ class SimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
     """The attribute definitions describing the data requirements for this function."""
 
     _ctx: _Context = _EMPTY_CONTEXT
-    _requirements_by_name: dict[str, AttributeDef]
 
     def evaluate_in_context(
         self,
@@ -509,7 +517,7 @@ class SimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
         """Retrieve the value of a specific attribute."""
         if isinstance(attribute, str):
             name = attribute
-            req = self._requirements_by_name.get(attribute)
+            req = next((r for r in self.requirements if r.name == attribute), None)
         else:
             name = attribute.name
             req = attribute
