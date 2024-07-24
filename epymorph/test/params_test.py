@@ -49,7 +49,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             np.arange(400).reshape((4, 100)),
         )
 
@@ -65,7 +65,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             np.array(42.0, dtype=np.float64),
         )
 
@@ -81,7 +81,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             2 * np.arange(100, dtype=np.float64),
         )
 
@@ -97,7 +97,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             3 * np.arange(4, dtype=np.float64),
         )
 
@@ -113,7 +113,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             np.array([
                 [0, 1, 2, 3],
                 [10, 11, 12, 13],
@@ -134,7 +134,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             np.array([
                 [0, 1, 2],
                 [10, 11, 12],
@@ -156,7 +156,7 @@ class ParamFunctionsTest(unittest.TestCase):
 
         cosine = np.cos(np.arange(100) / 100, dtype=np.float64)
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             np.stack([
                 1.0 * cosine,
                 2.0 * cosine,
@@ -173,7 +173,7 @@ class ParamFunctionsTest(unittest.TestCase):
 
         cosine = np.cos(np.arange(100) / 100, dtype=np.float64)
         npt.assert_array_equal(
-            f(data, dim, scope, np.random.default_rng(1)),
+            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
             np.stack([
                 1.0 * cosine,
                 2.0 * cosine,

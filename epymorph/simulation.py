@@ -1,14 +1,16 @@
 """General simulation requisites and utility functions."""
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from functools import cached_property
+from functools import cache, cached_property
 from importlib import reload
 from typing import (Any, Callable, Generator, Generic, Iterable, NamedTuple,
-                    Self, Sequence, TypeVar, final, overload)
+                    Self, Sequence, Type, TypeVar, final, overload)
 
 import numpy as np
+from jsonpickle.util import is_picklable
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
 
@@ -19,6 +21,7 @@ from epymorph.database import (AbsoluteName, AttributeName, Database,
                                ModuleNamespace)
 from epymorph.error import AttributeException
 from epymorph.geography.scope import GeoScope
+from epymorph.util import are_instances, are_unique
 
 
 def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:
@@ -327,134 +330,195 @@ class NamespacedAttributeResolver(_BaseAttributeResolver):
 ########################
 
 
-T_co = TypeVar('T_co', bound=np.generic, covariant=True)
+T_co = TypeVar('T_co', covariant=True)
 """The result type of a SimulationFunction."""
 
-_DeferredT = TypeVar('_DeferredT', bound=np.generic)
+_DeferredT = TypeVar('_DeferredT')
 """The result type of a SimulationFunction during deference."""
 
 
-class _Context:
-    def data(self, attribute: AttributeKey) -> NDArray:
-        """Retrieve the value of a specific attribute."""
-        raise ValueError("Invalid access of function context.")
+class _Context(ABC):
+    """
+    The evaluation context of a SimulationFunction. We want SimulationFunction
+    instances to be able to access properties of the simulation by using
+    various methods on `self`. But we also want to instantiate SimulationFunctions
+    before the simulation context exists! Hence this object starts out "empty" 
+    and will be swapped for a "real" context when the function is evaluated in
+    a simulation context object.
+    """
+
+    @abstractmethod
+    def data(self, attribute: AttributeDef) -> NDArray:
+        """Retrieve the value of an attribute."""
+
+    @property
+    @abstractmethod
+    def dim(self) -> SimDimensions:
+        """The simulation dimensions."""
+
+    @property
+    @abstractmethod
+    def scope(self) -> GeoScope:
+        """The simulation GeoScope."""
+
+    @property
+    @abstractmethod
+    def rng(self) -> np.random.Generator:
+        """The simulation's random number generator."""
+
+    @abstractmethod
+    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
+        """Defer processing to another instance of a SimulationFunction."""
+
+
+class _EmptyContext(_Context):
+    def data(self, attribute: AttributeDef) -> NDArray:
+        raise TypeError("Invalid access of function context.")
 
     @property
     def dim(self) -> SimDimensions:
-        """The simulation dimensions."""
-        raise ValueError("Invalid access of function context.")
+        raise TypeError("Invalid access of function context.")
 
     @property
     def scope(self) -> GeoScope:
-        """The simulation GeoScope."""
-        raise ValueError("Invalid access of function context.")
+        raise TypeError("Invalid access of function context.")
 
     @property
     def rng(self) -> np.random.Generator:
-        """The simulation's random number generator."""
-        raise ValueError("Invalid access of function context.")
+        raise TypeError("Invalid access of function context.")
 
-    def defer(self, other: 'SimulationFunction[T_co]') -> NDArray[T_co]:
-        """Defer processing to another similarly-typed instance of a SimulationFunction."""
-        raise ValueError("Invalid access of function context.")
+    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
+        raise TypeError("Invalid access of function context.")
 
 
-_EMPTY_CONTEXT = _Context()
+_EMPTY_CONTEXT = _EmptyContext()
 
 
 class _RealContext(_Context):
-    # The following attributes make up the evaluation context.
-    # They are set for the duration of `__call__()` and cleared afterwards.
-    # This allows implementations to use `self` to access the context during
-    # evaluation. It also allows us to cache attribute resolution results
-    # as implementations may be doing that within a hot loop.
-    _cache: dict[AttributeKey, AttributeArray]
+    _cached_data: Callable[[AttributeDef], AttributeArray]
     _data: NamespacedAttributeResolver
     _dim: SimDimensions
     _scope: GeoScope
     _rng: np.random.Generator
 
     def __init__(self, data: NamespacedAttributeResolver, dim: SimDimensions, scope: GeoScope, rng: np.random.Generator):
-        self._cache = {}
+        self._cached_data = cache(data.resolve)
         self._data = data
         self._dim = dim
         self._scope = scope
         self._rng = rng
 
-    def data(self, attribute: AttributeKey) -> NDArray:
-        """Retrieve the value of a specific attribute."""
-        if (result := self._cache.get(attribute)) is None:
-            result = self._data.resolve(attribute)
-            self._cache[attribute] = result
-        return result
+    def data(self, attribute: AttributeDef) -> NDArray:
+        # attribute resolutions are cached because implementations may be
+        # calling this function within a hot loop
+        # (and we can't just throw @cache on this method because it interferes
+        # with abstract method overriding)
+        return self._cached_data(attribute)
 
     @property
     def dim(self) -> SimDimensions:
-        """The simulation dimensions."""
         return self._dim
 
     @property
     def scope(self) -> GeoScope:
-        """The simulation GeoScope."""
         return self._scope
 
     @property
     def rng(self) -> np.random.Generator:
-        """The simulation's random number generator."""
         return self._rng
 
-    def defer(self, other: 'SimulationFunction[_DeferredT]') -> NDArray[_DeferredT]:
-        """Defer processing to another similarly-typed instance of a SimulationFunction."""
-        return other(self._data, self._dim, self._scope, self._rng)
+    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
+        return other.evaluate_in_context(self._data, self._dim, self._scope, self._rng)
 
 
-class SimulationFunction(ABC, Generic[T_co]):
+class SimulationFunctionClass(ABCMeta):
+    """
+    The metaclass for SimulationFunctions.
+    Used to verify proper class implementation.
+    """
+    def __new__(
+        mcs: Type['SimulationFunctionClass'],
+        name: str,
+        bases: tuple[type, ...],
+        dct: dict[str, Any],
+    ) -> 'SimulationFunctionClass':
+        # Check requirements if this class overrides it.
+        # (Otherwise class will inherit from parent.)
+        if (reqs := dct.get("requirements")) is not None:
+            if not isinstance(reqs, (list, tuple)):
+                raise TypeError(
+                    f"Invalid requirements in {name}: please specify as a list or tuple."
+                )
+            if not are_instances(reqs, AttributeDef):
+                raise TypeError(
+                    f"Invalid requirements in {name}: must be instances of AttributeDef."
+                )
+            if not are_unique(r.name for r in reqs):
+                raise TypeError(
+                    f"Invalid requirements in {name}: requirement names must be unique."
+                )
+
+            # Add the requirements lookup dict
+            dct["_requirements_by_name"] = {r.name: r for r in reqs}
+
+        # Check serializable
+        if not is_picklable(name, mcs):
+            raise TypeError(
+                f"Invalid simulation function {name}: classes must be serializable (using jsonpickle)."
+            )
+
+        return super().__new__(mcs, name, bases, dct)
+
+
+class SimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
     """
     A function which runs in the context of a simulation to produce a value (as a numpy array).
     Implement a SimulationFunction by extending this class and overriding the `evaluate()` method.
     """
 
-    attributes: Sequence[AttributeDef] = ()
-    """The attribute definitions which describe the data requirements for this function."""
+    requirements: Sequence[AttributeDef] = ()
+    """The attribute definitions describing the data requirements for this function."""
 
     _ctx: _Context = _EMPTY_CONTEXT
+    _requirements_by_name: dict[str, AttributeDef]
 
-    def __call__(
+    def evaluate_in_context(
         self,
         data: NamespacedAttributeResolver,
         dim: SimDimensions,
         scope: GeoScope,
         rng: np.random.Generator,
-    ) -> NDArray[T_co]:
-        try:
-            self._ctx = _RealContext(data, dim, scope, rng)
-            return self.evaluate()
-        finally:
-            self._ctx = _EMPTY_CONTEXT
+    ) -> T_co:
+        """Evaluate a function within a context. epymorph calls this function; you generally don't need to."""
+        # clone this instance, then run evaluate on that; accomplishes two things:
+        # 1. don't have to worry about cleaning up _ctx
+        # 2. instances can use @cached_property without surprising results
+        clone = deepcopy(self)
+        setattr(clone, "_ctx", _RealContext(data, dim, scope, rng))
+        return clone.evaluate()
 
     @abstractmethod
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> T_co:
         """
         Implement this method to provide logic for the function.
         Your implementation is free to use `data`, `dim`, and `rng` in this function body.
         You can also use `defer` to utilize another SimulationFunction instance.
         """
 
-    @overload
-    def data(self, attribute: AttributeKey[type[int]]) -> NDArray[np.int64]: ...
-    @overload
-    def data(self, attribute: AttributeKey[type[float]]) -> NDArray[np.float64]: ...
-    @overload
-    def data(self, attribute: AttributeKey[type[str]]) -> NDArray[np.str_]: ...
-    @overload
-    def data(self, attribute: AttributeKey[Any]) -> NDArray[Any]: ...
-
-    def data(self, attribute: AttributeKey) -> NDArray:
+    def data(self, attribute: AttributeDef | str) -> NDArray:
         """Retrieve the value of a specific attribute."""
-        if attribute not in self.attributes:
-            msg = "You've accessed an attribute which you did not declare as a dependency!"
-            raise ValueError(msg)
-        return self._ctx.data(attribute)
+        if isinstance(attribute, str):
+            name = attribute
+            req = self._requirements_by_name.get(attribute)
+        else:
+            name = attribute.name
+            req = attribute
+        if req is None or req not in self.requirements:
+            raise ValueError(
+                f"Simulation function {self.__class__.__name__} accessed an attribute ({name}) "
+                "which you did not declare as a requirement."
+            )
+        return self._ctx.data(req)
 
     @property
     def dim(self) -> SimDimensions:
@@ -472,6 +536,6 @@ class SimulationFunction(ABC, Generic[T_co]):
         return self._ctx.rng
 
     @final
-    def defer(self, other: 'SimulationFunction[_DeferredT]') -> NDArray[_DeferredT]:
-        """Defer processing to another similarly-typed instance of a SimulationFunction."""
+    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
+        """Defer processing to another instance of a SimulationFunction."""
         return self._ctx.defer(other)

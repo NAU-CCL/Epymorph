@@ -34,22 +34,20 @@ def _evaluation_context(
     format_name = rume.name_display_formatter()
 
     # vals_db stores the raw values as provided by the user.
-    vals_db = DatabaseWithFallback(
-        # Simulation overrides...
-        dict(override_params.items()),
-        # falls back to RUME params...
-        DatabaseWithStrataFallback(
-            data=dict(rume.params.items()),
-            children={
-                # which falls back to GPM params, as scoped to that GPM
-                f"gpm:{strata}": Database[ParamValue]({
-                    k.to_absolute(f"gpm:{strata}"): v
-                    for k, v in gpm.params.items()
-                })
-                for strata, gpm in rume.original_gpms.items()
-            },
-        ),
+    vals_db = DatabaseWithStrataFallback(
+        data={**rume.params},
+        children={
+            # which falls back to GPM params, as scoped to that GPM
+            f"gpm:{strata}": Database[ParamValue]({
+                k.to_absolute(f"gpm:{strata}"): v
+                for k, v in gpm.params.items()
+            })
+            for strata, gpm in rume.original_gpms.items()
+        },
     )
+    # If override_params is not empty, wrap vals_db in another fallback layer.
+    if len(override_params) > 0:
+        vals_db = DatabaseWithFallback({**override_params}, vals_db)
 
     # This is the database of parameter evaluation results.
     # It is mutable so that we can add values as we go.
@@ -128,11 +126,11 @@ def _evaluation_context(
             # ParamFunction: first evaluate all dependencies of this function (recursively),
             # then evaluate the function itself.
             namespace = name.to_namespace()
-            for dependency in raw_value.attributes:
+            for dependency in raw_value.requirements:
                 dep_name = namespace.to_absolute(dependency.name)
                 evaluate(dep_name, [*chain, name], dependency.default_value)
             data = NamespacedAttributeResolver(attr_db, rume.dim, namespace)
-            value = raw_value(data, rume.dim, rume.scope, rng)
+            value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
         elif isinstance(raw_value, type) and issubclass(raw_value, ParamFunction):
             msg = f"Invalid parameter: '{format_name(match_pattern)}' "\
                 "is a ParamFunction class instead of an instance."
@@ -269,7 +267,7 @@ def initialize_rume(
             gpm.ipm.num_events,
         )
         strata_data = NamespacedAttributeResolver(data, strata_dim, namespace)
-        return gpm.init(strata_data, strata_dim, rume.scope, rng)
+        return gpm.init.evaluate_in_context(strata_data, strata_dim, rume.scope, rng)
 
     try:
         return np.column_stack([

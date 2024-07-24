@@ -20,7 +20,7 @@ T_co = TypeVar('T_co', bound=np.generic, covariant=True)
 """The result type of a ParamFunction."""
 
 
-class ParamFunction(SimulationFunction[T_co], ABC):
+class ParamFunction(SimulationFunction[NDArray[T_co]], ABC):
     """Parameter functions can be specified in a variety of forms; this class describe the common elements."""
 
 
@@ -153,7 +153,7 @@ def simulation_symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
 class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
     """A param function based on a sympy expression for a time-by-node matrix of data."""
 
-    attributes = ()
+    requirements = ()
 
     _expr: Expr
 

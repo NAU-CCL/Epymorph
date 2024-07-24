@@ -13,7 +13,7 @@ T_co = TypeVar('T_co', bound=np.generic, covariant=True)
 """The result type of an Adrio."""
 
 
-class Adrio(SimulationFunction[T_co]):
+class Adrio(SimulationFunction[NDArray[T_co]]):
     """yo, adrio-n"""
 
     # TODO: actually I'm not sure caching is a good idea...
@@ -24,7 +24,7 @@ class Adrio(SimulationFunction[T_co]):
     _cached_value: NDArray[T_co] | None = None
     _cached_scope: GeoScope | None = None
 
-    def __call__(
+    def evaluate_in_context(
         self,
         data: NamespacedAttributeResolver,
         dim: SimDimensions,
@@ -37,7 +37,7 @@ class Adrio(SimulationFunction[T_co]):
             # TODO: use events for messaging?
             print(f"Evaluating {self.__class__.__name__} ADRIO...")
             t0 = perf_counter()
-            value = super().__call__(data, dim, scope, rng)
+            value = super().evaluate_in_context(data, dim, scope, rng)
             self._cached_value = value
             self._cached_scope = scope
             t1 = perf_counter()
@@ -62,7 +62,7 @@ class PopulationPerKm2(Adrio[np.float64]):
     POPULATION = AttributeDef('population', int, Shapes.N)
     LAND_AREA_KM2 = AttributeDef('land_area_km2', float, Shapes.N)
 
-    attributes = [POPULATION, LAND_AREA_KM2]
+    requirements = [POPULATION, LAND_AREA_KM2]
 
     def evaluate(self) -> NDArray[np.float64]:
         pop = self.data(self.POPULATION)

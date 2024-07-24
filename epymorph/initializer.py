@@ -20,14 +20,14 @@ from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
 from epymorph.util import NumpyTypeError, check_ndarray, match, not_none
 
 
-class Initializer(SimulationFunction[np.int64], ABC):
+class Initializer(SimulationFunction[SimArray], ABC):
     """
     Represents an initialization routine responsible for determining the initial values
     of populations by IPM compartment for every simulation node.
     """
 
-    def __call__(self, data: NamespacedAttributeResolver, dim: SimDimensions, scope: GeoScope, rng: np.random.Generator) -> SimArray:
-        result = super().__call__(data, dim, scope, rng)
+    def evaluate_in_context(self, data: NamespacedAttributeResolver, dim: SimDimensions, scope: GeoScope, rng: np.random.Generator) -> SimArray:
+        result = super().evaluate_in_context(data, dim, scope, rng)
 
         # Result validation: it must be an NxC array of integers where no value is less than zero.
         try:
@@ -92,7 +92,7 @@ class NoInfection(Initializer):
     (default: the first compartment).
     """
 
-    attributes = (_POPULATION_ATTR,)
+    requirements = (_POPULATION_ATTR,)
 
     initial_compartment: int
     """The IPM compartment index where people should start."""
@@ -130,7 +130,7 @@ class Proportional(Initializer):
     - `ratios` a (C,) or (N,C) numpy array describing the ratios for each compartment
     """
 
-    attributes = (_POPULATION_ATTR,)
+    requirements = (_POPULATION_ATTR,)
 
     ratios: NDArray[np.int64 | np.float64]
     """The initialization ratios to use."""
@@ -211,7 +211,7 @@ class IndexedLocations(SeededInfection):
     - `seed_size` the number of individuals to infect in total
     """
 
-    attributes = (_POPULATION_ATTR,)
+    requirements = (_POPULATION_ATTR,)
 
     selection: NDArray[np.intp]
     """Which locations to infect."""
@@ -278,7 +278,7 @@ class SingleLocation(IndexedLocations):
     - `seed_size` the number of individuals to infect in total
     """
 
-    attributes = (_POPULATION_ATTR,)
+    requirements = (_POPULATION_ATTR,)
 
     def __init__(
         self,
@@ -309,7 +309,7 @@ class LabeledLocations(SeededInfection):
     - `seed_size` the number of individuals to infect in total
     """
 
-    attributes = (_POPULATION_ATTR, _LABEL_ATTR)
+    requirements = (_POPULATION_ATTR, _LABEL_ATTR)
 
     labels: NDArray[np.str_]
     """Which locations to infect."""
@@ -350,7 +350,7 @@ class RandomLocations(SeededInfection):
     - `seed_size` the number of individuals to infect in total
     """
 
-    attributes = (_POPULATION_ATTR,)
+    requirements = (_POPULATION_ATTR,)
 
     num_locations: int
     """The number of locations to choose (randomly)."""
@@ -416,7 +416,7 @@ class TopLocations(SeededInfection):
             raise InitException(msg)
 
         self.top_attribute = top_attribute
-        self.attributes = (_POPULATION_ATTR, top_attribute)
+        self.requirements = (_POPULATION_ATTR, top_attribute)
         self.num_locations = num_locations
         self.seed_size = seed_size
 
@@ -475,7 +475,7 @@ class BottomLocations(SeededInfection):
             raise InitException(msg)
 
         self.bottom_attribute = bottom_attribute
-        self.attributes = (_POPULATION_ATTR, bottom_attribute)
+        self.requirements = (_POPULATION_ATTR, bottom_attribute)
         self.num_locations = num_locations
         self.seed_size = seed_size
 

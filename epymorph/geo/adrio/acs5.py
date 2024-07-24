@@ -255,7 +255,7 @@ class AgeRange(NamedTuple):
 class PopulationByAge(Adrio[np.int64]):
     POP_BY_AGE_TABLE = AttributeDef('population_by_age_table', int, Shapes.NxA)
 
-    attributes = [POP_BY_AGE_TABLE]
+    requirements = [POP_BY_AGE_TABLE]
 
     _age_range: AgeRange
 

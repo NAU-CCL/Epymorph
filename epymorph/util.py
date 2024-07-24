@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
-                    Mapping, OrderedDict, Self, TypeGuard, TypeVar)
+                    Mapping, OrderedDict, Self, TypeGuard, TypeVar, overload)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -97,6 +97,19 @@ def are_unique(xs: Iterable[T]) -> bool:
             return False
         xset.add(x)
     return True
+
+
+@overload
+def are_instances(xs: list[Any], of_type: type[T]) -> TypeGuard[list[T]]: ...
+@overload
+def are_instances(xs: tuple[Any], of_type: type[T]) -> TypeGuard[tuple[T]]: ...
+
+
+def are_instances(xs: list[Any] | tuple[Any], of_type: type[T]) -> TypeGuard[list[T] | tuple[T]]:
+    """TypeGuards a collection to check that all items are instances of the given type (`of_type`)."""
+    # NOTE: TypeVars can't be generic so we can't do TypeGuard[C[T]] :(
+    # Thus this only supports the types of collections we specify explicitly.
+    return all(isinstance(x, of_type) for x in xs)
 
 
 def filter_unique(xs: Iterable[T]) -> list[T]:
