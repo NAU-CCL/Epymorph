@@ -5,11 +5,14 @@ version = "0.0.0"
 
 authors = [
   { name = "Tyler Coles", email = "tyler.coles@nau.edu" },
-  { name = "Frank Burkhart", email = "jfb84@nau.edu" },
-  { name = "Alex Nez", email = "an974@nau.edu" },
-  { name = "Trevor Johnson", email = "tkj44@nau.edu" },
-  { name = "Jarom Craghead", email = "jc4885@nau.edu" },
-  { name = "Ajay Shyam Pasam", email = "ap3535@nau.edu" },
+  { name = "Frank Burkhart" },
+  { name = "Alex Nez" },
+  { name = "Trevor Johnson" },
+  { name = "Jarom Craghead" },
+  { name = "Ajay Shyam Pasam" },
+  { name = "Sindhura Paruchuri" },
+  { name = "Izaac Molina" },
+  { name = "Meaghan Freund" },
 ]
 
 description = "EpiMoRPH disease modeling"
@@ -35,7 +38,7 @@ dependencies = [
   "numpy~=1.26.4",
   "sympy~=1.12.1",
   "psutil~=5.9.8",
-  "pandas~=2.2.2",
+  "pandas[excel]~=2.2.2",
   "geopandas~=0.14.4",
   "census~=0.8.22",
   "jsonpickle~=3.2.1",
@@ -43,6 +46,8 @@ dependencies = [
   "shapely~=2.0.4",
   "platformdirs~=4.2.2",
   "graphviz~=0.20.3",
+  "typing_extensions~=4.12.2",
+  "ipython~=8.26.0",
 ]
 
 [project.optional-dependencies]
@@ -86,6 +91,6 @@ include = ["epymorph*"]
 
 [tool.setuptools.package-data]
 "epymorph" = ["py.typed"]
-"epymorph.data.geo" = ["*.geo.tar", "*.geo"]
+"epymorph.data.geo" = ["*.geo.tgz", "*.geo"]
 "epymorph.data.mm" = ["*.movement"]
 "epymorph.data.ipm" = ["*.ipm"]
