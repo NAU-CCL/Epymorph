@@ -1,14 +1,27 @@
 """epymorph's file caching utilities."""
 from hashlib import sha256
 from io import BytesIO
-from os import PathLike
+from os import PathLike, getenv
 from pathlib import Path
 from tarfile import TarInfo, is_tarfile
 from tarfile import open as open_tarfile
 
 from platformdirs import user_cache_path
 
-CACHE_PATH = user_cache_path(appname='epymorph', ensure_exists=True)
+
+def _cache_path() -> Path:
+    if (path_var := getenv("EPYMORPH_CACHE_PATH")) is not None:
+        # Load path from env var
+        path = Path(path_var)
+    else:
+        # fall back to platform-specific default path
+        path = user_cache_path(appname='epymorph')
+    # ensure cache directory exists
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+CACHE_PATH = _cache_path()
 
 
 class FileError(Exception):
