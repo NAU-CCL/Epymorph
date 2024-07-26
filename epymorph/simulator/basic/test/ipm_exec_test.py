@@ -7,8 +7,7 @@ import numpy as np
 import numpy.testing as npt
 
 from epymorph.compartment_model import (BIRTH, DEATH, CompartmentModel,
-                                        compartment, create_model,
-                                        create_symbols, edge)
+                                        compartment, edge)
 from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import AttributeArray, SimDType
 from epymorph.database import Database
@@ -18,66 +17,58 @@ from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.world_list import ListWorld
 
 
-def _model1() -> CompartmentModel:
-    symbols = create_symbols(
-        compartments=[
-            compartment('S', tags=['test_tag']),
-            compartment('I'),
-            compartment('R'),
-        ],
-        attributes=[
-            AttributeDef('beta', float, Shapes.TxN),
-            AttributeDef('gamma', float, Shapes.TxN),
-        ]
-    )
+class Sir(CompartmentModel):
+    compartments = [
+        compartment('S', tags=['test_tag']),
+        compartment('I'),
+        compartment('R'),
+    ]
+    requirements = [
+        AttributeDef('beta', float, Shapes.TxN),
+        AttributeDef('gamma', float, Shapes.TxN),
+    ]
 
-    [S, I, R] = symbols.compartment_symbols
-    [beta, gamma] = symbols.attribute_symbols
-
-    return create_model(
-        symbols=symbols,
-        transitions=[
+    def edges(self, symbols):
+        [S, I, R] = symbols.all_compartments
+        [beta, gamma] = symbols.all_requirements
+        return [
             edge(S, I, rate=beta * S * I),
             edge(I, R, rate=gamma * I),
-        ],
-    )
-
-
-def _model2() -> CompartmentModel:
-    symbols = create_symbols(
-        compartments=[
-            compartment('S'),
-            compartment('I'),
-            compartment('R'),
-        ],
-        attributes=[
-            AttributeDef('beta', float, Shapes.TxN),
-            AttributeDef('gamma', float, Shapes.TxN),
-            AttributeDef('b', float, Shapes.TxN),  # birth rate
-            AttributeDef('d', float, Shapes.TxN),  # death rate
         ]
-    )
 
-    [S, I, R] = symbols.compartment_symbols
-    [beta, gamma, b, d] = symbols.attribute_symbols
 
-    return create_model(
-        symbols=symbols,
-        transitions=[
+class Sirbd(CompartmentModel):
+    compartments = [
+        compartment('S'),
+        compartment('I'),
+        compartment('R'),
+    ]
+
+    requirements = [
+        AttributeDef('beta', float, Shapes.TxN),
+        AttributeDef('gamma', float, Shapes.TxN),
+        AttributeDef('b', float, Shapes.TxN),  # birth rate
+        AttributeDef('d', float, Shapes.TxN),  # death rate
+    ]
+
+    def edges(self, symbols):
+        [S, I, R] = symbols.all_compartments
+        [beta, gamma, b, d] = symbols.all_requirements
+
+        return [
             edge(S, I, rate=beta * S * I),
             edge(BIRTH, S, rate=b),
             edge(I, R, rate=gamma * I),
             edge(S, DEATH, rate=d * S),
             edge(I, DEATH, rate=d * I),
             edge(R, DEATH, rate=d * R),
-        ],
-    )
+        ]
 
 
 class StandardIpmExecutorTest(unittest.TestCase):
 
     def test_init_01(self):
-        ipm = _model1()
+        ipm = Sir()
 
         rume = MagicMock(spec=Rume)
         rume.ipm = ipm
@@ -106,7 +97,7 @@ class StandardIpmExecutorTest(unittest.TestCase):
         )
 
     def test_init_02(self):
-        ipm = _model2()
+        ipm = Sirbd()
 
         rume = MagicMock(spec=Rume)
         rume.ipm = ipm

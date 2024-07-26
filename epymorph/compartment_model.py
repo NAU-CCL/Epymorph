@@ -4,6 +4,7 @@ This represents disease mechanics using a compartmental model for tracking
 populations as groupings of integer-numbered individuals.
 """
 import re
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Iterable, Iterator, OrderedDict, Sequence
@@ -160,61 +161,63 @@ def quick_compartments(symbol_names: str) -> list[CompartmentDef]:
 ############################################################
 
 
-@dataclass(frozen=True)
 class ModelSymbols:
-    """
-    Keeps track of the symbols used in constructing an IPM.
-    These symbols are necessary for defining the model's transition rate expressions.
-    """
-    compartments: Sequence[CompartmentDef]
-    """The compartments of a model."""
-    attributes: OrderedDict[AbsoluteName, AttributeDef]
-    """The attributes of a model."""
-    compartment_symbols: Sequence[Symbol]
+    """IPM symbols needed in defining the model's transition rate expressions."""
+    all_compartments: Sequence[Symbol]
     """Compartment symbols in definition order."""
-    attribute_symbols: Sequence[Symbol]
+    all_requirements: Sequence[Symbol]
     """Attribute symbols in definition order."""
 
+    def __init__(self, compartments: Sequence[CompartmentDef], requirements: Sequence[AttributeDef]):
+        self.all_compartments = [to_symbol(c.name) for c in compartments]
+        self.all_requirements = [to_symbol(r.name) for r in requirements]
+        self._csymbols = {c.name: s for c, s
+                          in zip(compartments, self.all_compartments)}
+        self._rsymbols = {r.name: s for r, s
+                          in zip(requirements, self.all_requirements)}
 
-class CompartmentModel:
+    def compartments(self, *names: str) -> Sequence[Symbol]:
+        return [self._csymbols[n] for n in names]
+
+    def requirements(self, *names: str) -> Sequence[Symbol]:
+        return [self._rsymbols[n] for n in names]
+
+
+class CompartmentModel(ABC):
     """
     A compartment model definition and its corresponding metadata.
     Effectively, a collection of compartments, transitions between compartments,
     and the data parameters which are required to compute the transitions.
     """
 
-    _symbols: ModelSymbols
-    _transitions: list[TransitionDef]
+    requirements: Sequence[AttributeDef] = ()
+    compartments: Sequence[CompartmentDef] = ()
 
-    def __init__(self, symbols: ModelSymbols, transitions: list[TransitionDef]):
-        self._symbols = symbols
-        self._transitions = transitions
-        self._validate()
-
-    @property
+    @cached_property
     def symbols(self) -> ModelSymbols:
-        """The symbols used in the model."""
-        return self._symbols
+        return ModelSymbols(self.compartments, self.requirements)
 
-    @property
+    @abstractmethod
+    def edges(self, symbols: ModelSymbols) -> Sequence[TransitionDef]:
+        pass
+
+    @cached_property
     def transitions(self) -> Sequence[TransitionDef]:
         """The transitions in the model."""
-        return self._transitions
-
-    @property
-    def compartments(self) -> Sequence[CompartmentDef]:
-        """The compartments in the model."""
-        return self.symbols.compartments
+        return self.edges(self.symbols)
 
     @cached_property
     def num_compartments(self) -> int:
         """The number of compartments in this model."""
-        return len(self.symbols.compartments)
+        return len(self.compartments)
 
-    @property
-    def attributes(self) -> OrderedDict[AbsoluteName, AttributeDef]:
+    @cached_property
+    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
         """The attributes required by this model."""
-        return self.symbols.attributes
+        return OrderedDict([
+            (AbsoluteName("gpm:all", "ipm", r.name), r)
+            for r in self.requirements
+        ])
 
     @cached_property
     def events(self) -> Sequence[EdgeDef]:
@@ -304,73 +307,44 @@ class CompartmentModel:
             msg = f"No matching compartment found for name: {name}"
             raise ValueError(msg) from None
 
-    def _validate(self) -> None:
-        if len(self.symbols.compartments) == 0:
-            msg = "CompartmentModel must contain at least one compartment."
-            raise IpmValidationException(msg)
+    # def _validate(self) -> None:
+    #     if len(self.symbols.compartments) == 0:
+    #         msg = "CompartmentModel must contain at least one compartment."
+    #         raise IpmValidationException(msg)
 
-        # Extract the set of compartments used by any transition.
-        trx_comps = set(
-            compartment
-            for e in _as_events(self.transitions)
-            for compartment in [e.compartment_from, e.compartment_to]
-            # don't include exogenous states in the compartment set
-            if compartment not in exogenous_states
-        )
+    #     # Extract the set of compartments used by any transition.
+    #     trx_comps = set(
+    #         compartment
+    #         for e in _as_events(self.transitions)
+    #         for compartment in [e.compartment_from, e.compartment_to]
+    #         # don't include exogenous states in the compartment set
+    #         if compartment not in exogenous_states
+    #     )
 
-        # Extract the set of symbols referenced by any transition rate expression.
-        # This includes compartment symbols.
-        trx_attrs = set(
-            symbol
-            for e in _as_events(self.transitions)
-            for symbol in e.rate.free_symbols if isinstance(symbol, Symbol)
-        ).difference(trx_comps)
+    #     # Extract the set of symbols referenced by any transition rate expression.
+    #     # This includes compartment symbols.
+    #     trx_attrs = set(
+    #         symbol
+    #         for e in _as_events(self.transitions)
+    #         for symbol in e.rate.free_symbols if isinstance(symbol, Symbol)
+    #     ).difference(trx_comps)
 
-        # transitions cannot have the source and destination both be exogenous; this would be madness.
-        if any((edge.compartment_from in exogenous_states and edge.compartment_to in exogenous_states
-                for edge in _as_events(self.transitions))):
-            msg = "Transitions cannot use exogenous states (BIRTH/DEATH) as both source and destination."
-            raise IpmValidationException(msg)
+    #     # transitions cannot have the source and destination both be exogenous; this would be madness.
+    #     if any((edge.compartment_from in exogenous_states and edge.compartment_to in exogenous_states
+    #             for edge in _as_events(self.transitions))):
+    #         msg = "Transitions cannot use exogenous states (BIRTH/DEATH) as both source and destination."
+    #         raise IpmValidationException(msg)
 
-        # transitions_compartments minus symbols_compartments should be empty
-        missing_comps = trx_comps.difference(self.symbols.compartment_symbols)
-        if len(missing_comps) > 0:
-            msg = "Transitions reference compartments which were not declared as symbols.\n" \
-                f"Missing states: {', '.join(map(str, missing_comps))}"
-            raise IpmValidationException(msg)
+    #     # transitions_compartments minus symbols_compartments should be empty
+    #     missing_comps = trx_comps.difference(self.symbols.compartment_symbols)
+    #     if len(missing_comps) > 0:
+    #         msg = "Transitions reference compartments which were not declared as symbols.\n" \
+    #             f"Missing states: {', '.join(map(str, missing_comps))}"
+    #         raise IpmValidationException(msg)
 
-        # transitions_attributes minus symbols_attributes should be empty
-        missing_attrs = trx_attrs.difference(self.symbols.attribute_symbols)
-        if len(missing_attrs) > 0:
-            msg = "Transitions reference attributes which were not declared as symbols.\n" \
-                f"Missing attributes: {', '.join(map(str, missing_attrs))}"
-            raise IpmValidationException(msg)
-
-
-############################################################
-# Function-based creation API
-############################################################
-
-
-def create_symbols(compartments: Sequence[CompartmentDef], attributes: Sequence[AttributeDef]) -> ModelSymbols:
-    """Create a symbols object by combining compartment and attribute definitions."""
-    csym = [to_symbol(c.name) for c in compartments]
-    asym = [to_symbol(a.name) for a in attributes]
-    return ModelSymbols(
-        compartments=list(compartments),
-        attributes=OrderedDict([
-            (AbsoluteName("gpm:all", "ipm", a.name), a)
-            for a in attributes
-        ]),
-        compartment_symbols=csym,
-        attribute_symbols=asym,
-    )
-
-
-def create_model(symbols: ModelSymbols, transitions: Sequence[TransitionDef]) -> CompartmentModel:
-    """
-    Construct a compartment model with the given set of symbols and the given transitions.
-    `symbols` must include all of the symbols used in the transition definitions: all compartments and all attributes.
-    Raises an IpmValidationException if a valid IPM cannot be constructed from the arguments.
-    """
-    return CompartmentModel(symbols, list(transitions))
+    #     # transitions_attributes minus symbols_attributes should be empty
+    #     missing_attrs = trx_attrs.difference(self.symbols.attribute_symbols)
+    #     if len(missing_attrs) > 0:
+    #         msg = "Transitions reference attributes which were not declared as symbols.\n" \
+    #             f"Missing attributes: {', '.join(map(str, missing_attrs))}"
+    #         raise IpmValidationException(msg)

@@ -381,7 +381,7 @@ class Rume:
         """Returns the attributes required by the RUME."""
         def generate_items():
             # IPM attributes are already fully named.
-            yield from self.ipm.attributes.items()
+            yield from self.ipm.requirements_dict.items()
             # Name the MM and Init attributes.
             for strata, gpm in self.original_gpms.items():
                 strata_name = f"gpm:{strata}"

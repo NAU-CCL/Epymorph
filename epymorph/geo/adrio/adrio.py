@@ -3,7 +3,7 @@ ADRIOs enable dynamic geos to fetch data from varied external data sources,
 and ADRIOMakers create ADRIOs for a data soruce and specialized for a geo's purposes.
 """
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from numpy.typing import NDArray
 
@@ -50,5 +50,5 @@ class ADRIOMaker(ABC):
         """Creates an ADRIO to fetch the specified attribute for the specified time and place."""
 
 
-ADRIOMakerLibrary = dict[str, type[ADRIOMaker]]
+ADRIOMakerLibrary = Mapping[str, type[ADRIOMaker]]
 """ADRIOMaker objects for all supported data sources."""

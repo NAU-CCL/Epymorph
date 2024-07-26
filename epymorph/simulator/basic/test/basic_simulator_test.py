@@ -6,8 +6,7 @@ from typing import cast
 import numpy as np
 
 from epymorph import *
-from epymorph.compartment_model import (CompartmentModel, compartment,
-                                        create_model, create_symbols, edge)
+from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.error import (IpmSimInvalidProbsException,
                             IpmSimLessThanZeroException, IpmSimNaNException,
                             MmSimException)
@@ -176,36 +175,34 @@ class SimulateTest(unittest.TestCase):
 
     def test_divide_by_zero_err(self):
         """Test exception handling for a divide by zero (NaN) error"""
-        def load_ipm() -> CompartmentModel:
-            """Load the 'sirs' IPM."""
-            symbols = create_symbols(
-                compartments=[
-                    compartment('S'),
-                    compartment('I'),
-                    compartment('R'),
-                ],
-                attributes=[
-                    AttributeDef('beta', type=float, shape=Shapes.TxN),
-                    AttributeDef('gamma', type=float, shape=Shapes.TxN),
-                    AttributeDef('xi', type=float, shape=Shapes.TxN)
-                ])
+        class Sirs(CompartmentModel):
+            compartments = [
+                compartment('S'),
+                compartment('I'),
+                compartment('R'),
+            ]
 
-            [S, I, R] = symbols.compartment_symbols
-            [β, γ, ξ] = symbols.attribute_symbols
+            requirements = [
+                AttributeDef('beta', type=float, shape=Shapes.TxN),
+                AttributeDef('gamma', type=float, shape=Shapes.TxN),
+                AttributeDef('xi', type=float, shape=Shapes.TxN),
+            ]
 
-            # N is NOT protected by Max(1, ...) here
-            N = S + I + R  # type: ignore
+            def edges(self, symbols):
+                [S, I, R] = symbols.all_compartments
+                [β, γ, ξ] = symbols.all_requirements
 
-            return create_model(
-                symbols=symbols,
-                transitions=[
-                    edge(S, I, rate=β * S * I / N),  # type: ignore
-                    edge(I, R, rate=γ * I),  # type: ignore
-                    edge(R, S, rate=ξ * R),  # type: ignore
-                ])
+                # N is NOT protected by Max(1, ...) here
+                N = S + I + R  # type: ignore
+
+                return [
+                    edge(S, I, rate=β * S * I / N),
+                    edge(I, R, rate=γ * I),
+                    edge(R, S, rate=ξ * R),
+                ]
 
         rume = Rume.single_strata(
-            ipm=load_ipm(),
+            ipm=Sirs(),
             mm=mm_library['no'](),
             init=init.SingleLocation(location=1, seed_size=5),
             scope=CustomScope(np.array(['a', 'b', 'c'])),

@@ -1,42 +1,40 @@
 """Defines a compartmental IPM mirroring the Pei paper's beta treatment."""
 from sympy import Max, exp, log
 
-from epymorph.compartment_model import (CompartmentModel, compartment,
-                                        create_model, create_symbols, edge)
+from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
 from epymorph.simulation import AttributeDef
 
 
 @registry.ipm('pei')
-def load() -> CompartmentModel:
-    """Load the 'pei' IPM."""
-    symbols = create_symbols(
-        compartments=[
-            compartment('S'),
-            compartment('I'),
-            compartment('R'),
-        ],
-        attributes=[
-            AttributeDef('infection_duration', float, Shapes.TxN),
-            AttributeDef('immunity_duration', float, Shapes.TxN),
-            AttributeDef('humidity', float, Shapes.TxN),
-        ])
+class Pei(CompartmentModel):
+    """The 'pei' IPM: an SIRS model driven by humidity."""
+    compartments = [
+        compartment('S'),
+        compartment('I'),
+        compartment('R'),
+    ]
 
-    [S, I, R] = symbols.compartment_symbols
-    [D, L, H] = symbols.attribute_symbols
+    requirements = [
+        AttributeDef('infection_duration', float, Shapes.TxN),
+        AttributeDef('immunity_duration', float, Shapes.TxN),
+        AttributeDef('humidity', float, Shapes.TxN),
+    ]
 
-    beta = (exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D
+    def edges(self, symbols):
+        S, I, R = symbols.all_compartments
+        D, L, H = symbols.all_requirements
 
-    # formulate N so as to avoid dividing by zero;
-    # this is safe in this instance because if the denominator is zero,
-    # the numerator must also be zero
-    N = Max(1, S + I + R)
+        beta = (exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D
 
-    return create_model(
-        symbols=symbols,
-        transitions=[
+        # formulate N so as to avoid dividing by zero;
+        # this is safe in this instance because if the denominator is zero,
+        # the numerator must also be zero
+        N = Max(1, S + I + R)
+
+        return [
             edge(S, I, rate=beta * S * I / N),
             edge(I, R, rate=I / D),
-            edge(R, S, rate=R / L)
-        ])
+            edge(R, S, rate=R / L),
+        ]

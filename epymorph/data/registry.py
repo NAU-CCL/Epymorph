@@ -4,8 +4,8 @@ Library creation and registration for built-in IPMs, MMs, and GEOs.
 from importlib import import_module
 from importlib.abc import Traversable
 from importlib.resources import as_file, files
-from inspect import signature
-from typing import Callable, NamedTuple, TypeGuard, TypeVar, cast
+from inspect import isclass, signature
+from typing import Callable, Mapping, NamedTuple, TypeGuard, TypeVar, cast
 
 from epymorph.compartment_model import CompartmentModel
 from epymorph.error import ModelRegistryException
@@ -18,7 +18,8 @@ from epymorph.util import as_sorted_dict
 
 ModelT = TypeVar('ModelT')
 LoaderFunc = Callable[[], ModelT]
-Library = dict[str, LoaderFunc[ModelT]]
+Library = Mapping[str, LoaderFunc[ModelT]]
+ClassLibrary = Mapping[str, type[ModelT]]
 
 
 class _ModelRegistryInfo(NamedTuple):
@@ -121,6 +122,29 @@ The function must take zero parameters and its return-type must be correctly ann
     }
 
 
+def _discover_classes(model: _ModelRegistryInfo, library_type: type[DiscoverT]) -> ClassLibrary[DiscoverT]:
+    """
+    Search for the specified type of model, implemented by the specified Python class.
+    """
+    # There's nothing stopping you from calling this method with incompatible types,
+    # you'll just probably come up empty in that scenario. But this is an internal method,
+    # so no need to be over-careful.
+
+    in_path = model.path
+    modules = [
+        import_module(f"{in_path}.{f.name.removesuffix('.py')}")
+        for f in files(in_path).iterdir()
+        if f.name != "__init__.py" and f.name.endswith('.py')
+    ]
+
+    return {
+        cast(str, model.get_model_id(x)): x
+        for mod in modules
+        for x in mod.__dict__.values()
+        if isclass(x) and issubclass(x, library_type) and x.__module__ == mod.__name__
+    }
+
+
 def _mm_spec_loader(mm_spec_file: Traversable) -> Callable[[], MovementSpec]:
     """Returns a function to load the identified movement model."""
     def load() -> MovementSpec:
@@ -153,8 +177,8 @@ _GEO_DIR = files(GEO_REGISTRY.path)
 # The model libraries (and useful library subsets)
 
 
-ipm_library: Library[CompartmentModel] = as_sorted_dict({
-    **_discover(IPM_REGISTRY, CompartmentModel),
+ipm_library: ClassLibrary[CompartmentModel] = as_sorted_dict({
+    **_discover_classes(IPM_REGISTRY, CompartmentModel),
 })
 """All epymorph intra-population models (by id)."""
 

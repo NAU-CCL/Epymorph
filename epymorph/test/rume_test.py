@@ -2,11 +2,10 @@
 import unittest
 
 from numpy.testing import assert_array_equal
-from sympy import Max, symbols
+from sympy import Max
 
 from epymorph import AttributeDef, Shapes, TimeFrame, init, mm_library
-from epymorph.compartment_model import (compartment, create_model,
-                                        create_symbols, edge)
+from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.database import AbsoluteName
 from epymorph.geography.us_census import StateScope
 from epymorph.movement.parser import (ALL_DAYS, DailyClause, MovementSpec,
@@ -17,34 +16,30 @@ from epymorph.rume import (DEFAULT_STRATA, Gpm, Rume, RumeSymbols,
 from epymorph.test import EpymorphTestCase
 
 
-def _create_sir():
-    sym = create_symbols(
-        compartments=[
-            compartment('S'),
-            compartment('I'),
-            compartment('R'),
-        ],
-        attributes=[
-            AttributeDef('beta', float, Shapes.TxN),
-            AttributeDef('gamma', float, Shapes.TxN),
-        ],
-    )
+class Sir(CompartmentModel):
+    compartments = [
+        compartment('S'),
+        compartment('I'),
+        compartment('R'),
+    ]
 
-    [S, I, R] = sym.compartment_symbols
-    [beta, gamma] = sym.attribute_symbols
+    requirements = [
+        AttributeDef('beta', float, Shapes.TxN),
+        AttributeDef('gamma', float, Shapes.TxN),
+    ]
 
-    return create_model(
-        symbols=sym,
-        transitions=[
+    def edges(self, symbols):
+        S, I, R = symbols.all_compartments
+        beta, gamma = symbols.all_requirements
+        return [
             edge(S, I, rate=beta * S * I),
             edge(I, R, rate=gamma * I),
-        ],
-    )
+        ]
 
 
 class CombineIpmTest(unittest.TestCase):
     def test_combine_1(self):
-        sir = _create_sir()
+        sir = Sir()
 
         meta_attributes = [
             AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
@@ -234,7 +229,7 @@ class RumeTest(EpymorphTestCase):
 
     def test_create_monostrata_1(self):
         # A single-strata RUME uses the IPM without modification.
-        sir = _create_sir()
+        sir = Sir()
         centroids = mm_library['centroids']()
         # Make sure centroids has the tau steps we will expect later...
         self.assertListAlmostEqual(centroids.steps.step_lengths, [1 / 3, 2 / 3])
@@ -269,7 +264,7 @@ class RumeTest(EpymorphTestCase):
     def test_create_multistrata_1(self):
         # Test a multi-strata model.
 
-        sir = _create_sir()
+        sir = Sir()
         no = mm_library['no']()
         # Make sure 'no' has the tau steps we will expect later...
         self.assertListAlmostEqual(no.steps.step_lengths, [1.0])
@@ -334,7 +329,7 @@ class RumeTest(EpymorphTestCase):
     def test_create_multistrata_2(self):
         # Test special case: a multi-strata model but with only one strata.
 
-        sir = _create_sir()
+        sir = Sir()
         centroids = mm_library['centroids']()
         # Make sure centroids has the tau steps we will expect later...
         self.assertListAlmostEqual(centroids.steps.step_lengths, [1 / 3, 2 / 3])
@@ -364,15 +359,26 @@ class RumeTest(EpymorphTestCase):
 
         # NOTE: these tests will break if someone alters the MM or Init definition; even just the comments
         self.assertDictEqual(rume.attributes, {
-            AbsoluteName("gpm:aaa", "ipm", "beta"): AttributeDef("beta", float, Shapes.TxN),
-            AbsoluteName("gpm:aaa", "ipm", "gamma"): AttributeDef("gamma", float, Shapes.TxN),
-            AbsoluteName("gpm:aaa", "mm", "population"): AttributeDef("population", int, Shapes.N,
-                                                                      comment="The total population at each node."),
-            AbsoluteName("gpm:aaa", "mm", "centroid"): AttributeDef("centroid", [('longitude', float), ('latitude', float)], Shapes.N,
-                                                                    comment="The centroids for each node as (longitude, latitude) tuples."),
-            AbsoluteName("gpm:aaa", "mm", "phi"): AttributeDef("phi", float, Shapes.S,
-                                                               comment="Influences the distance that movers tend to travel.",
-                                                               default_value=40.0),
-            AbsoluteName("gpm:aaa", "init", "population"): AttributeDef("population", int, Shapes.N,
-                                                                        comment="The population at each geo node."),
+            AbsoluteName("gpm:aaa", "ipm", "beta"):
+                AttributeDef("beta", float, Shapes.TxN),
+
+            AbsoluteName("gpm:aaa", "ipm", "gamma"):
+                AttributeDef("gamma", float, Shapes.TxN),
+
+            AbsoluteName("gpm:aaa", "mm", "population"):
+                AttributeDef("population", int, Shapes.N,
+                             comment="The total population at each node."),
+
+            AbsoluteName("gpm:aaa", "mm", "centroid"):
+                AttributeDef("centroid", [('longitude', float), ('latitude', float)], Shapes.N,
+                             comment="The centroids for each node as (longitude, latitude) tuples."),
+
+            AbsoluteName("gpm:aaa", "mm", "phi"):
+                AttributeDef("phi", float, Shapes.S,
+                             comment="Influences the distance that movers tend to travel.",
+                             default_value=40.0),
+
+            AbsoluteName("gpm:aaa", "init", "population"):
+                AttributeDef("population", int, Shapes.N,
+                             comment="The population at each geo node."),
         })
