@@ -14,7 +14,7 @@ from epymorph.database import AbsoluteName
 from epymorph.error import IpmValidationException
 from epymorph.simulation import AttributeDef
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
-from epymorph.util import iterator_length
+from epymorph.util import acceptable_name, iterator_length
 
 ############################################################
 # Model Transitions
@@ -140,6 +140,10 @@ class CompartmentDef:
     name: str
     tags: list[str]
     description: str | None = field(default=None)
+
+    def __post_init__(self):
+        if acceptable_name.match(self.name) is None:
+            raise ValueError(f"Invalid compartment name: {self.name}")
 
 
 def compartment(name: str, tags: list[str] | None = None, description: str | None = None) -> CompartmentDef:

@@ -18,6 +18,7 @@ from epymorph.data_type import (AttributeArray, AttributeType, AttributeValue,
 from epymorph.database import (AbsoluteName, AttributeName, Database,
                                ModuleNamespace)
 from epymorph.error import AttributeException
+from epymorph.util import acceptable_name
 
 
 def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:
@@ -141,6 +142,8 @@ class AttributeKey(Generic[AttributeT]):
     shape: DataShape
 
     def __post_init__(self):
+        if acceptable_name.match(self.name) is None:
+            raise ValueError(f"Invalid attribute name: {self.name}")
         try:
             dtype_as_np(self.type)
         except Exception as e:
@@ -174,6 +177,8 @@ class AttributeDef(AttributeKey[AttributeT]):
     comment: str | None = field(default=None, compare=False)
 
     def __post_init__(self):
+        if acceptable_name.match(self.name) is None:
+            raise ValueError(f"Invalid attribute name: {self.name}")
         try:
             dtype_as_np(self.type)
         except Exception as e:
