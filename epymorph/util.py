@@ -2,12 +2,16 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
+from re import compile as re_compile
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
                     Mapping, OrderedDict, Self, TypeVar)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 from typing_extensions import deprecated
+
+acceptable_name = re_compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+"""A pattern that matches generally acceptable names for use across epymorph."""
 
 # function utilities
 

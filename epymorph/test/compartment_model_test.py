@@ -194,3 +194,11 @@ class CompartmentModelTest(unittest.TestCase):
                 symbols=symbols,
                 transitions=[],
             )
+
+    def test_create_07(self):
+        # Test for attribute/compartment names that include spaces.
+        with self.assertRaises(ValueError):
+            compartment("some people")
+
+        with self.assertRaises(ValueError):
+            AttributeDef('some attribute', float, Shapes.N)
