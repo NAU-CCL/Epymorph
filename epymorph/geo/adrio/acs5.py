@@ -3,7 +3,7 @@ import os
 import re
 from collections import defaultdict
 from functools import cache
-from typing import NamedTuple, TypeGuard
+from typing import Literal, NamedTuple, TypeGuard
 from urllib.request import urlopen
 
 import numpy as np
@@ -18,7 +18,8 @@ from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
                                           BlockGroupScope, CensusScope,
                                           CountyScope, StateScope,
-                                          StateScopeAll, TractScope)
+                                          StateScopeAll, TractScope,
+                                          get_census_granularity)
 from epymorph.simulation import AttributeDef
 from epymorph.util import filter_with_mask
 
@@ -289,3 +290,130 @@ class PopulationByAge(Adrio[np.int64]):
 
         table = self.data(self.POP_BY_AGE_TABLE)
         return table[:, col_mask].sum(axis=1)
+
+
+class AverageHouseholdSize(Adrio[np.int64]):
+
+    def evaluate(self) -> NDArray[np.int64]:
+        scope = self.scope
+        if not isinstance(scope, CensusScope):
+            raise DataResourceException("booo")
+
+        df = _fetch_acs5(['B25010_001E'], scope)
+        return df['B25010_001E'].to_numpy(dtype=np.int64)
+
+
+class DissimilarityIndex(Adrio[np.float64]):
+
+    RACE_CATEGORY = Literal['White', 'Black',
+                            'Native', 'Asian',
+                            'Pacific Islander', 'Other']
+
+    race_variables = {'White': 'B02001_002E',
+                      'Black': 'B02001_003E',
+                      'Native': 'B02001_004E',
+                      'Asian': 'B02001_005E',
+                      'Pacific Islander': 'B02001_006E',
+                      'Other': 'B02001_007E'}
+
+    def __init__(self, majority_pop: RACE_CATEGORY, minority_pop: RACE_CATEGORY):
+        self.majority_var = self.race_variables[majority_pop]
+        self.minority_var = self.race_variables[minority_pop]
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        if not isinstance(scope, CensusScope):
+            raise DataResourceException("booo")
+
+        if isinstance(scope, BlockGroupScope):
+            msg = "Dissimilarity index cannot be retreived for block group scope."
+            raise DataResourceException(msg)
+
+        df = _fetch_acs5([self.majority_var, self.minority_var], scope)
+        df2 = _fetch_acs5([self.majority_var, self.minority_var],
+                          scope.lower_granularity())
+        df2['geoid'] = df2['geoid'].apply(
+            get_census_granularity(scope.granularity).extract)
+
+        df.rename(columns={self.majority_var: 'high_majority',
+                  self.minority_var: 'high_minority'}, inplace=True)
+        df2.rename(columns={self.majority_var: 'low_majority',
+                   self.minority_var: 'low_minority'}, inplace=True)
+
+        df3 = df.merge(df2, on='geoid')
+
+        df3['score'] = abs(df3['low_minority'] / df3['high_minority'] -
+                           df3['low_majority'] / df3['high_majority'])
+        df3 = df3.groupby('geoid').sum()
+        df3['score'] *= .5
+        df3['score'] = df3['score'].replace(0., 0.5)
+        df3 = df3.reset_index()
+
+        return df3['score'].to_numpy(dtype=np.float64)
+
+
+class GiniIndex(Adrio[np.float64]):
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        if not isinstance(scope, CensusScope):
+            raise DataResourceException("booo")
+
+        df = _fetch_acs5(['B19083_001E'], scope)
+        df['B19083_001E'] = df['B19083_001E'].astype(
+            np.float64).fillna(0.5).replace(-666666666, 0.5)
+
+        # set cbg data to that of the parent tract if geo granularity = cbg
+        if isinstance(scope, BlockGroupScope):
+            print(
+                "Gini Index cannot be retrieved for block group level, fetching tract level data instead.")
+            df2 = _fetch_acs5(['B19083_001E'], scope.raise_granularity())
+            df['merge_geoid'] = df['geoid'].apply(lambda x: x[:-1])
+            df = df.drop(columns='B19083_001E')
+
+            df = df.merge(df2, left_on='merge_geoid',
+                          right_on='geoid', suffixes=(None, '_y'))
+
+        return df['B19083_001E'].to_numpy(dtype=np.float64)
+
+
+class MedianAge(Adrio[np.float64]):
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        if not isinstance(scope, CensusScope):
+            raise DataResourceException("booo")
+
+        df = _fetch_acs5(['B01002_001E'], scope)
+        return df['B01002_001E'].to_numpy(dtype=np.int64)
+
+
+class MedianIncome(Adrio[np.float64]):
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        if not isinstance(scope, CensusScope):
+            raise DataResourceException("booo")
+
+        df = _fetch_acs5(['B19013_001E'], scope)
+        return df['B19013_001E'].to_numpy(dtype=np.int64)
+
+
+class TractMedianIncome(Adrio[np.int64]):
+
+    def evaluate(self) -> NDArray[np.int64]:
+        if isinstance(self.scope, BlockGroupScope):
+            # query median income at cbg and tract level
+            df = _fetch_acs5(['NAME'], self.scope)
+            df2 = _fetch_acs5(['B19013_001E'], self.scope.raise_granularity())
+            df2 = df2.fillna(0).replace(-666666666, 0)
+
+            df['tract_geoid'] = df['geoid'].apply(lambda x: x[:-1])
+            df = df.merge(df2, left_on='tract_geoid',
+                          right_on='geoid', suffixes=(None, '_y'))
+
+            return df['B19013_001E'].to_numpy(dtype=np.int64)
+
+        else:
+            msg = "Tract median income can only be retrieved for block group scope."
+            raise DataResourceException(msg)
