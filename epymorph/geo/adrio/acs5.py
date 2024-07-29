@@ -15,6 +15,7 @@ from pandas import DataFrame
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
 from epymorph.geo.adrio.adrio2 import Adrio
+from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
                                           BlockGroupScope, CensusScope,
                                           CountyScope, StateScope,
@@ -51,6 +52,14 @@ def _get_group_vars(year: int, group: str) -> list[tuple[str, dict]]:
         for name, attrs in _get_vars(year).items()
         if attrs['group'] == group
     ), key=lambda x: x[0])
+
+
+def _validate_scope(scope: GeoScope) -> CensusScope:
+    if not isinstance(scope, CensusScope):
+        msg = "Census scope is required for ACS5 attributes."
+        raise DataResourceException(msg)
+
+    return scope
 
 
 def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
@@ -188,9 +197,7 @@ class Population(Adrio[np.int64]):
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for Census population attribute."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B01001_001E'], scope)
         return df['B01001_001E'].to_numpy(dtype=np.int64)
@@ -200,9 +207,7 @@ class PopulationByAgeTable(Adrio[np.int64]):
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required to construct population by age table."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         # NOTE: asking acs5 explicitly for the [B01001_001E, ...] vars
         # seems to be about twice as fast as asking for group(B01001)
@@ -267,9 +272,7 @@ class PopulationByAge(Adrio[np.int64]):
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for Census population by age attribute."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         age_ranges = [
             AgeRange.parse(attrs['label'])
@@ -299,9 +302,7 @@ class AverageHouseholdSize(Adrio[np.int64]):
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for Census average household size attribute."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B25010_001E'], scope)
         return df['B25010_001E'].to_numpy(dtype=np.int64)
@@ -309,41 +310,51 @@ class AverageHouseholdSize(Adrio[np.int64]):
 
 class DissimilarityIndex(Adrio[np.float64]):
 
-    RACE_CATEGORY = Literal['White', 'Black',
-                            'Native', 'Asian',
-                            'Pacific Islander', 'Other']
+    RaceCategory = Literal[
+        'White', 'Black',
+        'Native', 'Asian',
+        'Pacific Islander', 'Other'
+    ]
 
-    race_variables = {'White': 'B02001_002E',
-                      'Black': 'B02001_003E',
-                      'Native': 'B02001_004E',
-                      'Asian': 'B02001_005E',
-                      'Pacific Islander': 'B02001_006E',
-                      'Other': 'B02001_007E'}
+    race_variables: dict[RaceCategory, str] = {
+        'White': 'B02001_002E',
+        'Black': 'B02001_003E',
+        'Native': 'B02001_004E',
+        'Asian': 'B02001_005E',
+        'Pacific Islander': 'B02001_006E',
+        'Other': 'B02001_007E'
+    }
 
-    def __init__(self, majority_pop: RACE_CATEGORY, minority_pop: RACE_CATEGORY):
-        self.majority_var = self.race_variables[majority_pop]
-        self.minority_var = self.race_variables[minority_pop]
+    majority_pop: RaceCategory
+    minority_pop: RaceCategory
+
+    def __init__(self, majority_pop: RaceCategory, minority_pop: RaceCategory):
+        self.majority_pop = majority_pop
+        """The race category of the majority population"""
+        self.minority_pop = minority_pop
+        """The race category of the minority population of interest"""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for Census dissimilarity index attribute."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         if isinstance(scope, BlockGroupScope):
             msg = "Dissimilarity index cannot be retreived for block group scope."
             raise DataResourceException(msg)
 
-        df = _fetch_acs5([self.majority_var, self.minority_var], scope)
-        df2 = _fetch_acs5([self.majority_var, self.minority_var],
+        majority_var = self.race_variables[self.majority_pop]
+        minority_var = self.race_variables[self.minority_pop]
+
+        df = _fetch_acs5([majority_var, minority_var], scope)
+        df2 = _fetch_acs5([majority_var, minority_var],
                           scope.lower_granularity())
         df2['geoid'] = df2['geoid'].apply(
             get_census_granularity(scope.granularity).extract)
 
-        df.rename(columns={self.majority_var: 'high_majority',
-                  self.minority_var: 'high_minority'}, inplace=True)
-        df2.rename(columns={self.majority_var: 'low_majority',
-                   self.minority_var: 'low_minority'}, inplace=True)
+        df.rename(columns={majority_var: 'high_majority',
+                  minority_var: 'high_minority'}, inplace=True)
+        df2.rename(columns={majority_var: 'low_majority',
+                   minority_var: 'low_minority'}, inplace=True)
 
         df3 = df.merge(df2, on='geoid')
 
@@ -361,9 +372,7 @@ class GiniIndex(Adrio[np.float64]):
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for Census gini index attribute."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B19083_001E'], scope)
         df['B19083_001E'] = df['B19083_001E'].astype(
@@ -387,9 +396,7 @@ class MedianAge(Adrio[np.float64]):
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for Census median age attribute."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B01002_001E'], scope)
         return df['B01002_001E'].to_numpy(dtype=np.int64)
@@ -399,29 +406,7 @@ class MedianIncome(Adrio[np.float64]):
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for Census median income attribute."
-            raise DataResourceException(msg)
+        scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B19013_001E'], scope)
         return df['B19013_001E'].to_numpy(dtype=np.int64)
-
-
-class TractMedianIncome(Adrio[np.int64]):
-
-    def evaluate(self) -> NDArray[np.int64]:
-        if isinstance(self.scope, BlockGroupScope):
-            # query median income at cbg and tract level
-            df = _fetch_acs5(['NAME'], self.scope)
-            df2 = _fetch_acs5(['B19013_001E'], self.scope.raise_granularity())
-            df2 = df2.fillna(0).replace(-666666666, 0)
-
-            df['tract_geoid'] = df['geoid'].apply(lambda x: x[:-1])
-            df = df.merge(df2, left_on='tract_geoid',
-                          right_on='geoid', suffixes=(None, '_y'))
-
-            return df['B19013_001E'].to_numpy(dtype=np.int64)
-
-        else:
-            msg = "Tract median income can only be retrieved for block group scope."
-            raise DataResourceException(msg)
