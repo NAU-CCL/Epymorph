@@ -189,7 +189,8 @@ class Population(Adrio[np.int64]):
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for Census population attribute."
+            raise DataResourceException(msg)
 
         df = _fetch_acs5(['B01001_001E'], scope)
         return df['B01001_001E'].to_numpy(dtype=np.int64)
@@ -200,7 +201,8 @@ class PopulationByAgeTable(Adrio[np.int64]):
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required to construct population by age table."
+            raise DataResourceException(msg)
 
         # NOTE: asking acs5 explicitly for the [B01001_001E, ...] vars
         # seems to be about twice as fast as asking for group(B01001)
@@ -266,7 +268,8 @@ class PopulationByAge(Adrio[np.int64]):
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for Census population by age attribute."
+            raise DataResourceException(msg)
 
         age_ranges = [
             AgeRange.parse(attrs['label'])
@@ -297,7 +300,8 @@ class AverageHouseholdSize(Adrio[np.int64]):
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for Census average household size attribute."
+            raise DataResourceException(msg)
 
         df = _fetch_acs5(['B25010_001E'], scope)
         return df['B25010_001E'].to_numpy(dtype=np.int64)
@@ -323,7 +327,8 @@ class DissimilarityIndex(Adrio[np.float64]):
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for Census dissimilarity index attribute."
+            raise DataResourceException(msg)
 
         if isinstance(scope, BlockGroupScope):
             msg = "Dissimilarity index cannot be retreived for block group scope."
@@ -357,7 +362,8 @@ class GiniIndex(Adrio[np.float64]):
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for Census gini index attribute."
+            raise DataResourceException(msg)
 
         df = _fetch_acs5(['B19083_001E'], scope)
         df['B19083_001E'] = df['B19083_001E'].astype(
@@ -382,7 +388,8 @@ class MedianAge(Adrio[np.float64]):
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for Census median age attribute."
+            raise DataResourceException(msg)
 
         df = _fetch_acs5(['B01002_001E'], scope)
         return df['B01002_001E'].to_numpy(dtype=np.int64)
@@ -393,7 +400,8 @@ class MedianIncome(Adrio[np.float64]):
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for Census median income attribute."
+            raise DataResourceException(msg)
 
         df = _fetch_acs5(['B19013_001E'], scope)
         return df['B19013_001E'].to_numpy(dtype=np.int64)
