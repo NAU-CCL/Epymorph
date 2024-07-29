@@ -88,7 +88,8 @@ class Commuters(Adrio[np.int64]):
         scope = self.scope
 
         if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+            msg = "Census scope is required for commuting flows data."
+            raise DataResourceException(msg)
 
         df = _fetch_commuters(scope, scope.year)
 
