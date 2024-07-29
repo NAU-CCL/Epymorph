@@ -6,18 +6,20 @@ into one multi-strata RUME.
 """
 import dataclasses
 import textwrap
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import accumulate
-from typing import Callable, Mapping, OrderedDict, Self, Sequence
+from typing import Callable, Mapping, OrderedDict, Self, Sequence, final
 
 import numpy as np
 from numpy.typing import NDArray
-from sympy import Add, Expr, Max, Symbol
+from sympy import Symbol
 
-from epymorph.compartment_model import (CompartmentDef, CompartmentModel,
-                                        ModelSymbols, TransitionDef,
-                                        remap_transition)
+from epymorph.compartment_model import (BaseCompartmentModel,
+                                        CombinedCompartmentModel,
+                                        CompartmentModel, MetaEdgeBuilder,
+                                        MultistrataModelSymbols, TransitionDef)
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import dtype_str
 from epymorph.database import AbsoluteName, ModuleNamePattern, NamePattern
@@ -26,8 +28,8 @@ from epymorph.initializer import Initializer
 from epymorph.movement.parser import (DailyClause, MovementClause,
                                       MovementSpec, MoveSteps)
 from epymorph.params import ParamSymbol, ParamValue, simulation_symbols
-from epymorph.simulation import AttributeDef, TimeFrame
-from epymorph.sympy_shim import to_symbol
+from epymorph.simulation import (DEFAULT_STRATA, META_STRATA, AttributeDef,
+                                 TimeFrame, gpm_strata)
 from epymorph.util import are_unique, map_values
 
 #######
@@ -42,6 +44,7 @@ class Gpm:
     that make up a RUME.
     """
 
+    name: str
     ipm: CompartmentModel
     mm: MovementSpec
     init: Initializer
@@ -49,11 +52,13 @@ class Gpm:
 
     def __init__(
         self,
+        name: str,
         ipm: CompartmentModel,
         mm: MovementSpec,
         init: Initializer,
         params: Mapping[str, ParamValue] | None = None,
     ):
+        self.name = name
         self.ipm = ipm
         self.mm = mm
         self.init = init
@@ -63,174 +68,16 @@ class Gpm:
         }
 
 
-#####################################
-# Utilities for building meta edges #
-#####################################
-
-
-class RumeSymbols:
-    """
-    A symbol dictionary for the symbols in a RUME. This information is made available during
-    the meta-edge builder function so that you can reference the RUME symbols to create the
-    appropriate transition rates.
-    """
-    _compartments: dict[str, tuple[Symbol, ...]]
-    _attr: dict[str, tuple[Symbol, ...]]
-    _meta: tuple[Symbol, ...]
-
-    def __init__(
-        self,
-        compartments: dict[str, tuple[Symbol, ...]],
-        attr: dict[str, tuple[Symbol, ...]],
-        meta: tuple[Symbol, ...],
-    ):
-        self._compartments = compartments
-        self._attr = attr
-        self._meta = meta
-
-    def compartments(self, strata: str) -> tuple[Symbol, ...]:
-        """A tuple of symbols for the compartments in a strata."""
-        return self._compartments[strata]
-
-    def total(self, strata: str) -> Expr:
-        """A sympy expression for the total of all compartments in a strata."""
-        return Add(*self._compartments[strata])
-
-    def total_nonzero(self, strata: str) -> Expr:
-        """
-        A sympy expression for the total of all compartments in a strata,
-        but clamped so that it's never less than one. (This is useful as
-        a divisor, if you can guarantee the numerator is zero when the
-        sum otherwise would be zero.)
-        """
-        return Max(1, self.total(strata))
-
-    def attributes(self, strata: str) -> tuple[Symbol, ...]:
-        """A tuple of symbols for the (non-meta) IPM attributes in a strata."""
-        return self._attr[strata]
-
-    def meta_attributes(self) -> tuple[Symbol, ...]:
-        """A tuple of symbols for the meta attributes."""
-        return self._meta
-
-
-MetaEdgeBuilder = Callable[[RumeSymbols], Sequence[TransitionDef]]
-"""A function for creating meta edges in a multistrata RUME."""
-
-
 ########
 # RUME #
 ########
 
-
-DEFAULT_STRATA = "all"
-"""The strata name used as the default, primarily for single-strata simulations."""
-META_STRATA = "meta"
-"""A strata for meta-strata information."""
 
 GEO_LABELS = AbsoluteName(META_STRATA, "geo", "label")
 """
 If this attribute is provided to a RUME, it will be used as labels for the geo node.
 Otherwise we'll use the node IDs from the geo scope.
 """
-
-
-@dataclass(frozen=True)
-class _StrataSymbols(ModelSymbols):
-    """The remapping of an IPM's symbols to use in a multi-strata IPM."""
-
-    mapping: dict[Symbol, Symbol]
-
-    @classmethod
-    def map_to_strata(cls, symbols: ModelSymbols, strata: str) -> Self:
-        """Remap an IPM's ModelSymbols to be in the given strata."""
-        compartments = list[CompartmentDef]()
-        attributes = OrderedDict[AbsoluteName, AttributeDef]()
-        compartment_symbols = list[Symbol]()
-        attribute_symbols = list[Symbol]()
-        mapping = dict[Symbol, Symbol]()
-
-        for comp, old_symbol in zip(symbols.compartments, symbols.compartment_symbols):
-            new_name = f"{comp.name}_{strata}"
-            new_symbol = to_symbol(new_name)
-            mapping[old_symbol] = new_symbol
-            compartments.append(dataclasses.replace(comp, name=new_name))
-            compartment_symbols.append(new_symbol)
-
-        for (name, attr), old_symbol in zip(symbols.attributes.items(), symbols.attribute_symbols):
-            new_name = name.in_strata(f"gpm:{strata}")
-            new_symbol = to_symbol(f"{attr.name}_{strata}")
-            mapping[old_symbol] = new_symbol
-            attributes[new_name] = attr
-            attribute_symbols.append(new_symbol)
-
-        return cls(compartments, attributes, compartment_symbols, attribute_symbols, mapping)
-
-
-def combine_ipms(
-    strata: list[tuple[str, CompartmentModel]],
-    meta_attributes: list[AttributeDef],
-    meta_edges: MetaEdgeBuilder,
-) -> CompartmentModel:
-    """
-    Combine IPMs for different strata, remapping symbols as appropriate and using the
-    `meta_edges` function to construct edges connecting the strata compartments.
-    """
-
-    strata_symbols = [
-        _StrataSymbols.map_to_strata(ipm.symbols, strata)
-        for strata, ipm in strata
-    ]
-
-    meta_attributes_symbols = [
-        to_symbol(f"{a.name}_{META_STRATA}")
-        for a in meta_attributes
-    ]
-
-    rume_symbols = RumeSymbols(
-        compartments={
-            strata: tuple(symbols.compartment_symbols)
-            for (strata, _), symbols in zip(strata, strata_symbols)
-        },
-        attr={
-            strata: tuple(symbols.attribute_symbols)
-            for (strata, _), symbols in zip(strata, strata_symbols)
-        },
-        meta=tuple(meta_attributes_symbols),
-    )
-
-    ipm_symbols = ModelSymbols(
-        compartments=[
-            compartment
-            for symbols in strata_symbols
-            for compartment in symbols.compartments
-        ],
-        attributes=OrderedDict([
-            *((name, attr)
-              for symbols in strata_symbols
-              for name, attr in symbols.attributes.items()),
-            *((AbsoluteName(META_STRATA, "ipm", attr.name), attr)
-              for attr in meta_attributes),
-        ]),
-        compartment_symbols=[
-            compartment
-            for symbols in strata_symbols
-            for compartment in symbols.compartment_symbols
-        ],
-        attribute_symbols=[
-            *(a for s in strata_symbols for a in s.attribute_symbols),
-            *meta_attributes_symbols,
-        ],
-    )
-
-    ipm_transitions = [
-        *(remap_transition(trx, symbols.mapping)
-            for (_, ipm), symbols in zip(strata, strata_symbols)
-            for trx in ipm.transitions),
-        *meta_edges(rume_symbols),
-    ]
-
-    return CompartmentModel(ipm_symbols, ipm_transitions)
 
 
 def combine_tau_steps(strata_tau_lengths: dict[str, list[float]]) -> tuple[list[float], dict[str, dict[int, int]], dict[str, dict[int, int]]]:
@@ -281,7 +128,7 @@ def combine_tau_steps(strata_tau_lengths: dict[str, list[float]]) -> tuple[list[
     return combined_tau_lengths, tau_start_mapping, tau_stop_mapping
 
 
-def remap_taus(strata_mms: list[tuple[str, MovementSpec]]) -> tuple[list[float], OrderedDict[str, MovementSpec]]:
+def remap_taus(strata_mms: list[tuple[str, MovementSpec]]) -> OrderedDict[str, MovementSpec]:
     """
     When combining movement models with different tau steps, it is necessary to create a
     new tau step scheme which can accomodate them all.
@@ -313,13 +160,14 @@ def remap_taus(strata_mms: list[tuple[str, MovementSpec]]) -> tuple[list[float],
             ],
         )
 
-    return new_tau_steps, OrderedDict([
+    return OrderedDict([
         (strata_name, spec_remap_tau(spec, strata_name))
         for strata_name, spec in strata_mms
     ])
 
 
-class Rume:
+@dataclass(frozen=True)
+class Rume(ABC):
     """
     A RUME (or Runnable Modeling Experiment) contains the configuration of an
     epymorph-style simulation. It brings together one or more IPMs, MMs, initialization routines,
@@ -329,52 +177,35 @@ class Rume:
     running a disease simulation and providing time-series results of the disease model.
     """
 
-    original_gpms: OrderedDict[str, Gpm]
-    ipm: CompartmentModel
+    strata: Sequence[Gpm]
+    ipm: BaseCompartmentModel
     mms: OrderedDict[str, MovementSpec]
     scope: GeoScope
     time_frame: TimeFrame
     params: Mapping[NamePattern, ParamValue]
-    dim: SimDimensions
-    is_single_strata: bool
+    dim: SimDimensions = field(init=False)
 
-    def __init__(
-        self,
-        strata: OrderedDict[str, Gpm],
-        ipm: CompartmentModel,
-        mms: OrderedDict[str, MovementSpec],
-        tau_step_lengths: list[float],
-        scope: GeoScope,
-        time_frame: TimeFrame,
-        params: Mapping[NamePattern, ParamValue],
-        is_single_strata: bool,
-    ):
-        """
-        This is the 'internal' constructor for Rume; you probably want to use the
-        `single_strata` or `multistrata` static methods instead.
-        """
-        if not are_unique(strata):
+    def __post_init__(self):
+        if not are_unique(g.name for g in self.strata):
             msg = "Strata names must be unique; duplicate found."
             raise ValueError(msg)
 
-        # Create dimensions
+        # We can get the tau step lengths from a movement model.
+        # In a multistrata model, there will be multiple remapped MMs,
+        # but they all have the same set of tau steps so it doesn't matter
+        # which we use. (Using the first one is safe.)
+        first_strata = self.strata[0].name
+        tau_step_lengths = self.mms[first_strata].steps.step_lengths
+
         dim = SimDimensions.build(
             tau_step_lengths=tau_step_lengths,
-            start_date=time_frame.start_date,
-            days=time_frame.duration_days,
-            nodes=len(scope.get_node_ids()),
-            compartments=ipm.num_compartments,
-            events=ipm.num_events,
+            start_date=self.time_frame.start_date,
+            days=self.time_frame.duration_days,
+            nodes=len(self.scope.get_node_ids()),
+            compartments=self.ipm.num_compartments,
+            events=self.ipm.num_events,
         )
-
-        self.original_gpms = strata
-        self.ipm = ipm
-        self.mms = mms
-        self.scope = scope
-        self.time_frame = time_frame
-        self.params = params
-        self.dim = dim
-        self.is_single_strata = is_single_strata
+        object.__setattr__(self, 'dim', dim)
 
     @cached_property
     def attributes(self) -> Mapping[AbsoluteName, AttributeDef]:
@@ -383,13 +214,13 @@ class Rume:
             # IPM attributes are already fully named.
             yield from self.ipm.requirements_dict.items()
             # Name the MM and Init attributes.
-            for strata, gpm in self.original_gpms.items():
-                strata_name = f"gpm:{strata}"
+            for gpm in self.strata:
+                strata_name = gpm_strata(gpm.name)
                 for a in gpm.mm.attributes:
                     yield AbsoluteName(strata_name, "mm", a.name), a
                 for a in gpm.init.requirements:
                     yield AbsoluteName(strata_name, "init", a.name), a
-        return dict(generate_items())
+        return OrderedDict(generate_items())
 
     def compartment_mask(self, strata_name: str) -> NDArray[np.bool_]:
         """
@@ -403,10 +234,10 @@ class Rume:
                          fill_value=False, dtype=np.bool_)
         ci, cf = 0, 0
         found = False
-        for strata, gpm in self.original_gpms.items():
+        for gpm in self.strata:
             # Iterate through the strata IPMs:
             ipm = gpm.ipm
-            if strata_name != strata:
+            if strata_name != gpm.name:
                 # keep count of how many compartments precede our target strata
                 ci += ipm.num_compartments
             else:
@@ -428,27 +259,9 @@ class Rume:
         )
         return self.compartment_mask(strata_name) * compartment_mobility
 
-    def with_time_frame(self, time_frame: TimeFrame) -> 'Rume':
-        """Create a RUME with a new time frame."""
-        # TODO: do we need to go through all of the params and subset any that are time-based?
-        # How would that work? Or maybe reconciling to time frame happens at param evaluation time...
-        return Rume(
-            strata=self.original_gpms,
-            ipm=self.ipm,
-            mms=self.mms,
-            tau_step_lengths=list(self.dim.tau_step_lengths),
-            scope=self.scope,
-            time_frame=time_frame,
-            params=self.params,
-            is_single_strata=self.is_single_strata,
-        )
-
+    @abstractmethod
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
         """Returns a function for formatting attribute/parameter names."""
-        if self.is_single_strata:
-            return lambda n: f"{n.module}::{n.id}"
-        else:
-            return str
 
     def params_description(self) -> str:
         """Provide a description of all attributes required by the RUME."""
@@ -489,8 +302,15 @@ class Rume:
         """Convenient function to retrieve the symbols used to represent simulation quantities."""
         return simulation_symbols(*symbols)
 
+
+@dataclass(frozen=True)
+class SingleStrataRume(Rume):
+    """A RUME with a single strata."""
+
+    ipm: CompartmentModel
+
     @classmethod
-    def single_strata(
+    def build(
         cls,
         ipm: CompartmentModel,
         mm: MovementSpec,
@@ -500,52 +320,102 @@ class Rume:
         params: Mapping[str, ParamValue],
     ) -> Self:
         """Create a RUME with only a single strata."""
-        gpm = Gpm(ipm, mm, init, {})
-
         return cls(
-            strata=OrderedDict([(DEFAULT_STRATA, gpm)]),
+            strata=[Gpm(DEFAULT_STRATA, ipm, mm, init, {})],
             ipm=ipm,
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
-            tau_step_lengths=mm.steps.step_lengths,
             scope=scope,
             time_frame=time_frame,
             params={
                 NamePattern.parse(k): v
                 for k, v in params.items()
-            },
-            is_single_strata=True,
+            }
         )
 
+    def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
+        """Returns a function for formatting attribute/parameter names."""
+        return lambda n: f"{n.module}::{n.id}"
+
+
+@dataclass(frozen=True)
+class MultistrataRume(Rume):
+    """A RUME with a multiple strata."""
+
+    ipm: CombinedCompartmentModel
+
     @classmethod
-    def multistrata(
+    def build(
         cls,
-        strata: list[tuple[str, Gpm]],
-        meta_attributes: list[AttributeDef],
+        strata: Sequence[Gpm],
+        meta_requirements: Sequence[AttributeDef],
         meta_edges: MetaEdgeBuilder,
         scope: GeoScope,
         time_frame: TimeFrame,
         params: Mapping[str, ParamValue],
     ) -> Self:
-        """Create a multi-strata RUME by combining GPMs, one for each strata."""
-        # Combine IPMs
-        ipm = combine_ipms(
-            [(strata_name, gpm.ipm) for strata_name, gpm in strata],
-            meta_attributes, meta_edges)
-
-        # Combine MMs
-        tau_step_lengths, mms = remap_taus(
-            [(strata_name, gpm.mm) for strata_name, gpm in strata])
-
+        """Create a multistrata RUME by combining one GPM per strata."""
         return cls(
-            strata=OrderedDict(strata),
-            ipm=ipm,
-            mms=mms,
-            tau_step_lengths=tau_step_lengths,
+            strata=strata,
+            # Combine IPMs
+            ipm=CombinedCompartmentModel(
+                strata=[(gpm.name, gpm.ipm) for gpm in strata],
+                meta_requirements=meta_requirements,
+                meta_edges=meta_edges),
+            # Combine MMs
+            mms=remap_taus([(gpm.name, gpm.mm) for gpm in strata]),
             scope=scope,
             time_frame=time_frame,
             params={
                 NamePattern.parse(k): v
                 for k, v in params.items()
-            },
-            is_single_strata=False,
+            }
+        )
+
+    def with_time_frame(self, time_frame: TimeFrame) -> 'MultistrataRume':
+        """Create a RUME with a new time frame."""
+        # TODO: do we need to go through all of the params and subset any that are time-based?
+        # How would that work? Or maybe reconciling to time frame happens at param evaluation time...
+        return dataclasses.replace(self, time_frame=time_frame)
+
+    def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
+        """Returns a function for formatting attribute/parameter names."""
+        return str
+
+
+class MultistrataRumeBuilder(ABC):
+    """Create a multi-strata RUME by combining GPMs, one for each strata."""
+
+    strata: Sequence[Gpm]
+    """The strata that are part of this RUME."""
+
+    meta_requirements: Sequence[AttributeDef]
+    """
+    A set of additional requirements which are needed by the meta-edges
+    in our combined compartment model.
+    """
+
+    @abstractmethod
+    def meta_edges(self, symbols: MultistrataModelSymbols) -> list[TransitionDef]:
+        """
+        When implementing a MultistrataRumeBuilder, override this method
+        to build the meta-transition-edges -- the edges which represent
+        cross-strata interactions. You are given a reference to this model's symbols library
+        so you can build expressions for the transition rates.
+        """
+
+    @final
+    def build(
+        self,
+        scope: GeoScope,
+        time_frame: TimeFrame,
+        params: Mapping[str, ParamValue],
+    ) -> MultistrataRume:
+        """Build the RUME."""
+        return MultistrataRume.build(
+            self.strata,
+            self.meta_requirements,
+            self.meta_edges,
+            scope,
+            time_frame,
+            params
         )

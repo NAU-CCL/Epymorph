@@ -3,17 +3,19 @@ The basis of the intra-population model (disease mechanics) system in epymorph.
 This represents disease mechanics using a compartmental model for tracking
 populations as groupings of integer-numbered individuals.
 """
+import dataclasses
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Iterable, Iterator, OrderedDict, Sequence
+from typing import Callable, Iterable, Iterator, OrderedDict, Sequence
 
 from sympy import Expr, Float, Integer, Symbol
 
 from epymorph.database import AbsoluteName
 from epymorph.error import IpmValidationException
-from epymorph.simulation import AttributeDef
+from epymorph.simulation import (DEFAULT_STRATA, META_STRATA, AttributeDef,
+                                 gpm_strata)
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
 from epymorph.util import iterator_length
 
@@ -157,67 +159,70 @@ def quick_compartments(symbol_names: str) -> list[CompartmentDef]:
 
 
 ############################################################
-# Compartment Symbols
+# Compartment Models
 ############################################################
 
 
 class ModelSymbols:
     """IPM symbols needed in defining the model's transition rate expressions."""
+
     all_compartments: Sequence[Symbol]
     """Compartment symbols in definition order."""
     all_requirements: Sequence[Symbol]
-    """Attribute symbols in definition order."""
+    """Requirements symbols in definition order."""
 
-    def __init__(self, compartments: Sequence[CompartmentDef], requirements: Sequence[AttributeDef]):
-        self.all_compartments = [to_symbol(c.name) for c in compartments]
-        self.all_requirements = [to_symbol(r.name) for r in requirements]
-        self._csymbols = {c.name: s for c, s
-                          in zip(compartments, self.all_compartments)}
-        self._rsymbols = {r.name: s for r, s
-                          in zip(requirements, self.all_requirements)}
+    _csymbols: dict[str, Symbol]
+    """Mapping of compartment name to symbol."""
+    _rsymbols: dict[str, Symbol]
+    """Mapping of requirement name to symbol."""
+
+    def __init__(self,
+                 compartments: Sequence[tuple[str, str]],
+                 requirements: Sequence[tuple[str, str]]):
+        # NOTE: the arguments here are tuples of name and symbolic name; this is redundant for
+        # single-strata models, but allows multistrata models to keep fine-grained control over
+        # symbol substitution while allowing the user to refer to the names they already know.
+        cs = [(n, to_symbol(s)) for n, s in compartments]
+        rs = [(n, to_symbol(s)) for n, s in requirements]
+        self.all_compartments = [s for _, s in cs]
+        self.all_requirements = [s for _, s in rs]
+        self._csymbols = dict(cs)
+        self._rsymbols = dict(rs)
 
     def compartments(self, *names: str) -> Sequence[Symbol]:
+        """Select compartment symbols by name."""
         return [self._csymbols[n] for n in names]
 
     def requirements(self, *names: str) -> Sequence[Symbol]:
+        """Select requirement symbols by name."""
         return [self._rsymbols[n] for n in names]
 
 
-class CompartmentModel(ABC):
-    """
-    A compartment model definition and its corresponding metadata.
-    Effectively, a collection of compartments, transitions between compartments,
-    and the data parameters which are required to compute the transitions.
-    """
+class BaseCompartmentModel(ABC):
+    """Shared base-class for compartment models."""
 
-    requirements: Sequence[AttributeDef] = ()
     compartments: Sequence[CompartmentDef] = ()
+    requirements: Sequence[AttributeDef] = ()
 
     @cached_property
-    def symbols(self) -> ModelSymbols:
-        return ModelSymbols(self.compartments, self.requirements)
-
     @abstractmethod
-    def edges(self, symbols: ModelSymbols) -> Sequence[TransitionDef]:
-        pass
+    def symbols(self) -> ModelSymbols:
+        """The symbols which represent parts of this model."""
 
     @cached_property
+    @abstractmethod
     def transitions(self) -> Sequence[TransitionDef]:
         """The transitions in the model."""
-        return self.edges(self.symbols)
+
+    @cached_property
+    @abstractmethod
+    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
+        """The attributes required by this model."""
 
     @cached_property
     def num_compartments(self) -> int:
         """The number of compartments in this model."""
         return len(self.compartments)
-
-    @cached_property
-    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
-        """The attributes required by this model."""
-        return OrderedDict([
-            (AbsoluteName("gpm:all", "ipm", r.name), r)
-            for r in self.requirements
-        ])
 
     @cached_property
     def events(self) -> Sequence[EdgeDef]:
@@ -306,6 +311,201 @@ class CompartmentModel(ABC):
         except StopIteration:
             msg = f"No matching compartment found for name: {name}"
             raise ValueError(msg) from None
+
+
+############################################################
+# Single-strata Compartment Models
+############################################################
+
+
+class CompartmentModel(BaseCompartmentModel, ABC):
+    """
+    A compartment model definition and its corresponding metadata.
+    Effectively, a collection of compartments, transitions between compartments,
+    and the data parameters which are required to compute the transitions.
+    """
+
+    @cached_property
+    def symbols(self) -> ModelSymbols:
+        """The symbols which represent parts of this model."""
+        return ModelSymbols(
+            [(c.name, c.name) for c in self.compartments],
+            [(r.name, r.name) for r in self.requirements])
+
+    @cached_property
+    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
+        """The attributes required by this model."""
+        return OrderedDict([
+            (AbsoluteName(gpm_strata(DEFAULT_STRATA), "ipm", r.name), r)
+            for r in self.requirements
+        ])
+
+    @cached_property
+    @abstractmethod
+    def transitions(self) -> Sequence[TransitionDef]:
+        """The transitions in the model."""
+        return self.edges(self.symbols)
+
+    @abstractmethod
+    def edges(self, symbols: ModelSymbols) -> Sequence[TransitionDef]:
+        """
+        When implementing a CompartmentModel, override this method
+        to build the transition edges between compartments. You are
+        given a reference to this model's symbols library so you can
+        build expressions for the transition rates.
+        """
+
+
+############################################################
+# Multi-strata Compartment Models
+############################################################
+
+
+class MultistrataModelSymbols(ModelSymbols):
+    """IPM symbols needed in defining the model's transition rate expressions."""
+
+    all_meta_requirements: Sequence[Symbol]
+    """Meta-requirement symbols in definition order."""
+
+    _msymbols: dict[str, Symbol]
+    """Mapping of meta requirements name to symbol."""
+
+    strata: Sequence[str]
+    """The strata names used in this model."""
+
+    _strata_symbols: dict[str, ModelSymbols]
+    """
+    Mapping of strata name to the symbols of that strata.
+    The symbols within use their original names.
+    """
+
+    def __init__(self,
+                 strata: Sequence[tuple[str, CompartmentModel]],
+                 combined_compartments: Sequence[str],
+                 meta_requirements: Sequence[str]):
+        super().__init__(
+            # compartments have already been renamed
+            compartments=[(c, c) for c in combined_compartments],
+            # strata requirements have not been renamed
+            requirements=[
+                *((n, n)
+                  for strata_name, ipm in strata
+                  for r in ipm.requirements
+                  for n in [f"{r.name}_{strata_name}"]),
+                *((r, r) for r in meta_requirements),
+            ]
+        )
+
+        self.strata = [strata_name for strata_name, _ in strata]
+        self._strata_symbols = {
+            strata_name: ModelSymbols(
+                compartments=[(c.name, f"{c.name}_{strata_name}")
+                              for c in ipm.compartments],
+                requirements=[(r.name, f"{r.name}_{strata_name}")
+                              for r in ipm.requirements]
+            )
+            for strata_name, ipm in strata
+        }
+
+        ms = [(m, to_symbol(m)) for m in meta_requirements]
+        self.all_meta_requirements = [s for _, s in ms]
+        self._msymbols = dict(ms)
+
+    def strata_compartments(self, strata: str, *names: str) -> Sequence[Symbol]:
+        """
+        Select compartment symbols by name in a particular strata.
+        If `names` is non-empty, select those symbols by their original name.
+        If `names` is empty, return all symbols.
+        """
+        sym = self._strata_symbols[strata]
+        return sym.all_compartments if len(names) == 0 else sym.compartments(*names)
+
+    def strata_requirements(self, strata: str, *names: str) -> Sequence[Symbol]:
+        """
+        Select requirement symbols by name in a particular strata.
+        If `names` is non-empty, select those symbols by their original name.
+        If `names` is empty, return all symbols.
+        """
+        sym = self._strata_symbols[strata]
+        return sym.all_requirements if len(names) == 0 else sym.requirements(*names)
+
+
+MetaEdgeBuilder = Callable[[MultistrataModelSymbols], Sequence[TransitionDef]]
+"""A function for creating meta edges in a multistrata RUME."""
+
+
+class CombinedCompartmentModel(BaseCompartmentModel):
+    """A CompartmentModel constructed by combining others."""
+
+    compartments: Sequence[CompartmentDef]
+    """All compartments; renamed with strata."""
+    requirements: Sequence[AttributeDef]
+    """All requirements, including meta-requirements."""
+
+    _strata: Sequence[tuple[str, CompartmentModel]]
+    _meta_requirements: Sequence[AttributeDef]
+    _meta_edges: MetaEdgeBuilder
+
+    def __init__(self,
+                 strata: Sequence[tuple[str, CompartmentModel]],
+                 meta_requirements: Sequence[AttributeDef],
+                 meta_edges: MetaEdgeBuilder):
+
+        self._strata = strata
+        self._meta_requirements = meta_requirements
+        self._meta_edges = meta_edges
+
+        self.compartments = [
+            dataclasses.replace(comp, name=f"{comp.name}_{strata_name}")
+            for strata_name, ipm in strata
+            for comp in ipm.compartments
+        ]
+
+        self.requirements = [
+            *(r for _, ipm in strata for r in ipm.requirements),
+            *self._meta_requirements,
+        ]
+
+    @cached_property
+    def symbols(self) -> MultistrataModelSymbols:
+        """The symbols which represent parts of this model."""
+        return MultistrataModelSymbols(
+            strata=self._strata,
+            combined_compartments=[c.name for c in self.compartments],
+            meta_requirements=[r.name for r in self._meta_requirements])
+
+    @cached_property
+    def transitions(self) -> Sequence[TransitionDef]:
+        symbols = self.symbols
+
+        strata_mapping = list[dict[Symbol, Symbol]]()
+        all_cs = iter(symbols.all_compartments)
+        all_rs = iter(symbols.all_requirements)
+        for _, ipm in self._strata:
+            mapping = {}
+            old = ipm.symbols
+            for old_symbol in old.all_compartments:
+                mapping[old_symbol] = next(all_cs)
+            for old_symbol in old.all_requirements:
+                mapping[old_symbol] = next(all_rs)
+            strata_mapping.append(mapping)
+
+        return [
+            *(remap_transition(trx, mapping)
+                for (_, ipm), mapping in zip(self._strata, strata_mapping)
+                for trx in ipm.transitions),
+            *self._meta_edges(symbols),
+        ]
+
+    @cached_property
+    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
+        return OrderedDict([
+            *((AbsoluteName(gpm_strata(strata_name), "ipm", r.name), r)
+              for strata_name, ipm in self._strata
+              for r in ipm.requirements),
+            *((AbsoluteName(META_STRATA, "ipm", r.name), r)
+              for r in self._meta_requirements),
+        ])
 
     # def _validate(self) -> None:
     #     if len(self.symbols.compartments) == 0:

@@ -14,7 +14,7 @@ from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.params import (ParamExpressionTimeAndNode, ParamFunction,
                              ParamValue)
 from epymorph.rume import GEO_LABELS, Gpm, Rume
-from epymorph.simulation import NamespacedAttributeResolver
+from epymorph.simulation import NamespacedAttributeResolver, gpm_strata
 from epymorph.util import NumpyTypeError, check_ndarray, match
 
 _EvalFunction = Callable[
@@ -38,8 +38,8 @@ def _evaluation_context(
         data={**rume.params},
         children={
             # which falls back to GPM params, as scoped to that GPM
-            f"gpm:{strata}": Database[ParamValue]({
-                k.to_absolute(f"gpm:{strata}"): v
+            gpm_strata(strata): Database[ParamValue]({
+                k.to_absolute(gpm_strata(strata)): v
                 for k, v in gpm.params.items()
             })
             for strata, gpm in rume.original_gpms.items()
@@ -257,7 +257,7 @@ def initialize_rume(
     Initializer and combining the results. Raises InitException if anything goes wrong.
     """
     def init_strata(strata: str, gpm: Gpm) -> SimArray:
-        namespace = ModuleNamespace(f"gpm:{strata}", "init")
+        namespace = ModuleNamespace(gpm_strata(strata), "init")
         strata_dim = SimDimensions.build(
             rume.dim.tau_step_lengths,
             rume.dim.start_date,

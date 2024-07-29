@@ -547,3 +547,19 @@ class SimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
     def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
         """Defer processing to another instance of a SimulationFunction."""
         return self._ctx.defer(other)
+
+
+###############
+# Multistrata #
+###############
+
+
+DEFAULT_STRATA = "all"
+"""The strata name used as the default, primarily for single-strata simulations."""
+META_STRATA = "meta"
+"""A strata for information that concerns the other strata."""
+
+
+def gpm_strata(strata_name: str) -> str:
+    """The strata name for a GPM in a multistrata RUME."""
+    return f"gpm:{strata_name}"
