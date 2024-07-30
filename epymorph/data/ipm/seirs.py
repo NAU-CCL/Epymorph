@@ -27,8 +27,8 @@ class Seirs(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        S, E, I, R = symbols.all_compartments
-        β, σ, γ, ξ = symbols.all_requirements
+        [S, E, I, R] = symbols.all_compartments
+        [β, σ, γ, ξ] = symbols.all_requirements
 
         N = Max(1, S + E + I + R)
 

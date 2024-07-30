@@ -16,7 +16,7 @@ class Sirs(CompartmentModel):
         compartment('R'),
     ]
 
-    attributes = [
+    requirements = [
         AttributeDef('beta', type=float, shape=Shapes.TxN,
                      comment='infectivity'),
         AttributeDef('gamma', type=float, shape=Shapes.TxN,
@@ -26,8 +26,8 @@ class Sirs(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        S, I, R = symbols.all_compartments
-        β, γ, ξ = symbols.all_requirements
+        [S, I, R] = symbols.all_compartments
+        [β, γ, ξ] = symbols.all_requirements
 
         # formulate N so as to avoid dividing by zero;
         # this is safe in this instance because if the denominator is zero,

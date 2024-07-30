@@ -7,7 +7,7 @@ from typing import ClassVar, Generator, Iterable, NamedTuple
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
+from epymorph.compartment_model import (BaseCompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
 from epymorph.data_type import (AttributeArray, AttributeValue, SimArray,
                                 SimDType)
@@ -53,7 +53,7 @@ class CompiledFork:
 CompiledTransition = CompiledEdge | CompiledFork
 
 
-def _compile_transitions(model: CompartmentModel) -> list[CompiledTransition]:
+def _compile_transitions(model: BaseCompartmentModel) -> list[CompiledTransition]:
     # The parameters to pass to all rate lambdas
     rate_params = [*model.symbols.all_compartments, *model.symbols.all_requirements]
 
@@ -71,7 +71,7 @@ def _compile_transitions(model: CompartmentModel) -> list[CompiledTransition]:
     return [f(t) for t in model.transitions]
 
 
-def _make_apply_matrix(ipm: CompartmentModel) -> SimArray:
+def _make_apply_matrix(ipm: BaseCompartmentModel) -> SimArray:
     """
     Calc apply matrix; this matrix is used to apply a set of events
     to the compartments they impact. In general, an event indicates

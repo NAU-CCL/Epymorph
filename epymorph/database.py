@@ -86,14 +86,17 @@ class AbsoluteName:
         Parse a module name from a ::-delimited string, where strata and module
         can be omitted to be filled from defaults.
         """
+        def replace_star(string: str, default_value: str) -> str:
+            return default_value if string == "*" else string
+
         parts = name.split("::")
-        match len(parts):
-            case 1:
-                return cls(strata, module, *parts)
-            case 2:
-                return cls(strata, *parts)
-            case 3:
-                return cls(*parts)
+        match parts:
+            case [i]:
+                return cls(strata, module, i)
+            case [m, i]:
+                return cls(strata, replace_star(m, module), i)
+            case [s, m, i]:
+                return cls(replace_star(s, strata), replace_star(m, module), i)
             case _:
                 raise ValueError("Invalid number of parts for absolute name.")
 

@@ -38,11 +38,11 @@ def _evaluation_context(
         data={**rume.params},
         children={
             # which falls back to GPM params, as scoped to that GPM
-            gpm_strata(strata): Database[ParamValue]({
-                k.to_absolute(gpm_strata(strata)): v
+            gpm_strata(gpm.name): Database[ParamValue]({
+                k.to_absolute(gpm_strata(gpm.name)): v
                 for k, v in gpm.params.items()
             })
-            for strata, gpm in rume.original_gpms.items()
+            for gpm in rume.strata
         },
     )
     # If override_params is not empty, wrap vals_db in another fallback layer.
@@ -135,8 +135,6 @@ def _evaluation_context(
             msg = f"Invalid parameter: '{format_name(match_pattern)}' "\
                 "is a ParamFunction class instead of an instance."
             raise AttributeException(msg)
-
-        # elif isinstance(param, Adrio): # TODO: adrios as param values!
 
         elif isinstance(raw_value, np.ndarray):
             # numpy array: make a copy so we don't risk unexpected mutations
@@ -256,8 +254,8 @@ def initialize_rume(
     Executes Initializers for a multi-strata simulation by running each strata's
     Initializer and combining the results. Raises InitException if anything goes wrong.
     """
-    def init_strata(strata: str, gpm: Gpm) -> SimArray:
-        namespace = ModuleNamespace(gpm_strata(strata), "init")
+    def init_strata(gpm: Gpm) -> SimArray:
+        namespace = ModuleNamespace(gpm_strata(gpm.name), "init")
         strata_dim = SimDimensions.build(
             rume.dim.tau_step_lengths,
             rume.dim.start_date,
@@ -271,8 +269,8 @@ def initialize_rume(
 
     try:
         return np.column_stack([
-            init_strata(strata, gpm)
-            for strata, gpm in rume.original_gpms.items()
+            init_strata(gpm)
+            for gpm in rume.strata
         ])
     except InitException as e:
         raise e

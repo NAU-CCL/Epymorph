@@ -11,8 +11,8 @@ from epymorph.geography.us_census import StateScope
 from epymorph.movement.parser import (ALL_DAYS, DailyClause, MovementSpec,
                                       MoveSteps)
 from epymorph.movement.parser_util import Duration
-from epymorph.rume import (DEFAULT_STRATA, Gpm, Rume, RumeSymbols,
-                           combine_ipms, combine_tau_steps, remap_taus)
+from epymorph.rume import (DEFAULT_STRATA, Gpm, MultistrataRume, Rume,
+                           SingleStrataRume, combine_tau_steps, remap_taus)
 from epymorph.test import EpymorphTestCase
 
 
@@ -37,6 +37,7 @@ class Sir(CompartmentModel):
         ]
 
 
+# TODO: this test might need to move to compartment_model_test
 class CombineIpmTest(unittest.TestCase):
     def test_combine_1(self):
         sir = Sir()
@@ -212,7 +213,9 @@ class CombineMmTest(EpymorphTestCase):
             ],
         )
 
-        new_taus, new_mms = remap_taus([('a', mm1), ('b', mm2)])
+        new_mms = remap_taus([('a', mm1), ('b', mm2)])
+
+        new_taus = new_mms["a"].steps.step_lengths
         self.assertListAlmostEqual(new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertEqual(len(new_mms), 2)
 
@@ -234,7 +237,7 @@ class RumeTest(EpymorphTestCase):
         # Make sure centroids has the tau steps we will expect later...
         self.assertListAlmostEqual(centroids.steps.step_lengths, [1 / 3, 2 / 3])
 
-        rume = Rume.single_strata(
+        rume = SingleStrataRume.build(
             ipm=sir,
             mm=centroids,
             init=init.NoInfection(),
@@ -244,7 +247,6 @@ class RumeTest(EpymorphTestCase):
         )
         self.assertIs(sir, rume.ipm)
 
-        self.assertTrue(rume.is_single_strata)
         self.assertEqual(rume.dim.compartments, 3)
         self.assertEqual(rume.dim.events, 2)
         self.assertEqual(rume.dim.days, 180)
@@ -269,27 +271,28 @@ class RumeTest(EpymorphTestCase):
         # Make sure 'no' has the tau steps we will expect later...
         self.assertListAlmostEqual(no.steps.step_lengths, [1.0])
 
-        rume = Rume.multistrata(
+        rume = MultistrataRume.build(
             strata=[
-                ('aaa', Gpm(
+                Gpm(
+                    name="aaa",
                     ipm=sir,
                     mm=no,
                     init=init.SingleLocation(location=0, seed_size=100),
-                )),
-                ('bbb', Gpm(
+                ),
+                Gpm(
+                    name="bbb",
                     ipm=sir,
                     mm=no,
                     init=init.SingleLocation(location=0, seed_size=100),
-                )),
+                ),
             ],
-            meta_attributes=[],
+            meta_requirements=[],
             meta_edges=lambda _: [],
             scope=StateScope.in_states(['04', '35']),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params={},
         )
 
-        self.assertFalse(rume.is_single_strata)
         self.assertEqual(rume.dim.compartments, 6)
         self.assertEqual(rume.dim.events, 4)
         self.assertEqual(rume.dim.days, 180)
@@ -334,22 +337,22 @@ class RumeTest(EpymorphTestCase):
         # Make sure centroids has the tau steps we will expect later...
         self.assertListAlmostEqual(centroids.steps.step_lengths, [1 / 3, 2 / 3])
 
-        rume = Rume.multistrata(
+        rume = MultistrataRume.build(
             strata=[
-                ('aaa', Gpm(
+                Gpm(
+                    name="aaa",
                     ipm=sir,
                     mm=centroids,
                     init=init.NoInfection(),
-                )),
+                ),
             ],
-            meta_attributes=[],
+            meta_requirements=[],
             meta_edges=lambda _: [],
             scope=StateScope.in_states(['04', '35']),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params={},
         )
 
-        self.assertFalse(rume.is_single_strata)
         self.assertEqual(rume.dim.compartments, 3)
         self.assertEqual(rume.dim.events, 2)
         self.assertEqual(rume.dim.days, 180)

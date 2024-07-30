@@ -23,8 +23,8 @@ class Pei(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        S, I, R = symbols.all_compartments
-        D, L, H = symbols.all_requirements
+        [S, I, R] = symbols.all_compartments
+        [D, L, H] = symbols.all_requirements
 
         beta = (exp(-180 * H + log(2.0 - 1.3)) + 1.3) / D
 

@@ -13,6 +13,7 @@ from epymorph.error import (IpmSimInvalidProbsException,
 from epymorph.geo.static import StaticGeo
 from epymorph.geography.scope import CustomScope
 from epymorph.geography.us_census import StateScope
+from epymorph.rume import SingleStrataRume
 from epymorph.simulation import AttributeDef
 
 
@@ -32,8 +33,9 @@ class SimulateTest(unittest.TestCase):
 
     def test_pei(self):
 
+        # TODO: Remove use of GEO
         geo = self._pei_geo()
-        rume = Rume.single_strata(
+        rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
             init=init.SingleLocation(location=0, seed_size=10_000),
@@ -98,7 +100,7 @@ class SimulateTest(unittest.TestCase):
 
     def test_override_params(self):
         geo = self._pei_geo()
-        rume = Rume.single_strata(
+        rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
             init=init.SingleLocation(location=0, seed_size=10_000),
@@ -137,7 +139,7 @@ class SimulateTest(unittest.TestCase):
         """Test exception handling for a negative rate value due to a negative parameter"""
 
         geo = self._pei_geo()
-        rume = Rume.single_strata(
+        rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
             init=init.SingleLocation(location=0, seed_size=10_000),
@@ -201,7 +203,7 @@ class SimulateTest(unittest.TestCase):
                     edge(R, S, rate=ξ * R),
                 ]
 
-        rume = Rume.single_strata(
+        rume = SingleStrataRume.build(
             ipm=Sirs(),
             mm=mm_library['no'](),
             init=init.SingleLocation(location=1, seed_size=5),
@@ -237,7 +239,7 @@ class SimulateTest(unittest.TestCase):
     def test_negative_probs_error(self):
         """Test for handling negative probability error"""
         geo = self._pei_geo()
-        rume = Rume.single_strata(
+        rume = SingleStrataRume.build(
             ipm=ipm_library['sirh'](),
             mm=mm_library['no'](),
             init=init.SingleLocation(location=1, seed_size=5),
@@ -280,7 +282,7 @@ class SimulateTest(unittest.TestCase):
         """Test for handling invalid movement model clause application"""
 
         geo = self._pei_geo()
-        rume = Rume.single_strata(
+        rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
             init=init.SingleLocation(location=1, seed_size=5),

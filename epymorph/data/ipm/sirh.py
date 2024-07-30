@@ -33,8 +33,8 @@ class Sirh(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        S, I, R, H = symbols.all_compartments
-        β, γ, ξ, h_prob, h_dur = symbols.all_requirements
+        [S, I, R, H] = symbols.all_compartments
+        [β, γ, ξ, h_prob, h_dur] = symbols.all_requirements
 
         # formulate N so as to avoid dividing by zero;
         # this is safe in this instance because if the denominator is zero,

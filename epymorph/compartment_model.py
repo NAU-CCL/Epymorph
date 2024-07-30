@@ -341,7 +341,6 @@ class CompartmentModel(BaseCompartmentModel, ABC):
         ])
 
     @cached_property
-    @abstractmethod
     def transitions(self) -> Sequence[TransitionDef]:
         """The transitions in the model."""
         return self.edges(self.symbols)
@@ -507,6 +506,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
               for r in self._meta_requirements),
         ])
 
+    # TODO: compartment model validation checks!
     # def _validate(self) -> None:
     #     if len(self.symbols.compartments) == 0:
     #         msg = "CompartmentModel must contain at least one compartment."

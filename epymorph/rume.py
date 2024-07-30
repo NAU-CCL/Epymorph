@@ -302,6 +302,12 @@ class Rume(ABC):
         """Convenient function to retrieve the symbols used to represent simulation quantities."""
         return simulation_symbols(*symbols)
 
+    def with_time_frame(self, time_frame: TimeFrame) -> Self:
+        """Create a RUME with a new time frame."""
+        # TODO: do we need to go through all of the params and subset any that are time-based?
+        # How would that work? Or maybe reconciling to time frame happens at param evaluation time...
+        return dataclasses.replace(self, time_frame=time_frame)
+
 
 @dataclass(frozen=True)
 class SingleStrataRume(Rume):
@@ -370,12 +376,6 @@ class MultistrataRume(Rume):
                 for k, v in params.items()
             }
         )
-
-    def with_time_frame(self, time_frame: TimeFrame) -> 'MultistrataRume':
-        """Create a RUME with a new time frame."""
-        # TODO: do we need to go through all of the params and subset any that are time-based?
-        # How would that work? Or maybe reconciling to time frame happens at param evaluation time...
-        return dataclasses.replace(self, time_frame=time_frame)
 
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
         """Returns a function for formatting attribute/parameter names."""

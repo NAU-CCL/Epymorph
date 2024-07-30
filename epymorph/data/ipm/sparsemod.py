@@ -25,7 +25,7 @@ class Sparsemod(CompartmentModel):
         compartment('R', description='recovered'),
     ]
 
-    attributes = [
+    requirements = [
         AttributeDef('beta', type=float, shape=Shapes.TxN),
         AttributeDef('omega_1', type=float, shape=Shapes.TxN),
         AttributeDef('omega_2', type=float, shape=Shapes.TxN),
