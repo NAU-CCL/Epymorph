@@ -1,5 +1,4 @@
 import os
-from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal
 
@@ -17,132 +16,6 @@ from epymorph.geography.us_census import (STATE, CensusScope, CountyScope,
                                           state_code_to_fips)
 
 KeySpecifier = Literal['state_abbrev', 'county_state', 'geoid']
-
-
-@dataclass
-class _BaseCSVSpec():
-    file_path: os.PathLike
-    key_col: int
-    data_col: int
-    data_type: dtype
-    key_type: KeySpecifier
-    skiprows: int | None
-
-
-@dataclass
-class CSVSpec(_BaseCSVSpec):
-    """Dataclass to store parameters for CSV ADRIO with data shape N."""
-
-
-@dataclass
-class CSVSpecTime(_BaseCSVSpec):
-    """Dataclass to store parameters for time-series CSV ADRIO with data shape TxN."""
-    time_period: TimePeriod
-    time_col: int
-
-
-@dataclass
-class _BaseCSVSpecMatrix():
-    file_path: os.PathLike
-    from_key_col: int
-    to_key_col: int
-    data_col: int
-    data_type: dtype
-    key_type: KeySpecifier
-    skiprows: int | None
-
-
-@dataclass
-class CSVSpecMatrix(_BaseCSVSpecMatrix):
-    """Dataclass to store parameters for CSV ADRIO with data shape NxN."""
-
-
-def _single_column(scope: GeoScope, spec: CSVSpec | CSVSpecTime) -> NDArray[Any]:
-    """Makes an ADRIO to fetch data from a single relevant column in a .csv file."""
-    if spec.key_col == spec.data_col:
-        msg = "Key column and data column must not be the same."
-        raise GeoValidationException(msg)
-
-    df = _load_from_file(spec, scope)
-
-    # check for null values (missing data in file)
-    if df[spec.data_col].isnull().any():
-        msg = f"Data for required geographies missing from CSV file or could not be found."
-        raise DataResourceException(msg)
-
-    if isinstance(spec, CSVSpec):
-        df.rename(columns={spec.key_col: 'key'}, inplace=True)
-        df.sort_values(by='key', inplace=True)
-        return df[spec.data_col].to_numpy(dtype=spec.data_type)
-    else:
-        if not isinstance(spec.time_period, SpecificTimePeriod):
-            raise GeoValidationException("Unsupported time period.")
-
-        df[spec.time_col] = df[spec.time_col].apply(date.fromisoformat)
-
-        if any(df[spec.time_col] < spec.time_period.start_date) or any(df[spec.time_col] > spec.time_period.end_date):
-            msg = "Found time column value(s) outside of provided date range."
-            raise DataResourceException(msg)
-
-        df.rename(columns={spec.key_col: 'key', spec.data_col: 'data',
-                           spec.time_col: 'time'}, inplace=True)
-        df.sort_values(by=['time', 'key'], inplace=True)
-        df = df.pivot(index='time', columns='key', values='data')
-        return df.to_numpy(dtype=spec.data_type)
-
-
-def _matrix(scope: GeoScope, spec: CSVSpecMatrix) -> NDArray[Any]:
-    """Makes an ADRIO to fetch data from a single column within a .csv file and converts it to matrix format."""
-    if len({spec.from_key_col, spec.to_key_col, spec.data_col}) != 3:
-        msg = "From key column, to key column, and data column must all be unique."
-        raise GeoValidationException(msg)
-
-    df = _load_from_file(spec, scope)
-
-    df = df.pivot(index=spec.from_key_col, columns=spec.to_key_col,
-                  values=spec.data_col)
-
-    df.sort_index(axis=0, inplace=True)
-    df.sort_index(axis=1, inplace=True)
-
-    df.fillna(0, inplace=True)
-
-    return df.to_numpy(dtype=spec.data_type)
-
-
-def _load_from_file(spec: CSVSpec | CSVSpecTime | CSVSpecMatrix, scope: GeoScope) -> DataFrame:
-    """
-    Loads .csv at path location into a pandas DataFrame, filtering out data outside of the specified
-    geographic scope and time period.
-    Returns a DataFrame with the resulting data.
-    """
-    path = spec.file_path
-    if os.path.exists(path):
-        if isinstance(spec, CSVSpec | CSVSpecTime):
-            if spec.skiprows is not None:
-                df = read_csv(path, skiprows=spec.skiprows,
-                              header=None, dtype={spec.key_col: str})
-            else:
-                df = read_csv(path, header=None, dtype={spec.key_col: str})
-        else:
-            if spec.skiprows is not None:
-                df = read_csv(path, skiprows=spec.skiprows, header=None, dtype={
-                    spec.from_key_col: str, spec.to_key_col: str})
-            else:
-                df = read_csv(path, header=None, dtype={
-                    spec.from_key_col: str, spec.to_key_col: str})
-
-        if isinstance(spec, CSVSpec | CSVSpecTime):
-            df = _parse_label(spec.key_type, scope, df, spec.key_col)
-        else:
-            df = _parse_label(spec.key_type, scope, df,
-                              spec.from_key_col, spec.to_key_col)
-
-        return df
-
-    else:
-        msg = f"File {spec.file_path} not found"
-        raise DataResourceException(msg)
 
 
 def _parse_label(key_type: KeySpecifier, scope: GeoScope, df: DataFrame, key_col: int, key_col2: int | None = None) -> DataFrame:
@@ -255,19 +128,151 @@ def _parse_geoid(scope: GeoScope, df: DataFrame, key_col: int, key_col2: int | N
 
 
 def _validate_result(scope: GeoScope, data: Series) -> None:
-    """Ensures that key column for an attribute contains exactly one entry for every node in the scope."""
+    """Ensures that the key column for an attribute contains at least one entry for every node in the scope."""
     if set(data) != set(scope.get_node_ids()):
         msg = "Key column missing keys for geographies in scope or contains unrecognized keys."
         raise DataResourceException(msg)
 
 
 class CSV(Adrio[Any]):
+    """Retrieves an N-shaped array of any type from a user-provided CSV file."""
 
-    def __init__(self, csv_spec: CSVSpec | CSVSpecTime | CSVSpecMatrix) -> None:
-        self.spec = csv_spec
+    key_type: KeySpecifier
+
+    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
+        self.file_path = file_path
+        self.key_col = key_col
+        self.data_col = data_col
+        self.data_type = data_type
+        self.key_type = key_type
+        self.skiprows = skiprows
 
     def evaluate(self) -> NDArray[Any]:
-        if isinstance(self.spec, CSVSpec) or isinstance(self.spec, CSVSpecTime):
-            return _single_column(self.scope, self.spec)
+
+        if self.key_col == self.data_col:
+            msg = "Key column and data column must not be the same."
+            raise GeoValidationException(msg)
+
+        path = self.file_path
+        if os.path.exists(path):
+            if self.skiprows is not None:
+                df = read_csv(path, skiprows=self.skiprows,
+                              header=None, dtype={self.key_col: str})
+            else:
+                df = read_csv(path, header=None, dtype={self.key_col: str})
+
+            df = _parse_label(self.key_type, self.scope, df, self.key_col)
+
+            if df[self.data_col].isnull().any():
+                msg = f"Data for required geographies missing from CSV file or could not be found."
+                raise DataResourceException(msg)
+
+            df.rename(columns={self.key_col: 'key'}, inplace=True)
+            df.sort_values(by='key', inplace=True)
+            return df[self.data_col].to_numpy(dtype=self.data_type)
+
         else:
-            return _matrix(self.scope, self.spec)
+            msg = f"File {self.file_path} not found"
+            raise DataResourceException(msg)
+
+
+class CSVTimeSeries(Adrio[Any]):
+    """Retrieves a TxN-shaped array of any type from a user-provided CSV file."""
+
+    key_type: KeySpecifier
+
+    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None, time_period: TimePeriod, time_col: int):
+        self.file_path = file_path
+        self.key_col = key_col
+        self.data_col = data_col
+        self.data_type = data_type
+        self.key_type = key_type
+        self.skiprows = skiprows
+        self.time_period = time_period
+        self.time_col = time_col
+
+    def evaluate(self) -> NDArray[Any]:
+
+        if self.key_col == self.data_col:
+            msg = "Key column and data column must not be the same."
+            raise GeoValidationException(msg)
+
+        path = self.file_path
+        if os.path.exists(path):
+            if self.skiprows is not None:
+                df = read_csv(path, skiprows=self.skiprows,
+                              header=None, dtype={self.key_col: str})
+            else:
+                df = read_csv(path, header=None, dtype={self.key_col: str})
+
+            df = _parse_label(self.key_type, self.scope, df, self.key_col)
+
+            if df[self.data_col].isnull().any():
+                msg = f"Data for required geographies missing from CSV file or could not be found."
+                raise DataResourceException(msg)
+
+            if not isinstance(self.time_period, SpecificTimePeriod):
+                raise GeoValidationException("Unsupported time period.")
+
+            df[self.time_col] = df[self.time_col].apply(date.fromisoformat)
+
+            if any(df[self.time_col] < self.time_period.start_date) or any(df[self.time_col] > self.time_period.end_date):
+                msg = "Found time column value(s) outside of provided date range."
+                raise DataResourceException(msg)
+
+            df.rename(columns={self.key_col: 'key', self.data_col: 'data',
+                               self.time_col: 'time'}, inplace=True)
+            df.sort_values(by=['time', 'key'], inplace=True)
+            df = df.pivot(index='time', columns='key', values='data')
+            return df.to_numpy(dtype=self.data_type)
+
+        else:
+            msg = f"File {self.file_path} not found"
+            raise DataResourceException(msg)
+
+
+class CSVMatrix(Adrio[Any]):
+    """Recieves an NxN-shaped array of any type from a user-provided CSV file."""
+
+    key_type: KeySpecifier
+
+    def __init__(self, file_path: os.PathLike, from_key_col: int, to_key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
+        self.file_path = file_path
+        self.from_key_col = from_key_col
+        self.to_key_col = to_key_col
+        self.data_col = data_col
+        self.data_type = data_type
+        self.key_type = key_type
+        self.skiprows = skiprows
+
+    def evaluate(self) -> NDArray[Any]:
+
+        if len({self.from_key_col, self.to_key_col, self.data_col}) != 3:
+            msg = "From key column, to key column, and data column must all be unique."
+            raise GeoValidationException(msg)
+
+        path = self.file_path
+        if os.path.exists(path):
+            if self.skiprows is not None:
+                df = read_csv(path, skiprows=self.skiprows, header=None, dtype={
+                    self.from_key_col: str, self.to_key_col: str})
+            else:
+                df = read_csv(path, header=None, dtype={
+                    self.from_key_col: str, self.to_key_col: str})
+
+            df = _parse_label(self.key_type, self.scope, df,
+                              self.from_key_col, self.to_key_col)
+
+            df = df.pivot(index=self.from_key_col,
+                          columns=self.to_key_col, values=self.data_col)
+
+            df.sort_index(axis=0, inplace=True)
+            df.sort_index(axis=1, inplace=True)
+
+            df.fillna(0, inplace=True)
+
+            return df.to_numpy(dtype=self.data_type)
+
+        else:
+            msg = f"File {self.file_path} not found"
+            raise DataResourceException(msg)
