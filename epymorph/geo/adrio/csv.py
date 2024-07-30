@@ -156,12 +156,15 @@ def _parse_label(key_type: KeySpecifier, scope: GeoScope, df: DataFrame, key_col
             result = _parse_abbrev(scope, df, key_col, key_col2)
 
         case "county_state":
-            result = _parse_county_state(scope, df, key_col)
+            result = _parse_county_state(scope, df, key_col, key_col2)
 
         case "geoid":
             result = _parse_geoid(scope, df, key_col, key_col2)
 
     _validate_result(scope, result[key_col])
+
+    if key_col2 is not None:
+        _validate_result(scope, result[key_col2])
 
     return result
 
@@ -177,8 +180,13 @@ def _parse_abbrev(scope: GeoScope, df: DataFrame, key_col: int, key_col2: int | 
         if df[key_col].isnull().any():
             raise DataResourceException("Invalid state code in key column.")
         df = df[df[key_col].isin(scope.get_node_ids())]
+
         if key_col2 is not None:
+            df[key_col2] = [state_mapping.get(x) for x in df[key_col2]]
+            if df[key_col2].isnull().any():
+                raise DataResourceException("Invalid state code in second key column.")
             df = df[df[key_col2].isin(scope.get_node_ids())]
+
         return df
 
     else:
@@ -186,7 +194,7 @@ def _parse_abbrev(scope: GeoScope, df: DataFrame, key_col: int, key_col2: int | 
         raise DataResourceException(msg)
 
 
-def _parse_county_state(scope: GeoScope, df: DataFrame, key_col: int) -> DataFrame:
+def _parse_county_state(scope: GeoScope, df: DataFrame, key_col: int, key_col2: int | None = None) -> DataFrame:
     """
     Replaces values in label column containing county and state names (i.e. Maricopa, Arizona)
     with state county fips codes and filters out any not in the specified geographic scope.
@@ -218,6 +226,10 @@ def _parse_county_state(scope: GeoScope, df: DataFrame, key_col: int) -> DataFra
     # merge with csv dataframe and set key column to geoid
     df = df.merge(counties_info_df, how='left', left_on=key_col, right_on='name')
     df[key_col] = df['geoid']
+
+    if key_col2 is not None:
+        df = df.merge(counties_info_df, how='left', left_on=key_col2, right_on='name')
+        df[key_col2] = df['geoid_y']
 
     return df
 
