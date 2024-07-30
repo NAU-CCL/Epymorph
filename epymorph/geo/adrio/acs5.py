@@ -194,6 +194,10 @@ def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
 
 
 class Population(Adrio[np.int64]):
+    """
+    Retrieves an N-shaped array of integers representing the total population of each geographic node.
+    Data is retrieved from Census table variable B01001_001 using ACS5 5-year estimates.
+    """
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
@@ -204,6 +208,10 @@ class Population(Adrio[np.int64]):
 
 
 class PopulationByAgeTable(Adrio[np.int64]):
+    """
+    Creates a table of population data for each geographic node split into various age categories.
+    Data is retrieved from Census table B01001 using ACS5 5-year estimates. 
+    """
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
@@ -261,6 +269,12 @@ class AgeRange(NamedTuple):
 
 
 class PopulationByAge(Adrio[np.int64]):
+    """
+    Retrieves an N-shaped array of integers representing the total population
+    within a specified age range for each geographic node.
+    Data is retrieved from a population by age table constructed from Census table B01001.
+    """
+
     POP_BY_AGE_TABLE = AttributeDef('population_by_age_table', int, Shapes.NxA)
 
     attributes = [POP_BY_AGE_TABLE]
@@ -299,6 +313,11 @@ class PopulationByAge(Adrio[np.int64]):
 
 
 class AverageHouseholdSize(Adrio[np.int64]):
+    """
+    Retrieves an N-shaped array of integers representing the average number of people
+    living in each household for every geographic node.
+    Data is retrieved from Census table variable B25010_001 using ACS5 5-year estimates.
+    """
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
@@ -309,6 +328,11 @@ class AverageHouseholdSize(Adrio[np.int64]):
 
 
 class DissimilarityIndex(Adrio[np.float64]):
+    """
+    Calculates an N-shaped array of floats representing the amount of racial segregation between a specified
+    racial majority and minority groups on a scale of 0 (complete integration) to 1 (complete segregation).
+    Data is calculated using population data from Census table B02001 using ACS5 5-year estimates.
+    """
 
     RaceCategory = Literal[
         'White', 'Black',
@@ -369,6 +393,11 @@ class DissimilarityIndex(Adrio[np.float64]):
 
 
 class GiniIndex(Adrio[np.float64]):
+    """
+    Retrieves an N-shaped array of floats representing the amount of income inequality on a scale of
+    0 (perfect equality) to 1 (perfect inequality) for each geographic node.
+    Data is retrieved from Census table variable B19083_001 using ACS 5-year estimates.
+    """
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -393,6 +422,10 @@ class GiniIndex(Adrio[np.float64]):
 
 
 class MedianAge(Adrio[np.float64]):
+    """
+    Retrieves an N-shaped array of floats representing the median age in each geographic node.
+    Data is retrieved from Census table variable B01002_001 using ACS 5-year estimates.
+    """
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -403,6 +436,10 @@ class MedianAge(Adrio[np.float64]):
 
 
 class MedianIncome(Adrio[np.float64]):
+    """
+    Retrieves an N-shaped array of floats representing the median yearly income in each geographic node.
+    Data is retrieved from Census table variable B19013_001 using ACS 5-year estimates.
+    """
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
