@@ -141,11 +141,17 @@ class CSV(Adrio[Any]):
 
     def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
+        """The path to the CSV file containing data."""
         self.key_col = key_col
+        """Numerical index of the column containing information to identify geographies."""
         self.data_col = data_col
+        """Numerical index of the column containing the data of interest."""
         self.data_type = data_type
+        """The data type of values in the data column."""
         self.key_type = key_type
+        """The type of geographic identifier in the key column."""
         self.skiprows = skiprows
+        """Number of header rows in the file to be skipped."""
 
     def evaluate(self) -> NDArray[Any]:
 
@@ -154,17 +160,15 @@ class CSV(Adrio[Any]):
             raise GeoValidationException(msg)
 
         path = self.file_path
+        # workaround for bad pandas type definitions
+        skiprows: int = self.skiprows  # type: ignore
         if os.path.exists(path):
-            if self.skiprows is not None:
-                df = read_csv(path, skiprows=self.skiprows,
-                              header=None, dtype={self.key_col: str})
-            else:
-                df = read_csv(path, header=None, dtype={self.key_col: str})
-
+            df = read_csv(path, skiprows=skiprows,
+                          header=None, dtype={self.key_col: str})
             df = _parse_label(self.key_type, self.scope, df, self.key_col)
 
             if df[self.data_col].isnull().any():
-                msg = f"Data for required geographies missing from CSV file or could not be found."
+                msg = "Data for required geographies missing from CSV file or could not be found."
                 raise DataResourceException(msg)
 
             df.rename(columns={self.key_col: 'key'}, inplace=True)
@@ -183,13 +187,21 @@ class CSVTimeSeries(Adrio[Any]):
 
     def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None, time_period: TimePeriod, time_col: int):
         self.file_path = file_path
+        """The path to the CSV file containing data."""
         self.key_col = key_col
+        """Numerical index of the column containing information to identify geographies."""
         self.data_col = data_col
+        """Numerical index of the column containing the data of interest."""
         self.data_type = data_type
+        """The data type of values in the data column."""
         self.key_type = key_type
+        """The type of geographic identifier in the key column."""
         self.skiprows = skiprows
+        """Number of header rows in the file to be skipped."""
         self.time_period = time_period
+        """The time period encompassed by data in the file."""
         self.time_col = time_col
+        """The numerical index of the column containing time information."""
 
     def evaluate(self) -> NDArray[Any]:
 
@@ -198,17 +210,14 @@ class CSVTimeSeries(Adrio[Any]):
             raise GeoValidationException(msg)
 
         path = self.file_path
+        skiprows: int = self.skiprows  # type: ignore
         if os.path.exists(path):
-            if self.skiprows is not None:
-                df = read_csv(path, skiprows=self.skiprows,
-                              header=None, dtype={self.key_col: str})
-            else:
-                df = read_csv(path, header=None, dtype={self.key_col: str})
-
+            df = read_csv(path, skiprows=skiprows,
+                          header=None, dtype={self.key_col: str})
             df = _parse_label(self.key_type, self.scope, df, self.key_col)
 
             if df[self.data_col].isnull().any():
-                msg = f"Data for required geographies missing from CSV file or could not be found."
+                msg = "Data for required geographies missing from CSV file or could not be found."
                 raise DataResourceException(msg)
 
             if not isinstance(self.time_period, SpecificTimePeriod):
@@ -238,12 +247,19 @@ class CSVMatrix(Adrio[Any]):
 
     def __init__(self, file_path: os.PathLike, from_key_col: int, to_key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
+        """The path to the CSV file containing data."""
         self.from_key_col = from_key_col
+        """Numerical index of the column containing information to identify source geographies."""
         self.to_key_col = to_key_col
+        """Numerical index of the column containing information to identify destination geographies."""
         self.data_col = data_col
+        """Numerical index of the column containing the data of interest."""
         self.data_type = data_type
+        """The data type of values in the data column."""
         self.key_type = key_type
+        """The type of geographic identifier in the key columns."""
         self.skiprows = skiprows
+        """Number of header rows in the file to be skipped."""
 
     def evaluate(self) -> NDArray[Any]:
 
@@ -252,14 +268,10 @@ class CSVMatrix(Adrio[Any]):
             raise GeoValidationException(msg)
 
         path = self.file_path
+        skiprows: int = self.skiprows  # type: ignore
         if os.path.exists(path):
-            if self.skiprows is not None:
-                df = read_csv(path, skiprows=self.skiprows, header=None, dtype={
-                    self.from_key_col: str, self.to_key_col: str})
-            else:
-                df = read_csv(path, header=None, dtype={
-                    self.from_key_col: str, self.to_key_col: str})
-
+            df = read_csv(path, skiprows=skiprows, header=None, dtype={
+                self.from_key_col: str, self.to_key_col: str})
             df = _parse_label(self.key_type, self.scope, df,
                               self.from_key_col, self.to_key_col)
 
