@@ -312,19 +312,19 @@ class PopulationByAge(Adrio[np.int64]):
         return table[:, col_mask].sum(axis=1)
 
 
-class AverageHouseholdSize(Adrio[np.int64]):
+class AverageHouseholdSize(Adrio[np.float64]):
     """
-    Retrieves an N-shaped array of integers representing the average number of people
+    Retrieves an N-shaped array of floats representing the average number of people
     living in each household for every geographic node.
     Data is retrieved from Census table variable B25010_001 using ACS5 5-year estimates.
     """
 
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
         scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B25010_001E'], scope)
-        return df['B25010_001E'].to_numpy(dtype=np.int64)
+        return df['B25010_001E'].to_numpy(dtype=np.float64)
 
 
 class DissimilarityIndex(Adrio[np.float64]):
@@ -432,7 +432,7 @@ class MedianAge(Adrio[np.float64]):
         scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B01002_001E'], scope)
-        return df['B01002_001E'].to_numpy(dtype=np.int64)
+        return df['B01002_001E'].to_numpy(dtype=np.float64)
 
 
 class MedianIncome(Adrio[np.float64]):
@@ -446,4 +446,4 @@ class MedianIncome(Adrio[np.float64]):
         scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B19013_001E'], scope)
-        return df['B19013_001E'].to_numpy(dtype=np.int64)
+        return df['B19013_001E'].to_numpy(dtype=np.float64)
