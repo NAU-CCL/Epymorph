@@ -29,14 +29,14 @@ class Commuters(Adrio[np.int64]):
         if year not in [2010, 2015, 2020]:
             # if invalid year is close to a valid year, fetch valid data and notify user
             passed_year = year
-            if year in range(2008, 2013):
+            if year in range(2010, 2015):
                 year = 2010
-            elif year in range(2013, 2018):
+            elif year in range(2015, 2020):
                 year = 2015
-            elif year in range(2018, 2023):
+            elif year in range(2020, 2024):
                 year = 2020
             else:
-                msg = "Invalid year. Communting data is only available for 2008-2022"
+                msg = "Invalid year. Communting data is only available for 2010-2023"
                 raise DataResourceException(msg)
 
             print(
@@ -65,11 +65,18 @@ class Commuters(Adrio[np.int64]):
 
             header_num = 4
 
+        node_ids = scope.get_node_ids()
+
+        # a discrepancy exists in data for Connecticut counties in 2020 and 2021
+        # raise an exception if this data is requested for these years.
+        if year in [2020, 2021] and any(connecticut_county in node_ids for connecticut_county in ['09001', '09003', '09005', '09007', '09009', '09011', '09013', '09015']):
+            msg = "Commuting flows data cannot be retrieved for connecticut counties for years 2020 or 2021."
+            raise DataResourceException(msg)
+
         # download communter data spreadsheet as a pandas dataframe
         df = read_excel(url, header=header_num, names=all_fields, dtype={
             'res_state_code': str, 'wrk_state_code': str, 'res_county_code': str, 'wrk_county_code': str})
 
-        node_ids = scope.get_node_ids()
         match scope.granularity:
             case 'state':
                 df.rename(columns={'res_state_code': 'res_geoid',
