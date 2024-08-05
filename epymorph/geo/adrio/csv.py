@@ -137,21 +137,26 @@ def _validate_result(scope: GeoScope, data: Series) -> None:
 class CSV(Adrio[Any]):
     """Retrieves an N-shaped array of any type from a user-provided CSV file."""
 
+    file_path: os.PathLike
+    """The path to the CSV file containing data."""
+    key_col: int
+    """Numerical index of the column containing information to identify geographies."""
+    data_col: int
+    """Numerical index of the column containing the data of interest."""
+    data_type: dtype
+    """The data type of values in the data column."""
     key_type: KeySpecifier
+    """The type of geographic identifier in the key column."""
+    skiprows: int | None
+    """Number of header rows in the file to be skipped."""
 
     def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
-        """The path to the CSV file containing data."""
         self.key_col = key_col
-        """Numerical index of the column containing information to identify geographies."""
         self.data_col = data_col
-        """Numerical index of the column containing the data of interest."""
         self.data_type = data_type
-        """The data type of values in the data column."""
         self.key_type = key_type
-        """The type of geographic identifier in the key column."""
         self.skiprows = skiprows
-        """Number of header rows in the file to be skipped."""
 
     def evaluate(self) -> NDArray[Any]:
 
@@ -183,25 +188,32 @@ class CSV(Adrio[Any]):
 class CSVTimeSeries(Adrio[Any]):
     """Retrieves a TxN-shaped array of any type from a user-provided CSV file."""
 
+    file_path: os.PathLike
+    """The path to the CSV file containing data."""
+    key_col: int
+    """Numerical index of the column containing information to identify geographies."""
+    data_col: int
+    """Numerical index of the column containing the data of interest."""
+    data_type: dtype
+    """The data type of values in the data column."""
     key_type: KeySpecifier
+    """The type of geographic identifier in the key column."""
+    skiprows: int | None
+    """Number of header rows in the file to be skipped."""
+    time_period: TimePeriod
+    """The time period encompassed by data in the file."""
+    time_col: int
+    """The numerical index of the column containing time information."""
 
     def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None, time_period: TimePeriod, time_col: int):
         self.file_path = file_path
-        """The path to the CSV file containing data."""
         self.key_col = key_col
-        """Numerical index of the column containing information to identify geographies."""
         self.data_col = data_col
-        """Numerical index of the column containing the data of interest."""
         self.data_type = data_type
-        """The data type of values in the data column."""
         self.key_type = key_type
-        """The type of geographic identifier in the key column."""
         self.skiprows = skiprows
-        """Number of header rows in the file to be skipped."""
         self.time_period = time_period
-        """The time period encompassed by data in the file."""
         self.time_col = time_col
-        """The numerical index of the column containing time information."""
 
     def evaluate(self) -> NDArray[Any]:
 
@@ -243,23 +255,29 @@ class CSVTimeSeries(Adrio[Any]):
 class CSVMatrix(Adrio[Any]):
     """Recieves an NxN-shaped array of any type from a user-provided CSV file."""
 
+    file_path: os.PathLike
+    """The path to the CSV file containing data."""
+    from_key_col: int
+    """Numerical index of the column containing information to identify source geographies."""
+    to_key_col: int
+    """Numerical index of the column containing information to identify destination geographies."""
+    data_col: int
+    """Numerical index of the column containing the data of interest."""
+    data_type: dtype
+    """The data type of values in the data column."""
     key_type: KeySpecifier
+    """The type of geographic identifier in the key columns."""
+    skiprows: int | None
+    """Number of header rows in the file to be skipped."""
 
     def __init__(self, file_path: os.PathLike, from_key_col: int, to_key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
-        """The path to the CSV file containing data."""
         self.from_key_col = from_key_col
-        """Numerical index of the column containing information to identify source geographies."""
         self.to_key_col = to_key_col
-        """Numerical index of the column containing information to identify destination geographies."""
         self.data_col = data_col
-        """Numerical index of the column containing the data of interest."""
         self.data_type = data_type
-        """The data type of values in the data column."""
         self.key_type = key_type
-        """The type of geographic identifier in the key columns."""
         self.skiprows = skiprows
-        """Number of header rows in the file to be skipped."""
 
     def evaluate(self) -> NDArray[Any]:
 
