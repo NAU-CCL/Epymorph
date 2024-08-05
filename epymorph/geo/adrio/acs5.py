@@ -3,7 +3,7 @@ import os
 import re
 from collections import defaultdict
 from functools import cache
-from typing import NamedTuple, TypeGuard
+from typing import Literal, NamedTuple, TypeGuard
 from urllib.request import urlopen
 
 import numpy as np
@@ -15,10 +15,12 @@ from pandas import DataFrame
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
 from epymorph.geo.adrio.adrio2 import Adrio
+from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
                                           BlockGroupScope, CensusScope,
                                           CountyScope, StateScope,
-                                          StateScopeAll, TractScope)
+                                          StateScopeAll, TractScope,
+                                          get_census_granularity)
 from epymorph.simulation import AttributeDef
 from epymorph.util import filter_with_mask
 
@@ -50,6 +52,14 @@ def _get_group_vars(year: int, group: str) -> list[tuple[str, dict]]:
         for name, attrs in _get_vars(year).items()
         if attrs['group'] == group
     ), key=lambda x: x[0])
+
+
+def _validate_scope(scope: GeoScope) -> CensusScope:
+    if not isinstance(scope, CensusScope):
+        msg = "Census scope is required for ACS5 attributes."
+        raise DataResourceException(msg)
+
+    return scope
 
 
 def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
@@ -184,22 +194,28 @@ def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
 
 
 class Population(Adrio[np.int64]):
+    """
+    Retrieves an N-shaped array of integers representing the total population of each geographic node.
+    Data is retrieved from Census table variable B01001_001 using ACS5 5-year estimates.
+    """
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+        scope = _validate_scope(scope)
 
         df = _fetch_acs5(['B01001_001E'], scope)
         return df['B01001_001E'].to_numpy(dtype=np.int64)
 
 
 class PopulationByAgeTable(Adrio[np.int64]):
+    """
+    Creates a table of population data for each geographic node split into various age categories.
+    Data is retrieved from Census table B01001 using ACS5 5-year estimates. 
+    """
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+        scope = _validate_scope(scope)
 
         # NOTE: asking acs5 explicitly for the [B01001_001E, ...] vars
         # seems to be about twice as fast as asking for group(B01001)
@@ -253,6 +269,12 @@ class AgeRange(NamedTuple):
 
 
 class PopulationByAge(Adrio[np.int64]):
+    """
+    Retrieves an N-shaped array of integers representing the total population
+    within a specified age range for each geographic node.
+    Data is retrieved from a population by age table constructed from Census table B01001.
+    """
+
     POP_BY_AGE_TABLE = AttributeDef('population_by_age_table', int, Shapes.NxA)
 
     requirements = [POP_BY_AGE_TABLE]
@@ -264,8 +286,7 @@ class PopulationByAge(Adrio[np.int64]):
 
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
-        if not isinstance(scope, CensusScope):
-            raise DataResourceException("booo")
+        scope = _validate_scope(scope)
 
         age_ranges = [
             AgeRange.parse(attrs['label'])
@@ -289,3 +310,140 @@ class PopulationByAge(Adrio[np.int64]):
 
         table = self.data(self.POP_BY_AGE_TABLE)
         return table[:, col_mask].sum(axis=1)
+
+
+class AverageHouseholdSize(Adrio[np.float64]):
+    """
+    Retrieves an N-shaped array of floats representing the average number of people
+    living in each household for every geographic node.
+    Data is retrieved from Census table variable B25010_001 using ACS5 5-year estimates.
+    """
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
+
+        df = _fetch_acs5(['B25010_001E'], scope)
+        return df['B25010_001E'].to_numpy(dtype=np.float64)
+
+
+class DissimilarityIndex(Adrio[np.float64]):
+    """
+    Calculates an N-shaped array of floats representing the amount of racial segregation between a specified
+    racial majority and minority groups on a scale of 0 (complete integration) to 1 (complete segregation).
+    Data is calculated using population data from Census table B02001 using ACS5 5-year estimates.
+    """
+
+    RaceCategory = Literal[
+        'White', 'Black',
+        'Native', 'Asian',
+        'Pacific Islander', 'Other'
+    ]
+
+    race_variables: dict[RaceCategory, str] = {
+        'White': 'B02001_002E',
+        'Black': 'B02001_003E',
+        'Native': 'B02001_004E',
+        'Asian': 'B02001_005E',
+        'Pacific Islander': 'B02001_006E',
+        'Other': 'B02001_007E'
+    }
+
+    majority_pop: RaceCategory
+    minority_pop: RaceCategory
+
+    def __init__(self, majority_pop: RaceCategory, minority_pop: RaceCategory):
+        self.majority_pop = majority_pop
+        """The race category of the majority population"""
+        self.minority_pop = minority_pop
+        """The race category of the minority population of interest"""
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
+
+        if isinstance(scope, BlockGroupScope):
+            msg = "Dissimilarity index cannot be retreived for block group scope."
+            raise DataResourceException(msg)
+
+        majority_var = self.race_variables[self.majority_pop]
+        minority_var = self.race_variables[self.minority_pop]
+
+        df = _fetch_acs5([majority_var, minority_var], scope)
+        df2 = _fetch_acs5([majority_var, minority_var],
+                          scope.lower_granularity())
+        df2['geoid'] = df2['geoid'].apply(
+            get_census_granularity(scope.granularity).extract)
+
+        df.rename(columns={majority_var: 'high_majority',
+                  minority_var: 'high_minority'}, inplace=True)
+        df2.rename(columns={majority_var: 'low_majority',
+                   minority_var: 'low_minority'}, inplace=True)
+
+        df3 = df.merge(df2, on='geoid')
+
+        df3['score'] = abs(df3['low_minority'] / df3['high_minority'] -
+                           df3['low_majority'] / df3['high_majority'])
+        df3 = df3.groupby('geoid').sum()
+        df3['score'] *= .5
+        df3['score'] = df3['score'].replace(0., 0.5)
+        df3 = df3.reset_index()
+
+        return df3['score'].to_numpy(dtype=np.float64)
+
+
+class GiniIndex(Adrio[np.float64]):
+    """
+    Retrieves an N-shaped array of floats representing the amount of income inequality on a scale of
+    0 (perfect equality) to 1 (perfect inequality) for each geographic node.
+    Data is retrieved from Census table variable B19083_001 using ACS 5-year estimates.
+    """
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
+
+        df = _fetch_acs5(['B19083_001E'], scope)
+        df['B19083_001E'] = df['B19083_001E'].astype(
+            np.float64).fillna(0.5).replace(-666666666, 0.5)
+
+        # set cbg data to that of the parent tract if geo granularity = cbg
+        if isinstance(scope, BlockGroupScope):
+            print(
+                "Gini Index cannot be retrieved for block group level, fetching tract level data instead.")
+            df2 = _fetch_acs5(['B19083_001E'], scope.raise_granularity())
+            df['merge_geoid'] = df['geoid'].apply(lambda x: x[:-1])
+            df = df.drop(columns='B19083_001E')
+
+            df = df.merge(df2, left_on='merge_geoid',
+                          right_on='geoid', suffixes=(None, '_y'))
+
+        return df['B19083_001E'].to_numpy(dtype=np.float64)
+
+
+class MedianAge(Adrio[np.float64]):
+    """
+    Retrieves an N-shaped array of floats representing the median age in each geographic node.
+    Data is retrieved from Census table variable B01002_001 using ACS 5-year estimates.
+    """
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
+
+        df = _fetch_acs5(['B01002_001E'], scope)
+        return df['B01002_001E'].to_numpy(dtype=np.float64)
+
+
+class MedianIncome(Adrio[np.float64]):
+    """
+    Retrieves an N-shaped array of floats representing the median yearly income in each geographic node.
+    Data is retrieved from Census table variable B19013_001 using ACS 5-year estimates.
+    """
+
+    def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
+
+        df = _fetch_acs5(['B19013_001E'], scope)
+        return df['B19013_001E'].to_numpy(dtype=np.float64)
