@@ -296,9 +296,11 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
 class CovidCasesPer100k(Adrio[np.float64]):
     """Number of COVID-19 cases per 100k population."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -309,9 +311,11 @@ class CovidCasesPer100k(Adrio[np.float64]):
 class CovidHospitalizationsPer100k(Adrio[np.float64]):
     """Number of COVID-19 hospitalizations per 100k population."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -322,9 +326,11 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
 class CovidHospitalizationAvgFacility(Adrio[np.float64]):
     """Weekly averages of COVID-19 hospitalizations from facility level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -335,9 +341,11 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
 class CovidHospitalizationSumFacility(Adrio[np.float64]):
     """Weekly sums of all COVID-19 hospitalizations from facility level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -348,9 +356,11 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
 class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
     """Weekly averages of influenza hospitalizations from facility level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -361,9 +371,11 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
 class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
     """Weekly sums of influenza hospitalizations from facility level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -374,9 +386,11 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
 class CovidHospitalizationAvgState(Adrio[np.float64]):
     """Weekly averages of COVID-19 hospitalizations from state level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -387,9 +401,11 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
 class CovidHospitalizationSumState(Adrio[np.float64]):
     """Weekly sums of COVID-19 hospitalizations from state level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -400,9 +416,11 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
 class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
     """Weekly averages of influenza hospitalizations from state level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -413,9 +431,11 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
 class InfluenzaHospitalizationSumState(Adrio[np.float64]):
     """Weekly sums of influenza hospitalizations from state level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -426,9 +446,11 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
 class FullCovidVaccinations(Adrio[np.float64]):
     """Cumulative total number of individuals fully vaccinated for COVID-19."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -439,9 +461,11 @@ class FullCovidVaccinations(Adrio[np.float64]):
 class OneDoseCovidVaccinations(Adrio[np.float64]):
     """Cumulative total number of individuals with at least one dose of COVID-19 vaccination."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -452,9 +476,11 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
 class CovidBoosterDoses(Adrio[np.float64]):
     """Cumulative total number of COVID-19 booster doses administered."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -465,9 +491,11 @@ class CovidBoosterDoses(Adrio[np.float64]):
 class CovidDeathsCounty(Adrio[np.float64]):
     """Weekly total COVID-19 deaths from county level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -478,9 +506,11 @@ class CovidDeathsCounty(Adrio[np.float64]):
 class CovidDeathsState(Adrio[np.float64]):
     """Weekly total COVID-19 deaths from state level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
@@ -491,9 +521,11 @@ class CovidDeathsState(Adrio[np.float64]):
 class InfluenzaDeathsState(Adrio[np.float64]):
     """Weekly total influenza deaths from state level dataset."""
 
+    time_period: SpecificTimePeriod
+    """The time period the data encompasses."""
+
     def __init__(self, time_period: SpecificTimePeriod):
         self.time_period = time_period
-        """The time period the data encompasses."""
 
     def evaluate(self) -> NDArray[np.float64]:
         scope = self.scope
