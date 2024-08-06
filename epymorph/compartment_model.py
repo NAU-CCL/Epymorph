@@ -5,10 +5,11 @@ populations as groupings of integer-numbered individuals.
 """
 import dataclasses
 import re
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Callable, Iterable, Iterator, OrderedDict, Sequence
+from typing import (Any, Callable, Iterable, Iterator, OrderedDict, Sequence,
+                    Type)
 
 from sympy import Expr, Float, Integer, Symbol
 
@@ -17,7 +18,7 @@ from epymorph.error import IpmValidationException
 from epymorph.simulation import (DEFAULT_STRATA, META_STRATA, AttributeDef,
                                  gpm_strata)
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
-from epymorph.util import iterator_length
+from epymorph.util import are_instances, are_unique, iterator_length
 
 ############################################################
 # Model Transitions
@@ -124,7 +125,7 @@ def _remap_fork(f: ForkDef, symbol_mapping: dict[Symbol, Symbol]) -> ForkDef:
     )
 
 
-def remap_transition(t: TransitionDef, symbol_mapping: dict[Symbol, Symbol]) -> TransitionDef:
+def _remap_transition(t: TransitionDef, symbol_mapping: dict[Symbol, Symbol]) -> TransitionDef:
     """Replaces all symbols used in the transition using substitution from `symbol_mapping`."""
     match t:
         case EdgeDef():
@@ -202,7 +203,17 @@ class BaseCompartmentModel(ABC):
     """Shared base-class for compartment models."""
 
     compartments: Sequence[CompartmentDef] = ()
+    """The compartments of the model."""
+
     requirements: Sequence[AttributeDef] = ()
+    """The attributes required by the model."""
+
+    # NOTE: these two attributes are coded as such so that overriding
+    # this class is simpler for users. Normally I'd make them properties,
+    # -- since they really should not be modified after creation --
+    # but this would increase the implementation complexity.
+    # And to avoid requiring users to call the initializer, the rest
+    # of the attributes are cached_properties which initialize lazily.
 
     @cached_property
     @abstractmethod
@@ -318,7 +329,95 @@ class BaseCompartmentModel(ABC):
 ############################################################
 
 
-class CompartmentModel(BaseCompartmentModel, ABC):
+class CompartmentModelClass(ABCMeta):
+    """
+    The metaclass for user-defined CompartmentModel classes.
+    Used to verify proper class implementation.
+    """
+    def __new__(
+        mcs: Type['CompartmentModelClass'],
+        name: str,
+        bases: tuple[type, ...],
+        dct: dict[str, Any],
+    ) -> 'CompartmentModelClass':
+        # Skip these checks for known base classes:
+        if name in ("BaseCompartmentModel", "CompartmentModel"):
+            return super().__new__(mcs, name, bases, dct)
+
+        # Check model compartments.
+        cmps = dct.get("compartments")
+        if cmps is None or not isinstance(cmps, (list, tuple)):
+            raise TypeError(
+                f"Invalid compartments in {name}: please specify as a list or tuple."
+            )
+        if len(cmps) == 0:
+            raise TypeError(
+                f"Invalid compartments in {name}: please specify at least one compartment."
+            )
+        if not are_instances(cmps, CompartmentDef):
+            raise TypeError(
+                f"Invalid compartments in {name}: must be instances of CompartmentDef."
+            )
+        if not are_unique(c.name for c in cmps):
+            raise TypeError(
+                f"Invalid compartments in {name}: compartment names must be unique."
+            )
+        # Make compartments immutable.
+        dct["compartments"] = tuple(cmps)
+
+        # Check transitions... we have to instantiate the class.
+        cls = super().__new__(mcs, name, bases, dct)
+        instance = cls()
+
+        trxs = instance.transitions
+
+        # transitions cannot have the source and destination both be exogenous; this would be madness.
+        if any(edge.compartment_from in exogenous_states and edge.compartment_to in exogenous_states
+                for edge in _as_events(trxs)):
+            raise TypeError(
+                f"Invalid transitions in {name}: "
+                "transitions cannot use exogenous states (BIRTH/DEATH) as both source and destination."
+            )
+
+        # Extract the set of compartments used by transitions.
+        trx_comps = set(
+            compartment
+            for e in _as_events(trxs)
+            for compartment in [e.compartment_from, e.compartment_to]
+            # don't include exogenous states in the compartment set
+            if compartment not in exogenous_states
+        )
+
+        # Extract the set of requirements used by transition rate expressions
+        # by taking all used symbols and subtracting compartment symbols.
+        trx_reqs = set(
+            symbol
+            for e in _as_events(trxs)
+            for symbol in e.rate.free_symbols if isinstance(symbol, Symbol)
+        ).difference(trx_comps)
+
+        # transition compartments minus declared compartments should be empty
+        missing_comps = trx_comps.difference(instance.symbols.all_compartments)
+        if len(missing_comps) > 0:
+            raise TypeError(
+                f"Invalid transitions in {name}: "
+                "transitions reference compartments which were not declared.\n"
+                f"Missing compartments: {', '.join(map(str, missing_comps))}"
+            )
+
+        # transition requirements minus declared requirements should be empty
+        missing_reqs = trx_reqs.difference(instance.symbols.all_requirements)
+        if len(missing_reqs) > 0:
+            raise TypeError(
+                f"Invalid transitions in {name}: "
+                "transitions reference requirements which were not declared.\n"
+                f"Missing requirements: {', '.join(map(str, missing_reqs))}"
+            )
+
+        return cls
+
+
+class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClass):
     """
     A compartment model definition and its corresponding metadata.
     Effectively, a collection of compartments, transitions between compartments,
@@ -380,35 +479,57 @@ class MultistrataModelSymbols(ModelSymbols):
 
     def __init__(self,
                  strata: Sequence[tuple[str, CompartmentModel]],
-                 combined_compartments: Sequence[str],
-                 meta_requirements: Sequence[str]):
+                 meta_requirements: Sequence[AttributeDef]):
+        # These are all tuples of:
+        # (original name, strata name, symbolic name)
+        # where the symbolic name is disambiguated by appending
+        # the strata it belongs to.
+        cs = [
+            (c.name, strata_name, f"{c.name}_{strata_name}")
+            for strata_name, ipm in strata
+            for c in ipm.compartments
+        ]
+        rs = [
+            (r.name, strata_name, f"{r.name}_{strata_name}")
+            for strata_name, ipm in strata
+            for r in ipm.requirements
+        ]
+        ms = [
+            (r.name, "meta", f"{r.name}_meta")
+            for r in meta_requirements
+        ]
+
         super().__init__(
-            # compartments have already been renamed
-            compartments=[(c, c) for c in combined_compartments],
-            # strata requirements have not been renamed
+            compartments=[(sym, sym) for _, _, sym in cs],
             requirements=[
-                *((n, n)
-                  for strata_name, ipm in strata
-                  for r in ipm.requirements
-                  for n in [f"{r.name}_{strata_name}"]),
-                *((r, r) for r in meta_requirements),
+                *((sym, sym) for _, _, sym in rs),
+                *((orig, sym) for orig, _, sym in ms),
             ]
         )
 
         self.strata = [strata_name for strata_name, _ in strata]
         self._strata_symbols = {
             strata_name: ModelSymbols(
-                compartments=[(c.name, f"{c.name}_{strata_name}")
-                              for c in ipm.compartments],
-                requirements=[(r.name, f"{r.name}_{strata_name}")
-                              for r in ipm.requirements]
+                compartments=[
+                    (orig, sym) for orig, strt, sym in cs
+                    if strt == strata_name
+                ],
+                requirements=[
+                    (orig, sym) for orig, strt, sym in rs
+                    if strt == strata_name
+                ]
             )
-            for strata_name, ipm in strata
+            for strata_name, _ in strata
         }
 
-        ms = [(m, to_symbol(m)) for m in meta_requirements]
-        self.all_meta_requirements = [s for _, s in ms]
-        self._msymbols = dict(ms)
+        self.all_meta_requirements = [
+            to_symbol(sym)
+            for _, _, sym in ms
+        ]
+        self._msymbols = {
+            orig: to_symbol(sym)
+            for orig, _, sym in ms
+        }
 
     def strata_compartments(self, strata: str, *names: str) -> Sequence[Symbol]:
         """
@@ -470,13 +591,14 @@ class CombinedCompartmentModel(BaseCompartmentModel):
         """The symbols which represent parts of this model."""
         return MultistrataModelSymbols(
             strata=self._strata,
-            combined_compartments=[c.name for c in self.compartments],
-            meta_requirements=[r.name for r in self._meta_requirements])
+            meta_requirements=self._meta_requirements)
 
     @cached_property
     def transitions(self) -> Sequence[TransitionDef]:
         symbols = self.symbols
 
+        # Figure out the per-strata mapping from old symbol to new symbol
+        # by matching everything up in-order.
         strata_mapping = list[dict[Symbol, Symbol]]()
         all_cs = iter(symbols.all_compartments)
         all_rs = iter(symbols.all_requirements)
@@ -490,7 +612,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
             strata_mapping.append(mapping)
 
         return [
-            *(remap_transition(trx, mapping)
+            *(_remap_transition(trx, mapping)
                 for (_, ipm), mapping in zip(self._strata, strata_mapping)
                 for trx in ipm.transitions),
             *self._meta_edges(symbols),
@@ -505,46 +627,3 @@ class CombinedCompartmentModel(BaseCompartmentModel):
             *((AbsoluteName(META_STRATA, "ipm", r.name), r)
               for r in self._meta_requirements),
         ])
-
-    # TODO: compartment model validation checks!
-    # def _validate(self) -> None:
-    #     if len(self.symbols.compartments) == 0:
-    #         msg = "CompartmentModel must contain at least one compartment."
-    #         raise IpmValidationException(msg)
-
-    #     # Extract the set of compartments used by any transition.
-    #     trx_comps = set(
-    #         compartment
-    #         for e in _as_events(self.transitions)
-    #         for compartment in [e.compartment_from, e.compartment_to]
-    #         # don't include exogenous states in the compartment set
-    #         if compartment not in exogenous_states
-    #     )
-
-    #     # Extract the set of symbols referenced by any transition rate expression.
-    #     # This includes compartment symbols.
-    #     trx_attrs = set(
-    #         symbol
-    #         for e in _as_events(self.transitions)
-    #         for symbol in e.rate.free_symbols if isinstance(symbol, Symbol)
-    #     ).difference(trx_comps)
-
-    #     # transitions cannot have the source and destination both be exogenous; this would be madness.
-    #     if any((edge.compartment_from in exogenous_states and edge.compartment_to in exogenous_states
-    #             for edge in _as_events(self.transitions))):
-    #         msg = "Transitions cannot use exogenous states (BIRTH/DEATH) as both source and destination."
-    #         raise IpmValidationException(msg)
-
-    #     # transitions_compartments minus symbols_compartments should be empty
-    #     missing_comps = trx_comps.difference(self.symbols.compartment_symbols)
-    #     if len(missing_comps) > 0:
-    #         msg = "Transitions reference compartments which were not declared as symbols.\n" \
-    #             f"Missing states: {', '.join(map(str, missing_comps))}"
-    #         raise IpmValidationException(msg)
-
-    #     # transitions_attributes minus symbols_attributes should be empty
-    #     missing_attrs = trx_attrs.difference(self.symbols.attribute_symbols)
-    #     if len(missing_attrs) > 0:
-    #         msg = "Transitions reference attributes which were not declared as symbols.\n" \
-    #             f"Missing attributes: {', '.join(map(str, missing_attrs))}"
-    #         raise IpmValidationException(msg)

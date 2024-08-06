@@ -1,8 +1,5 @@
 # pylint: disable=missing-docstring
-import unittest
-
 from numpy.testing import assert_array_equal
-from sympy import Max
 
 from epymorph import AttributeDef, Shapes, TimeFrame, init, mm_library
 from epymorph.compartment_model import CompartmentModel, compartment, edge
@@ -11,7 +8,7 @@ from epymorph.geography.us_census import StateScope
 from epymorph.movement.parser import (ALL_DAYS, DailyClause, MovementSpec,
                                       MoveSteps)
 from epymorph.movement.parser_util import Duration
-from epymorph.rume import (DEFAULT_STRATA, Gpm, MultistrataRume, Rume,
+from epymorph.rume import (DEFAULT_STRATA, Gpm, MultistrataRume,
                            SingleStrataRume, combine_tau_steps, remap_taus)
 from epymorph.test import EpymorphTestCase
 
@@ -29,92 +26,12 @@ class Sir(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        S, I, R = symbols.all_compartments
-        beta, gamma = symbols.all_requirements
+        [S, I, R] = symbols.all_compartments
+        [beta, gamma] = symbols.all_requirements
         return [
             edge(S, I, rate=beta * S * I),
             edge(I, R, rate=gamma * I),
         ]
-
-
-# TODO: this test might need to move to compartment_model_test
-class CombineIpmTest(unittest.TestCase):
-    def test_combine_1(self):
-        sir = Sir()
-
-        meta_attributes = [
-            AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
-        ]
-
-        def meta_edges(s: RumeSymbols):
-            [S_aaa, I_aaa, R_aaa] = s.compartments("aaa")
-            [S_bbb, I_bbb, R_bbb] = s.compartments("bbb")
-            [beta_bbb_aaa] = s.meta_attributes()
-            N_aaa = s.total_nonzero("aaa")
-            return [
-                edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
-            ]
-
-        model = combine_ipms(
-            strata=[('aaa', sir), ('bbb', sir)],
-            meta_attributes=meta_attributes,
-            meta_edges=meta_edges,
-        )
-
-        self.assertEqual(model.num_compartments, 6)
-        self.assertEqual(model.num_events, 5)
-
-        # Check compartment mapping
-        self.assertEqual(
-            [c.name for c in model.compartments],
-            ['S_aaa', 'I_aaa', 'R_aaa', 'S_bbb', 'I_bbb', 'R_bbb'],
-        )
-
-        self.assertEqual(
-            model.symbols.compartment_symbols,
-            list(symbols("S_aaa I_aaa R_aaa S_bbb I_bbb R_bbb")),
-        )
-
-        # Check attribute mapping
-        self.assertEqual(
-            model.symbols.attribute_symbols,
-            list(symbols("beta_aaa gamma_aaa beta_bbb gamma_bbb beta_bbb_aaa_meta")),
-        )
-
-        self.assertEqual(
-            list(model.attributes.keys()),
-            [
-                AbsoluteName("gpm:aaa", "ipm", "beta"),
-                AbsoluteName("gpm:aaa", "ipm", "gamma"),
-                AbsoluteName("gpm:bbb", "ipm", "beta"),
-                AbsoluteName("gpm:bbb", "ipm", "gamma"),
-                AbsoluteName("meta", "ipm", "beta_bbb_aaa"),
-            ],
-        )
-
-        self.assertEqual(
-            list(model.attributes.values()),
-            [
-                AttributeDef('beta', float, Shapes.TxN),
-                AttributeDef('gamma', float, Shapes.TxN),
-                AttributeDef('beta', float, Shapes.TxN),
-                AttributeDef('gamma', float, Shapes.TxN),
-                AttributeDef('beta_bbb_aaa', float, Shapes.TxN),
-            ],
-        )
-
-        [S_aaa, I_aaa, R_aaa, S_bbb, I_bbb, R_bbb] = model.symbols.compartment_symbols
-        [beta_aaa, gamma_aaa, beta_bbb, gamma_bbb,
-            beta_bbb_aaa] = model.symbols.attribute_symbols
-
-        self.assertEqual(model.transitions, [
-            edge(S_aaa, I_aaa, rate=beta_aaa * S_aaa * I_aaa),
-            edge(I_aaa, R_aaa, rate=gamma_aaa * I_aaa),
-            edge(S_bbb, I_bbb, rate=beta_bbb * S_bbb * I_bbb),
-            edge(I_bbb, R_bbb, rate=gamma_bbb * I_bbb),
-            edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb *
-                 I_aaa / Max(1, S_aaa + I_aaa + R_aaa)),
-        ])
 
 
 class CombineMmTest(EpymorphTestCase):

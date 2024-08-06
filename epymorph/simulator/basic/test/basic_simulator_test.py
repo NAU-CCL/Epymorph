@@ -1,16 +1,16 @@
 # pylint: disable=missing-docstring
 import unittest
 from math import inf
-from typing import cast
+from typing import Mapping
 
 import numpy as np
+from numpy.typing import NDArray
 
 from epymorph import *
 from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.error import (IpmSimInvalidProbsException,
                             IpmSimLessThanZeroException, IpmSimNaNException,
                             MmSimException)
-from epymorph.geo.static import StaticGeo
 from epymorph.geography.scope import CustomScope
 from epymorph.geography.us_census import StateScope
 from epymorph.rume import SingleStrataRume
@@ -28,13 +28,27 @@ class SimulateTest(unittest.TestCase):
         pei_states = ["FL", "GA", "MD", "NC", "SC", "VA"]
         return StateScope.in_states_by_code(pei_states, 2010)
 
-    def _pei_geo(self) -> StaticGeo:
-        return cast(StaticGeo, geo_library['pei']())
+    def _pei_geo(self) -> Mapping[str, NDArray]:
+        # We don't want to use real ADRIOs here because they could fail
+        # and cause these tests to spuriously fail.
+        # So instead, hard-code some values. They don't need to be real.
+        t = np.arange(start=0, stop=2 * np.pi, step=2 * np.pi / 365)
+        return {
+            "*::population": np.array([18811310, 9687653, 5773552, 9535483, 4625364, 8001024]),
+            "*::humidity": np.array([
+                0.005 + 0.005 * np.sin(t) for _ in range(6)
+            ]).T,
+            "*::commuters": np.array([
+                [7993452, 13805, 2410, 2938, 1783, 3879],
+                [15066, 4091461, 966, 6057, 20318, 2147],
+                [949, 516, 2390255, 947, 91, 122688],
+                [3005, 5730, 1872, 4121984, 38081, 29487],
+                [1709, 23513, 630, 64872, 1890853, 1620],
+                [1368, 1175, 68542, 16869, 577, 3567788],
+            ]),
+        }
 
     def test_pei(self):
-
-        # TODO: Remove use of GEO
-        geo = self._pei_geo()
         rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
@@ -46,17 +60,13 @@ class SimulateTest(unittest.TestCase):
                 'ipm::immunity_duration': 90,
                 'mm::move_control': 0.9,
                 'mm::theta': 0.1,
-                '*::population': geo.values['population'],
-                '*::humidity': geo.values['humidity'],
-                '*::commuters': geo.values['commuters'],
+                **self._pei_geo(),
             },
         )
 
         sim = BasicSimulator(rume)
 
-        out1 = sim.run(
-            rng_factory=default_rng(42),
-        )
+        out1 = sim.run(rng_factory=default_rng(42))
 
         np.testing.assert_array_equal(
             out1.initial[:, 1],
@@ -99,7 +109,6 @@ class SimulateTest(unittest.TestCase):
         )
 
     def test_override_params(self):
-        geo = self._pei_geo()
         rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
@@ -111,9 +120,7 @@ class SimulateTest(unittest.TestCase):
                 'ipm::immunity_duration': 90,
                 'mm::move_control': 0.9,
                 'mm::theta': 0.1,
-                '*::population': geo.values['population'],
-                '*::humidity': geo.values['humidity'],
-                '*::commuters': geo.values['commuters'],
+                **self._pei_geo(),
             },
         )
 
@@ -137,8 +144,6 @@ class SimulateTest(unittest.TestCase):
 
     def test_less_than_zero_err(self):
         """Test exception handling for a negative rate value due to a negative parameter"""
-
-        geo = self._pei_geo()
         rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
@@ -150,30 +155,18 @@ class SimulateTest(unittest.TestCase):
                 'ipm::immunity_duration': -100,  # notice the negative parameter
                 'mm::move_control': 0.9,
                 'mm::theta': 0.1,
-                '*::population': geo.values['population'],
-                '*::humidity': geo.values['humidity'],
-                '*::commuters': geo.values['commuters'],
+                **self._pei_geo(),
             },
         )
 
-        # geo = geo_library['pei']()
         sim = BasicSimulator(rume)
 
         with self.assertRaises(IpmSimLessThanZeroException) as e:
-            sim.run(
-                rng_factory=default_rng(42),
-            )
+            sim.run(rng_factory=default_rng(42))
 
         err_msg = str(e.exception)
-
         self.assertIn("Less than zero rate detected", err_msg)
-        self.assertIn("Showing current Node : Timestep", err_msg)
-        self.assertIn("S: ", err_msg)
-        self.assertIn("I: ", err_msg)
-        self.assertIn("R: ", err_msg)
-        self.assertIn("infection_duration: 4.0", err_msg)
         self.assertIn("immunity_duration: -100.0", err_msg)
-        self.assertIn("humidity: 0.01003", err_msg)
 
     def test_divide_by_zero_err(self):
         """Test exception handling for a divide by zero (NaN) error"""
@@ -220,25 +213,17 @@ class SimulateTest(unittest.TestCase):
 
         sim = BasicSimulator(rume)
         with self.assertRaises(IpmSimNaNException) as e:
-            sim.run(
-                rng_factory=default_rng(1),
-            )
+            sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
-
         self.assertIn("NaN (not a number) rate detected", err_msg)
-        self.assertIn("Showing current Node : Timestep", err_msg)
         self.assertIn("S: 0", err_msg)
         self.assertIn("I: 0", err_msg)
         self.assertIn("R: 0", err_msg)
-        self.assertIn("beta: 0.4", err_msg)
-        self.assertIn("gamma: 0.2", err_msg)
-        self.assertIn("xi: 0.01", err_msg)
         self.assertIn("S->I: I*S*beta/(I + R + S)", err_msg)
 
     def test_negative_probs_error(self):
         """Test for handling negative probability error"""
-        geo = self._pei_geo()
         rume = SingleStrataRume.build(
             ipm=ipm_library['sirh'](),
             mm=mm_library['no'](),
@@ -251,37 +236,24 @@ class SimulateTest(unittest.TestCase):
                 'xi': 1 / 100,
                 'hospitalization_prob': -1 / 5,
                 'hospitalization_duration': 15,
-                'population': geo.values['population'],
+                **self._pei_geo(),
             },
         )
 
         sim = BasicSimulator(rume)
         with self.assertRaises(IpmSimInvalidProbsException) as e:
-            sim.run(
-                rng_factory=default_rng(1),
-            )
+            sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
-
         self.assertIn("Invalid probabilities for fork definition detected.", err_msg)
-        self.assertIn("Showing current Node : Timestep", err_msg)
-        self.assertIn("S: ", err_msg)
-        self.assertIn("I: ", err_msg)
-        self.assertIn("R: ", err_msg)
-        self.assertIn("beta: 0.4", err_msg)
-        self.assertIn("gamma: 0.2", err_msg)
-        self.assertIn("xi: 0.01", err_msg)
         self.assertIn("hospitalization_prob: -0.2", err_msg)
         self.assertIn("hospitalization_duration: 15", err_msg)
-
         self.assertIn("I->(H, R): I*gamma", err_msg)
         self.assertIn(
             "Probabilities: hospitalization_prob, 1 - hospitalization_prob", err_msg)
 
     def test_mm_clause_error(self):
         """Test for handling invalid movement model clause application"""
-
-        geo = self._pei_geo()
         rume = SingleStrataRume.build(
             ipm=ipm_library['pei'](),
             mm=mm_library['pei'](),
@@ -294,16 +266,13 @@ class SimulateTest(unittest.TestCase):
                 'humidity': 20.2,
                 'move_control': 0.4,
                 'theta': -5.0,
-                'population': geo.values['population'],
-                'commuters': geo.values['commuters'],
+                **self._pei_geo(),
             },
         )
 
         sim = BasicSimulator(rume)
         with self.assertRaises(MmSimException) as e:
-            sim.run(
-                rng_factory=default_rng(1),
-            )
+            sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
 
