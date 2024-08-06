@@ -1,7 +1,7 @@
 """Logic for saving to, loading from, and managing a cache of geos on the user's hard disk."""
 import os
 from pathlib import Path
-from typing import Callable, overload
+from typing import Callable, Mapping, overload
 
 from epymorph.cache import CACHE_PATH
 from epymorph.geo.adrio.adrio import ADRIOMaker
@@ -13,8 +13,8 @@ from epymorph.geo.static import StaticGeoFileOps as F
 from epymorph.geo.util import convert_to_static_geo
 from epymorph.log.messaging import dynamic_geo_messaging
 
-AdrioMakerLibrary = dict[str, type[ADRIOMaker]]
-DynamicGeoLibrary = dict[str, Callable[[], DynamicGeo]]
+AdrioMakerLibrary = Mapping[str, type[ADRIOMaker]]
+DynamicGeoLibrary = Mapping[str, Callable[[], DynamicGeo]]
 
 
 class GeoCacheException(Exception):

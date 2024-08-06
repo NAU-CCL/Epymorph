@@ -104,6 +104,31 @@ class AbsoluteNameTest(unittest.TestCase):
         self.assertEqual(name.module, "module")
         self.assertEqual(name.id, "id")
 
+    def test_parse_with_defaults_wildcards(self):
+        name = AbsoluteName.parse_with_defaults(
+            "gpm:alpha::*::id", "default_strata", "default_module")
+        self.assertEqual(name.strata, "gpm:alpha")
+        self.assertEqual(name.module, "default_module")
+        self.assertEqual(name.id, "id")
+
+        name = AbsoluteName.parse_with_defaults(
+            "*::mm::id", "default_strata", "default_module")
+        self.assertEqual(name.strata, "default_strata")
+        self.assertEqual(name.module, "mm")
+        self.assertEqual(name.id, "id")
+
+        name = AbsoluteName.parse_with_defaults(
+            "*::*::id", "default_strata", "default_module")
+        self.assertEqual(name.strata, "default_strata")
+        self.assertEqual(name.module, "default_module")
+        self.assertEqual(name.id, "id")
+
+        name = AbsoluteName.parse_with_defaults(
+            "*::id", "default_strata", "default_module")
+        self.assertEqual(name.strata, "default_strata")
+        self.assertEqual(name.module, "default_module")
+        self.assertEqual(name.id, "id")
+
     def test_str_representation(self):
         name = AbsoluteName("strata", "module", "id")
         self.assertEqual(str(name), "strata::module::id")

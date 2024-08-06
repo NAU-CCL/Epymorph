@@ -6,7 +6,7 @@ only the attributes needed by the simulation.
 import dataclasses
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
-from typing import Any, Self
+from typing import Any, Mapping, Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -40,7 +40,7 @@ class DynamicGeo(Geo[DynamicGeoSpec], DynamicGeoEvents):
     @classmethod
     def from_library(cls, spec: DynamicGeoSpec, adrio_maker_library: ADRIOMakerLibrary) -> Self:
         """Given an ADRIOMaker library, construct a DynamicGeo for the given spec."""
-        def get_maker_by_source(source: Any, makers: dict[str, type[ADRIOMaker]]) -> str | None:
+        def get_maker_by_source(source: Any, makers: Mapping[str, type[ADRIOMaker]]) -> str | None:
             for maker_name, maker_type in makers.items():
                 if maker_type.accepts_source(source):
                     return maker_name

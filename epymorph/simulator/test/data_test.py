@@ -8,7 +8,7 @@ import sympy
 from numpy.typing import NDArray
 
 from epymorph import *
-from epymorph.compartment_model import edge
+from epymorph.compartment_model import MultistrataModelSymbols, edge
 from epymorph.data_type import AttributeArray
 from epymorph.database import Database, NamePattern
 from epymorph.error import AttributeException
@@ -16,7 +16,7 @@ from epymorph.geography.us_census import StateScope
 from epymorph.params import (ParamFunctionNode, ParamFunctionNumpy,
                              ParamFunctionScalar, ParamFunctionTimeAndNode,
                              ParamValue, simulation_symbols)
-from epymorph.rume import Gpm, Rume
+from epymorph.rume import Gpm, MultistrataRume, Rume
 from epymorph.simulator.data import evaluate_params
 
 
@@ -54,30 +54,32 @@ class EvaluateParamsTest(unittest.TestCase):
         }
 
     def _create_rume(self, rume_params: dict[str, ParamValue] | None = None) -> Rume:
-        meta_attributes = [
+        meta_requirements = [
             AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
         ]
 
-        def meta_edges(s: RumeSymbols):
-            [S_aaa, I_aaa, R_aaa] = s.compartments("aaa")
-            [S_bbb, I_bbb, R_bbb] = s.compartments("bbb")
-            [beta_bbb_aaa] = s.meta_attributes()
-            N_aaa = s.total_nonzero("aaa")
+        def meta_edges(s: MultistrataModelSymbols):
+            [S_aaa, I_aaa, R_aaa] = s.strata_compartments("aaa")
+            [S_bbb, I_bbb, R_bbb] = s.strata_compartments("bbb")
+            [beta_bbb_aaa] = s.all_meta_requirements
+            N_aaa = sympy.Max(1, S_aaa + I_aaa + R_aaa)
             return [
                 edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
             ]
 
-        return Rume.multistrata(
+        return MultistrataRume.build(
             strata=[
-                ('aaa', Gpm(
+                Gpm(
+                    name='aaa',
                     ipm=ipm_library['sirs'](),
                     mm=mm_library['centroids'](),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
                         # leave phi unspecified to test default value resolution
                     },
-                )),
-                ('bbb', Gpm(
+                ),
+                Gpm(
+                    name='bbb',
                     ipm=ipm_library['sirs'](),
                     mm=mm_library['centroids'](),
                     init=init.SingleLocation(location=0, seed_size=100),
@@ -85,9 +87,9 @@ class EvaluateParamsTest(unittest.TestCase):
                         "beta": 99.0,  # we'll override this value to test value shadowing
                         "phi": 33.0,  # test GPM value resolution
                     },
-                )),
+                ),
             ],
-            meta_attributes=meta_attributes,
+            meta_requirements=meta_requirements,
             meta_edges=meta_edges,
             scope=StateScope.in_states(['04', '35']),
             time_frame=TimeFrame.of("2021-01-01", 180),

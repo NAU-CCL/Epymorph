@@ -14,7 +14,7 @@ from epymorph.movement.compile import compile_spec
 from epymorph.movement.movement_model import (MovementContext, MovementModel,
                                               TravelClause)
 from epymorph.rume import Rume
-from epymorph.simulation import (NamespacedAttributeResolver, Tick,
+from epymorph.simulation import (NamespacedAttributeResolver, Tick, gpm_strata,
                                  resolve_tick_delta)
 from epymorph.simulator.world import World
 from epymorph.util import row_normalize
@@ -149,7 +149,7 @@ class MovementExecutor:
                     data=NamespacedAttributeResolver(
                         data=data,
                         dim=rume.dim,
-                        namespace=ModuleNamespace(f"gpm:{strata}", "mm"),
+                        namespace=ModuleNamespace(gpm_strata(strata), "mm"),
                     ),
                 ),
             )
@@ -167,7 +167,7 @@ class MovementExecutor:
             for key, value in result.items():
                 if not isinstance(value, np.ndarray):
                     msg = f"Movement predef: key '{key}' invalid; it is not a numpy array."
-                pattern = NamePattern(f"gpm:{strata}", "mm", key)
+                pattern = NamePattern(gpm_strata(strata), "mm", key)
                 self._data.update(pattern, value.copy())
 
     def apply(self, tick: Tick) -> None:
