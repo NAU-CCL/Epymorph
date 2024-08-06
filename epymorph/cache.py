@@ -245,11 +245,8 @@ def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
     """
     try:
         # Try to load from cache.
-        file = load_file_from_cache(cache_path)
-        print("hit")
-        return file
+        return load_file_from_cache(cache_path)
     except CacheMiss:
-        print("miss")
         # On cache miss, fetch file contents.
         file = fetch()
         # And attempt to save the file to the cache for next time.
