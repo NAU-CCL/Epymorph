@@ -5,6 +5,9 @@ from os import PathLike
 from pathlib import Path
 from tarfile import TarInfo, is_tarfile
 from tarfile import open as open_tarfile
+from typing import Callable
+from urllib.request import urlopen
+from warnings import warn
 
 from platformdirs import user_cache_path
 
@@ -217,6 +220,7 @@ def _resolve_cache_path(path: str | PathLike[str]) -> Path:
 def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
     """
     Save a single file to the cache (overwriting the existing file, if any).
+    This is a low-level building block.
     """
     save_file(_resolve_cache_path(to_path), file)
 
@@ -224,11 +228,53 @@ def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
 def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
     """
     Load a single file from the cache.
+    This is a low-level building block.
     """
     try:
         return load_file(_resolve_cache_path(from_path))
     except FileError as e:
         raise CacheMiss() from e
+
+
+def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
+    """
+    Attempts to load a file from the cache. If it doesn't exist, uses the provided
+    fetch method to load the file, then attempts to save the file to the cache for 
+    next time. (This is a higher-level but still generic building block.)
+    Any exceptions raised by `fetch` will not be caught in this method.
+    """
+    try:
+        # Try to load from cache.
+        file = load_file_from_cache(cache_path)
+        print("hit")
+        return file
+    except CacheMiss:
+        print("miss")
+        # On cache miss, fetch file contents.
+        file = fetch()
+        # And attempt to save the file to the cache for next time.
+        try:
+            save_file_to_cache(cache_path, file)
+        except Exception as e:
+            # Failure to save to the cache is not worth stopping the program:
+            # raise a warning.
+            warn(
+                f"Unable to save file to the cache ({cache_path}). Cause:\n{e}",
+                CacheWarning
+            )
+        return file
+
+
+def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
+    """
+    Attempts to load a file from the cache. If it doesn't exist, fetches
+    the file contents from the given URL, then attempts to save the file to the cache
+    for next time.
+    """
+    def fetch_url():
+        with urlopen(url) as f:
+            return BytesIO(f.read())
+    return load_or_fetch(cache_path, fetch_url)
 
 
 def save_bundle_to_cache(to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]) -> None:

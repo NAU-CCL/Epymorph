@@ -1,12 +1,10 @@
-from io import BytesIO
 from pathlib import Path
-from urllib.request import urlopen
 
 import numpy as np
 from numpy.typing import NDArray
 from pandas import read_excel
 
-from epymorph.cache import CacheMiss, load_file_from_cache, save_file_to_cache
+from epymorph.cache import load_or_fetch_url
 from epymorph.error import DataResourceException
 from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.geography.us_census import (BlockGroupScope, CensusScope,
@@ -78,12 +76,11 @@ class Commuters(Adrio[np.int64]):
             msg = "Commuting flows data cannot be retrieved for connecticut counties for years 2020 or 2021."
             raise DataResourceException(msg)
 
-        file_path = Path(f'acs-commuting-flows/{year}.xlsx')
         try:
-            commuter_file = load_file_from_cache(file_path)
-        except CacheMiss:
-            commuter_file = BytesIO(urlopen(url).read())
-            save_file_to_cache(file_path, commuter_file)
+            file_path = Path(f'acs-commuting-flows/{year}.xlsx')
+            commuter_file = load_or_fetch_url(url, file_path)
+        except Exception as e:
+            raise DataResourceException("Unable to fetch commuting flows data.") from e
 
         # download communter data spreadsheet as a pandas dataframe
         df = read_excel(commuter_file, header=header_num, names=all_fields, dtype={

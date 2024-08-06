@@ -1,19 +1,16 @@
 from pathlib import Path
 from typing import Any
-from warnings import warn
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
-                            save_file_to_cache)
+from epymorph.cache import load_or_fetch_url
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
 from epymorph.geo.adrio.adrio import ADRIO, ADRIOMaker
 from epymorph.geo.spec import TimePeriod, Year
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
-from epymorph.geography.us_tiger import _fetch_url
 from epymorph.simulation import AttributeDef
 
 _LODES_CACHE_PATH = Path("geo/adrio/census/lodes")
@@ -210,8 +207,6 @@ class ADRIOMakerLODES(ADRIOMaker):
 
                 # construct the URL to fetch LODES data, reset to empty each time
                 url_list = []
-                cache_list = []
-                files = []
 
                 # always get main file (in state residency)
                 url_main = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz'
@@ -221,27 +216,14 @@ class ADRIOMakerLODES(ADRIOMaker):
                 if file_type == "aux":
                     url_aux = f'https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz'
                     url_list.append(url_aux)
-                cache_list = [_LODES_CACHE_PATH / Path(u).name for u in url_list]
 
-                # try to load the urls from the cache
                 try:
-                    files = [load_file_from_cache(path) for path in cache_list]
-
-                # on except CacheMiss
-                except CacheMiss:
-
-                    # fetch info from the urls
-                    files = [_fetch_url(u) for u in url_list]
-
-                    # try to save the files
-                    try:
-                        for f, path in zip(files, cache_list):
-                            save_file_to_cache(path, f)
-
-                    except Exception as e:
-                        msg = "We were unable to save LODES files to the cache.\n" \
-                            f"Cause: {e}"
-                        warn(msg, CacheWarning)
+                    files = [
+                        load_or_fetch_url(u, _LODES_CACHE_PATH / Path(u).name)
+                        for u in url_list
+                    ]
+                except Exception as e:
+                    raise DataResourceException("Unable to fetch LODES data.") from e
 
                 unfiltered_df = [pd.read_csv(file, compression="gzip", converters={
                     'w_geocode': str, 'h_geocode': str}) for file in files]
