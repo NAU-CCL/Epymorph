@@ -10,7 +10,7 @@ from epymorph.data_type import CentroidType, SimDType
 from epymorph.draw import render, render_and_save
 from epymorph.log.messaging import sim_messaging
 from epymorph.plots import plot_event, plot_pop
-from epymorph.rume import Gpm, Rume
+from epymorph.rume import Gpm, MultistrataRume, Rume, SingleStrataRume
 from epymorph.simulation import AttributeDef, TimeFrame, default_rng
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 
@@ -31,6 +31,8 @@ __all__ = [
     'init',
     'Rume',
     'Gpm',
+    'SingleStrataRume',
+    'MultistrataRume',
     'BasicSimulator',
     'sim_messaging',
     'plot_event',
