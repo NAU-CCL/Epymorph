@@ -60,6 +60,9 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-07-03.ipynb | Trevor |  | Demonstration of CDC ADRIO functionality and attributes. |
 | 2024-07-08.ipynb | Tyler | ✓ | Demonstrates the updated Initializers system, including library examples and custom initializers. |
 | 2024-07-10.ipynb | Trevor | ✓ | Integration test: Census ADRIOs |
+| 2024-07-12-v0.4.ipynb | Tyler | | Comparing v0.4 to v0.5 via example. (See next also.) |
+| 2024-07-12-v0.5.ipynb | Tyler | | Comparing v0.4 to v0.5 via example. (See previous also.) |
+| 2024-07-18.ipynb | Tyler | | A simple demo of ADRIOs "version 2". |
 
 ## Contributing
 
