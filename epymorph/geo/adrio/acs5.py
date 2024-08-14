@@ -14,7 +14,7 @@ from pandas import DataFrame
 
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
-from epymorph.geo.adrio.adrio2 import Adrio
+from epymorph.geo.adrio.adrio2 import Adrio, adrio_cache
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
                                           BlockGroupScope, CensusScope,
@@ -193,6 +193,7 @@ def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
         raise DataResourceException(msg) from None
 
 
+@adrio_cache
 class Population(Adrio[np.int64]):
     """
     Retrieves an N-shaped array of integers representing the total population of each geographic node.
@@ -207,6 +208,7 @@ class Population(Adrio[np.int64]):
         return df['B01001_001E'].to_numpy(dtype=np.int64)
 
 
+@adrio_cache
 class PopulationByAgeTable(Adrio[np.int64]):
     """
     Creates a table of population data for each geographic node split into various age categories.
@@ -233,10 +235,16 @@ _over_pattern = re.compile(r"^(\d+) years and over")
 
 
 class AgeRange(NamedTuple):
+    """
+    Models an age range for use with ACS age-categorized data.
+    Unlike Python integer ranges, the `end` of the this range is inclusive.
+    `end` can also be None which models the "and over" part of ranges like "85 years and over".
+    """
     start: int
     end: int | None
 
     def contains(self, other: 'AgeRange') -> bool:
+        """Is the `other` range fully contained in (or coincident with) this range?"""
         if self.start > other.start:
             return False
         if self.end is None:
@@ -247,6 +255,7 @@ class AgeRange(NamedTuple):
 
     @staticmethod
     def parse(label: str) -> 'AgeRange | None':
+        """Parse the age range of an ACS field label; e.g.: `Estimate!!Total:!!Male:!!22 to 24 years`"""
         parts = label.split("!!")
         if len(parts) != 4:
             return None
@@ -268,6 +277,7 @@ class AgeRange(NamedTuple):
         return AgeRange(start, end)
 
 
+@adrio_cache
 class PopulationByAge(Adrio[np.int64]):
     """
     Retrieves an N-shaped array of integers representing the total population
@@ -312,6 +322,7 @@ class PopulationByAge(Adrio[np.int64]):
         return table[:, col_mask].sum(axis=1)
 
 
+@adrio_cache
 class AverageHouseholdSize(Adrio[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the average number of people
@@ -327,6 +338,7 @@ class AverageHouseholdSize(Adrio[np.float64]):
         return df['B25010_001E'].to_numpy(dtype=np.float64)
 
 
+@adrio_cache
 class DissimilarityIndex(Adrio[np.float64]):
     """
     Calculates an N-shaped array of floats representing the amount of racial segregation between a specified
@@ -392,6 +404,7 @@ class DissimilarityIndex(Adrio[np.float64]):
         return df3['score'].to_numpy(dtype=np.float64)
 
 
+@adrio_cache
 class GiniIndex(Adrio[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the amount of income inequality on a scale of
@@ -421,6 +434,7 @@ class GiniIndex(Adrio[np.float64]):
         return df['B19083_001E'].to_numpy(dtype=np.float64)
 
 
+@adrio_cache
 class MedianAge(Adrio[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the median age in each geographic node.
@@ -435,6 +449,7 @@ class MedianAge(Adrio[np.float64]):
         return df['B01002_001E'].to_numpy(dtype=np.float64)
 
 
+@adrio_cache
 class MedianIncome(Adrio[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the median yearly income in each geographic node.

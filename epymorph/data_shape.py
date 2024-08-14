@@ -33,11 +33,11 @@ class SimDimensions(NamedTuple):
         tau_steps = len(tau_step_lengths)
         ticks = tau_steps * days
         return cls(
-            tau_step_lengths, tau_steps, start_date, days, ticks,
+            tuple(tau_step_lengths), tau_steps, start_date, days, ticks,
             nodes, compartments, events,
             (ticks, nodes, compartments, events))
 
-    tau_step_lengths: Sequence[float]
+    tau_step_lengths: tuple[float, ...]
     """The lengths of each tau step in the MM."""
     tau_steps: int
     """How many tau steps are in the MM?"""
