@@ -86,6 +86,11 @@ class Tick(NamedTuple):
     """What's the tau length of the current step? (0.666,0.333,0.666,0.333,...)"""
 
 
+class TickIndex(NamedTuple):
+    """A zero-based index of the simulation tau steps."""
+    step: int  # which tau step within that day (zero-indexed)
+
+
 class TickDelta(NamedTuple):
     """
     An offset relative to a Tick expressed as a number of days which should elapse,
@@ -371,8 +376,8 @@ class _Context(ABC):
         """The simulation's random number generator."""
 
     @abstractmethod
-    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
-        """Defer processing to another instance of a SimulationFunction."""
+    def export(self) -> tuple[NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator]:
+        """Tuples the contents of this context so it can be re-used (see: defer())."""
 
 
 class _EmptyContext(_Context):
@@ -391,7 +396,7 @@ class _EmptyContext(_Context):
     def rng(self) -> np.random.Generator:
         raise TypeError("Invalid access of function context.")
 
-    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
+    def export(self) -> tuple[NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator]:
         raise TypeError("Invalid access of function context.")
 
 
@@ -431,8 +436,11 @@ class _RealContext(_Context):
     def rng(self) -> np.random.Generator:
         return self._rng
 
-    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
-        return other.evaluate_in_context(self._data, self._dim, self._scope, self._rng)
+    def export(self) -> tuple[NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator]:
+        return (self._data, self._dim, self._scope, self._rng)
+
+
+_TypeT = TypeVar("_TypeT")
 
 
 class SimulationFunctionClass(ABCMeta):
@@ -441,11 +449,11 @@ class SimulationFunctionClass(ABCMeta):
     Used to verify proper class implementation.
     """
     def __new__(
-        mcs: Type['SimulationFunctionClass'],
+        mcs: Type[_TypeT],
         name: str,
         bases: tuple[type, ...],
         dct: dict[str, Any],
-    ) -> 'SimulationFunctionClass':
+    ) -> _TypeT:
         # Check requirements if this class overrides it.
         # (Otherwise class will inherit from parent.)
         if (reqs := dct.get("requirements")) is not None:
@@ -483,10 +491,11 @@ class SimulationFunctionClass(ABCMeta):
         return super().__new__(mcs, name, bases, dct)
 
 
-class SimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
+class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
     """
     A function which runs in the context of a simulation to produce a value (as a numpy array).
-    Implement a SimulationFunction by extending this class and overriding the `evaluate()` method.
+    This base class exists to share functionality without limiting the function signature
+    of evaluate().
     """
 
     requirements: Sequence[AttributeDef] = ()
@@ -494,28 +503,23 @@ class SimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
 
     _ctx: _Context = _EMPTY_CONTEXT
 
-    def evaluate_in_context(
+    def with_context(
         self,
         data: NamespacedAttributeResolver,
         dim: SimDimensions,
         scope: GeoScope,
         rng: np.random.Generator,
-    ) -> T_co:
-        """Evaluate a function within a context. epymorph calls this function; you generally don't need to."""
+    ) -> Self:
+        """
+        Constructs a clone of this instance which has access to the given context.
+        epymorph calls this function; you generally don't need to.
+        """
         # clone this instance, then run evaluate on that; accomplishes two things:
         # 1. don't have to worry about cleaning up _ctx
         # 2. instances can use @cached_property without surprising results
         clone = deepcopy(self)
         setattr(clone, "_ctx", _RealContext(data, dim, scope, rng))
-        return clone.evaluate()
-
-    @abstractmethod
-    def evaluate(self) -> T_co:
-        """
-        Implement this method to provide logic for the function.
-        Your implementation is free to use `data`, `dim`, and `rng` in this function body.
-        You can also use `defer` to utilize another SimulationFunction instance.
-        """
+        return clone
 
     def data(self, attribute: AttributeDef | str) -> NDArray:
         """Retrieve the value of a specific attribute."""
@@ -547,10 +551,76 @@ class SimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
         """The simulation's random number generator."""
         return self._ctx.rng
 
+
+class SimulationFunction(BaseSimulationFunction[T_co]):
+    """
+    A function which runs in the context of a simulation to produce a value (as a numpy array).
+    Implement a SimulationFunction by extending this class and overriding the `evaluate()` method.
+    """
+
+    def evaluate_in_context(
+        self,
+        data: NamespacedAttributeResolver,
+        dim: SimDimensions,
+        scope: GeoScope,
+        rng: np.random.Generator,
+    ) -> T_co:
+        """
+        Evaluate this function within a context.
+        epymorph calls this function; you generally don't need to.
+        """
+        return super()\
+            .with_context(data, dim, scope, rng)\
+            .evaluate()
+
+    @abstractmethod
+    def evaluate(self) -> T_co:
+        """
+        Implement this method to provide logic for the function.
+        Your implementation is free to use `data`, `dim`, and `rng` in this function body.
+        You can also use `defer` to utilize another SimulationFunction instance.
+        """
+
     @final
     def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
         """Defer processing to another instance of a SimulationFunction."""
-        return self._ctx.defer(other)
+        return other.evaluate_in_context(*self._ctx.export())
+
+
+class SimulationTickFunction(BaseSimulationFunction[T_co]):
+    """
+    A function which runs in the context of a simulation to produce a sim-time-specific value (as a numpy array).
+    Implement a SimulationTickFunction by extending this class and overriding the `evaluate()` method.
+    """
+
+    def evaluate_in_context(
+        self,
+        data: NamespacedAttributeResolver,
+        dim: SimDimensions,
+        scope: GeoScope,
+        rng: np.random.Generator,
+        tick: Tick
+    ) -> T_co:
+        """
+        Evaluate this function within a context.
+        epymorph calls this function; you generally don't need to.
+        """
+        return super()\
+            .with_context(data, dim, scope, rng)\
+            .evaluate(tick)
+
+    @abstractmethod
+    def evaluate(self, tick: Tick) -> T_co:
+        """
+        Implement this method to provide logic for the function.
+        Your implementation is free to use `data`, `dim`, and `rng` in this function body.
+        You can also use `defer` to utilize another SimulationTickFunction instance.
+        """
+
+    @final
+    def defer(self, other: 'SimulationTickFunction[_DeferredT]', tick: Tick) -> _DeferredT:
+        """Defer processing to another instance of a SimulationTickFunction."""
+        return other.evaluate_in_context(*self._ctx.export(), tick)
 
 
 ###############

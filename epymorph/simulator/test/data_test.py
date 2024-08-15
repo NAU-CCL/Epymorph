@@ -103,7 +103,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         # We should have as many entries in our DB as we have attributes in the RUME,
         # plus 1 (for geo labels).
-        self.assertEqual(len(db._data), len(rume.attributes) + 1)
+        self.assertEqual(len(db._data), len(rume.requirements) + 1)
 
         self.assert_db(db, "gpm:aaa::ipm::beta", np.array(0.4, dtype=np.float64))
         self.assert_db(db, "gpm:bbb::ipm::beta", np.array(0.3, dtype=np.float64))

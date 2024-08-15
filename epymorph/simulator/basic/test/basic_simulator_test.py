@@ -277,4 +277,6 @@ class SimulateTest(unittest.TestCase):
         err_msg = str(e.exception)
 
         self.assertIn(
-            "Error from applying clause 'dispersers': see exception trace", err_msg)
+            "Error from applying clause 'Dispersers': see exception trace",
+            err_msg
+        )

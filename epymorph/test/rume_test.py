@@ -1,15 +1,16 @@
 # pylint: disable=missing-docstring
+import numpy as np
 from numpy.testing import assert_array_equal
+from numpy.typing import NDArray
 
 from epymorph import AttributeDef, Shapes, TimeFrame, init, mm_library
 from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.database import AbsoluteName
 from epymorph.geography.us_census import StateScope
-from epymorph.movement.parser import (ALL_DAYS, DailyClause, MovementSpec,
-                                      MoveSteps)
-from epymorph.movement.parser_util import Duration
+from epymorph.movement_model import EveryDay, MovementClause, MovementModel
 from epymorph.rume import (DEFAULT_STRATA, Gpm, MultistrataRume,
                            SingleStrataRume, combine_tau_steps, remap_taus)
+from epymorph.simulation import Tick, TickDelta, TickIndex
 from epymorph.test import EpymorphTestCase
 
 
@@ -100,49 +101,43 @@ class CombineMmTest(EpymorphTestCase):
         })
 
     def test_remap_taus_1(self):
-        mm1 = MovementSpec(
-            steps=MoveSteps([1 / 3, 2 / 3]),
-            attributes=[],
-            predef=None,
-            clauses=[
-                DailyClause(
-                    days=ALL_DAYS,
-                    leave_step=0,
-                    duration=Duration(0, 'd'),
-                    return_step=1,
-                    function='place-hodor',
-                ),
-            ],
-        )
+        class Clause1(MovementClause):
+            leaves = TickIndex(0)
+            returns = TickDelta(days=0, step=1)
+            predicate = EveryDay()
 
-        mm2 = MovementSpec(
-            steps=MoveSteps([1 / 2, 1 / 2]),
-            attributes=[],
-            predef=None,
-            clauses=[
-                DailyClause(
-                    days=ALL_DAYS,
-                    leave_step=1,
-                    duration=Duration(0, 'd'),
-                    return_step=1,
-                    function='place-hodor',
-                ),
-            ],
-        )
+            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+                return np.array([])
 
-        new_mms = remap_taus([('a', mm1), ('b', mm2)])
+        class Model1(MovementModel):
+            steps = (1 / 3, 2 / 3)
+            clauses = (Clause1(),)
 
-        new_taus = new_mms["a"].steps.step_lengths
+        class Clause2(MovementClause):
+            leaves = TickIndex(1)
+            returns = TickDelta(days=0, step=1)
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+                return np.array([])
+
+        class Model2(MovementModel):
+            steps = (1 / 2, 1 / 2)
+            clauses = (Clause2(),)
+
+        new_mms = remap_taus([('a', Model1()), ('b', Model2())])
+
+        new_taus = new_mms["a"].steps
         self.assertListAlmostEqual(new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertEqual(len(new_mms), 2)
 
         new_mm1 = new_mms['a']
-        self.assertEqual(new_mm1.clauses[0].leave_step, 0)
-        self.assertEqual(new_mm1.clauses[0].return_step, 2)
+        self.assertEqual(new_mm1.clauses[0].leaves.step, 0)
+        self.assertEqual(new_mm1.clauses[0].returns.step, 2)
 
         new_mm2 = new_mms['b']
-        self.assertEqual(new_mm2.clauses[0].leave_step, 2)
-        self.assertEqual(new_mm2.clauses[0].return_step, 2)
+        self.assertEqual(new_mm2.clauses[0].leaves.step, 2)
+        self.assertEqual(new_mm2.clauses[0].returns.step, 2)
 
 
 class RumeTest(EpymorphTestCase):
@@ -152,7 +147,7 @@ class RumeTest(EpymorphTestCase):
         sir = Sir()
         centroids = mm_library['centroids']()
         # Make sure centroids has the tau steps we will expect later...
-        self.assertListAlmostEqual(centroids.steps.step_lengths, [1 / 3, 2 / 3])
+        self.assertListAlmostEqual(centroids.steps, [1 / 3, 2 / 3])
 
         rume = SingleStrataRume.build(
             ipm=sir,
@@ -172,11 +167,11 @@ class RumeTest(EpymorphTestCase):
         self.assertEqual(rume.dim.nodes, 2)
 
         assert_array_equal(
-            rume.compartment_mask(DEFAULT_STRATA),
+            rume.compartment_mask[DEFAULT_STRATA],
             [True, True, True],
         )
         assert_array_equal(
-            rume.compartment_mobility(DEFAULT_STRATA),
+            rume.compartment_mobility[DEFAULT_STRATA],
             [True, True, True],
         )
 
@@ -186,7 +181,7 @@ class RumeTest(EpymorphTestCase):
         sir = Sir()
         no = mm_library['no']()
         # Make sure 'no' has the tau steps we will expect later...
-        self.assertListAlmostEqual(no.steps.step_lengths, [1.0])
+        self.assertListAlmostEqual(no.steps, [1.0])
 
         rume = MultistrataRume.build(
             strata=[
@@ -218,24 +213,24 @@ class RumeTest(EpymorphTestCase):
         self.assertEqual(rume.dim.nodes, 2)
 
         assert_array_equal(
-            rume.compartment_mask("aaa"),
+            rume.compartment_mask["aaa"],
             [True, True, True, False, False, False],
         )
         assert_array_equal(
-            rume.compartment_mask("bbb"),
+            rume.compartment_mask["bbb"],
             [False, False, False, True, True, True],
         )
         assert_array_equal(
-            rume.compartment_mobility("aaa"),
+            rume.compartment_mobility["aaa"],
             [True, True, True, False, False, False],
         )
         assert_array_equal(
-            rume.compartment_mobility("bbb"),
+            rume.compartment_mobility["bbb"],
             [False, False, False, True, True, True],
         )
 
         # NOTE: these tests will break if someone alters the MM or Init definition; even just the comments
-        self.assertDictEqual(rume.attributes, {
+        self.assertDictEqual(rume.requirements, {
             AbsoluteName("gpm:aaa", "ipm", "beta"): AttributeDef("beta", float, Shapes.TxN),
             AbsoluteName("gpm:aaa", "ipm", "gamma"): AttributeDef("gamma", float, Shapes.TxN),
             AbsoluteName("gpm:bbb", "ipm", "beta"): AttributeDef("beta", float, Shapes.TxN),
@@ -252,7 +247,7 @@ class RumeTest(EpymorphTestCase):
         sir = Sir()
         centroids = mm_library['centroids']()
         # Make sure centroids has the tau steps we will expect later...
-        self.assertListAlmostEqual(centroids.steps.step_lengths, [1 / 3, 2 / 3])
+        self.assertListAlmostEqual(centroids.steps, [1 / 3, 2 / 3])
 
         rume = MultistrataRume.build(
             strata=[
@@ -278,7 +273,7 @@ class RumeTest(EpymorphTestCase):
         self.assertEqual(rume.dim.nodes, 2)
 
         # NOTE: these tests will break if someone alters the MM or Init definition; even just the comments
-        self.assertDictEqual(rume.attributes, {
+        self.assertDictEqual(rume.requirements, {
             AbsoluteName("gpm:aaa", "ipm", "beta"):
                 AttributeDef("beta", float, Shapes.TxN),
 
@@ -297,6 +292,10 @@ class RumeTest(EpymorphTestCase):
                 AttributeDef("phi", float, Shapes.S,
                              comment="Influences the distance that movers tend to travel.",
                              default_value=40.0),
+
+            AbsoluteName("gpm:aaa", "mm", "commuter_proportion"):
+                AttributeDef("commuter_proportion", float, Shapes.S, default_value=0.1,
+                             comment="Decides what proportion of the total population should be commuting normally."),
 
             AbsoluteName("gpm:aaa", "init", "population"):
                 AttributeDef("population", int, Shapes.N,

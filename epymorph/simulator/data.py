@@ -175,13 +175,13 @@ def evaluate_params(
     # Evaluate every attribute required by the RUME.
     attr_db, evaluate = _evaluation_context(rume, override_params, rng)
 
-    rume_attributes: list[tuple[AbsoluteName, ParamValue | None]] = [
-        *((name, attr.default_value) for name, attr in rume.attributes.items()),
+    rume_reqs: list[tuple[AbsoluteName, ParamValue | None]] = [
+        *((name, attr.default_value) for name, attr in rume.requirements.items()),
         # Artificially require the special geo labels attribute.
         (GEO_LABELS, rume.scope.get_node_ids()),
     ]
 
-    for name, default_value in rume_attributes:
+    for name, default_value in rume_reqs:
         try:
             evaluate(name, [], default_value)
         except AttributeException as e:
@@ -214,15 +214,15 @@ def evaluate_param(
     return evaluate(param, [], None)
 
 
-def validate_attributes(
+def validate_requirements(
     rume: Rume,
     data: Database[AttributeArray],
 ) -> None:
     """
-    Validate all attributes in a RUME; raises an ExceptionGroup containing all errors.
+    Validate all attributes requirements in a RUME; raises an ExceptionGroup containing all errors.
     """
     def validate() -> Generator[AttributeException, None, None]:
-        for name, attr in rume.attributes.items():
+        for name, attr in rume.requirements.items():
             attr_match = data.query(name)
             if attr_match is None:
                 msg = f"Missing required parameter: '{name}'"

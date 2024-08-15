@@ -5,7 +5,7 @@ from importlib import import_module
 from importlib.abc import Traversable
 from importlib.resources import as_file, files
 from inspect import isclass, signature
-from typing import Callable, Mapping, NamedTuple, TypeGuard, TypeVar, cast
+from typing import Callable, Mapping, NamedTuple, TypeGuard, TypeVar
 
 from epymorph.compartment_model import CompartmentModel
 from epymorph.error import ModelRegistryException
@@ -13,7 +13,7 @@ from epymorph.geo.adrio import adrio_maker_library
 from epymorph.geo.dynamic import DynamicGeo, DynamicGeoFileOps
 from epymorph.geo.geo import Geo
 from epymorph.geo.static import StaticGeo, StaticGeoFileOps
-from epymorph.movement.parser import MovementSpec, parse_movement_spec
+from epymorph.movement_model import MovementModel
 from epymorph.util import as_sorted_dict
 
 ModelT = TypeVar('ModelT')
@@ -36,14 +36,17 @@ class _ModelRegistryInfo(NamedTuple):
         """Get the ID annotation name for this model type."""
         return f'__epymorph_{self.name}_id__'
 
-    def get_model_id(self, func: Callable) -> str | None:
+    def get_model_id(self, obj: object) -> str:
         """Retrieves the tagged model ID."""
-        value = getattr(func, self.annotation, None)
-        return value if isinstance(value, str) else None
+        value = getattr(obj, self.annotation, None)
+        if isinstance(value, str):
+            return value
+        else:
+            raise ValueError("Unable to load model ID during model registry.")
 
-    def set_model_id(self, func: Callable, model_id: str) -> None:
+    def set_model_id(self, obj: object, model_id: str) -> None:
         """Sets a model ID as a tag."""
-        setattr(func, self.annotation, model_id)
+        setattr(obj, self.annotation, model_id)
 
 
 GEO_REGISTRY = _ModelRegistryInfo('geo')
@@ -56,17 +59,17 @@ MM_REGISTRY = _ModelRegistryInfo('mm')
 
 def ipm(ipm_id: str):
     """Decorates an IPM loader so we can register it with the system."""
-    def make_decorator(func: LoaderFunc[CompartmentModel]) -> LoaderFunc[CompartmentModel]:
-        IPM_REGISTRY.set_model_id(func, ipm_id)
-        return func
+    def make_decorator(model: type[CompartmentModel]) -> type[CompartmentModel]:
+        IPM_REGISTRY.set_model_id(model, ipm_id)
+        return model
     return make_decorator
 
 
 def mm(mm_id: str):
     """Decorates an IPM loader so we can register it with the system."""
-    def make_decorator(func: LoaderFunc[MovementSpec]) -> LoaderFunc[MovementSpec]:
-        MM_REGISTRY.set_model_id(func, mm_id)
-        return func
+    def make_decorator(model: type[MovementModel]) -> type[MovementModel]:
+        MM_REGISTRY.set_model_id(model, mm_id)
+        return model
     return make_decorator
 
 
@@ -81,7 +84,7 @@ def geo(geo_id: str):
 # Discovery and loading utilities
 
 
-DiscoverT = TypeVar('DiscoverT', bound=CompartmentModel | MovementSpec | StaticGeo)
+DiscoverT = TypeVar('DiscoverT', bound=CompartmentModel | MovementModel | StaticGeo)
 
 
 def _discover(model: _ModelRegistryInfo, library_type: type[DiscoverT]) -> Library[DiscoverT]:
@@ -115,7 +118,7 @@ The function must take zero parameters and its return-type must be correctly ann
     ]
 
     return {
-        cast(str, model.get_model_id(x)): x
+        model.get_model_id(x): x
         for mod in modules
         for x in mod.__dict__.values()
         if callable(x) and x.__module__ == mod.__name__ and is_loader(x)
@@ -138,20 +141,11 @@ def _discover_classes(model: _ModelRegistryInfo, library_type: type[DiscoverT]) 
     ]
 
     return {
-        cast(str, model.get_model_id(x)): x
+        model.get_model_id(x): x
         for mod in modules
         for x in mod.__dict__.values()
         if isclass(x) and issubclass(x, library_type) and x.__module__ == mod.__name__
     }
-
-
-def _mm_spec_loader(mm_spec_file: Traversable) -> Callable[[], MovementSpec]:
-    """Returns a function to load the identified movement model."""
-    def load() -> MovementSpec:
-        with as_file(mm_spec_file) as file:
-            spec_string = file.read_text(encoding="utf-8")
-            return parse_movement_spec(spec_string)
-    return load
 
 
 def _geo_spec_loader(geo_spec_file: Traversable) -> Callable[[], DynamicGeo]:
@@ -170,7 +164,6 @@ def _geo_archive_loader(geo_archive_file: Traversable) -> Callable[[], StaticGeo
     return load
 
 
-_MM_DIR = files(MM_REGISTRY.path)
 _GEO_DIR = files(GEO_REGISTRY.path)
 
 
@@ -182,17 +175,9 @@ ipm_library: ClassLibrary[CompartmentModel] = as_sorted_dict({
 })
 """All epymorph intra-population models (by id)."""
 
-mm_library_parsed: Library[MovementSpec] = as_sorted_dict({
-    # Auto-discover all .movement files in the data/mm path.
-    f.name.removesuffix('.movement'): _mm_spec_loader(f)
-    for f in _MM_DIR.iterdir()
-    if f.name.endswith('.movement')
-})
-"""The subset of MMs that are parsed from movement files."""
 
-mm_library: Library[MovementSpec] = as_sorted_dict({
-    **_discover(MM_REGISTRY, MovementSpec),
-    **mm_library_parsed,
+mm_library: ClassLibrary[MovementModel] = as_sorted_dict({
+    **_discover_classes(MM_REGISTRY, MovementModel),
 })
 """All epymorph movement models (by id)."""
 
