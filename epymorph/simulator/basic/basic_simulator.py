@@ -18,7 +18,7 @@ from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
 from epymorph.simulator.data import (evaluate_params, initialize_rume,
-                                     validate_attributes)
+                                     validate_requirements)
 from epymorph.simulator.world_list import ListWorld
 
 
@@ -62,7 +62,7 @@ class BasicSimulator(SimulationEventsMixin, MovementEventsMixin):
                     },
                     rng=rng,
                 )
-                validate_attributes(rume, db)
+                validate_requirements(rume, db)
             except AttributeException as e:
                 msg = f"RUME attribute requirements were not met. See errors:\n- {e}"
                 raise SimValidationException(msg) from None

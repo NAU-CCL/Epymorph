@@ -7,5 +7,4 @@ __all__ = [
     'geo_library_static',
     'ipm_library',
     'mm_library',
-    'mm_library_parsed',
 ]

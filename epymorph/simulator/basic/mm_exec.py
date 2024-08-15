@@ -1,18 +1,11 @@
-from typing import NamedTuple
-
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data_shape import SimDimensions
 from epymorph.data_type import AttributeArray, SimDType
-from epymorph.database import (Database, DatabaseWithFallback, ModuleNamespace,
-                               NamePattern)
-from epymorph.error import MmCompileException
+from epymorph.database import Database, ModuleNamespace
+from epymorph.error import MmSimException
 from epymorph.event import (MovementEventsMixin, OnMovementClause,
                             OnMovementFinish, OnMovementStart)
-from epymorph.movement.compile import compile_spec
-from epymorph.movement.movement_model import (MovementContext, MovementModel,
-                                              TravelClause)
 from epymorph.rume import Rume
 from epymorph.simulation import (NamespacedAttributeResolver, Tick, gpm_strata,
                                  resolve_tick_delta)
@@ -21,13 +14,12 @@ from epymorph.util import row_normalize
 
 
 def calculate_travelers(
-    # General movement model info.
-    ctx: MovementContext,
-    # Clause info.
-    clause: TravelClause,
+    clause_name: str,
     clause_mobility: NDArray[np.bool_],
+    requested_movers: NDArray[SimDType],
+    available_movers: NDArray[SimDType],
     tick: Tick,
-    local_cohorts: NDArray[SimDType],
+    rng: np.random.Generator
 ) -> OnMovementClause:
     """
     Calculate the number of travelers resulting from this movement clause for this tick.
@@ -35,27 +27,28 @@ def calculate_travelers(
     then selects exactly which individuals (by compartment) should move.
     Returns an (N,N,C) array; from-source-to-destination-by-compartment.
     """
-    _, N, C, _ = ctx.dim.TNCE
+    # Extract number of nodes and cohorts from the provided array.
+    (N, C) = available_movers.shape
 
-    clause_movers = clause.requested(ctx, tick)
-    np.fill_diagonal(clause_movers, 0)
-    clause_sum = clause_movers.sum(axis=1, dtype=SimDType)
+    initial_requested_movers = requested_movers
+    np.fill_diagonal(requested_movers, 0)
+    requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
 
-    available_movers = local_cohorts * clause_mobility
+    available_movers = available_movers * clause_mobility
     available_sum = available_movers.sum(axis=1, dtype=SimDType)
 
     # If clause requested total is greater than the total available,
     # use mvhg to select as many as possible.
-    if not np.any(clause_sum > available_sum):
+    if not np.any(requested_sum > available_sum):
         throttled = False
-        requested_movers = clause_movers
-        requested_sum = clause_sum
+        # requested_movers = requested_movers
+        # requested_sum = requested_sum
     else:
         throttled = True
-        requested_movers = clause_movers.copy()
+        requested_movers = requested_movers.copy()
         for src in range(N):
-            if clause_sum[src] > available_sum[src]:
-                requested_movers[src, :] = ctx.rng.multivariate_hypergeometric(
+            if requested_sum[src] > available_sum[src]:
+                requested_movers[src, :] = rng.multivariate_hypergeometric(
                     colors=requested_movers[src, :],
                     nsample=available_sum[src]
                 )
@@ -70,14 +63,14 @@ def calculate_travelers(
             continue
 
         # Select which individuals will be leaving this node.
-        mover_cs = ctx.rng.multivariate_hypergeometric(
+        mover_cs = rng.multivariate_hypergeometric(
             available_movers[src, :],
             requested_sum[src]
         ).astype(SimDType)
 
         # Select which location they are each going to.
         # (Each row contains the compartments for a destination.)
-        travelers_cs[src, :, :] = ctx.rng.multinomial(
+        travelers_cs[src, :, :] = rng.multinomial(
             mover_cs,
             requested_prb[src, :]
         ).T.astype(SimDType)
@@ -86,24 +79,12 @@ def calculate_travelers(
         tick.sim_index,
         tick.day,
         tick.step,
-        clause.name,
-        clause_movers,
+        clause_name,
+        initial_requested_movers,
         travelers_cs,
         requested_sum.sum(),
         throttled,
     )
-
-
-class _Ctx(NamedTuple):
-    dim: SimDimensions
-    rng: np.random.Generator
-    data: NamespacedAttributeResolver
-
-
-class _StrataInfo(NamedTuple):
-    model: MovementModel
-    mobility: NDArray[np.bool_]
-    ctx: _Ctx
 
 
 class MovementExecutor:
@@ -115,10 +96,9 @@ class MovementExecutor:
     """the world state"""
     _rng: np.random.Generator
     """the simulation RNG"""
-    _event_target: MovementEventsMixin
 
-    _data: Database[AttributeArray]
-    _strata: dict[str, _StrataInfo]
+    _event_target: MovementEventsMixin
+    _strata_data: dict[str, NamespacedAttributeResolver]
 
     def __init__(
         self,
@@ -128,47 +108,20 @@ class MovementExecutor:
         rng: np.random.Generator,
         event_target: MovementEventsMixin,
     ):
-        # Introduce a new data layer so we have a place to store predefs
-        data = DatabaseWithFallback({}, db)
-
         self._rume = rume
         self._world = world
-        self._data = data
         self._rng = rng
         self._event_target = event_target
-        self._strata = {
-            strata: _StrataInfo(
-                # Compile movement model
-                model=compile_spec(mm, rng),
-                # Get compartment mobility for this strata
-                mobility=rume.compartment_mobility(strata),
-                # Assemble a context with a resolver for this strata
-                ctx=_Ctx(
-                    dim=rume.dim,
-                    rng=rng,
-                    data=NamespacedAttributeResolver(
-                        data=data,
-                        dim=rume.dim,
-                        namespace=ModuleNamespace(gpm_strata(strata), "mm"),
-                    ),
-                ),
+
+        # Create a per-strata attribute resolver for MM clauses.
+        self._strata_data = {
+            strata: NamespacedAttributeResolver(
+                data=db,
+                dim=rume.dim,
+                namespace=ModuleNamespace(gpm_strata(strata), "mm"),
             )
             for strata, mm in rume.mms.items()
         }
-        self._compute_predefs()
-
-    def _compute_predefs(self) -> None:
-        """Compute predefs and store results to our database."""
-        for strata, (model, _, ctx) in self._strata.items():
-            result = model.predef(ctx)
-            if not isinstance(result, dict):
-                msg = f"Movement predef: did not return a dictionary result (got: {type(result)})"
-                raise MmCompileException(msg)
-            for key, value in result.items():
-                if not isinstance(value, np.ndarray):
-                    msg = f"Movement predef: key '{key}' invalid; it is not a numpy array."
-                pattern = NamePattern(gpm_strata(strata), "mm", key)
-                self._data.update(pattern, value.copy())
 
     def apply(self, tick: Tick) -> None:
         """Applies movement for this tick, mutating the world state."""
@@ -178,19 +131,39 @@ class MovementExecutor:
 
         # Process travel clauses.
         total = 0
-        for model, mobility, ctx in self._strata.values():
+        for strata, model in self._rume.mms.items():
             for clause in model.clauses:
-                if not clause.predicate(ctx, tick):
+                if not clause.is_active(tick):
                     continue
-                local_array = self._world.get_local_array()
+
+                available_movers = self._world.get_local_array()
+
+                try:
+                    requested_movers = clause.evaluate_in_context(
+                        self._strata_data[strata],
+                        self._rume.dim,
+                        self._rume.scope,
+                        self._rng,
+                        tick
+                    )
+                except Exception as e:
+                    # NOTE: catching exceptions here is necessary to get nice error messages
+                    # for some value error cause by incorrect parameter and/or clause definition
+                    msg = f"Error from applying clause '{clause.__class__.__name__}': see exception trace"
+                    raise MmSimException(msg) from e
 
                 clause_event = calculate_travelers(
-                    ctx, clause, mobility, tick, local_array)
+                    clause.__class__.__name__,
+                    self._rume.compartment_mobility[strata],
+                    requested_movers,
+                    available_movers,
+                    tick,
+                    self._rng
+                )
                 self._event_target.on_movement_clause.publish(clause_event)
                 travelers = clause_event.actual
 
-                returns = clause.returns(ctx, tick)
-                return_tick = resolve_tick_delta(ctx.dim, tick, returns)
+                return_tick = resolve_tick_delta(self._rume.dim, tick, clause.returns)
                 self._world.apply_travel(travelers, return_tick)
                 total += travelers.sum()
 

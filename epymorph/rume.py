@@ -7,10 +7,12 @@ into one multi-strata RUME.
 import dataclasses
 import textwrap
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
-from itertools import accumulate
-from typing import Callable, Mapping, OrderedDict, Self, Sequence, final
+from itertools import accumulate, pairwise, starmap
+from typing import (Callable, Mapping, NamedTuple, OrderedDict, Self, Sequence,
+                    final)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -25,11 +27,10 @@ from epymorph.data_type import dtype_str
 from epymorph.database import AbsoluteName, ModuleNamePattern, NamePattern
 from epymorph.geography.scope import GeoScope
 from epymorph.initializer import Initializer
-from epymorph.movement.parser import (DailyClause, MovementClause,
-                                      MovementSpec, MoveSteps)
+from epymorph.movement_model import MovementClause, MovementModel
 from epymorph.params import ParamSymbol, ParamValue, simulation_symbols
 from epymorph.simulation import (DEFAULT_STRATA, META_STRATA, AttributeDef,
-                                 TimeFrame, gpm_strata)
+                                 TickDelta, TickIndex, TimeFrame, gpm_strata)
 from epymorph.util import are_unique, map_values
 
 #######
@@ -46,7 +47,7 @@ class Gpm:
 
     name: str
     ipm: CompartmentModel
-    mm: MovementSpec
+    mm: MovementModel
     init: Initializer
     params: Mapping[ModuleNamePattern, ParamValue]
 
@@ -54,7 +55,7 @@ class Gpm:
         self,
         name: str,
         ipm: CompartmentModel,
-        mm: MovementSpec,
+        mm: MovementModel,
         init: Initializer,
         params: Mapping[str, ParamValue] | None = None,
     ):
@@ -80,7 +81,13 @@ Otherwise we'll use the node IDs from the geo scope.
 """
 
 
-def combine_tau_steps(strata_tau_lengths: dict[str, list[float]]) -> tuple[list[float], dict[str, dict[int, int]], dict[str, dict[int, int]]]:
+class _CombineTauStepsResult(NamedTuple):
+    new_tau_steps: tuple[float, ...]
+    start_mapping: dict[str, dict[int, int]]
+    stop_mapping: dict[str, dict[int, int]]
+
+
+def combine_tau_steps(strata_tau_lengths: dict[str, Sequence[float]]) -> _CombineTauStepsResult:
     """
     When combining movement models with different tau steps, it is necessary to create a
     new tau step scheme which can accomodate them all. This function performs that calculation,
@@ -91,10 +98,10 @@ def combine_tau_steps(strata_tau_lengths: dict[str, list[float]]) -> tuple[list[
     """
     # Convert the tau lengths into the starting point and stopping point for each tau step.
     # Starts and stops are expressed as fractions of one day.
-    def tau_starts(taus: list[float]) -> list[float]:
+    def tau_starts(taus: Sequence[float]) -> Sequence[float]:
         return [0.0, *accumulate(taus)][:-1]
 
-    def tau_stops(taus: list[float]) -> list[float]:
+    def tau_stops(taus: Sequence[float]) -> Sequence[float]:
         return [*accumulate(taus)]
 
     strata_tau_starts = map_values(tau_starts, strata_tau_lengths)
@@ -108,10 +115,10 @@ def combine_tau_steps(strata_tau_lengths: dict[str, list[float]]) -> tuple[list[
     combined_tau_stops.sort()
 
     # Now calculate the combined tau lengths.
-    combined_tau_lengths = [
+    combined_tau_lengths = tuple(
         stop - start
         for start, stop in zip(combined_tau_starts, combined_tau_stops)
-    ]
+    )
 
     # But the individual strata MMs are indexed by their original tau steps,
     # so we need to calculate the appropriate re-indexing to the new tau steps
@@ -125,44 +132,40 @@ def combine_tau_steps(strata_tau_lengths: dict[str, list[float]]) -> tuple[list[
         for name, curr in strata_tau_stops.items()
     }
 
-    return combined_tau_lengths, tau_start_mapping, tau_stop_mapping
+    return _CombineTauStepsResult(combined_tau_lengths, tau_start_mapping, tau_stop_mapping)
 
 
-def remap_taus(strata_mms: list[tuple[str, MovementSpec]]) -> OrderedDict[str, MovementSpec]:
+def remap_taus(strata_mms: list[tuple[str, MovementModel]]) -> OrderedDict[str, MovementModel]:
     """
     When combining movement models with different tau steps, it is necessary to create a
     new tau step scheme which can accomodate them all.
     """
     new_tau_steps, start_mapping, stop_mapping = combine_tau_steps({
-        strata: mm.steps.step_lengths
+        strata: mm.steps
         for strata, mm in strata_mms
     })
 
     def clause_remap_tau(clause: MovementClause, strata: str) -> MovementClause:
-        match clause:
-            case DailyClause():
-                return DailyClause(
-                    days=clause.days,
-                    leave_step=start_mapping[strata][clause.leave_step],
-                    duration=clause.duration,
-                    return_step=stop_mapping[strata][clause.return_step],
-                    function=clause.function,
-                )
+        leave_step = start_mapping[strata][clause.leaves.step]
+        return_step = stop_mapping[strata][clause.returns.step]
 
-    def spec_remap_tau(orig_spec: MovementSpec, strata: str) -> MovementSpec:
-        return MovementSpec(
-            steps=MoveSteps(new_tau_steps),
-            attributes=orig_spec.attributes,
-            predef=orig_spec.predef,
-            clauses=[
-                clause_remap_tau(c, strata)
-                for c in orig_spec.clauses
-            ],
+        clone = deepcopy(clause)
+        clone.leaves = TickIndex(leave_step)
+        clone.returns = TickDelta(clause.returns.days, return_step)
+        return clone
+
+    def model_remap_tau(orig_model: MovementModel, strata: str) -> MovementModel:
+        clone = deepcopy(orig_model)
+        clone.steps = new_tau_steps
+        clone.clauses = tuple(
+            clause_remap_tau(c, strata)
+            for c in orig_model.clauses
         )
+        return clone
 
     return OrderedDict([
-        (strata_name, spec_remap_tau(spec, strata_name))
-        for strata_name, spec in strata_mms
+        (strata_name, model_remap_tau(model, strata_name))
+        for strata_name, model in strata_mms
     ])
 
 
@@ -179,7 +182,7 @@ class Rume(ABC):
 
     strata: Sequence[Gpm]
     ipm: BaseCompartmentModel
-    mms: OrderedDict[str, MovementSpec]
+    mms: OrderedDict[str, MovementModel]
     scope: GeoScope
     time_frame: TimeFrame
     params: Mapping[NamePattern, ParamValue]
@@ -195,7 +198,7 @@ class Rume(ABC):
         # but they all have the same set of tau steps so it doesn't matter
         # which we use. (Using the first one is safe.)
         first_strata = self.strata[0].name
-        tau_step_lengths = self.mms[first_strata].steps.step_lengths
+        tau_step_lengths = self.mms[first_strata].steps
 
         dim = SimDimensions.build(
             tau_step_lengths=tau_step_lengths,
@@ -208,7 +211,7 @@ class Rume(ABC):
         object.__setattr__(self, 'dim', dim)
 
     @cached_property
-    def attributes(self) -> Mapping[AbsoluteName, AttributeDef]:
+    def requirements(self) -> Mapping[AbsoluteName, AttributeDef]:
         """Returns the attributes required by the RUME."""
         def generate_items():
             # IPM attributes are already fully named.
@@ -216,48 +219,51 @@ class Rume(ABC):
             # Name the MM and Init attributes.
             for gpm in self.strata:
                 strata_name = gpm_strata(gpm.name)
-                for a in gpm.mm.attributes:
+                for a in gpm.mm.requirements:
                     yield AbsoluteName(strata_name, "mm", a.name), a
                 for a in gpm.init.requirements:
                     yield AbsoluteName(strata_name, "init", a.name), a
         return OrderedDict(generate_items())
 
-    def compartment_mask(self, strata_name: str) -> NDArray[np.bool_]:
+    @cached_property
+    def compartment_mask(self) -> Mapping[str, NDArray[np.bool_]]:
         """
-        Returns a mask which describes which compartments belong in the given strata.
-        For example: if the model has three strata ('1', '2', and '3') with three compartments each,
-        `strata_compartment_mask('2')` returns `[0 0 0 1 1 1 0 0 0]`
+        Masks that describe which compartments belong in the given strata.
+        For example: if the model has three strata ('a', 'b', and 'c') with three compartments each,
+        `strata_compartment_mask('b')` returns `[0 0 0 1 1 1 0 0 0]`
         (where 0 stands for False and 1 stands for True).
-        Raises ValueError if no strata matches the given name.
         """
-        result = np.full(shape=self.ipm.num_compartments,
-                         fill_value=False, dtype=np.bool_)
-        ci, cf = 0, 0
-        found = False
-        for gpm in self.strata:
-            # Iterate through the strata IPMs:
-            ipm = gpm.ipm
-            if strata_name != gpm.name:
-                # keep count of how many compartments precede our target strata
-                ci += ipm.num_compartments
-            else:
-                # when we find our target, we now have the target's compartment index range
-                cf = ci + ipm.num_compartments
-                # set those to True and break
-                result[ci:cf] = True
-                found = True
-                break
-        if not found:
-            raise ValueError(f"Not a valid strata name in this model: {strata_name}")
-        return result
+        def mask(length: int, true_slice: slice) -> NDArray[np.bool_]:
+            # A boolean array with the given slice set to True, all others False
+            m = np.zeros(shape=length, dtype=np.bool_)
+            m[true_slice] = True
+            return m
 
-    def compartment_mobility(self, strata_name: str) -> NDArray[np.bool_]:
-        """Calculates which compartments should be considered subject to movement in a particular strata."""
-        compartment_mobility = np.array(
+        # num of compartments in the combined IPM
+        C = self.ipm.num_compartments
+        # num of compartments in each strata
+        strata_cs = [gpm.ipm.num_compartments for gpm in self.strata]
+        # start and stop index for each strata
+        strata_ranges = pairwise([0, *accumulate(strata_cs)])
+        # map stata name to the mask for each strata
+        return dict(zip(
+            [g.name for g in self.strata],
+            [mask(C, s) for s in starmap(slice, strata_ranges)]
+        ))
+
+    @cached_property
+    def compartment_mobility(self) -> Mapping[str, NDArray[np.bool_]]:
+        """Masks that describe which compartments should be considered subject to movement in a particular strata."""
+        # The mobility mask for all strata.
+        all_mobility = np.array(
             ['immobile' not in c.tags for c in self.ipm.compartments],
             dtype=np.bool_
         )
-        return self.compartment_mask(strata_name) * compartment_mobility
+        # Mobility for a single strata is all_mobility boolean-and whether the compartment is in that strata.
+        return {
+            strata.name: all_mobility & self.compartment_mask[strata.name]
+            for strata in self.strata
+        }
 
     @abstractmethod
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
@@ -267,7 +273,7 @@ class Rume(ABC):
         """Provide a description of all attributes required by the RUME."""
         format_name = self.name_display_formatter()
         lines = []
-        for name, attr in self.attributes.items():
+        for name, attr in self.requirements.items():
             properties = [
                 f"type: {dtype_str(attr.type)}",
                 f"shape: {attr.shape}",
@@ -289,7 +295,7 @@ class Rume(ABC):
         """Generate a skeleton dictionary you can use to provide parameter values to the room."""
         format_name = self.name_display_formatter()
         lines = ["{"]
-        for name, attr in self.attributes.items():
+        for name, attr in self.requirements.items():
             value = 'PLACEHOLDER'
             if attr.default_value is not None:
                 value = str(attr.default_value)
@@ -319,7 +325,7 @@ class SingleStrataRume(Rume):
     def build(
         cls,
         ipm: CompartmentModel,
-        mm: MovementSpec,
+        mm: MovementModel,
         init: Initializer,
         scope: GeoScope,
         time_frame: TimeFrame,
