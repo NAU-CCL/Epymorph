@@ -285,7 +285,7 @@ class RumeTest(EpymorphTestCase):
                              comment="The total population at each node."),
 
             AbsoluteName("gpm:aaa", "mm", "centroid"):
-                AttributeDef("centroid", [('longitude', float), ('latitude', float)], Shapes.N,
+                AttributeDef("centroid", (('longitude', float), ('latitude', float)), Shapes.N,
                              comment="The centroids for each node as (longitude, latitude) tuples."),
 
             AbsoluteName("gpm:aaa", "mm", "phi"):
