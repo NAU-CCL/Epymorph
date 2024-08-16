@@ -2,7 +2,7 @@
 Types for source data and attributes in epymorph.
 """
 from datetime import date
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -10,8 +10,13 @@ from numpy.typing import DTypeLike, NDArray
 # Types for attribute declarations:
 # these are expressed as Python types for simplicity.
 
+# NOTE: In epymorph, we express structured types as tuples-of-tuples;
+# this way they're hashable, which is important for AttributeDef.
+# However numpy expresses them as lists-of-tuples, so we have to convert;
+# thankfully we had an infrastructure for this sort of thing already.
+
 ScalarType = type[int | float | str | date]
-StructType = Sequence[tuple[str, ScalarType]]
+StructType = tuple[tuple[str, ScalarType], ...]
 AttributeType = ScalarType | StructType
 """The allowed type declarations for epymorph attributes."""
 
@@ -38,16 +43,16 @@ def dtype_as_np(dtype: AttributeType) -> np.dtype:
         return np.dtype(np.str_)
     if dtype == date:
         return np.dtype(np.datetime64)
-    if isinstance(dtype, Sequence):
-        dtype = list(dtype)
-        if len(dtype) == 0:
+    if isinstance(dtype, tuple):
+        fields = list(dtype)
+        if len(fields) == 0:
             raise ValueError(f"Unsupported dtype: {dtype}")
         try:
             return np.dtype([
                 (field_name, dtype_as_np(field_dtype))
-                for field_name, field_dtype in dtype
+                for field_name, field_dtype in fields
             ])
-        except TypeError:
+        except (TypeError, ValueError):
             raise ValueError(f"Unsupported dtype: {dtype}") from None
     raise ValueError(f"Unsupported dtype: {dtype}")
 
@@ -62,17 +67,17 @@ def dtype_str(dtype: AttributeType) -> str:
         return "str"
     if dtype == date:
         return "date"
-    if isinstance(dtype, Sequence):
-        dtype = list(dtype)
-        if len(dtype) == 0:
+    if isinstance(dtype, tuple):
+        fields = list(dtype)
+        if len(fields) == 0:
             raise ValueError(f"Unsupported dtype: {dtype}")
         try:
             values = [
                 f"({field_name}, {dtype_str(field_dtype)})"
-                for field_name, field_dtype in dtype
+                for field_name, field_dtype in fields
             ]
             return f"[{', '.join(values)}]"
-        except TypeError:
+        except (TypeError, ValueError):
             raise ValueError(f"Unsupported dtype: {dtype}") from None
     raise ValueError(f"Unsupported dtype: {dtype}")
 
@@ -81,22 +86,22 @@ def dtype_check(dtype: AttributeType, value: Any) -> bool:
     """Checks that a value conforms to a given dtype. (Python types only.)"""
     if dtype in (int, float, str, date):
         return isinstance(value, dtype)
-    if isinstance(dtype, Sequence):
-        dtype = list(dtype)
+    if isinstance(dtype, tuple):
+        fields = list(dtype)
         if not isinstance(value, tuple):
             return False
-        if len(value) != len(dtype):
+        if len(value) != len(fields):
             return False
         return all((
             dtype_check(field_dtype, field_value)
-            for ((_, field_dtype), field_value) in zip(dtype, value)
+            for ((_, field_dtype), field_value) in zip(fields, value)
         ))
     raise ValueError(f"Unsupported dtype: {dtype}")
 
 
-CentroidType: AttributeType = [('longitude', float), ('latitude', float)]
+CentroidType: AttributeType = (('longitude', float), ('latitude', float))
 """Structured epymorph type declaration for long/lat coordinates."""
-CentroidDType: DTypeLike = [('longitude', np.float64), ('latitude', np.float64)]
+CentroidDType: DTypeLike = dtype_as_np(CentroidType)
 """The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates)."""
 
 # SimDType being centrally-located means we can change it reliably.
