@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 from epymorph.cache import load_or_fetch_url
 from epymorph.error import DataResourceException
 from epymorph.geo.adrio.adrio2 import Adrio
-from epymorph.geo.spec import Year
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
 
@@ -36,18 +35,8 @@ def _fetch_lodes(scope: CensusScope, worker_type: str, job_type: str, year: int)
 
     # check for valid year input
     if year not in range(2002, 2022):
-        passed_year = year
-        # adjust to closest year
-        if year in range(1999, 2002):
-            year = 2002
-        elif year in range(2022, 2025):
-            year = 2021
-        else:
-            msg = "Invalid year. LODES data is only available for 2002-2021"
-            raise DataResourceException(msg)
-
-        print(
-            f"Commuting data cannot be retrieved for {passed_year}, fetching {year} data instead.")
+        msg = "Invalid year. LODES data is only available for 2002-2021"
+        raise DataResourceException(msg)
 
     # file type is main (residence in state only) by default
     file_type = "main"
@@ -107,11 +96,6 @@ def _fetch_lodes(scope: CensusScope, worker_type: str, job_type: str, year: int)
     for condition, message in invalid_conditions:
         if condition:
             raise DataResourceException(message)
-
-    # check if the CensusScope year is the current LODES geography: 2020
-    if scope.year != 2020:
-        msg = "GeoScope year does not match the LODES geography year."
-        raise DataResourceException(msg)
 
     # translate state FIPS code to state to use in URL
     state_codes = state_fips_to_code(scope.year)
@@ -174,7 +158,7 @@ def _fetch_lodes(scope: CensusScope, worker_type: str, job_type: str, year: int)
     for (w_geocode, h_geocode), value in aggregated_data.items():  # type: ignore
         w_index = geocode_to_index.get(w_geocode)
         h_index = geocode_to_index.get(h_geocode)
-        output[h_index, w_index] += np.int64(value)
+        output[h_index, w_index] += value
 
     return output
 
@@ -182,6 +166,11 @@ def _fetch_lodes(scope: CensusScope, worker_type: str, job_type: str, year: int)
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
         msg = 'Census scope is required for LODES attributes.'
+        raise DataResourceException(msg)
+
+    # check if the CensusScope year is the current LODES geography: 2020
+    if scope.year != 2020:
+        msg = "GeoScope year does not match the LODES geography year."
         raise DataResourceException(msg)
 
     return scope
@@ -192,12 +181,12 @@ class Commuters(Adrio[np.int64]):
     Creates an NxN matrix of integers representing the number of workers moving from a home GEOID to a work GEOID.
     """
 
-    year: Year
+    year: int
     """The year the data encompasses."""
 
     job_type: JobType
 
-    def __init__(self, year: Year, job_type: JobType = 'All Jobs'):
+    def __init__(self, year: int, job_type: JobType = 'All Jobs'):
         self.year = year
         self.job_type = job_type
 
@@ -205,7 +194,7 @@ class Commuters(Adrio[np.int64]):
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, "S000", job_var, self.year.year)
+        df = _fetch_lodes(scope, "S000", job_var, self.year)
         return df
 
 
@@ -215,7 +204,7 @@ class CommutersByAge(Adrio[np.int64]):
     home GEOID to a work GEOID that fall under a certain age range.
     """
 
-    year: Year
+    year: int
     """The year the data encompasses."""
 
     job_type: JobType
@@ -233,7 +222,7 @@ class CommutersByAge(Adrio[np.int64]):
 
     age_range: AgeRange
 
-    def __init__(self, year: Year, age_range: AgeRange, job_type: JobType = 'All Jobs'):
+    def __init__(self, year: int, age_range: AgeRange, job_type: JobType = 'All Jobs'):
         self.year = year
         self.age_range = age_range
         self.job_type = job_type
@@ -243,7 +232,7 @@ class CommutersByAge(Adrio[np.int64]):
         scope = _validate_scope(scope)
         age_var = self.age_variables[self.age_range]
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, age_var, job_var, self.year.year)
+        df = _fetch_lodes(scope, age_var, job_var, self.year)
         return df
 
 
@@ -253,7 +242,7 @@ class CommutersByEarnings(Adrio[np.int64]):
     home GEOID to a work GEOID that earn a certain income range monthly.
     """
 
-    year: Year
+    year: int
     """The year the data encompasses."""
 
     job_type: JobType
@@ -271,7 +260,7 @@ class CommutersByEarnings(Adrio[np.int64]):
 
     earning_range: EarningRange
 
-    def __init__(self, year: Year, earning_range: EarningRange, job_type: JobType = 'All Jobs'):
+    def __init__(self, year: int, earning_range: EarningRange, job_type: JobType = 'All Jobs'):
         self.year = year
         self.earning_range = earning_range
         self.job_type = job_type
@@ -281,7 +270,7 @@ class CommutersByEarnings(Adrio[np.int64]):
         scope = _validate_scope(scope)
         earning_var = self.earnings_variables[self.earning_range]
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, earning_var, job_var, self.year.year)
+        df = _fetch_lodes(scope, earning_var, job_var, self.year)
         return df
 
 
@@ -291,7 +280,7 @@ class CommutersByIndustry(Adrio[np.int64]):
     home GEOID to a work GEOID that work under specified industry sector.
     """
 
-    year: Year
+    year: int
     """The year the data encompasses."""
 
     job_type: JobType
@@ -309,7 +298,7 @@ class CommutersByIndustry(Adrio[np.int64]):
 
     industry: Industries
 
-    def __init__(self, year: Year, industry: Industries, job_type: JobType = 'All Jobs'):
+    def __init__(self, year: int, industry: Industries, job_type: JobType = 'All Jobs'):
         self.year = year
         self.industry = industry
         self.job_type = job_type
@@ -319,7 +308,7 @@ class CommutersByIndustry(Adrio[np.int64]):
         scope = _validate_scope(scope)
         industry_var = self.industry_variables[self.industry]
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, industry_var, job_var, self.year.year)
+        df = _fetch_lodes(scope, industry_var, job_var, self.year)
         return df
 
 
