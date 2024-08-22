@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -6,6 +8,7 @@ from epymorph.database import Database, ModuleNamespace
 from epymorph.error import MmSimException
 from epymorph.event import (MovementEventsMixin, OnMovementClause,
                             OnMovementFinish, OnMovementStart)
+from epymorph.movement_model import MovementClause
 from epymorph.rume import Rume
 from epymorph.simulation import (NamespacedAttributeResolver, Tick, gpm_strata,
                                  resolve_tick_delta)
@@ -98,7 +101,7 @@ class MovementExecutor:
     """the simulation RNG"""
 
     _event_target: MovementEventsMixin
-    _strata_data: dict[str, NamespacedAttributeResolver]
+    _clauses: list[tuple[str, MovementClause]]
 
     def __init__(
         self,
@@ -113,15 +116,17 @@ class MovementExecutor:
         self._rng = rng
         self._event_target = event_target
 
-        # Create a per-strata attribute resolver for MM clauses.
-        self._strata_data = {
-            strata: NamespacedAttributeResolver(
+        # Clone and set context on clauses.
+        self._clauses = []
+        for strata, model in self._rume.mms.items():
+            data = NamespacedAttributeResolver(
                 data=db,
                 dim=rume.dim,
                 namespace=ModuleNamespace(gpm_strata(strata), "mm"),
             )
-            for strata, mm in rume.mms.items()
-        }
+            for clause in model.clauses:
+                c = deepcopy(clause).with_context(data, rume.dim, rume.scope, rng)
+                self._clauses.append((strata, c))
 
     def apply(self, tick: Tick) -> None:
         """Applies movement for this tick, mutating the world state."""
@@ -131,41 +136,33 @@ class MovementExecutor:
 
         # Process travel clauses.
         total = 0
-        for strata, model in self._rume.mms.items():
-            for clause in model.clauses:
-                if not clause.is_active(tick):
-                    continue
+        for strata, clause in self._clauses:
+            if not clause.is_active(tick):
+                continue
 
-                available_movers = self._world.get_local_array()
+            try:
+                requested_movers = clause.evaluate(tick)
+            except Exception as e:
+                # NOTE: catching exceptions here is necessary to get nice error messages
+                # for some value error cause by incorrect parameter and/or clause definition
+                msg = f"Error from applying clause '{clause.__class__.__name__}': see exception trace"
+                raise MmSimException(msg) from e
 
-                try:
-                    requested_movers = clause.evaluate_in_context(
-                        self._strata_data[strata],
-                        self._rume.dim,
-                        self._rume.scope,
-                        self._rng,
-                        tick
-                    )
-                except Exception as e:
-                    # NOTE: catching exceptions here is necessary to get nice error messages
-                    # for some value error cause by incorrect parameter and/or clause definition
-                    msg = f"Error from applying clause '{clause.__class__.__name__}': see exception trace"
-                    raise MmSimException(msg) from e
+            available_movers = self._world.get_local_array()
+            clause_event = calculate_travelers(
+                clause.__class__.__name__,
+                self._rume.compartment_mobility[strata],
+                requested_movers,
+                available_movers,
+                tick,
+                self._rng
+            )
+            self._event_target.on_movement_clause.publish(clause_event)
+            travelers = clause_event.actual
 
-                clause_event = calculate_travelers(
-                    clause.__class__.__name__,
-                    self._rume.compartment_mobility[strata],
-                    requested_movers,
-                    available_movers,
-                    tick,
-                    self._rng
-                )
-                self._event_target.on_movement_clause.publish(clause_event)
-                travelers = clause_event.actual
-
-                return_tick = resolve_tick_delta(self._rume.dim, tick, clause.returns)
-                self._world.apply_travel(travelers, return_tick)
-                total += travelers.sum()
+            return_tick = resolve_tick_delta(self._rume.dim, tick, clause.returns)
+            self._world.apply_travel(travelers, return_tick)
+            total += travelers.sum()
 
         # Process return clause.
         return_movers = self._world.apply_return(tick, return_stats=True)
