@@ -54,6 +54,27 @@ class TimeFrame:
         """Alternate constructor for TimeFrame, parsing start date from an ISO-8601 string."""
         return cls(date.fromisoformat(start_date_iso8601), duration_days)
 
+    @classmethod
+    def year(cls, year: int) -> Self:
+        """Alternate constructor for TimeFrame, comprising one full calendar year."""
+        start = date(year, 1, 1)
+        end = date(year + 1, 1, 1)
+        duration = (end - start).days
+        return cls(start, duration)
+
+    @classmethod
+    def range(cls, start_date: date | str, end_date: date | str) -> Self:
+        """
+        Alternate constructor for TimeFrame, comprising the (endpoint inclusive) date range.
+        If a date is passed as a string, it will be parsed using ISO-8601 format.
+        """
+        if isinstance(start_date, str):
+            start_date = date.fromisoformat(start_date)
+        if isinstance(end_date, str):
+            end_date = date.fromisoformat(end_date)
+        duration = (end_date - start_date).days
+        return cls(start_date, duration)
+
     start_date: date
     """The first date in the simulation."""
     duration_days: int

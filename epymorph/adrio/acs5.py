@@ -12,9 +12,9 @@ from census import Census
 from numpy.typing import NDArray
 from pandas import DataFrame
 
+from epymorph.adrio.adrio import Adrio, adrio_cache
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
-from epymorph.geo.adrio.adrio2 import Adrio, adrio_cache
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
                                           BlockGroupScope, CensusScope,

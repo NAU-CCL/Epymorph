@@ -1,11 +1,13 @@
 """epymorph's file caching utilities."""
 from hashlib import sha256
 from io import BytesIO
+from math import log
 from os import PathLike, getenv
 from pathlib import Path
+from shutil import rmtree
 from tarfile import TarInfo, is_tarfile
 from tarfile import open as open_tarfile
-from typing import Callable
+from typing import Callable, NamedTuple, Sequence
 from urllib.request import urlopen
 from warnings import warn
 
@@ -63,7 +65,7 @@ class CacheWarning(Warning):
 
 def save_file(to_path: str | PathLike[str], file: BytesIO) -> None:
     """
-    Save a single file. `to_path` can be absolute or relative; relative paths will be reoslved
+    Save a single file. `to_path` can be absolute or relative; relative paths will be resolved
     against the current working directory. Folders in the path which do not exist will be created
     automatically.
     """
@@ -225,9 +227,16 @@ def load_bundle(from_path: str | PathLike[str], version_at_least: int = -1) -> d
 def _resolve_cache_path(path: str | PathLike[str]) -> Path:
     cache_path = Path(path)
     if cache_path.is_absolute():
-        msg = "When saving to or loading from the cache, please supply a relative path."
-        raise ValueError(msg)
-    return CACHE_PATH.joinpath(cache_path).resolve()
+        raise ValueError(
+            "When saving to or loading from the cache, please supply a relative path."
+        )
+    resolved = CACHE_PATH.joinpath(cache_path).resolve()
+    if not resolved.is_relative_to(CACHE_PATH):
+        # Ensure the resolved path is still inside CACHE_PATH.
+        raise ValueError(
+            "When saving to or loading from the cache, please supply a relative path."
+        )
+    return resolved
 
 
 def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
@@ -310,3 +319,114 @@ def load_bundle_from_cache(from_path: str | PathLike[str], version_at_least: int
         return load_bundle(_resolve_cache_path(from_path), version_at_least)
     except FileError as e:
         raise CacheMiss() from e
+
+
+####################
+# Cache Management #
+####################
+
+
+# https://en.wikipedia.org/wiki/Metric_prefix
+_suffixes = ('B', 'kiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB', 'RiB', 'QiB')
+
+
+def format_file_size(size: int) -> str:
+    """Format a file size given in bytes in 1024-based-unit representation."""
+    if size < 0:
+        raise ValueError("size cannot be less than zero.")
+    if size < 1024:
+        return f"{size} {_suffixes[0]}"
+    magnitude = int(log(size, 1024))
+    if magnitude >= len(_suffixes):
+        raise ValueError("size is too large to format.")
+    fsize = size / pow(1024, magnitude)
+    return f"{fsize:.1f} {_suffixes[magnitude]}"
+
+
+class Directory(NamedTuple):
+    """A directory."""
+    name: str
+    """The directory name."""
+    size: int
+    """The combined size of all of this directory's children."""
+    children: "Sequence[FileTree]"
+    """The directory's children, which may be files or nested directories."""
+
+
+class File(NamedTuple):
+    """A file."""
+    name: str
+    """The file name."""
+    size: int
+    """The file size."""
+
+
+FileTree = Directory | File
+"""Nodes in a file tree are either directories or files."""
+
+
+def cache_inventory() -> Directory:
+    """Lists the contents of epymorph's cache as a FileTree."""
+    def recurse(directory: Path) -> Directory:
+        children = []
+        size = 0
+        for path in directory.iterdir():
+            if path.is_symlink():
+                # Ignore symlinks.
+                continue
+            if path.is_file():
+                file_size = path.stat().st_size
+                children.append(File(path.name, file_size))
+                size += file_size
+            elif path.is_dir():
+                d = recurse(path)
+                children.append(d)
+                size += d.size
+        return Directory(directory.name, size, children)
+
+    if not CACHE_PATH.exists():
+        return Directory(CACHE_PATH.name, 0, [])
+    return recurse(CACHE_PATH)
+
+
+def cache_remove_confirmation(path: str | PathLike[str]) -> tuple[Path, Callable[[], None]]:
+    """
+    Creates a function which removes a directory or file from the cache.
+    Also returns the resolved path to the thing that will be removed;
+    this allows the application to confirm the removal.
+    """
+    try:
+        # This makes sure we don't delete things outside of the cache path.
+        to_remove = _resolve_cache_path(path)
+    except ValueError as e:
+        raise FileError(str(e)) from None
+    if not to_remove.exists():
+        raise FileError(f"Given path is not in the cache: {to_remove}")
+
+    def confirm_remove() -> None:
+        # Remove the target file/dir
+        if to_remove.is_file():
+            to_remove.unlink()
+        else:
+            rmtree(to_remove)
+
+        # Remove any newly-empty parent directories, up to the cache dir
+        parents = [p for p in to_remove.parents
+                   if p.is_relative_to(CACHE_PATH)
+                   and p != CACHE_PATH]
+        for p in parents:
+            if any(p.iterdir()):
+                break  # parent not empty, we can stop
+            p.rmdir()  # parent is empty
+
+        # We may need to replace the cache dir if we just deleted it.
+        CACHE_PATH.mkdir(parents=True, exist_ok=True)
+
+    return to_remove, confirm_remove
+
+
+def cache_remove(path: str | PathLike[str]) -> None:
+    """Removes a directory or file from the cache."""
+    # This is the "no confirmation" version of `cache_remove_confirmation`
+    _, confirm_remove = cache_remove_confirmation(path)
+    confirm_remove()

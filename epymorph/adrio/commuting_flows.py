@@ -4,9 +4,9 @@ import numpy as np
 from numpy.typing import NDArray
 from pandas import read_excel
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.cache import load_or_fetch_url
 from epymorph.error import DataResourceException
-from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.geography.us_census import (BlockGroupScope, CensusScope,
                                           StateScope, StateScopeAll,
                                           TractScope)

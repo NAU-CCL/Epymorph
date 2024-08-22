@@ -2,18 +2,17 @@ import os
 from datetime import date
 from typing import Any, Literal
 
-from numpy import dtype
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 from pandas import DataFrame, Series, read_csv
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.error import DataResourceException, GeoValidationException
-from epymorph.geo.adrio.adrio2 import Adrio
-from epymorph.geo.spec import SpecificTimePeriod, TimePeriod
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (STATE, CensusScope, CountyScope,
                                           StateScope, get_census_granularity,
                                           get_us_counties, get_us_states,
                                           state_code_to_fips)
+from epymorph.simulation import TimeFrame
 
 KeySpecifier = Literal['state_abbrev', 'county_state', 'geoid']
 
@@ -143,14 +142,14 @@ class CSV(Adrio[Any]):
     """Numerical index of the column containing information to identify geographies."""
     data_col: int
     """Numerical index of the column containing the data of interest."""
-    data_type: dtype
+    data_type: DTypeLike
     """The data type of values in the data column."""
     key_type: KeySpecifier
     """The type of geographic identifier in the key column."""
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
 
-    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
+    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
         self.key_col = key_col
         self.data_col = data_col
@@ -194,25 +193,25 @@ class CSVTimeSeries(Adrio[Any]):
     """Numerical index of the column containing information to identify geographies."""
     data_col: int
     """Numerical index of the column containing the data of interest."""
-    data_type: dtype
+    data_type: DTypeLike
     """The data type of values in the data column."""
     key_type: KeySpecifier
     """The type of geographic identifier in the key column."""
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
-    time_period: TimePeriod
+    time_frame: TimeFrame
     """The time period encompassed by data in the file."""
     time_col: int
     """The numerical index of the column containing time information."""
 
-    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None, time_period: TimePeriod, time_col: int):
+    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None, time_frame: TimeFrame, time_col: int):
         self.file_path = file_path
         self.key_col = key_col
         self.data_col = data_col
         self.data_type = data_type
         self.key_type = key_type
         self.skiprows = skiprows
-        self.time_period = time_period
+        self.time_frame = time_frame
         self.time_col = time_col
 
     def evaluate(self) -> NDArray[Any]:
@@ -232,12 +231,9 @@ class CSVTimeSeries(Adrio[Any]):
                 msg = "Data for required geographies missing from CSV file or could not be found."
                 raise DataResourceException(msg)
 
-            if not isinstance(self.time_period, SpecificTimePeriod):
-                raise GeoValidationException("Unsupported time period.")
-
             df[self.time_col] = df[self.time_col].apply(date.fromisoformat)
 
-            if any(df[self.time_col] < self.time_period.start_date) or any(df[self.time_col] > self.time_period.end_date):
+            if any(df[self.time_col] < self.time_frame.start_date) or any(df[self.time_col] > self.time_frame.end_date):
                 msg = "Found time column value(s) outside of provided date range."
                 raise DataResourceException(msg)
 
@@ -263,14 +259,14 @@ class CSVMatrix(Adrio[Any]):
     """Numerical index of the column containing information to identify destination geographies."""
     data_col: int
     """Numerical index of the column containing the data of interest."""
-    data_type: dtype
+    data_type: DTypeLike
     """The data type of values in the data column."""
     key_type: KeySpecifier
     """The type of geographic identifier in the key columns."""
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
 
-    def __init__(self, file_path: os.PathLike, from_key_col: int, to_key_col: int, data_col: int, data_type: dtype, key_type: KeySpecifier, skiprows: int | None):
+    def __init__(self, file_path: os.PathLike, from_key_col: int, to_key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
         self.from_key_col = from_key_col
         self.to_key_col = to_key_col

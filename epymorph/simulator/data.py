@@ -4,13 +4,13 @@ from typing import Callable, Generator, Mapping, Sequence, TypeVar
 import numpy as np
 from sympy import Expr
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.data_shape import DataShapeMatcher, SimDimensions
 from epymorph.data_type import AttributeArray, SimArray
 from epymorph.database import (AbsoluteName, Database, DatabaseWithFallback,
                                DatabaseWithStrataFallback, ModuleNamespace,
                                NamePattern)
 from epymorph.error import AttributeException, InitException
-from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.params import (ParamExpressionTimeAndNode, ParamFunction,
                              ParamValue)
 from epymorph.rume import GEO_LABELS, Gpm, Rume

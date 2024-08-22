@@ -3,8 +3,8 @@ from geopandas import GeoDataFrame
 from numpy.typing import NDArray
 from pandas import DataFrame, to_numeric
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.data_type import CentroidDType, StructDType
-from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_tiger import (get_block_groups_geo,

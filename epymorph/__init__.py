@@ -4,7 +4,7 @@ from numpy import seterr
 
 import epymorph.compartment_model as IPM
 import epymorph.initializer as init
-from epymorph.data import geo_library, ipm_library, mm_library
+from epymorph.data import ipm_library, mm_library
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType, SimDType
 from epymorph.draw import render, render_and_save
@@ -22,7 +22,6 @@ __all__ = [
     'IPM',
     'ipm_library',
     'mm_library',
-    'geo_library',
     'SimDType',
     'CentroidType',
     'Shapes',

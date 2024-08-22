@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.cache import load_or_fetch_url
 from epymorph.error import DataResourceException
-from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
 

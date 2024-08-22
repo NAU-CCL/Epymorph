@@ -10,9 +10,9 @@ import numpy as np
 from numpy.typing import NDArray
 from sympy import Expr, Symbol
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.data_type import (AttributeValue, ScalarDType, ScalarValue,
                                 StructDType, StructValue)
-from epymorph.geo.adrio.adrio2 import Adrio
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
 

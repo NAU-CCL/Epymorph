@@ -18,10 +18,10 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2023-06-01-sparsemod-example.ipynb | Frank | | Demonstration of the 'sparsemod' movement model. |
 | 2023-06-28.ipynb | Tyler | | Proving validity of the newly-added declarative compartment model IPM implementation. |
 | 2023-06-30.ipynb | Tyler | ✓ | Demonstrating the newly-added declarative compartment model IPM system. (This is a good reference for building custom IPMs, so we're keeping it current.) |
-| 2023-07-06.ipynb | Tyler | ✓ | Creates the Pei Geo. (Maintained until such a time as the ADRIO system can replace it.) |
-| 2023-07-07.ipynb | Tyler | ✓ | Creates the 2015 US States and US Counties Geos. (Maintained until such a time as the ADRIO system can replace them.) |
-| 2023-07-12.ipynb | Tyler | ✓ | Creates the 2019 Maricopa County CBGs Geo. (Maintained until such a time as the ADRIO system can replace it.) |
-| 2023-07-13.ipynb | Tyler | ✓ | Implements a compatibility matrix test: are all possible combinations of IPM/MM/GEO valid? |
+| 2023-07-06.ipynb | Tyler | | Creates the Pei Geo. (Maintained until such a time as the ADRIO system can replace it.) |
+| 2023-07-07.ipynb | Tyler | | Creates the 2015 US States and US Counties Geos. (Maintained until such a time as the ADRIO system can replace them.) |
+| 2023-07-12.ipynb | Tyler | | Creates the 2019 Maricopa County CBGs Geo. (Maintained until such a time as the ADRIO system can replace it.) |
+| 2023-07-13.ipynb | Tyler | | Implements a compatibility matrix test: are all possible combinations of IPM/MM/GEO valid? |
 | 2023-07-14.ipynb | Tyler | | Demonstrates filtering a geo down to a subset of its nodes. (While the motivation to do this still exists, recent changes have made this exact approach obsolete.) |
 | 2023-07-20-movement-probs.ipynb | Tyler | | Analyzing statistical correctness of our movement processing algorithms. |
 | 2023-07-24.ipynb | Tyler | | Experiments with adapting an IPM by "attaching" a function to an IPM parameter. This approach has been superseded by a design for direct support for functional parameters. |
@@ -47,22 +47,24 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-02-14.ipynb | Tyler | | Prep work related to the "Z-virus" workshop. (Not very organized.) |
 | 2024-03-01.ipynb | Tyler | | Getting the indices of IPM events and compartments by name with wildcard support. |
 | 2024-03-13.ipynb | Tyler | | Showing off movement data collection (NEW!) |
-| 2024-03-19.ipynb | Tyler | ✓ | Create and save the `us_sw_counties_2015.geo` spec file. |
+| 2024-03-19.ipynb | Tyler | | Create and save the `us_sw_counties_2015.geo` spec file. |
 | 2024-04-04-draw-demo.ipynb | Izaac | | Showing the new draw module for visualising IPMs (NEW!) |
 | 2024-04-16.ipynb | Izaac | | Showing error handling for common ipm errors (NEW!)|
-| 2024-04-25.ipynb | Tyler | ✓ | Integration test: epymorph cache utilities |
+| 2024-04-25.ipynb | Tyler | | Integration test: epymorph cache utilities |
 | 2024-05-03.ipynb | Tyler | ✓ | Integration test: loading US Census geography from TIGER |
 | 2024-05-09-lodes-adrio-demo.ipynb | Meaghan | | A full geo spec for testing LODES ADRIOs |
 | 2024-05-22.ipynb | Sachin |  | Integrating particle filter with epymorph. Propagating the particles using epymorph simulation and plot the infection rates |
 | 2024-06-03.ipynb | Trevor | ✓ | Integration test: using dynamic geos to fetch Census data |
 | 2024-06-05.ipynb | Meaghan | ✓ | A user manual and basic demonstrations of calling LODES ADRIOs |
 | 2024-06-12.ipynb | Trevor | ✓ | Integration test: CSV file ADRIOs |
-| 2024-07-03.ipynb | Trevor |  | Demonstration of CDC ADRIO functionality and attributes. |
+| 2024-07-03.ipynb | Trevor | ✓ | Demonstration of CDC ADRIO functionality and attributes. |
 | 2024-07-08.ipynb | Tyler | ✓ | Demonstrates the updated Initializers system, including library examples and custom initializers. |
 | 2024-07-10.ipynb | Trevor | ✓ | Integration test: Census ADRIOs |
 | 2024-07-12-v0.4.ipynb | Tyler | | Comparing v0.4 to v0.5 via example. (See next also.) |
 | 2024-07-12-v0.5.ipynb | Tyler | | Comparing v0.4 to v0.5 via example. (See previous also.) |
+| 2024-07-12-v0.6.ipynb | Tyler | | Comparing v0.5 to v0.6 via example. (See previous also.) |
 | 2024-07-18.ipynb | Tyler | | A simple demo of ADRIOs "version 2". |
+| 2024-08-13.ipynb | Tyler | | Demo @adrio_cache. |
 
 ## Contributing
 
