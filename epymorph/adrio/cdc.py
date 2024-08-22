@@ -1,3 +1,4 @@
+"""ADRIOs that access data.cdc.gov website for various health data."""
 from datetime import date, timedelta
 from typing import NamedTuple
 from urllib.parse import quote, urlencode
@@ -6,6 +7,7 @@ from warnings import warn
 import numpy as np
 from numpy.typing import NDArray
 from pandas import DataFrame, concat, read_csv
+from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio
 from epymorph.error import DataResourceException
@@ -299,6 +301,7 @@ class CovidCasesPer100k(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_cases('covid_cases_per_100k', scope, self.time_frame)
@@ -313,6 +316,7 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_cases('covid_hospital_admissions_per_100k', scope, self.time_frame)
@@ -327,6 +331,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_avg', scope, self.time_frame)
@@ -341,6 +346,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_sum', scope, self.time_frame)
@@ -355,6 +361,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_avg', scope, self.time_frame)
@@ -369,6 +376,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_sum', scope, self.time_frame)
@@ -383,6 +391,7 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization('avg_admissions_all_covid_confirmed', scope, self.time_frame)
@@ -397,6 +406,7 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization('total_admissions_all_covid_confirmed', scope, self.time_frame)
@@ -411,6 +421,7 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization('avg_admissions_all_influenza_confirmed', scope, self.time_frame)
@@ -425,6 +436,7 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization('total_admissions_all_influenza_confirmed', scope, self.time_frame)
@@ -439,6 +451,7 @@ class FullCovidVaccinations(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_vaccination('series_complete_yes', scope, self.time_frame)
@@ -453,6 +466,7 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_vaccination('administered_dose1_recip', scope, self.time_frame)
@@ -467,6 +481,7 @@ class CovidBoosterDoses(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_vaccination('booster_doses', scope, self.time_frame)
@@ -481,6 +496,7 @@ class CovidDeathsCounty(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_deaths_county('covid_19_deaths', scope, self.time_frame)
@@ -495,6 +511,7 @@ class CovidDeathsState(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_deaths_state('covid_19_deaths', scope, self.time_frame)
@@ -509,6 +526,7 @@ class InfluenzaDeathsState(Adrio[np.float64]):
     def __init__(self, time_frame: TimeFrame):
         self.time_frame = time_frame
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_deaths_state('influenza_deaths', scope, self.time_frame)

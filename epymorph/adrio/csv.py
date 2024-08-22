@@ -1,9 +1,12 @@
-import os
+"""ADRIOs that load data from locally available CSV files."""
 from datetime import date
+from os import PathLike
+from pathlib import Path
 from typing import Any, Literal
 
 from numpy.typing import DTypeLike, NDArray
 from pandas import DataFrame, Series, read_csv
+from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio
 from epymorph.error import DataResourceException, GeoValidationException
@@ -136,7 +139,7 @@ def _validate_result(scope: GeoScope, data: Series) -> None:
 class CSV(Adrio[Any]):
     """Retrieves an N-shaped array of any type from a user-provided CSV file."""
 
-    file_path: os.PathLike
+    file_path: PathLike
     """The path to the CSV file containing data."""
     key_col: int
     """Numerical index of the column containing information to identify geographies."""
@@ -149,7 +152,7 @@ class CSV(Adrio[Any]):
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
 
-    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None):
+    def __init__(self, file_path: PathLike, key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
         self.key_col = key_col
         self.data_col = data_col
@@ -157,16 +160,17 @@ class CSV(Adrio[Any]):
         self.key_type = key_type
         self.skiprows = skiprows
 
+    @override
     def evaluate(self) -> NDArray[Any]:
 
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
             raise GeoValidationException(msg)
 
-        path = self.file_path
+        path = Path(self.file_path)
         # workaround for bad pandas type definitions
         skiprows: int = self.skiprows  # type: ignore
-        if os.path.exists(path):
+        if path.exists():
             df = read_csv(path, skiprows=skiprows,
                           header=None, dtype={self.key_col: str})
             df = _parse_label(self.key_type, self.scope, df, self.key_col)
@@ -187,7 +191,7 @@ class CSV(Adrio[Any]):
 class CSVTimeSeries(Adrio[Any]):
     """Retrieves a TxN-shaped array of any type from a user-provided CSV file."""
 
-    file_path: os.PathLike
+    file_path: PathLike
     """The path to the CSV file containing data."""
     key_col: int
     """Numerical index of the column containing information to identify geographies."""
@@ -204,7 +208,7 @@ class CSVTimeSeries(Adrio[Any]):
     time_col: int
     """The numerical index of the column containing time information."""
 
-    def __init__(self, file_path: os.PathLike, key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None, time_frame: TimeFrame, time_col: int):
+    def __init__(self, file_path: PathLike, key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None, time_frame: TimeFrame, time_col: int):
         self.file_path = file_path
         self.key_col = key_col
         self.data_col = data_col
@@ -214,15 +218,16 @@ class CSVTimeSeries(Adrio[Any]):
         self.time_frame = time_frame
         self.time_col = time_col
 
+    @override
     def evaluate(self) -> NDArray[Any]:
 
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
             raise GeoValidationException(msg)
 
-        path = self.file_path
+        path = Path(self.file_path)
         skiprows: int = self.skiprows  # type: ignore
-        if os.path.exists(path):
+        if path.exists():
             df = read_csv(path, skiprows=skiprows,
                           header=None, dtype={self.key_col: str})
             df = _parse_label(self.key_type, self.scope, df, self.key_col)
@@ -251,7 +256,7 @@ class CSVTimeSeries(Adrio[Any]):
 class CSVMatrix(Adrio[Any]):
     """Recieves an NxN-shaped array of any type from a user-provided CSV file."""
 
-    file_path: os.PathLike
+    file_path: PathLike
     """The path to the CSV file containing data."""
     from_key_col: int
     """Numerical index of the column containing information to identify source geographies."""
@@ -266,7 +271,7 @@ class CSVMatrix(Adrio[Any]):
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
 
-    def __init__(self, file_path: os.PathLike, from_key_col: int, to_key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None):
+    def __init__(self, file_path: PathLike, from_key_col: int, to_key_col: int, data_col: int, data_type: DTypeLike, key_type: KeySpecifier, skiprows: int | None):
         self.file_path = file_path
         self.from_key_col = from_key_col
         self.to_key_col = to_key_col
@@ -275,15 +280,16 @@ class CSVMatrix(Adrio[Any]):
         self.key_type = key_type
         self.skiprows = skiprows
 
+    @override
     def evaluate(self) -> NDArray[Any]:
 
         if len({self.from_key_col, self.to_key_col, self.data_col}) != 3:
             msg = "From key column, to key column, and data column must all be unique."
             raise GeoValidationException(msg)
 
-        path = self.file_path
+        path = Path(self.file_path)
         skiprows: int = self.skiprows  # type: ignore
-        if os.path.exists(path):
+        if path.exists():
             df = read_csv(path, skiprows=skiprows, header=None, dtype={
                 self.from_key_col: str, self.to_key_col: str})
             df = _parse_label(self.key_type, self.scope, df,

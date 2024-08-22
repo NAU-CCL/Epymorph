@@ -10,7 +10,6 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import cache
 from io import BytesIO
-from pathlib import Path
 from typing import (Callable, Iterable, Literal, Mapping, NamedTuple,
                     ParamSpec, Sequence, TypeVar)
 
@@ -19,7 +18,7 @@ from numpy.typing import NDArray
 
 import epymorph.geography.us_tiger as us_tiger
 from epymorph.cache import (CacheMiss, load_bundle_from_cache,
-                            save_bundle_to_cache)
+                            module_cache_path, save_bundle_to_cache)
 from epymorph.error import GeographyError
 from epymorph.geography.scope import GeoScope
 from epymorph.util import filter_unique, prefix
@@ -252,7 +251,7 @@ def get_census_granularity(name: CensusGranularityName) -> CensusGranularity:
 
 DEFAULT_YEAR = 2020
 
-_GEOGRAPHY_CACHE_PATH = Path("geography")
+_USCENSUS_CACHE_PATH = module_cache_path(__name__)
 
 _CACHE_VERSION = 2
 
@@ -262,7 +261,7 @@ ModelT = TypeVar('ModelT', bound=NamedTuple)
 def _load_cached(relpath: str, on_miss: Callable[[], ModelT], on_hit: Callable[..., ModelT]) -> ModelT:
     # NOTE: this would be more natural as a decorator,
     # but Pylance seems to have problems tracking the return type properly with that implementation
-    path = _GEOGRAPHY_CACHE_PATH.joinpath(relpath)
+    path = _USCENSUS_CACHE_PATH.joinpath(relpath)
     try:
         content = load_bundle_from_cache(path, _CACHE_VERSION)
         with np.load(content['data.npz']) as data_npz:

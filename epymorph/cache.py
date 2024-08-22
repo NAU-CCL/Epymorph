@@ -5,6 +5,7 @@ from math import log
 from os import PathLike, getenv
 from pathlib import Path
 from shutil import rmtree
+from sys import modules
 from tarfile import TarInfo, is_tarfile
 from tarfile import open as open_tarfile
 from typing import Callable, NamedTuple, Sequence
@@ -27,6 +28,30 @@ def _cache_path() -> Path:
 
 
 CACHE_PATH = _cache_path()
+
+
+def module_cache_path(name: str) -> Path:
+    """
+    When epymorph modules need to store files in the cache,
+    they should use a subdirectory tree within the application's
+    cache path. This tree should correspond to the module's path
+    within epymorph. e.g.: module epymorph.adrio.acs5 will store
+    files at $CACHE_PATH/adrio/acs5.
+    (The returned value is a relative path since the cache functions
+    require that.)
+
+    Usage example:
+
+    `_TIGER_CACHE_PATH = module_cache_path(__name__)`
+    """
+    file_name = modules[name].__file__
+    if file_name is None:
+        return CACHE_PATH
+    file_path = Path(file_name).with_suffix("")
+    root = file_path.parent
+    while root.name != "epymorph":
+        root = root.parent
+    return file_path.relative_to(root)
 
 
 class FileError(Exception):

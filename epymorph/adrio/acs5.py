@@ -1,18 +1,20 @@
-import json
-import os
+"""ADRIOs that access the US Census ACS 5-year data."""
 import re
 from collections import defaultdict
 from functools import cache
-from typing import Literal, NamedTuple, TypeGuard
-from urllib.request import urlopen
+from json import load as load_json
+from os import environ
+from typing import Literal, NamedTuple, Sequence, TypeGuard
 
 import numpy as np
 import pandas as pd
 from census import Census
 from numpy.typing import NDArray
 from pandas import DataFrame
+from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio, adrio_cache
+from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
@@ -24,10 +26,20 @@ from epymorph.geography.us_census import (BLOCK_GROUP, COUNTY, STATE, TRACT,
 from epymorph.simulation import AttributeDef
 from epymorph.util import filter_with_mask
 
+_ACS5_CACHE_PATH = module_cache_path(__name__)
+
+Acs5Year = Literal[2009, 2010, 2011, 2012, 2013, 2014,
+                   2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022]
+"""A supported ACS5 data year."""
+
+ACS5_YEARS: Sequence[Acs5Year] = (2009, 2010, 2011, 2012, 2013, 2014,
+                                  2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022)
+"""All supported ACS5 data years."""
+
 
 @cache
 def _get_api() -> Census:
-    api_key = os.environ.get('CENSUS_API_KEY')
+    api_key = environ.get('CENSUS_API_KEY')
     if api_key is None:
         msg = "Census API key not found. " \
             "Please ensure you have set the environment variable 'CENSUS_API_KEY'"
@@ -37,12 +49,13 @@ def _get_api() -> Census:
 
 @cache
 def _get_vars(year: int) -> dict[str, dict]:
-    # TODO:
-    # - check year is good
-    # - disk cache vars files
-    vars_url = f"https://api.census.gov/data/{year}/acs/acs5/variables.json"
-    with urlopen(vars_url) as f:
-        return json.load(f)['variables']
+    try:
+        vars_url = f"https://api.census.gov/data/{year}/acs/acs5/variables.json"
+        cache_path = _ACS5_CACHE_PATH / f"variables-{year}.json"
+        file = load_or_fetch_url(vars_url, cache_path)
+        return load_json(file)['variables']
+    except Exception as e:
+        raise DataResourceException("Unable to load ACS5 variables.") from e
 
 
 @cache
@@ -56,10 +69,19 @@ def _get_group_vars(year: int, group: str) -> list[tuple[str, dict]]:
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
-        msg = "Census scope is required for ACS5 attributes."
-        raise DataResourceException(msg)
-
+        raise DataResourceException(
+            "Census scope is required for acs5 attributes."
+        )
+    if not is_acs5_year(scope.year):
+        raise DataResourceException(
+            f"{scope.year} is not a supported year for acs5 attributes."
+        )
     return scope
+
+
+def is_acs5_year(year: int) -> TypeGuard[Acs5Year]:
+    """A type-guard function to ensure a year is a supported ACS5 year."""
+    return year in ACS5_YEARS
 
 
 def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
@@ -200,10 +222,9 @@ class Population(Adrio[np.int64]):
     Data is retrieved from Census table variable B01001_001 using ACS5 5-year estimates.
     """
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
-
+        scope = _validate_scope(self.scope)
         df = _fetch_acs5(['B01001_001E'], scope)
         return df['B01001_001E'].to_numpy(dtype=np.int64)
 
@@ -215,10 +236,9 @@ class PopulationByAgeTable(Adrio[np.int64]):
     Data is retrieved from Census table B01001 using ACS5 5-year estimates. 
     """
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
-
+        scope = _validate_scope(self.scope)
         # NOTE: asking acs5 explicitly for the [B01001_001E, ...] vars
         # seems to be about twice as fast as asking for group(B01001)
         age_vars = [var for var, _
@@ -294,9 +314,9 @@ class PopulationByAge(Adrio[np.int64]):
     def __init__(self, age_range_start: int, age_range_end: int | None):
         self._age_range = AgeRange(age_range_start, age_range_end)
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
+        scope = _validate_scope(self.scope)
 
         age_ranges = [
             AgeRange.parse(attrs['label'])
@@ -330,10 +350,9 @@ class AverageHouseholdSize(Adrio[np.float64]):
     Data is retrieved from Census table variable B25010_001 using ACS5 5-year estimates.
     """
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
-
+        scope = _validate_scope(self.scope)
         df = _fetch_acs5(['B25010_001E'], scope)
         return df['B25010_001E'].to_numpy(dtype=np.float64)
 
@@ -370,10 +389,9 @@ class DissimilarityIndex(Adrio[np.float64]):
         self.minority_pop = minority_pop
         """The race category of the minority population of interest"""
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
-
+        scope = _validate_scope(self.scope)
         if isinstance(scope, BlockGroupScope):
             msg = "Dissimilarity index cannot be retreived for block group scope."
             raise DataResourceException(msg)
@@ -412,10 +430,9 @@ class GiniIndex(Adrio[np.float64]):
     Data is retrieved from Census table variable B19083_001 using ACS 5-year estimates.
     """
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
-
+        scope = _validate_scope(self.scope)
         df = _fetch_acs5(['B19083_001E'], scope)
         df['B19083_001E'] = df['B19083_001E'].astype(
             np.float64).fillna(0.5).replace(-666666666, 0.5)
@@ -441,10 +458,9 @@ class MedianAge(Adrio[np.float64]):
     Data is retrieved from Census table variable B01002_001 using ACS 5-year estimates.
     """
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
-
+        scope = _validate_scope(self.scope)
         df = _fetch_acs5(['B01002_001E'], scope)
         return df['B01002_001E'].to_numpy(dtype=np.float64)
 
@@ -456,9 +472,8 @@ class MedianIncome(Adrio[np.float64]):
     Data is retrieved from Census table variable B19013_001 using ACS 5-year estimates.
     """
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
-
+        scope = _validate_scope(self.scope)
         df = _fetch_acs5(['B19013_001E'], scope)
         return df['B19013_001E'].to_numpy(dtype=np.float64)

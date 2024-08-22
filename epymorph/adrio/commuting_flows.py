@@ -1,20 +1,23 @@
-from pathlib import Path
-
+"""ADRIOs that access the US Census ACS Commuting Flows files."""
 import numpy as np
 from numpy.typing import NDArray
 from pandas import read_excel
+from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio
-from epymorph.cache import load_or_fetch_url
+from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.error import DataResourceException
 from epymorph.geography.us_census import (BlockGroupScope, CensusScope,
                                           StateScope, StateScopeAll,
                                           TractScope)
 
+_COMMFLOWS_CACHE_PATH = module_cache_path(__name__)
+
 
 class Commuters(Adrio[np.int64]):
     """Makes an ADRIO to retrieve ACS commuting flow data."""
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
 
@@ -39,7 +42,7 @@ class Commuters(Adrio[np.int64]):
             elif year in range(2020, 2024):
                 year = 2020
             else:
-                msg = "Invalid year. Communting data is only available for 2010-2023"
+                msg = "Invalid year. Commuting data is only available for 2010-2023"
                 raise DataResourceException(msg)
 
             print(
@@ -77,8 +80,8 @@ class Commuters(Adrio[np.int64]):
             raise DataResourceException(msg)
 
         try:
-            file_path = Path(f'acs-commuting-flows/{year}.xlsx')
-            commuter_file = load_or_fetch_url(url, file_path)
+            cache_path = _COMMFLOWS_CACHE_PATH / f"{year}.xlsx"
+            commuter_file = load_or_fetch_url(url, cache_path)
         except Exception as e:
             raise DataResourceException("Unable to fetch commuting flows data.") from e
 

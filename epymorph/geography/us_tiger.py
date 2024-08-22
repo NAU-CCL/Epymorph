@@ -12,7 +12,7 @@ from geopandas import read_file as gp_read_file
 from pandas import DataFrame
 from pandas import concat as pd_concat
 
-from epymorph.cache import load_or_fetch_url
+from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.error import GeographyError
 
 # A fair question is why did we implement our own TIGER files loader instead of using pygris?
@@ -49,7 +49,7 @@ TIGER_YEARS: Sequence[TigerYear] = (2000, 2009, 2010, 2011, 2012, 2013, 2014,
 
 _TIGER_URL = "https://www2.census.gov/geo/tiger"
 
-_TIGER_CACHE_PATH = Path("geography/tiger")
+_TIGER_CACHE_PATH = module_cache_path(__name__)
 
 # _SUPPORTED_STATE_FILES = ['us', '60', '66', '69', '78']
 _SUPPORTED_STATE_FILES = ['us']

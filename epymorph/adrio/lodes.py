@@ -1,17 +1,19 @@
+"""ADRIOs thta access the US Census LODES files for commuting data."""
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio
-from epymorph.cache import load_or_fetch_url
+from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
 
-_LODES_CACHE_PATH = Path("geo/adrio/lodes")
+_LODES_CACHE_PATH = module_cache_path(__name__)
 
 # job type variables for use among all commuters classes
 JobType = Literal[
@@ -190,6 +192,7 @@ class Commuters(Adrio[np.int64]):
         self.year = year
         self.job_type = job_type
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
@@ -227,6 +230,7 @@ class CommutersByAge(Adrio[np.int64]):
         self.age_range = age_range
         self.job_type = job_type
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
@@ -265,6 +269,7 @@ class CommutersByEarnings(Adrio[np.int64]):
         self.earning_range = earning_range
         self.job_type = job_type
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
@@ -303,6 +308,7 @@ class CommutersByIndustry(Adrio[np.int64]):
         self.industry = industry
         self.job_type = job_type
 
+    @override
     def evaluate(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
@@ -310,15 +316,3 @@ class CommutersByIndustry(Adrio[np.int64]):
         job_var = job_variables[self.job_type]
         df = _fetch_lodes(scope, industry_var, job_var, self.year)
         return df
-
-
-class Geoid(Adrio):
-    """
-    Creates an array of strings of the geocodes involved within a commuters matrix.
-    """
-
-    def evaluate(self) -> NDArray:
-        scope = self.scope
-        scope = _validate_scope(scope)
-        geoid = scope.get_node_ids()
-        return np.array(geoid, dtype=str)

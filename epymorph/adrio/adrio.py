@@ -1,8 +1,10 @@
+"""Implements the base class for all ADRIOs, as well as some general-purpose ADRIO implementations."""
 import functools
 from typing import TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.geography.scope import GeoScope
@@ -63,6 +65,14 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
     return cls
 
 
+class NodeId(Adrio[np.str_]):
+    """An ADRIO which simply gives access to the node IDs as they exist in the geo scope."""
+
+    @override
+    def evaluate(self) -> NDArray:
+        return self.scope.get_node_ids()
+
+
 class Scale(Adrio[np.float64]):
     """Scales the result of another ADRIO by multiplying its values by the configured factor."""
 
@@ -73,6 +83,7 @@ class Scale(Adrio[np.float64]):
         self._parent = parent
         self._factor = factor
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         return self.defer(self._parent).astype(dtype=np.float64) * self._factor
 
@@ -85,6 +96,7 @@ class PopulationPerKm2(Adrio[np.float64]):
 
     requirements = [POPULATION, LAND_AREA_KM2]
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         pop = self.data(self.POPULATION)
         area = self.data(self.LAND_AREA_KM2)
