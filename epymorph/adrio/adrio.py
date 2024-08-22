@@ -6,10 +6,8 @@ import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.data_shape import Shapes, SimDimensions
-from epymorph.geography.scope import GeoScope
-from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
-                                 SimulationFunction)
+from epymorph.data_shape import Shapes
+from epymorph.simulation import AttributeDef, SimulationFunction
 
 T_co = TypeVar('T_co', bound=np.generic, covariant=True)
 """The result type of an Adrio."""
@@ -21,21 +19,6 @@ class Adrio(SimulationFunction[NDArray[T_co]]):
     load data from external sources for epymorph simulations. This may be from web APIs,
     local files or database, or anything imaginable.
     """
-
-    def evaluate_in_context(
-        self,
-        data: NamespacedAttributeResolver,
-        dim: SimDimensions,
-        scope: GeoScope,
-        rng: np.random.Generator,
-    ) -> NDArray[T_co]:
-        # TODO: use events for messaging?
-        # print(f"Evaluating {self.__class__.__name__} ADRIO...")
-        # t0 = perf_counter()
-        value = super().evaluate_in_context(data, dim, scope, rng)
-        # t1 = perf_counter()
-        # print(f"Completed {self.__class__.__name__} ADRIO ({(t1 - t0):0.3f}s).")
-        return value
 
 
 AdrioClassT = TypeVar('AdrioClassT', bound=type[Adrio])
@@ -56,9 +39,6 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
         if cached_value is None or cached_hash != curr_hash:
             cached_value = original_eval(self, data, dim, scope, rng)
             cached_hash = curr_hash
-        else:
-            # print(f"Using cached result for {self.__class__.__name__} ADRIO...")
-            pass
         return cached_value
 
     cls.evaluate_in_context = evaluate_in_context

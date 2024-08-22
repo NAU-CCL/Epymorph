@@ -5,19 +5,19 @@ from logging import (BASIC_FORMAT, DEBUG, NOTSET, FileHandler, Formatter,
 from time import perf_counter
 from typing import Generator
 
-from epymorph.event import (AdrioStart, DynamicGeoEvents, OnMovementClause,
-                            OnMovementFinish, OnMovementStart, OnStart, OnTick,
-                            SimWithEvents)
+from epymorph.event import (AdrioFinish, EventBus, OnMovementClause,
+                            OnMovementFinish, OnMovementStart, OnStart, OnTick)
 from epymorph.util import subscriptions
+
+_events = EventBus()
 
 
 @contextmanager
 def file_log(
-    sim: SimWithEvents,
     log_file: str = 'debug.log',
     log_level: str | int = DEBUG,
 ) -> Generator[None, None, None]:
-    """Attach file logging to a simulation."""
+    """Enable detailed file logging during a simulation."""
 
     # Initialize the logging system and create some Loggers for epymorph subsystems.
     log_handler = FileHandler(log_file, "w", "utf8")
@@ -28,21 +28,21 @@ def file_log(
     epy_log.setLevel(log_level)
 
     sim_log = epy_log.getChild('sim')
-    geo_log = epy_log.getChild('geo')
+    adrio_log = epy_log.getChild('adrio')
     mm_log = epy_log.getChild('movement')
 
     # Define handlers for each of the events we're interested in.
 
     start_time: float | None = None
 
-    def on_start(ctx: OnStart) -> None:
-        start_date = ctx.dim.start_date
-        end_date = ctx.dim.end_date
-        duration_days = ctx.dim.days
+    def on_start(e: OnStart) -> None:
+        start_date = e.dim.start_date
+        end_date = e.dim.end_date
+        duration_days = e.dim.days
 
-        sim_log.info(f"Running simulation ({sim.__class__.__name__}):")
+        sim_log.info(f"Running simulation ({e.simulator}):")
         sim_log.info(f"- {start_date} to {end_date} ({duration_days} days)")
-        sim_log.info(f"- {ctx.dim.nodes} geo nodes")
+        sim_log.info(f"- {e.dim.nodes} geo nodes")
 
         nonlocal start_time
         start_time = perf_counter()
@@ -56,9 +56,10 @@ def file_log(
         if start_time is not None:
             sim_log.info(f"Runtime: {(end_time - start_time):.3f}s")
 
-    def adrio_start(adrio: AdrioStart) -> None:
-        geo_log.debug(
-            "Uncached geo attribute requested: %s. Retreiving now.", adrio.attribute)
+    def on_adrio_finish(e: AdrioFinish) -> None:
+        adrio_log.info(
+            f"ADRIO {e.adrio_name} fetched `{e.attribute}` in ({e.duration:.3f} seconds)"
+        )
 
     def on_movement_start(e: OnMovementStart) -> None:
         mm_log.info("Processing movement for day %d, step %d.", e.day, e.step)
@@ -76,27 +77,21 @@ def file_log(
     def on_movement_finish(e: OnMovementFinish) -> None:
         mm_log.info(f"Moved a total of {e.total} individuals.")
 
-    # Set up a subscriptions context, subscribe our handlers,
-    # then yield to the outer context (where the sim should be run).
     with subscriptions() as subs:
-        # Simulation logging
-        subs.subscribe(sim.on_start, on_start)
-        subs.subscribe(sim.on_tick, on_tick)
-        subs.subscribe(sim.on_finish, on_finish)
+        # Set up a subscriptions context, subscribe our handlers,
+        # then yield to the outer context (where the sim should be run).
+        subs.subscribe(_events.on_start, on_start)
+        subs.subscribe(_events.on_tick, on_tick)
+        subs.subscribe(_events.on_finish, on_finish)
 
-        # Geo logging will be attached if it makes sense.
-        sim_geo = getattr(sim, 'geo', None)
-        if isinstance(sim_geo, DynamicGeoEvents):
-            geo_log.info("Geo not loaded from cache; "
-                         "attributes will be lazily loaded during simulation run.")
-            subs.subscribe(sim_geo.adrio_start, adrio_start)
+        subs.subscribe(_events.on_adrio_finish, on_adrio_finish)
 
-        # Movement logging
-        subs.subscribe(sim.on_movement_start, on_movement_start)
-        subs.subscribe(sim.on_movement_clause, on_movement_clause)
-        subs.subscribe(sim.on_movement_finish, on_movement_finish)
+        subs.subscribe(_events.on_movement_start, on_movement_start)
+        subs.subscribe(_events.on_movement_clause, on_movement_clause)
+        subs.subscribe(_events.on_movement_finish, on_movement_finish)
 
         yield  # to outer context
+        # And now our event handlers will be unsubscribed.
 
     # Close out the log file.
     # This isn't necessary if we're running on the CLI, but if we're in a Jupyter context,

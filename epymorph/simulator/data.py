@@ -1,4 +1,5 @@
 """Functions for managing simulation data."""
+from time import perf_counter
 from typing import Callable, Generator, Mapping, Sequence, TypeVar
 
 import numpy as np
@@ -11,11 +12,14 @@ from epymorph.database import (AbsoluteName, Database, DatabaseWithFallback,
                                DatabaseWithStrataFallback, ModuleNamespace,
                                NamePattern)
 from epymorph.error import AttributeException, InitException
+from epymorph.event import AdrioFinish, AdrioStart, EventBus
 from epymorph.params import (ParamExpressionTimeAndNode, ParamFunction,
                              ParamValue)
 from epymorph.rume import GEO_LABELS, Gpm, Rume
 from epymorph.simulation import NamespacedAttributeResolver, gpm_strata
 from epymorph.util import NumpyTypeError, check_ndarray, match
+
+_events = EventBus()
 
 _EvalFunction = Callable[
     [AbsoluteName, list[AbsoluteName], ParamValue | None],
@@ -130,7 +134,17 @@ def _evaluation_context(
                 dep_name = namespace.to_absolute(dependency.name)
                 evaluate(dep_name, [*chain, name], dependency.default_value)
             data = NamespacedAttributeResolver(attr_db, rume.dim, namespace)
-            value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
+
+            if not isinstance(raw_value, Adrio):
+                value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
+            else:
+                adrio_name = raw_value.__class__.__name__
+                _events.on_adrio_start.publish(AdrioStart(adrio_name, name))
+                t0 = perf_counter()
+                value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
+                t1 = perf_counter()
+                _events.on_adrio_finish.publish(AdrioFinish(adrio_name, name, t1 - t0))
+
         elif isinstance(raw_value, type) and issubclass(raw_value, ParamFunction):
             msg = f"Invalid parameter: '{format_name(match_pattern)}' "\
                 "is a ParamFunction class instead of an instance."

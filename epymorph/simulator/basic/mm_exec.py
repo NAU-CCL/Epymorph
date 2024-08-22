@@ -6,8 +6,8 @@ from numpy.typing import NDArray
 from epymorph.data_type import AttributeArray, SimDType
 from epymorph.database import Database, ModuleNamespace
 from epymorph.error import MmSimException
-from epymorph.event import (MovementEventsMixin, OnMovementClause,
-                            OnMovementFinish, OnMovementStart)
+from epymorph.event import (EventBus, OnMovementClause, OnMovementFinish,
+                            OnMovementStart)
 from epymorph.movement_model import MovementClause
 from epymorph.rume import Rume
 from epymorph.simulation import (NamespacedAttributeResolver, Tick, gpm_strata,
@@ -90,6 +90,9 @@ def calculate_travelers(
     )
 
 
+_events = EventBus()
+
+
 class MovementExecutor:
     """Movement model execution specifically for multi-strata simulations."""
 
@@ -100,7 +103,6 @@ class MovementExecutor:
     _rng: np.random.Generator
     """the simulation RNG"""
 
-    _event_target: MovementEventsMixin
     _clauses: list[tuple[str, MovementClause]]
 
     def __init__(
@@ -109,12 +111,10 @@ class MovementExecutor:
         world: World,
         db: Database[AttributeArray],
         rng: np.random.Generator,
-        event_target: MovementEventsMixin,
     ):
         self._rume = rume
         self._world = world
         self._rng = rng
-        self._event_target = event_target
 
         # Clone and set context on clauses.
         self._clauses = []
@@ -131,7 +131,7 @@ class MovementExecutor:
     def apply(self, tick: Tick) -> None:
         """Applies movement for this tick, mutating the world state."""
 
-        self._event_target.on_movement_start.publish(
+        _events.on_movement_start.publish(
             OnMovementStart(tick.sim_index, tick.day, tick.step))
 
         # Process travel clauses.
@@ -157,7 +157,7 @@ class MovementExecutor:
                 tick,
                 self._rng
             )
-            self._event_target.on_movement_clause.publish(clause_event)
+            _events.on_movement_clause.publish(clause_event)
             travelers = clause_event.actual
 
             return_tick = resolve_tick_delta(self._rume.dim, tick, clause.returns)
@@ -169,7 +169,7 @@ class MovementExecutor:
         return_total = return_movers.sum()
         total += return_total
 
-        self._event_target.on_movement_clause.publish(
+        _events.on_movement_clause.publish(
             OnMovementClause(
                 tick.sim_index,
                 tick.day,
@@ -182,5 +182,5 @@ class MovementExecutor:
             )
         )
 
-        self._event_target.on_movement_finish.publish(
+        _events.on_movement_finish.publish(
             OnMovementFinish(tick.sim_index, tick.day, tick.step, total))

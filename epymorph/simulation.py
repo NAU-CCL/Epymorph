@@ -1,11 +1,9 @@
 """General simulation requisites and utility functions."""
-import logging
 from abc import ABC, ABCMeta, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import cache, cached_property
-from importlib import reload
 from typing import (Any, Callable, Generator, Generic, Iterable, NamedTuple,
                     Self, Sequence, Type, TypeVar, final, overload)
 
@@ -30,14 +28,6 @@ def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.rando
     optionally with a given seed.
     """
     return lambda: np.random.default_rng(seed)
-
-
-def enable_logging(filename: str = 'debug.log', movement: bool = True) -> None:
-    """Enable simulation logging to file."""
-    reload(logging)
-    logging.basicConfig(filename=filename, filemode='w')
-    if movement:
-        logging.getLogger('movement').setLevel(logging.DEBUG)
 
 
 ########

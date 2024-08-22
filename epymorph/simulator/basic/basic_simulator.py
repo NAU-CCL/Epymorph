@@ -9,8 +9,7 @@ from epymorph.error import (AttributeException, CompilationException,
                             InitException, IpmSimException, MmSimException,
                             SimValidationException, ValidationException,
                             error_gate)
-from epymorph.event import (MovementEventsMixin, OnStart, OnTick,
-                            SimulationEventsMixin)
+from epymorph.event import EventBus, OnStart, OnTick
 from epymorph.params import ParamValue
 from epymorph.rume import GEO_LABELS, Rume
 from epymorph.simulation import TimeFrame, simulation_clock
@@ -21,8 +20,10 @@ from epymorph.simulator.data import (evaluate_params, initialize_rume,
                                      validate_requirements)
 from epymorph.simulator.world_list import ListWorld
 
+_events = EventBus()
 
-class BasicSimulator(SimulationEventsMixin, MovementEventsMixin):
+
+class BasicSimulator():
     """
     A simulator for running singular simulation passes and producing time-series output.
     The most basic simulator!
@@ -33,8 +34,6 @@ class BasicSimulator(SimulationEventsMixin, MovementEventsMixin):
     mm_exec: MovementExecutor
 
     def __init__(self, rume: Rume):
-        SimulationEventsMixin.__init__(self)
-        MovementEventsMixin.__init__(self)
         self.rume = rume
 
     def run(
@@ -92,9 +91,10 @@ class BasicSimulator(SimulationEventsMixin, MovementEventsMixin):
 
         with error_gate("compiling the simulation", CompilationException):
             ipm_exec = IpmExecutor(rume, world, db, rng)
-            movement_exec = MovementExecutor(rume, world, db, rng, self)
+            movement_exec = MovementExecutor(rume, world, db, rng)
 
-        self.on_start.publish(OnStart(dim, rume.time_frame))
+        _events.on_start.publish(
+            OnStart(self.__class__.__name__, dim, rume.time_frame))
 
         # Run the simulation!
         for tick in simulation_clock(dim):
@@ -109,8 +109,8 @@ class BasicSimulator(SimulationEventsMixin, MovementEventsMixin):
                 out.prevalence[tick.sim_index] = tick_prevalence
 
             t = tick.sim_index
-            self.on_tick.publish(OnTick(t, (t + 1) / dim.ticks))
+            _events.on_tick.publish(OnTick(t, (t + 1) / dim.ticks))
 
-        self.on_finish.publish(None)
+        _events.on_finish.publish(None)
 
         return out
