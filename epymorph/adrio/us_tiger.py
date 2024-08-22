@@ -1,13 +1,15 @@
+"""ADRIOs that access the US Census TIGER geography files."""
 import numpy as np
 from geopandas import GeoDataFrame
-from numpy.typing import NDArray
 from pandas import DataFrame, to_numeric
+from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio
 from epymorph.data_type import CentroidDType, StructDType
+from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
-from epymorph.geography.us_tiger import (get_block_groups_geo,
+from epymorph.geography.us_tiger import (TigerYear, get_block_groups_geo,
                                          get_block_groups_info,
                                          get_counties_geo, get_counties_info,
                                          get_states_geo, get_states_info,
@@ -15,13 +17,25 @@ from epymorph.geography.us_tiger import (get_block_groups_geo,
                                          is_tiger_year)
 
 
-def _get_geo(scope: GeoScope) -> GeoDataFrame:
+def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
-        raise Exception("booo")
+        raise DataResourceException(
+            "Census scope is required for us_tiger attributes."
+        )
+    return scope
+
+
+def _validate_year(scope: CensusScope) -> TigerYear:
     year = scope.year
     if not is_tiger_year(year):
-        raise Exception("booo2")
+        raise DataResourceException(
+            f"{year} is not a supported year for us_tiger attributes."
+        )
+    return year
 
+
+def _get_geo(scope: CensusScope) -> GeoDataFrame:
+    year = _validate_year(scope)
     match scope.granularity:
         case 'state':
             gdf = get_states_geo(year)
@@ -31,20 +45,16 @@ def _get_geo(scope: GeoScope) -> GeoDataFrame:
             gdf = get_tracts_geo(year)
         case 'block group':
             gdf = get_block_groups_geo(year)
-        case _:
-            raise Exception("booo3")
-
+        case x:
+            raise DataResourceException(
+                f"{x} is not a supported granularity for us_tiger attributes."
+            )
     df = DataFrame({'GEOID': scope.get_node_ids()})
     return GeoDataFrame(df.merge(gdf, on='GEOID', how='left', sort=True))
 
 
-def _get_info(scope: GeoScope) -> DataFrame:
-    if not isinstance(scope, CensusScope):
-        raise Exception("booo")
-    year = scope.year
-    if not is_tiger_year(year):
-        raise Exception("booo2")
-
+def _get_info(scope: CensusScope) -> DataFrame:
+    year = _validate_year(scope)
     match scope.granularity:
         case 'state':
             gdf = get_states_info(year)
@@ -54,25 +64,36 @@ def _get_info(scope: GeoScope) -> DataFrame:
             gdf = get_tracts_info(year)
         case 'block group':
             gdf = get_block_groups_info(year)
-        case _:
-            raise Exception("booo3")
-
+        case x:
+            raise DataResourceException(
+                f"{x} is not a supported granularity for us_tiger attributes."
+            )
     df = DataFrame({'GEOID': scope.get_node_ids()})
     return df.merge(gdf, on='GEOID', how='left', sort=True)
 
 
 class GeometricCentroid(Adrio[StructDType]):
+    """The centroid of the geographic polygons."""
 
-    def evaluate(self) -> NDArray:
-        return _get_geo(self.scope)['geometry']\
+    @override
+    def evaluate(self):
+        scope = _validate_scope(self.scope)
+        return _get_geo(scope)['geometry']\
             .apply(lambda x: x.centroid.coords[0])\
             .to_numpy(dtype=CentroidDType)
 
 
 class InternalPoint(Adrio[StructDType]):
+    """
+    The internal point provided by TIGER data. These points are selected by
+    Census workers so as to be guaranteed to be within the geographic polygons,
+    while geometric centroids have no such guarantee.
+    """
 
-    def evaluate(self) -> NDArray:
-        df = _get_info(self.scope)
+    @override
+    def evaluate(self):
+        scope = _validate_scope(self.scope)
+        df = _get_info(scope)
         return np.array([x for x in zip(
             to_numeric(df['INTPTLON']),
             to_numeric(df['INTPTLAT'])
@@ -80,12 +101,11 @@ class InternalPoint(Adrio[StructDType]):
 
 
 class Name(Adrio[np.str_]):
+    """For states and counties, the proper name of the location; otherwise its GEOID."""
 
-    def evaluate(self) -> NDArray:
-        scope = self.scope
-        if not isinstance(scope, CensusScope):
-            raise Exception("booo")
-
+    @override
+    def evaluate(self):
+        scope = _validate_scope(self.scope)
         if scope.granularity in ('state', 'county'):
             return _get_info(scope)['NAME'].to_numpy(dtype=np.str_)
         else:
@@ -94,17 +114,25 @@ class Name(Adrio[np.str_]):
 
 
 class PostalCode(Adrio[np.str_]):
+    """For states only, the postal code abbreviation for the state ("AZ" for Arizona, and so on)."""
 
-    def evaluate(self) -> NDArray[np.str_]:
-        scope = self.scope
-        if not isinstance(scope, CensusScope):
-            raise Exception("booo")
+    @override
+    def evaluate(self):
+        scope = _validate_scope(self.scope)
         if scope.granularity != 'state':
-            raise Exception("booo3")
+            raise DataResourceException(
+                "PostalCode is only available at state granularity."
+            )
         return _get_info(scope)['STUSPS'].to_numpy(dtype=np.str_)
 
 
 class LandAreaM2(Adrio[np.float64]):
+    """
+    The land area of the geo node in meters-squared. This is the 'ALAND' attribute
+    from the TIGER data files.
+    """
 
-    def evaluate(self) -> NDArray[np.float64]:
-        return _get_info(self.scope)['ALAND'].to_numpy(dtype=np.float64)
+    @override
+    def evaluate(self):
+        scope = _validate_scope(self.scope)
+        return _get_info(scope)['ALAND'].to_numpy(dtype=np.float64)
