@@ -17,7 +17,7 @@ from epymorph.error import InitException
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
                                  SimulationFunction)
-from epymorph.util import NumpyTypeError, check_ndarray, match, not_none
+from epymorph.util import NumpyTypeError, check_ndarray, match
 
 
 class Initializer(SimulationFunction[SimArray], ABC):
@@ -146,11 +146,16 @@ class Proportional(Initializer):
                 shape=DataShapeMatcher(Shapes.NxC, self.dim, True)
             )
         except NumpyTypeError as e:
-            msg = f"Initializer argument 'ratios' is not properly specified. {e}"
-            raise InitException(msg) from None
+            raise InitException(
+                f"Initializer argument 'ratios' is not properly specified. {e}"
+            ) from None
 
-        ratios = not_none(Shapes.NxC.adapt(self.dim, self.ratios, True))\
-            .astype(np.float64, copy=False)
+        ratios = Shapes.NxC.adapt(self.dim, self.ratios, True)
+        if ratios is None:
+            raise InitException(
+                "Initializer argument 'ratios' is not properly specified."
+            )
+        ratios = ratios.astype(np.float64, copy=False)
         row_sums = cast(NDArray[np.float64], np.sum(ratios, axis=1, dtype=np.float64))
 
         if np.any(row_sums <= 0):
