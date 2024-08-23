@@ -44,8 +44,6 @@ def calculate_travelers(
     # use mvhg to select as many as possible.
     if not np.any(requested_sum > available_sum):
         throttled = False
-        # requested_movers = requested_movers
-        # requested_sum = requested_sum
     else:
         throttled = True
         requested_movers = requested_movers.copy()
@@ -165,8 +163,9 @@ class MovementExecutor:
             total += travelers.sum()
 
         # Process return clause.
-        return_movers = self._world.apply_return(tick, return_stats=True)
-        return_total = return_movers.sum()
+        return_movers_nnc = self._world.apply_return(tick, return_stats=True)
+        return_movers_nn = return_movers_nnc.sum(axis=2)
+        return_total = return_movers_nn.sum()
         total += return_total
 
         _events.on_movement_clause.publish(
@@ -175,8 +174,8 @@ class MovementExecutor:
                 tick.day,
                 tick.step,
                 "return",
-                return_movers,
-                return_movers,
+                return_movers_nn,
+                return_movers_nnc,
                 return_total,
                 False,
             )

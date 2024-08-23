@@ -71,7 +71,7 @@ def file_log(
             if e.is_throttled:
                 cl_log.debug(
                     "WARNING: movement is throttled due to insufficient population")
-            cl_log.debug("moved:\n%s", e.actual)
+            cl_log.debug("moved:\n%s", e.actual.sum(axis=2))
         cl_log.info("moved %d individuals", e.total)
 
     def on_movement_finish(e: OnMovementFinish) -> None:
