@@ -8,7 +8,7 @@ from epymorph.adrio.adrio import Adrio
 from epymorph.data_type import CentroidDType, StructDType
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import CensusScope
+from epymorph.geography.us_census import STATE, CensusScope
 from epymorph.geography.us_tiger import (TigerYear, get_block_groups_geo,
                                          get_block_groups_info,
                                          get_counties_geo, get_counties_info,
@@ -42,9 +42,11 @@ def _get_geo(scope: CensusScope) -> GeoDataFrame:
         case 'county':
             gdf = get_counties_geo(year)
         case 'tract':
-            gdf = get_tracts_geo(year)
+            gdf = get_tracts_geo(year, [STATE.extract(x)
+                                        for x in scope.get_node_ids()])
         case 'block group':
-            gdf = get_block_groups_geo(year)
+            gdf = get_block_groups_geo(year, [STATE.extract(x)
+                                              for x in scope.get_node_ids()])
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
@@ -61,9 +63,11 @@ def _get_info(scope: CensusScope) -> DataFrame:
         case 'county':
             gdf = get_counties_info(year)
         case 'tract':
-            gdf = get_tracts_info(year)
+            gdf = get_tracts_info(year, [STATE.extract(x)
+                                  for x in scope.get_node_ids()])
         case 'block group':
-            gdf = get_block_groups_info(year)
+            gdf = get_block_groups_info(year, [STATE.extract(x)
+                                        for x in scope.get_node_ids()])
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."

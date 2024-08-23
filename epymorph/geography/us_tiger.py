@@ -214,9 +214,12 @@ def get_counties_info(year: TigerYear) -> DataFrame:
 ##########
 
 
-def _get_tracts_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
+def _get_tracts_config(year: TigerYear, state_id: Sequence[str] | None = None) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (tracts)."""
     states = get_states_info(year)
+    if state_id is not None:
+        states = states[states["GEOID"].isin(state_id)]
+
     match year:
         case year if year in range(2011, 2024):
             cols = ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
@@ -250,14 +253,14 @@ def _get_tracts_config(year: TigerYear) -> tuple[list[str], list[str], list[str]
     return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
-def get_tracts_geo(year: TigerYear) -> GeoDataFrame:
+def get_tracts_geo(year: TigerYear, state_id: Sequence[str] | None = None) -> GeoDataFrame:
     """Get all US census tracts for the given census year, with geography."""
-    return _get_geo(*_get_tracts_config(year))
+    return _get_geo(*_get_tracts_config(year, state_id))
 
 
-def get_tracts_info(year: TigerYear) -> DataFrame:
+def get_tracts_info(year: TigerYear, state_id: Sequence[str] | None = None) -> DataFrame:
     """Get all US census tracts for the given census year, without geography."""
-    return _get_info(*_get_tracts_config(year))
+    return _get_info(*_get_tracts_config(year, state_id))
 
 
 ################
@@ -265,9 +268,12 @@ def get_tracts_info(year: TigerYear) -> DataFrame:
 ################
 
 
-def _get_block_groups_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
+def _get_block_groups_config(year: TigerYear, state_id: Sequence[str] | None = None) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (block groups)."""
     states = get_states_info(year)
+    if state_id is not None:
+        states = states[states["GEOID"].isin(state_id)]
+
     match year:
         case year if year in range(2011, 2024):
             cols = ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
@@ -301,11 +307,11 @@ def _get_block_groups_config(year: TigerYear) -> tuple[list[str], list[str], lis
     return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
-def get_block_groups_geo(year: TigerYear) -> GeoDataFrame:
+def get_block_groups_geo(year: TigerYear, state_id: Sequence[str] | None = None) -> GeoDataFrame:
     """Get all US census block groups for the given census year, with geography."""
-    return _get_geo(*_get_block_groups_config(year))
+    return _get_geo(*_get_block_groups_config(year, state_id))
 
 
-def get_block_groups_info(year: TigerYear) -> DataFrame:
+def get_block_groups_info(year: TigerYear, state_id: Sequence[str] | None = None) -> DataFrame:
     """Get all US census block groups for the given census year, without geography."""
-    return _get_info(*_get_block_groups_config(year))
+    return _get_info(*_get_block_groups_config(year, state_id))
