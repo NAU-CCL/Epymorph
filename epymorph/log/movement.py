@@ -8,8 +8,10 @@ from numpy.typing import NDArray
 
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.event import OnMovementClause, OnStart, SimWithEvents
+from epymorph.event import EventBus, OnMovementClause, OnStart
 from epymorph.util import subscriptions
+
+_events = EventBus()
 
 
 class MovementData(Protocol):
@@ -112,7 +114,7 @@ class _MovementDataBuilder(MovementData):
 
 
 @contextmanager
-def movement_data(sim: SimWithEvents) -> Generator[MovementData, None, None]:
+def movement_data() -> Generator[MovementData, None, None]:
     """
     Run a simulation in this context in order to collect detailed movement data
     throughout the simulation run. This returns a MovementData object which
@@ -130,7 +132,7 @@ def movement_data(sim: SimWithEvents) -> Generator[MovementData, None, None]:
         md.actual.append(_Entry(e.clause_name, e.tick, e.actual))
 
     with subscriptions() as sub:
-        sub.subscribe(sim.on_start, on_start)
-        sub.subscribe(sim.on_movement_clause, on_clause)
+        sub.subscribe(_events.on_start, on_start)
+        sub.subscribe(_events.on_movement_clause, on_clause)
         yield md
         md.ready = True

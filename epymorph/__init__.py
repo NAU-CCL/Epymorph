@@ -4,13 +4,13 @@ from numpy import seterr
 
 import epymorph.compartment_model as IPM
 import epymorph.initializer as init
-from epymorph.data import geo_library, ipm_library, mm_library
+from epymorph.data import ipm_library, mm_library
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType, SimDType
 from epymorph.draw import render, render_and_save
 from epymorph.log.messaging import sim_messaging
 from epymorph.plots import plot_event, plot_pop
-from epymorph.rume import Gpm, Rume, RumeSymbols
+from epymorph.rume import Gpm, MultistrataRume, Rume, SingleStrataRume
 from epymorph.simulation import AttributeDef, TimeFrame, default_rng
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 
@@ -22,7 +22,6 @@ __all__ = [
     'IPM',
     'ipm_library',
     'mm_library',
-    'geo_library',
     'SimDType',
     'CentroidType',
     'Shapes',
@@ -31,7 +30,8 @@ __all__ = [
     'init',
     'Rume',
     'Gpm',
-    'RumeSymbols',
+    'SingleStrataRume',
+    'MultistrataRume',
     'BasicSimulator',
     'sim_messaging',
     'plot_event',

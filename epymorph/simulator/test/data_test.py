@@ -8,7 +8,7 @@ import sympy
 from numpy.typing import NDArray
 
 from epymorph import *
-from epymorph.compartment_model import edge
+from epymorph.compartment_model import MultistrataModelSymbols, edge
 from epymorph.data_type import AttributeArray
 from epymorph.database import Database, NamePattern
 from epymorph.error import AttributeException
@@ -16,7 +16,7 @@ from epymorph.geography.us_census import StateScope
 from epymorph.params import (ParamFunctionNode, ParamFunctionNumpy,
                              ParamFunctionScalar, ParamFunctionTimeAndNode,
                              ParamValue, simulation_symbols)
-from epymorph.rume import Gpm, Rume
+from epymorph.rume import Gpm, MultistrataRume, Rume
 from epymorph.simulator.data import evaluate_params
 
 
@@ -54,30 +54,32 @@ class EvaluateParamsTest(unittest.TestCase):
         }
 
     def _create_rume(self, rume_params: dict[str, ParamValue] | None = None) -> Rume:
-        meta_attributes = [
+        meta_requirements = [
             AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
         ]
 
-        def meta_edges(s: RumeSymbols):
-            [S_aaa, I_aaa, R_aaa] = s.compartments("aaa")
-            [S_bbb, I_bbb, R_bbb] = s.compartments("bbb")
-            [beta_bbb_aaa] = s.meta_attributes()
-            N_aaa = s.total_nonzero("aaa")
+        def meta_edges(s: MultistrataModelSymbols):
+            [S_aaa, I_aaa, R_aaa] = s.strata_compartments("aaa")
+            [S_bbb, I_bbb, R_bbb] = s.strata_compartments("bbb")
+            [beta_bbb_aaa] = s.all_meta_requirements
+            N_aaa = sympy.Max(1, S_aaa + I_aaa + R_aaa)
             return [
                 edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
             ]
 
-        return Rume.multistrata(
+        return MultistrataRume.build(
             strata=[
-                ('aaa', Gpm(
+                Gpm(
+                    name='aaa',
                     ipm=ipm_library['sirs'](),
                     mm=mm_library['centroids'](),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
                         # leave phi unspecified to test default value resolution
                     },
-                )),
-                ('bbb', Gpm(
+                ),
+                Gpm(
+                    name='bbb',
                     ipm=ipm_library['sirs'](),
                     mm=mm_library['centroids'](),
                     init=init.SingleLocation(location=0, seed_size=100),
@@ -85,9 +87,9 @@ class EvaluateParamsTest(unittest.TestCase):
                         "beta": 99.0,  # we'll override this value to test value shadowing
                         "phi": 33.0,  # test GPM value resolution
                     },
-                )),
+                ),
             ],
-            meta_attributes=meta_attributes,
+            meta_requirements=meta_requirements,
             meta_edges=meta_edges,
             scope=StateScope.in_states(['04', '35']),
             time_frame=TimeFrame.of("2021-01-01", 180),
@@ -101,7 +103,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         # We should have as many entries in our DB as we have attributes in the RUME,
         # plus 1 (for geo labels).
-        self.assertEqual(len(db._data), len(rume.attributes) + 1)
+        self.assertEqual(len(db._data), len(rume.requirements) + 1)
 
         self.assert_db(db, "gpm:aaa::ipm::beta", np.array(0.4, dtype=np.float64))
         self.assert_db(db, "gpm:bbb::ipm::beta", np.array(0.3, dtype=np.float64))
@@ -195,7 +197,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Beta(ParamFunctionTimeAndNode):
             GAMMA = AttributeDef('gamma', float, Shapes.TxN)
 
-            attributes = [GAMMA]
+            requirements = [GAMMA]
 
             r_0: float
 
@@ -227,7 +229,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Xi(ParamFunctionNode):
             BETA = AttributeDef('beta', float, Shapes.TxN)
 
-            attributes = [BETA]
+            requirements = [BETA]
 
             def evaluate1(self, node_index: int) -> float:
                 beta = self.data(self.BETA)[0, node_index]
@@ -249,7 +251,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Gamma(ParamFunctionScalar):
             BETA = AttributeDef('beta', float, Shapes.S)
 
-            attributes = [BETA]
+            requirements = [BETA]
 
             def evaluate1(self) -> float:
                 return float(self.data(self.BETA)) / 4.0
@@ -258,7 +260,7 @@ class EvaluateParamsTest(unittest.TestCase):
             ALPHA = AttributeDef('alpha', float, Shapes.S)
             GAMMA = AttributeDef('gamma', float, Shapes.S)
 
-            attributes = [ALPHA, GAMMA]
+            requirements = [ALPHA, GAMMA]
 
             def evaluate(self) -> NDArray[np.float64]:
                 alpha = self.data(self.ALPHA)
@@ -283,7 +285,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Gamma(ParamFunctionNumpy):
             XI = AttributeDef('xi', float, Shapes.S)
 
-            attributes = [XI]
+            requirements = [XI]
 
             def evaluate(self) -> NDArray[np.float64]:
                 return np.array(0)
@@ -291,7 +293,7 @@ class EvaluateParamsTest(unittest.TestCase):
         class Xi(ParamFunctionNumpy):
             GAMMA = AttributeDef('gamma', float, Shapes.S)
 
-            attributes = [GAMMA]
+            requirements = [GAMMA]
 
             def evaluate(self) -> NDArray[np.float64]:
                 return np.array(0)

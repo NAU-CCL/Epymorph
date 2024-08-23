@@ -6,16 +6,13 @@ and handles quirks and differences between the supported census years.
 from io import BytesIO
 from pathlib import Path
 from typing import Literal, Sequence, TypeGuard
-from urllib.request import urlopen
-from warnings import warn
 
 from geopandas import GeoDataFrame
 from geopandas import read_file as gp_read_file
 from pandas import DataFrame
 from pandas import concat as pd_concat
 
-from epymorph.cache import (CacheMiss, CacheWarning, load_file_from_cache,
-                            save_file_to_cache)
+from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.error import GeographyError
 
 # A fair question is why did we implement our own TIGER files loader instead of using pygris?
@@ -52,7 +49,7 @@ TIGER_YEARS: Sequence[TigerYear] = (2000, 2009, 2010, 2011, 2012, 2013, 2014,
 
 _TIGER_URL = "https://www2.census.gov/geo/tiger"
 
-_TIGER_CACHE_PATH = Path("geography/tiger")
+_TIGER_CACHE_PATH = module_cache_path(__name__)
 
 # _SUPPORTED_STATE_FILES = ['us', '60', '66', '69', '78']
 _SUPPORTED_STATE_FILES = ['us']
@@ -73,50 +70,19 @@ Not needed if we didn't have to filter out 4 territories.
 """
 
 
-def _fetch_url(url: str) -> BytesIO:
-    """Reads a file from a URL as a BytesIO."""
-    with urlopen(url) as f:
-        file_buffer = BytesIO()
-        file_buffer.write(f.read())
-        file_buffer.seek(0)
-        return file_buffer
-
-
 def _load_urls(urls: list[str]) -> list[BytesIO]:
     """
     Attempt to load the list of URLs from disk cache, or failing that, from the network.
     If the files are not cached, they will be saved to our TIGER cache path.
     """
     try:
-        cached_paths = [
-            _TIGER_CACHE_PATH / Path(u).name
+        return [
+            load_or_fetch_url(u, _TIGER_CACHE_PATH / Path(u).name)
             for u in urls
         ]
-        try:
-            # Try to load files from cache.
-            files = [
-                load_file_from_cache(path)
-                for path in cached_paths
-            ]
-        except CacheMiss:
-            # On cache miss, fetch info from the URLs.
-            files = [_fetch_url(u) for u in urls]
-
-            # Attempt to save the files to the cache for next time.
-            try:
-                for f, path in zip(files, cached_paths):
-                    save_file_to_cache(path, f)
-            except Exception as e:
-                # Failure to save the files to the cache is not worth stopping the program.
-                # Issue a warning.
-                msg = "We were unable to save TIGER files to the cache.\n" \
-                    f"Cause: {e}"
-                warn(msg, CacheWarning)
-
     except Exception as e:
         msg = "Unable to retrieve TIGER files for US Census geography."
         raise GeographyError(msg) from e
-    return files
 
 
 def _get_geo(cols: list[str], urls: list[str], result_cols: list[str]) -> GeoDataFrame:

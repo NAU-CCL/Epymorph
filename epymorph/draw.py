@@ -9,7 +9,7 @@ from IPython import display
 from matplotlib.image import imread
 from sympy import Expr, preview
 
-from epymorph.compartment_model import CompartmentModel
+from epymorph.compartment_model import BaseCompartmentModel
 
 
 class EdgeTracker:
@@ -66,7 +66,7 @@ def check_draw_requirements() -> bool:
     return latex_check is not None and graphviz_check is not None
 
 
-def build_ipm_edge_set(ipm: CompartmentModel) -> EdgeTracker:
+def build_ipm_edge_set(ipm: BaseCompartmentModel) -> EdgeTracker:
     """
     given an ipm, creates an edge tracker object that converts the transitions
     of the ipm into a set of adjacencies.
@@ -166,7 +166,7 @@ def draw_console(graph: Digraph):
     plt.show()
 
 
-def draw_and_return(ipm: CompartmentModel, console: bool) -> Digraph | None:
+def draw_and_return(ipm: BaseCompartmentModel, console: bool) -> Digraph | None:
     """
     main function for converting an ipm into a visual model to be displayed
     by default in jupyter notebook, but optionally to console.
@@ -196,14 +196,14 @@ def draw_and_return(ipm: CompartmentModel, console: bool) -> Digraph | None:
     return ipm_graph
 
 
-def render(ipm: CompartmentModel, console: bool = False) -> None:
+def render(ipm: BaseCompartmentModel, console: bool = False) -> None:
     """
     default render function, draws to jupyter by default
     """
     draw_and_return(ipm, console)
 
 
-def render_and_save(ipm: CompartmentModel, file_path: str,
+def render_and_save(ipm: BaseCompartmentModel, file_path: str,
                     console: bool = False) -> None:
     """
     render function that saves to file system, draws jupyter by default

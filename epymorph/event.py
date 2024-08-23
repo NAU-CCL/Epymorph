@@ -3,22 +3,29 @@ epymorph's event frameworks.
 The idea is to have a set of classes which define event protocols for 
 logical components of epymorph.
 """
-from typing import NamedTuple, Protocol, runtime_checkable
+from typing import NamedTuple
 
 from numpy.typing import NDArray
 
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
+from epymorph.database import AbsoluteName
 from epymorph.simulation import TimeFrame
-from epymorph.util import Event
+from epymorph.util import Event, Singleton
 
-# Simulation Events
+#####################
+# Simulation Events #
+#####################
 
 
 class OnStart(NamedTuple):
-    """The payload of a Simulation on_start event."""
+    """The payload of a simulation on_start event."""
+    simulator: str
+    """Name of the simulator class."""
     dim: SimDimensions
+    """The dimensions of the simulation."""
     time_frame: TimeFrame
+    """The timeframe for the simulation."""
 
 
 class OnTick(NamedTuple):
@@ -27,48 +34,9 @@ class OnTick(NamedTuple):
     percent_complete: float
 
 
-@runtime_checkable
-class SimulationEvents(Protocol):
-    """
-    Protocol for Simulations that support lifecycle events.
-    For correct operation, ensure that `on_start` is fired first,
-    then `on_tick` any number of times, then finally `on_finish`.
-    """
-
-    on_start: Event[OnStart]
-    """
-    Event fires at the start of a simulation run. Payload is a subset of the context for this run.
-    """
-
-    on_tick: Event[OnTick]
-    """
-    Event which fires after each tick has been processed.
-    Event payload is a tuple containing the tick index just completed (an integer),
-    and the percentage complete (a float).
-    """
-
-    on_finish: Event[None]
-    """
-    Event fires after a simulation run is complete.
-    """
-
-
-class SimulationEventsMixin(SimulationEvents):
-    """A mixin implementation of the SimulationEvents protocol which initializes the events."""
-
-    def __init__(self):
-        self.on_start = Event()
-        self.on_tick = Event()
-        self.on_finish = Event()
-
-    def has_subscribers(self) -> bool:
-        """True if there is at least one subscriber on any simulation event."""
-        return self.on_start.has_subscribers \
-            or self.on_tick.has_subscribers \
-            or self.on_finish.has_subscribers
-
-
-# Movement Events
+###################
+# Movement Events #
+###################
 
 
 class OnMovementStart(NamedTuple):
@@ -116,85 +84,76 @@ class OnMovementFinish(NamedTuple):
     """The total number of individuals moved during this tick."""
 
 
-@runtime_checkable
-class MovementEvents(Protocol):
-    """
-    Mixin for Simulations that support movement events.
-    For correct operation, ensure that `on_movement_start` is fired first,
-    then `on_movement_clause` any number of times, then finally `on_movement_finish`.
-    """
-
-    on_movement_start: Event[OnMovementStart]
-    """
-    Event fires at the start of the movement processing phase for every simulation tick.
-    """
-
-    on_movement_clause: Event[OnMovementClause]
-    """
-    Event fires after every movement clause has been processed, excluding clauses that are not triggered in this tick.
-    """
-
-    on_movement_finish: Event[OnMovementFinish]
-    """
-    Event fires at the end of the movement processing phase for every simulation tick.
-    """
-
-
-class MovementEventsMixin(MovementEvents):
-    """A mixin implementation of the MovementEvents protocol which initializes the events."""
-
-    def __init__(self):
-        self.on_movement_start = Event()
-        self.on_movement_clause = Event()
-        self.on_movement_finish = Event()
-
-    def has_subscribers(self) -> bool:
-        """True if there is at least one subscriber on any movement event."""
-        return self.on_movement_start.has_subscribers \
-            or self.on_movement_clause.has_subscribers \
-            or self.on_movement_finish.has_subscribers
-
-
-class SimWithEvents(SimulationEvents, MovementEvents, Protocol):
-    """Intersection type of SimulationEvents and MovementEvents"""
-
-
-# Geo/ADRIO Events
-
-
-class FetchStart(NamedTuple):
-    """The payload of a DynamicGeo fetch_start event."""
-    adrio_len: int
+################
+# ADRIO Events #
+################
 
 
 class AdrioStart(NamedTuple):
-    """The payload of a DynamicGeo adrio_start event."""
-    attribute: str
-    adrio_index: int | None
-    """An index assigned to this ADRIO if fetching ADRIOs as a batch."""
-    adrio_len: int | None
-    """The total number of ADRIOs being fetched if fetching ADRIOs as a batch."""
+    """The payload of AdrioEvents.on_adrio_start"""
+    adrio_name: str
+    """The name of the ADRIO."""
+    attribute: AbsoluteName
+    """The name of the attribute."""
 
 
-@runtime_checkable
-class DynamicGeoEvents(Protocol):
-    """
-    Protocol for DynamicGeos that support lifecycle events.
-    For correct operation, ensure that `fetch_start` is fired first,
-    then `adrio_start` any number of times, then finally `fetch_end`.
-    """
+class AdrioFinish(NamedTuple):
+    """The payload of AdrioEvents.on_adrio_finish"""
+    adrio_name: str
+    """The name of the ADRIO."""
+    attribute: AbsoluteName
+    """The name of the attribute."""
+    duration: float
+    """The number of seconds spent fetching."""
 
-    fetch_start: Event[FetchStart]
-    """
-    Event that fires when geo begins fetching attributes. Payload is the number of ADRIOs.
-    """
 
-    adrio_start: Event[AdrioStart]
-    """
-    Event that fires when an individual ADRIO begins data retreival. Payload is the attribute name and index.
-    """
+############
+# EventBus #
+############
 
-    fetch_end: Event[None]
-    """
-    Event that fires when data retreival is complete.
-    """
+
+class EventBus(metaclass=Singleton):
+    """The one-stop for epymorph events. This class uses the singleton pattern."""
+
+    # Simulation Events
+    on_start: Event[OnStart]
+    """Event fires at the start of a simulation run."""
+
+    on_tick: Event[OnTick]
+    """Event fires after each tick has been processed."""
+
+    on_finish: Event[None]
+    """Event fires after a simulation run is complete."""
+
+    # Movement Events
+    on_movement_start: Event[OnMovementStart]
+    """Event fires at the start of the movement processing phase for every simulation tick."""
+
+    on_movement_clause: Event[OnMovementClause]
+    """Event fires after processing each active movement clause."""
+
+    on_movement_finish: Event[OnMovementFinish]
+    """Event fires at the end of the movement processing phase for every simulation tick."""
+
+    # ADRIO Events
+    on_adrio_start: Event[AdrioStart]
+    """Event fires when an ADRIO is fetching data."""
+
+    # on_adrio_progress: Event[AdrioProgress]
+    # """Event that fires when..."""
+
+    on_adrio_finish: Event[AdrioFinish]
+    """Event fires when an ADRIO has finished fetching data."""
+
+    def __init__(self):
+        # SimulationEvents
+        self.on_start = Event()
+        self.on_tick = Event()
+        self.on_finish = Event()
+        # MovementEvents
+        self.on_movement_start = Event()
+        self.on_movement_clause = Event()
+        self.on_movement_finish = Event()
+        # AdrioEvents
+        self.on_adrio_start = Event()
+        self.on_adrio_finish = Event()

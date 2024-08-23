@@ -15,7 +15,7 @@ class DataTypeTest(unittest.TestCase):
         self.assertEqual(dtype_as_np(str), np.str_)
         self.assertEqual(dtype_as_np(date), np.datetime64)
 
-        struct = [('foo', float), ('bar', int), ('baz', str), ('bux', date)]
+        struct = (('foo', float), ('bar', int), ('baz', str), ('bux', date))
         self.assertEqual(
             dtype_as_np(struct),
             [('foo', np.float64), ('bar', np.int64),
@@ -28,7 +28,7 @@ class DataTypeTest(unittest.TestCase):
         self.assertEqual(dtype_str(str), "str")
         self.assertEqual(dtype_str(date), "date")
 
-        struct = [('foo', float), ('bar', int), ('baz', str), ('bux', date)]
+        struct = (('foo', float), ('bar', int), ('baz', str), ('bux', date))
         self.assertEqual(
             dtype_str(struct),
             "[(foo, float), (bar, int), (baz, str), (bux, date)]"
@@ -53,8 +53,8 @@ class DataTypeTest(unittest.TestCase):
         self.assertTrue(dtype_check(str, ""))
         self.assertTrue(dtype_check(date, date(2024, 1, 1)))
         self.assertTrue(dtype_check(date, date(1066, 10, 14)))
-        self.assertTrue(dtype_check([('x', int), ('y', int)], (1, 2)))
-        self.assertTrue(dtype_check([('a', str), ('b', float)], ("hi", 9273.3)))
+        self.assertTrue(dtype_check((('x', int), ('y', int)), (1, 2)))
+        self.assertTrue(dtype_check((('a', str), ('b', float)), ("hi", 9273.3)))
 
         self.assertFalse(dtype_check(int, "hi"))
         self.assertFalse(dtype_check(int, 42.42))
@@ -68,18 +68,10 @@ class DataTypeTest(unittest.TestCase):
         self.assertFalse(dtype_check(date, '2024-01-01'))
         self.assertFalse(dtype_check(date, 123))
 
-        dt1 = [('x', int), ('y', int)]
+        dt1 = (('x', int), ('y', int))
         self.assertFalse(dtype_check(dt1, 1))
         self.assertFalse(dtype_check(dt1, 78923.1))
         self.assertFalse(dtype_check(dt1, "hi"))
         self.assertFalse(dtype_check(dt1, ()))
         self.assertFalse(dtype_check(dt1, (1, 237.8)))
         self.assertFalse(dtype_check(dt1, (1, 2, 3)))
-
-        dt2 = (('x', int), ('y', int))
-        self.assertFalse(dtype_check(dt2, 1))
-        self.assertFalse(dtype_check(dt2, 78923.1))
-        self.assertFalse(dtype_check(dt2, "hi"))
-        self.assertFalse(dtype_check(dt2, ()))
-        self.assertFalse(dtype_check(dt2, (1, 237.8)))
-        self.assertFalse(dtype_check(dt2, (1, 2, 3)))

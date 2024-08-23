@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from re import compile as re_compile
 from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
-                    Mapping, OrderedDict, Self, TypeVar)
+                    Mapping, OrderedDict, Self, TypeGuard, TypeVar, overload)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -17,6 +17,8 @@ acceptable_name = re_compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 
 
 T = TypeVar('T')
+A = TypeVar('A')
+B = TypeVar('B')
 
 
 def identity(x: T) -> T:
@@ -37,23 +39,6 @@ def call_all(*fs: Callable[[], Any]) -> None:
     """Given a list of no-arg functions, call all of the functions and return None."""
     for f in fs:
         f()
-
-
-def or_raise(value: T | None, message: str) -> T:
-    """Enforce that the given value is not None, or else raise an exception."""
-    if value is None:
-        raise Exception(message)
-    return value
-
-
-def not_none(value: T | None) -> T:
-    """
-    Assert that a value could never be None (or else raise a generic exception).
-    Be very careful using this!
-    """
-    if value is None:
-        raise Exception("You asserted a value would never be None, but it was!")
-    return value
 
 
 # collection utilities
@@ -101,6 +86,19 @@ def are_unique(xs: Iterable[T]) -> bool:
     return True
 
 
+@overload
+def are_instances(xs: list[Any], of_type: type[T]) -> TypeGuard[list[T]]: ...
+@overload
+def are_instances(xs: tuple[Any], of_type: type[T]) -> TypeGuard[tuple[T]]: ...
+
+
+def are_instances(xs: list[Any] | tuple[Any], of_type: type[T]) -> TypeGuard[list[T] | tuple[T]]:
+    """TypeGuards a collection to check that all items are instances of the given type (`of_type`)."""
+    # NOTE: TypeVars can't be generic so we can't do TypeGuard[C[T]] :(
+    # Thus this only supports the types of collections we specify explicitly.
+    return all(isinstance(x, of_type) for x in xs)
+
+
 def filter_unique(xs: Iterable[T]) -> list[T]:
     """Convert an iterable to a list, keeping only the unique values and maintaining the order as first-seen."""
     xset = set[T]()
@@ -110,6 +108,21 @@ def filter_unique(xs: Iterable[T]) -> list[T]:
             ys.append(x)
             xset.add(x)
     return ys
+
+
+def filter_with_mask(xs: Iterable[A], predicate: Callable[[A], TypeGuard[B]]) -> tuple[list[B], list[bool]]:
+    """
+    Filters the given iterable for items which match `predicate`, and also
+    returns a boolean mask the same length as the iterable with the results of `predicate` for each item.
+    """
+    matched = list[B]()
+    mask = list[bool]()
+    for x in xs:
+        is_match = predicate(x)
+        mask.append(is_match)
+        if is_match:
+            matched.append(x)
+    return matched, mask
 
 
 def as_list(x: T | list[T]) -> list[T]:
@@ -124,10 +137,6 @@ V = TypeVar('V')
 def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
     """Returns a sorted OrderedDict of the given dict."""
     return OrderedDict(sorted(x.items()))
-
-
-A = TypeVar('A')
-B = TypeVar('B')
 
 
 def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
@@ -527,6 +536,20 @@ def subscriptions() -> Generator[Subscriber, None, None]:
     sub = Subscriber()
     yield sub
     sub.unsubscribe()
+
+
+# singletons
+
+
+class Singleton(type):
+    """A metaclass for classes you want to treat as singletons."""
+
+    _instances: dict[type['Singleton'], 'Singleton'] = {}
+
+    def __call__(cls: type['Singleton'], *args: Any, **kwargs: Any) -> 'Singleton':
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
 
 
 # string builders

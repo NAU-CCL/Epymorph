@@ -8,9 +8,9 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import merge as pd_merge
 
-from epymorph.geo.geo import Geo
 from epymorph.geography import us_tiger
-from epymorph.geography.us_census import STATE
+from epymorph.geography.us_census import (STATE, CensusScope, CountyScope,
+                                          StateScope)
 from epymorph.simulator.basic.output import Output
 
 
@@ -59,7 +59,7 @@ def _subset_states(gdf: GeoDataFrame, state_fips: tuple[str, ...]) -> GeoDataFra
 
 
 def map_data_by_county(
-    geo: Geo,
+    scope: CountyScope,
     data: NDArray,
     *,
     title: str,
@@ -71,22 +71,21 @@ def map_data_by_county(
 ) -> None:
     """
     Draw a county-level choropleth map using the given `data`. This must be a numpy array whose
-    ordering is the same as the nodes in the geo.
-    Assumes that the geo contains an attribute (`geoid`) containing the geoids of its nodes.
-    (This information is needed to fetch the map shapes.)
+    ordering is the same as the nodes in the geo scope.
     """
-    state_fips = tuple(STATE.truncate_list(geo["geoid"]))
+    state_fips = tuple(STATE.truncate_list(scope.get_node_ids()))
     gdf_counties = us_tiger.get_counties_geo(year)
     gdf_counties = _subset_states(gdf_counties, state_fips)
     gdf_borders = gdf_counties
     if outline == 'states':
         gdf_states = us_tiger.get_states_geo(2020)
         gdf_borders = _subset_states(gdf_states, state_fips)
-    return _map_data_by_geo(geo, data, gdf_counties, gdf_borders=gdf_borders, title=title, cmap=cmap, vmin=vmin, vmax=vmax)
+    return _map_data_by_geo(scope, data, gdf_counties, gdf_borders=gdf_borders,
+                            title=title, cmap=cmap, vmin=vmin, vmax=vmax)
 
 
 def map_data_by_state(
-    geo: Geo,
+    scope: StateScope,
     data: NDArray,
     *,
     title: str,
@@ -97,18 +96,17 @@ def map_data_by_state(
 ) -> None:
     """
     Draw a state-level choropleth map using the given `data`. This must be a numpy array whose
-    ordering is the same as the nodes in the geo.
-    Assumes that the geo contains an attribute (`geoid`) containing the geoids of its nodes.
-    (This information is needed to fetch the map shapes.)
+    ordering is the same as the nodes in the geo scope.
     """
-    state_fips = tuple(STATE.truncate_list(geo["geoid"]))
+    state_fips = tuple(STATE.truncate_list(scope.get_node_ids()))
     gdf_states = us_tiger.get_states_geo(year)
     gdf_states = _subset_states(gdf_states, state_fips)
-    return _map_data_by_geo(geo, data, gdf_states, title=title, cmap=cmap, vmin=vmin, vmax=vmax)
+    return _map_data_by_geo(scope, data, gdf_states,
+                            title=title, cmap=cmap, vmin=vmin, vmax=vmax)
 
 
 def _map_data_by_geo(
-    geo: Geo,
+    scope: CensusScope,
     data: NDArray,
     gdf_nodes: GeoDataFrame,
     *,
@@ -125,7 +123,7 @@ def _map_data_by_geo(
     df_merged = pd_merge(
         on="GEOID",
         left=gdf_nodes,
-        right=DataFrame({'GEOID': geo['geoid'], 'data': data}),
+        right=DataFrame({'GEOID': scope.get_node_ids(), 'data': data}),
     )
 
     fig, ax = plt.subplots(figsize=(8, 6))

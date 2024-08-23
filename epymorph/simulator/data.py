@@ -1,20 +1,25 @@
 """Functions for managing simulation data."""
+from time import perf_counter
 from typing import Callable, Generator, Mapping, Sequence, TypeVar
 
 import numpy as np
 from sympy import Expr
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.data_shape import DataShapeMatcher, SimDimensions
 from epymorph.data_type import AttributeArray, SimArray
 from epymorph.database import (AbsoluteName, Database, DatabaseWithFallback,
                                DatabaseWithStrataFallback, ModuleNamespace,
                                NamePattern)
 from epymorph.error import AttributeException, InitException
+from epymorph.event import AdrioFinish, AdrioStart, EventBus
 from epymorph.params import (ParamExpressionTimeAndNode, ParamFunction,
                              ParamValue)
 from epymorph.rume import GEO_LABELS, Gpm, Rume
-from epymorph.simulation import NamespacedAttributeResolver
+from epymorph.simulation import NamespacedAttributeResolver, gpm_strata
 from epymorph.util import NumpyTypeError, check_ndarray, match
+
+_events = EventBus()
 
 _EvalFunction = Callable[
     [AbsoluteName, list[AbsoluteName], ParamValue | None],
@@ -33,22 +38,20 @@ def _evaluation_context(
     format_name = rume.name_display_formatter()
 
     # vals_db stores the raw values as provided by the user.
-    vals_db = DatabaseWithFallback(
-        # Simulation overrides...
-        dict(override_params.items()),
-        # falls back to RUME params...
-        DatabaseWithStrataFallback(
-            data=dict(rume.params.items()),
-            children={
-                # which falls back to GPM params, as scoped to that GPM
-                f"gpm:{strata}": Database[ParamValue]({
-                    k.to_absolute(f"gpm:{strata}"): v
-                    for k, v in gpm.params.items()
-                })
-                for strata, gpm in rume.original_gpms.items()
-            },
-        ),
+    vals_db = DatabaseWithStrataFallback(
+        data={**rume.params},
+        children={
+            # which falls back to GPM params, as scoped to that GPM
+            gpm_strata(gpm.name): Database[ParamValue]({
+                k.to_absolute(gpm_strata(gpm.name)): v
+                for k, v in gpm.params.items()
+            })
+            for gpm in rume.strata
+        },
     )
+    # If override_params is not empty, wrap vals_db in another fallback layer.
+    if len(override_params) > 0:
+        vals_db = DatabaseWithFallback({**override_params}, vals_db)
 
     # This is the database of parameter evaluation results.
     # It is mutable so that we can add values as we go.
@@ -123,21 +126,29 @@ def _evaluation_context(
                 raise AttributeException(msg) from None
 
         # Otherwise, evaluate and store the parameter based on its type.
-        if isinstance(raw_value, ParamFunction):
+        if isinstance(raw_value, ParamFunction | Adrio):
             # ParamFunction: first evaluate all dependencies of this function (recursively),
             # then evaluate the function itself.
             namespace = name.to_namespace()
-            for dependency in raw_value.attributes:
+            for dependency in raw_value.requirements:
                 dep_name = namespace.to_absolute(dependency.name)
                 evaluate(dep_name, [*chain, name], dependency.default_value)
             data = NamespacedAttributeResolver(attr_db, rume.dim, namespace)
-            value = raw_value(data, rume.dim, rng)
+
+            if not isinstance(raw_value, Adrio):
+                value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
+            else:
+                adrio_name = raw_value.__class__.__name__
+                _events.on_adrio_start.publish(AdrioStart(adrio_name, name))
+                t0 = perf_counter()
+                value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
+                t1 = perf_counter()
+                _events.on_adrio_finish.publish(AdrioFinish(adrio_name, name, t1 - t0))
+
         elif isinstance(raw_value, type) and issubclass(raw_value, ParamFunction):
             msg = f"Invalid parameter: '{format_name(match_pattern)}' "\
                 "is a ParamFunction class instead of an instance."
             raise AttributeException(msg)
-
-        # elif isinstance(param, Adrio): # TODO: adrios as param values!
 
         elif isinstance(raw_value, np.ndarray):
             # numpy array: make a copy so we don't risk unexpected mutations
@@ -178,13 +189,13 @@ def evaluate_params(
     # Evaluate every attribute required by the RUME.
     attr_db, evaluate = _evaluation_context(rume, override_params, rng)
 
-    rume_attributes: list[tuple[AbsoluteName, ParamValue | None]] = [
-        *((name, attr.default_value) for name, attr in rume.attributes.items()),
+    rume_reqs: list[tuple[AbsoluteName, ParamValue | None]] = [
+        *((name, attr.default_value) for name, attr in rume.requirements.items()),
         # Artificially require the special geo labels attribute.
         (GEO_LABELS, rume.scope.get_node_ids()),
     ]
 
-    for name, default_value in rume_attributes:
+    for name, default_value in rume_reqs:
         try:
             evaluate(name, [], default_value)
         except AttributeException as e:
@@ -217,15 +228,15 @@ def evaluate_param(
     return evaluate(param, [], None)
 
 
-def validate_attributes(
+def validate_requirements(
     rume: Rume,
     data: Database[AttributeArray],
 ) -> None:
     """
-    Validate all attributes in a RUME; raises an ExceptionGroup containing all errors.
+    Validate all attributes requirements in a RUME; raises an ExceptionGroup containing all errors.
     """
     def validate() -> Generator[AttributeException, None, None]:
-        for name, attr in rume.attributes.items():
+        for name, attr in rume.requirements.items():
             attr_match = data.query(name)
             if attr_match is None:
                 msg = f"Missing required parameter: '{name}'"
@@ -257,8 +268,8 @@ def initialize_rume(
     Executes Initializers for a multi-strata simulation by running each strata's
     Initializer and combining the results. Raises InitException if anything goes wrong.
     """
-    def init_strata(strata: str, gpm: Gpm) -> SimArray:
-        namespace = ModuleNamespace(f"gpm:{strata}", "init")
+    def init_strata(gpm: Gpm) -> SimArray:
+        namespace = ModuleNamespace(gpm_strata(gpm.name), "init")
         strata_dim = SimDimensions.build(
             rume.dim.tau_step_lengths,
             rume.dim.start_date,
@@ -268,12 +279,12 @@ def initialize_rume(
             gpm.ipm.num_events,
         )
         strata_data = NamespacedAttributeResolver(data, strata_dim, namespace)
-        return gpm.init(strata_data, strata_dim, rng)
+        return gpm.init.evaluate_in_context(strata_data, strata_dim, rume.scope, rng)
 
     try:
         return np.column_stack([
-            init_strata(strata, gpm)
-            for strata, gpm in rume.original_gpms.items()
+            init_strata(gpm)
+            for gpm in rume.strata
         ])
     except InitException as e:
         raise e

@@ -7,7 +7,7 @@ from typing import ClassVar, Generator, Iterable, NamedTuple
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.compartment_model import (CompartmentModel, EdgeDef, ForkDef,
+from epymorph.compartment_model import (BaseCompartmentModel, EdgeDef, ForkDef,
                                         TransitionDef, exogenous_states)
 from epymorph.data_type import (AttributeArray, AttributeValue, SimArray,
                                 SimDType)
@@ -53,9 +53,9 @@ class CompiledFork:
 CompiledTransition = CompiledEdge | CompiledFork
 
 
-def _compile_transitions(model: CompartmentModel) -> list[CompiledTransition]:
+def _compile_transitions(model: BaseCompartmentModel) -> list[CompiledTransition]:
     # The parameters to pass to all rate lambdas
-    rate_params = [*model.symbols.compartment_symbols, *model.symbols.attribute_symbols]
+    rate_params = [*model.symbols.all_compartments, *model.symbols.all_requirements]
 
     def f(transition: TransitionDef) -> CompiledTransition:
         match transition:
@@ -71,7 +71,7 @@ def _compile_transitions(model: CompartmentModel) -> list[CompiledTransition]:
     return [f(t) for t in model.transitions]
 
 
-def _make_apply_matrix(ipm: CompartmentModel) -> SimArray:
+def _make_apply_matrix(ipm: BaseCompartmentModel) -> SimArray:
     """
     Calc apply matrix; this matrix is used to apply a set of events
     to the compartments they impact. In general, an event indicates
@@ -80,7 +80,7 @@ def _make_apply_matrix(ipm: CompartmentModel) -> SimArray:
     either add or subtract from the model but not both. By nature, they
     alter the number of individuals in the model. Matrix values are {+1, 0, -1}.
     """
-    csymbols = ipm.symbols.compartment_symbols
+    csymbols = ipm.symbols.all_compartments
     matrix_size = (ipm.num_events, ipm.num_compartments)
     apply_matrix = np.zeros(matrix_size, dtype=SimDType)
     for eidx, e in enumerate(ipm.events):
@@ -116,7 +116,7 @@ class IpmExecutor:
 
     def __init__(self, rume: Rume, world: World, data: Database[AttributeArray], rng: np.random.Generator):
         ipm = rume.ipm
-        csymbols = ipm.symbols.compartment_symbols
+        csymbols = ipm.symbols.all_compartments
 
         # Calc list of events leaving each compartment (each may have 0, 1, or more)
         events_leaving_compartment = [[eidx
@@ -138,7 +138,7 @@ class IpmExecutor:
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
         self._attribute_values_txn = AttributeResolver(data, rume.dim)\
-            .resolve_txn_series(list(ipm.attributes.items()))
+            .resolve_txn_series(list(ipm.requirements_dict.items()))
 
     def apply(self, tick: Tick) -> Result:
         """
@@ -256,7 +256,7 @@ class IpmExecutor:
         arg_list.append(("ipm params", {
             attribute.name: value
             for attribute, value
-            in zip(self._rume.ipm.attributes.values(),
+            in zip(self._rume.ipm.requirements,
                    rate_attrs[self._rume.dim.compartments:])
         }))
 
