@@ -403,7 +403,7 @@ class DissimilarityIndex(Adrio[np.float64]):
         df2 = _fetch_acs5([majority_var, minority_var],
                           scope.lower_granularity())
         df2['geoid'] = df2['geoid'].apply(
-            get_census_granularity(scope.granularity).extract)
+            get_census_granularity(scope.granularity).truncate)
 
         df.rename(columns={majority_var: 'high_majority',
                   minority_var: 'high_minority'}, inplace=True)
