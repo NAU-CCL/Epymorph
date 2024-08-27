@@ -1,8 +1,8 @@
 {
     "recommendations": [
-        "ms-python.vscode-pylance",
         "ms-python.python",
-        "ms-python.autopep8",
-        "ms-python.isort",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "charliermarsh.ruff",
     ]
 }

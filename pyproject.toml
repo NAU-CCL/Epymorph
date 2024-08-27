@@ -48,22 +48,26 @@ dependencies = [
   "ipython~=8.26.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-  "autopep8~=2.0.4",
-  "isort~=5.13.2",
-  "ipykernel~=6.29.4",
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.6.2",
+    "ipykernel>=6.29.5",
+    "setuptools>=74.0.0",
 ]
 
 [project.scripts]
 epymorph = "epymorph.__main__:main"
 
-[tool.autopep8]
-max_line_length = 88
-ignore = ["E731"]
 
-[tool.isort]
-skip_glob = [".venv*/*"]
+[build-system]
+requires = ["setuptools>=74.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["epymorph*"]
+
+[tool.setuptools.package-data]
+"epymorph" = ["py.typed"]
 
 [tool.pyright]
 exclude = [
@@ -75,17 +79,52 @@ exclude = [
 # so until that's fixed ignore operator errors.
 reportOperatorIssue = "none"
 
-[tool.pylint.basic]
-max-line-length = 120
-good-names = ["T", "N", "C", "E"]
-good-names-rgxs = ["[a-z_][a-zA-Z0-9_]*"]
+[tool.ruff]
+extend-include = ["*.ipynb"]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+[tool.ruff.lint]
+select = [
+  "F", # (basic pyflakes lints)
+  "E", # (basic pycodestyle lints)
+  "A", # (don't shadow builtins)
+  "I", # (sort imports)
+  # "T10", # (no debugger directives laying around)
+  # "ISC", # (clean string concat usage)
+  # "PIE", # (general improvements)
+  # "NPY", # (numpy linting)
+  # "PERF", # (performance traps)
+  # "PTH", # (prefer pathlib)
 
-[tool.setuptools.packages.find]
-include = ["epymorph*"]
+  # NOTE: rules I'd like to enable some day are below, commented out
+  # "ERA", # (no commented code)
+  # "W", # (no extra whitespace)
+  # "C4", # (clean comprehensions usage)
+  # "T20", (no extra print statements laying around)
+  # "UP", (use modern python)
+  # "FURB", (use modern python)
+  # "B", (possible bugs)
+  # "D", (enforced documentation)
+  # "DOC", (enforced documentation; complementary with D)
+  # "ANN", (enforced type annotations)
+  # "S", (security rules)
+  # "N", (naming conventions)
+  # "BLE", (catching Exception is too general)
+  # "RET", (clean return handling)
+  # "SIM", (code simplifications)
+  # "SLF", (prevent private member access)
+  # "ARG", (unused args)
+  # "COM", (comma consistency; maybe: is there a way to stop this from demanding trailing commas in function calls?)
+  # "TD", (rigorous formatting of TODO comments)
+  # "PD", (pandas linting)
+  # "RUF", (general linting)
+  # "TRY", (error handling; might need to be selective with this one)
+]
 
-[tool.setuptools.package-data]
-"epymorph" = ["py.typed"]
+ignore = [
+  "E741", # (ambiguous names false positives for common compartment name "I")
+]
+
+[tool.ruff.lint.extend-per-file-ignores]
+# Allow star imports in tests and notebooks
+"**/*_test.py" = ["F403", "F405"]
+"*.ipynb" = ["F403", "F405"]

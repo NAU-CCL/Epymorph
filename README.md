@@ -1,51 +1,16 @@
 # epymorph
 
-Prototype EpiMoRPH system written in Python. It is usable as a code library, for instance, from within a Jupyter Notebook (see: `USAGE.ipynb`).
+Prototype EpiMoRPH system written in Python. It is usable as a code library, for instance from within a Jupyter Notebook.
 
-The `epymorph/data` directory is the model library, containing named implementations of IPMs, MMs, and GEOs. Ultimately our goal is to allow users to bring their own models by loading specification files, but for now they need to be registered in the model library.
+See the `USAGE.ipynb` Notebook for a basic usage example.
 
-The `doc/devlog` directory contains Jupyter Notebooks demonstrating features of epymorph and general development progress.
+See `CONTRIBUTING.md` for development environment setup instructions.
 
-Beware: much of this code structure is experimental and subject to change!
+## Configuration
 
-## Basic usage
+epymorph accepts configuration values provided by your system's environment variables. This may include settings which change the behavior of epymorph, or secrets like API keys needed to interface with third-party services. All values are optional unless you are using a feature which requires them.
 
-See the `USAGE.ipynb` Notebook for a simple usage example.
+Currently supported values include:
 
-## Development setup
-
-For starters, you should have Python 3.11 installed and we'll assume it's accessible via the command `python3.11`.
-
-You may need to install additional system packages for virtual environments and viewing plots. For example (on Ubuntu 22.04 LTS - jammy):
-
-```bash
-sudo apt install python3.11-venv python3.11-tk
-```
-
-If you are using VS Code, install the project's recommended IDE extensions. Then use the "Python - Create Environment" command (`Ctrl+Shift+P`) to create a Venv environment and install all dependencies (including `dev`).
-
-Or you can set up from the command line:
-
-```bash
-cd $PROJECT_DIRECTORY
-
-# create the virtual environment
-python3.11 -m venv .venv
-
-# activate it (after which `python` should be bound to the venv python)
-# NOTE: activating venv on Windows is different; see documentation
-source .venv/bin/activate
-
-# then install the project in editable mode
-python -m pip install --editable ".[dev]"
-```
-
-Make sure you have correctly configured auto-formatting in your development environment. We're currently using autopep8 and isort. These formatting tools should run every time you save a file.
-
-### Other command-line tasks
-
-Run all unit tests:
-
-```bash
-python -m unittest discover -v -s ./epymorph -p '*_test.py'
-```
+- `CENSUS_API_KEY`: your API key for the US Census API ([which you can request here](https://api.census.gov/data/key_signup.html))
+- `EPYMORPH_CACHE_PATH`: the path epymorph should use to cache files; this defaults to a location appropriate to your operating system for cached files
