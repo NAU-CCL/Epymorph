@@ -42,11 +42,11 @@ def _get_geo(scope: CensusScope) -> GeoDataFrame:
         case 'county':
             gdf = get_counties_geo(year)
         case 'tract':
-            gdf = get_tracts_geo(year, [STATE.extract(x)
-                                        for x in scope.get_node_ids()])
+            gdf = get_tracts_geo(year, list({STATE.extract(x)
+                                             for x in scope.get_node_ids()}))
         case 'block group':
-            gdf = get_block_groups_geo(year, [STATE.extract(x)
-                                              for x in scope.get_node_ids()])
+            gdf = get_block_groups_geo(year, list({STATE.extract(x)
+                                                   for x in scope.get_node_ids()}))
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
@@ -63,11 +63,11 @@ def _get_info(scope: CensusScope) -> DataFrame:
         case 'county':
             gdf = get_counties_info(year)
         case 'tract':
-            gdf = get_tracts_info(year, [STATE.extract(x)
-                                  for x in scope.get_node_ids()])
+            gdf = get_tracts_info(year, list({STATE.extract(x)
+                                  for x in scope.get_node_ids()}))
         case 'block group':
-            gdf = get_block_groups_info(year, [STATE.extract(x)
-                                        for x in scope.get_node_ids()])
+            gdf = get_block_groups_info(year, list({STATE.extract(x)
+                                        for x in scope.get_node_ids()}))
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
