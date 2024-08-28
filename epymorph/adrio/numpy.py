@@ -31,7 +31,7 @@ class NPY(Adrio[Any]):
                 raise DataResourceException(msg)
             axis = 0
             for curr_slice in self.array_slice:
-                if curr_slice is not None and isinstance(curr_slice, slice):
+                if curr_slice is not None:
                     data = data.take(
                         indices=range(curr_slice.start, curr_slice.stop),
                         axis=axis
@@ -66,7 +66,7 @@ class NPZ(Adrio[Any]):
                 raise DataResourceException(msg)
             axis = 0
             for curr_slice in self.array_slice:
-                if curr_slice is not None and isinstance(curr_slice, slice):
+                if curr_slice is not None:
                     data = data.take(
                         indices=range(curr_slice.start, curr_slice.stop),
                         axis=axis
