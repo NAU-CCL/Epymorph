@@ -1,5 +1,6 @@
 """ADRIOs that access data.cdc.gov website for various health data."""
 from datetime import date, timedelta
+from random import Random
 from typing import NamedTuple
 from urllib.parse import quote, urlencode
 from warnings import warn
@@ -82,9 +83,13 @@ def _fetch_facility_hospitalization(attrib_name: str, scope: CensusScope, time_f
 
     # if the sentinel value '-999999' appears in the data, ensure aggregated value is also -999999
     df['is_sentinel'] = df[info.data_col] == -999999
+    df.loc[df['is_sentinel'], info.data_col] = Random().randrange(1, 4)
+    # df.replace(-999999, 0, inplace=True)
     df = df.groupby(['collection_week', 'fips_code']).agg(
         {info.data_col: 'sum', 'is_sentinel': any})
-    df.loc[df['is_sentinel'], info.data_col] = -999999
+    # df.loc[df['is_sentinel'], info.data_col] = -999999
+    num_sentinel = df['is_sentinel'].sum()
+    warn(f'{num_sentinel} values < 4 were suppressed in returned data.')
 
     df.reset_index(inplace=True)
     df = df.pivot(index='collection_week',
