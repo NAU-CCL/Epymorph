@@ -21,9 +21,15 @@ class NPY(Adrio[Any]):
         self.array_slice = array_slice
 
     def evaluate(self) -> NDArray:
-        data = np.load(self.file_path)
-
-        data = np.array(data)
+        try:
+            data = np.load(self.file_path)
+            data = np.array(data)
+        except OSError as e:
+            msg = 'File not found.'
+            raise DataResourceException(msg) from e
+        except ValueError as e:
+            msg = 'Object arrays cannot be loaded.'
+            raise DataResourceException(msg) from e
 
         if self.array_slice is not None:
             if len(self.array_slice) != data.ndim:
@@ -56,8 +62,15 @@ class NPZ(Adrio[Any]):
         self.array_slice = array_slice
 
     def evaluate(self) -> NDArray:
-        data = np.load(self.file_path)
-        data = np.array(data[self.array_name])
+        try:
+            data = np.load(self.file_path)
+            data = np.array(data[self.array_name])
+        except OSError as e:
+            msg = 'File not found.'
+            raise DataResourceException(msg) from e
+        except ValueError as e:
+            msg = 'Object arrays cannot be loaded.'
+            raise DataResourceException(msg) from e
 
         if self.array_slice is not None:
             if len(self.array_slice) != data.ndim:
