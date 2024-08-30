@@ -206,6 +206,7 @@ class ModelSymbols:
 
 class BaseCompartmentModel(ABC):
     """Shared base-class for compartment models."""
+    _abstract_model = True  # marking this abstract skips metaclass validation
 
     compartments: Sequence[CompartmentDef] = ()
     """The compartments of the model."""
@@ -345,8 +346,8 @@ class CompartmentModelClass(ABCMeta):
         bases: tuple[type, ...],
         dct: dict[str, Any],
     ) -> 'CompartmentModelClass':
-        # Skip these checks for known base classes:
-        if name in ("BaseCompartmentModel", "CompartmentModel"):
+        # Skip these checks for classes we want to treat as abstract:
+        if dct.get("_abstract_model", False):
             return super().__new__(mcs, name, bases, dct)
 
         # Check model compartments.
@@ -428,6 +429,7 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
     Effectively, a collection of compartments, transitions between compartments,
     and the data parameters which are required to compute the transitions.
     """
+    _abstract_model = True  # marking this abstract skips metaclass validation
 
     @cached_property
     def symbols(self) -> ModelSymbols:

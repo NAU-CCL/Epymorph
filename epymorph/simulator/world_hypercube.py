@@ -104,6 +104,9 @@ class HypercubeWorld(World):
         self.ledger[ti:tf, :, location_idx, :] += visitors_delta
 
     def apply_travel(self, travelers: NDArray[SimDType], return_tick: int) -> None:
+        if return_tick == -1:
+            msg = "Hypercube world does not yet support non-returning movement clauses."
+            raise NotImplementedError(msg)
         trav_by_source = travelers.sum(axis=1, dtype=SimDType) * self._ident
         self.ledger[self.time_offset, :, :, :] -= trav_by_source
         self.ledger[return_tick + 1, :, :, :] += travelers
