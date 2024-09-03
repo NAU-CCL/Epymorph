@@ -176,7 +176,8 @@ class TestListWorld(EpymorphTestCase):
             ]]
         )
 
-    def test_travel(self):
+    def test_travel_01(self):
+        # Test simple travel.
         world = ListWorld([[
             Cohort(np.array([100]), 0, HOME_TICK),
             Cohort(np.array([22]), 1, 1),
@@ -193,6 +194,7 @@ class TestListWorld(EpymorphTestCase):
             return_tick=2
         )
 
+        # Movement cohorts maintain their identity.
         self.assertWorld(
             world.locations,
             [[
@@ -203,6 +205,36 @@ class TestListWorld(EpymorphTestCase):
                 Cohort(np.array([171]), 1, HOME_TICK),
                 Cohort(np.array([11]), 0, 1),
                 Cohort(np.array([19]), 0, 2),
+            ]]
+        )
+
+    def test_travel_02(self):
+        # Test travel with a "never" return tick.
+        world = ListWorld([[
+            Cohort(np.array([100]), 0, HOME_TICK),
+            Cohort(np.array([22]), 1, 1),
+        ], [
+            Cohort(np.array([200]), 1, HOME_TICK),
+            Cohort(np.array([11]), 0, 1),
+        ]])
+
+        world.apply_travel(
+            travelers=np.array([
+                [[0], [19]],
+                [[29], [0]],
+            ], dtype=SimDType),
+            return_tick=-1
+        )
+
+        # Movement cohorts merge with locals.
+        self.assertWorld(
+            world.locations,
+            [[
+                Cohort(np.array([110]), 0, HOME_TICK),
+                Cohort(np.array([22]), 1, 1),
+            ], [
+                Cohort(np.array([190]), 1, HOME_TICK),
+                Cohort(np.array([11]), 0, 1),
             ]]
         )
 

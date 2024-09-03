@@ -131,7 +131,13 @@ class ListWorld(World):
             self.locations[src][0].compartments -= travelers_leaving[src]
             for dst in range(self.nodes):
                 if src != dst and travelers_nxn_sum[src, dst] > 0:
-                    p = Cohort(travelers[src, dst, :], src, return_tick)
+                    # Normally a Cohort's home is the source index.
+                    # But if the return clause is "never"
+                    # it needs to be the destination index.
+                    # This makes the Cohort consider its new location to be home
+                    # so it will merge with the local population.
+                    home = dst if return_tick == -1 else src
+                    p = Cohort(travelers[src, dst, :], home, return_tick)
                     self.locations[dst].append(p)
 
         self.normalize()

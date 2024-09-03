@@ -66,6 +66,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-07-18.ipynb | Tyler | | A simple demo of ADRIOs "version 2". |
 | 2024-08-13.ipynb | Tyler | | Demo @adrio_cache. |
 | 2024-08-28.ipynb | Trevor | | Demo of numpy ADRIOs. |
+| 2024-08-30.ipynb | Tyler | | Testing non-returner movement support. |
 
 ## Contributing
 

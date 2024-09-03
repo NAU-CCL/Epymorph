@@ -19,7 +19,8 @@ from numpy.typing import NDArray
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
 from epymorph.geography.scope import GeoScope
-from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
+from epymorph.simulation import (NEVER, AttributeDef,
+                                 NamespacedAttributeResolver,
                                  SimulationFunctionClass,
                                  SimulationTickFunction, Tick, TickDelta,
                                  TickIndex)
@@ -93,8 +94,8 @@ class MovementClauseClass(SimulationFunctionClass):
         bases: tuple[type, ...],
         dct: dict[str, Any],
     ) -> _TypeT:
-        # Skip these checks for known base classes:
-        if name in ("MovementClause",):
+        # Skip these checks for classes we want to treat as abstract:
+        if dct.get("_abstract_simfunc", False):
             return super().__new__(mcs, name, bases, dct)
 
         # Check predicate.
@@ -119,14 +120,15 @@ class MovementClauseClass(SimulationFunctionClass):
             raise TypeError(
                 f"Invalid returns in {name}: please specify a TickDelta instance."
             )
-        if returns.step < 0:
-            raise TypeError(
-                f"Invalid returns in {name}: step indices cannot be less than zero."
-            )
-        if returns.days < 0:
-            raise TypeError(
-                f"Invalid returns in {name}: days cannot be less than zero."
-            )
+        if returns != NEVER:
+            if returns.step < 0:
+                raise TypeError(
+                    f"Invalid returns in {name}: step indices cannot be less than zero."
+                )
+            if returns.days < 0:
+                raise TypeError(
+                    f"Invalid returns in {name}: days cannot be less than zero."
+                )
 
         return super().__new__(mcs, name, bases, dct)
 
@@ -141,6 +143,7 @@ class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC, metaclass=M
     and when the individuals that were moved by the clause should return home
     (for example, stay for two days and then return at the end of the day).
     """
+    _abstract_simfunc = True  # marking this abstract skips metaclass validation
 
     # in addition to requirements (from super), movement clauses must also specify:
 
