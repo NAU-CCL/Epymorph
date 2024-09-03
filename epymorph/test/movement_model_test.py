@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
-from epymorph.simulation import Tick, TickDelta, TickIndex
+from epymorph.simulation import NEVER, Tick, TickDelta, TickIndex
 
 
 class MovementClauseTest(unittest.TestCase):
@@ -22,7 +22,6 @@ class MovementClauseTest(unittest.TestCase):
                 return np.array([0])
 
         clause = MyClause()
-
         self.assertEqual(clause.leaves, TickIndex(step=0))
         self.assertEqual(clause.returns, TickDelta(days=0, step=1))
 
@@ -85,6 +84,21 @@ class MovementClauseTest(unittest.TestCase):
                 def evaluate(self, tick: Tick) -> NDArray[SimDType]:
                     return np.array([0])
         self.assertIn("step indices cannot be less than zero", str(e.exception).lower())
+
+    def test_create_07(self):
+        # Successful clause with a NEVER returns policy.
+        class MyClause(MovementClause):
+            leaves = TickIndex(step=0)
+            returns = NEVER
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+                return np.array([0])
+
+        clause = MyClause()
+        self.assertEqual(clause.leaves, TickIndex(step=0))
+        self.assertEqual(clause.returns,
+                         TickDelta(days=-1, step=-1))  # equivalent to NEVER
 
 
 class MovementModelTest(unittest.TestCase):
