@@ -1,4 +1,5 @@
 """World implementation: ListWorld."""
+
 from operator import attrgetter
 from typing import Any, Iterable, Literal, Self, overload
 
@@ -19,7 +20,7 @@ class Cohort:
     merely the next location in a chain of movements.
     """
 
-    SORT_KEY = attrgetter('return_tick', 'return_location')
+    SORT_KEY = attrgetter("return_tick", "return_location")
     """The natural sort order of a Cohort."""
 
     compartments: NDArray[SimDType]
@@ -30,15 +31,19 @@ class Cohort:
     # its `return_location` is the same as their home/current location,
     # and its `return_tick` is set to -1 (the "Never" placeholder value).
 
-    def __init__(self, compartments: NDArray[SimDType], return_location: int, return_tick: int):
+    def __init__(
+        self, compartments: NDArray[SimDType], return_location: int, return_tick: int
+    ):
         self.compartments = compartments
         self.return_location = return_location
         self.return_tick = return_tick
 
     def can_merge_with(self, other: Self) -> bool:
         """Returns true if two cohorts can be merged."""
-        return self.return_tick == other.return_tick \
+        return (
+            self.return_tick == other.return_tick
             and self.return_location == other.return_location
+        )
 
     def merge_from(self, from_cohort: Self) -> None:
         """Merges another cohort into this one, modifying in-place."""
@@ -47,9 +52,11 @@ class Cohort:
     def __eq__(self, other) -> bool:
         if not isinstance(other, Cohort):
             return False
-        return np.array_equal(self.compartments, other.compartments) and \
-            self.return_location == other.return_location and \
-            self.return_tick == other.return_tick
+        return (
+            np.array_equal(self.compartments, other.compartments)
+            and self.return_location == other.return_location
+            and self.return_tick == other.return_tick
+        )
 
     def __repr__(self) -> str:
         return f"Cohort({str(self.compartments)}, rloc={self.return_location}, rtic={self.return_tick})"
@@ -75,8 +82,10 @@ class ListWorld(World):
         assumes everyone starts at home, no travelers initially.
         initial_compartments is an (N,C) array.
         """
-        locations = [[Cohort(cs, i, ListWorld.HOME_TICK)]
-                     for (i, cs) in enumerate(initial_compartments.copy())]
+        locations = [
+            [Cohort(cs, i, ListWorld.HOME_TICK)]
+            for (i, cs) in enumerate(initial_compartments.copy())
+        ]
         return cls(locations)
 
     def __init__(self, locations: list[list[Cohort]]):
@@ -103,15 +112,15 @@ class ListWorld(World):
                     j += 1
 
     def get_cohort_array(self, location_idx: int) -> NDArray[SimDType]:
-        return np.array([
-            c.compartments for c in self.locations[location_idx]
-        ], dtype=SimDType)
+        return np.array(
+            [c.compartments for c in self.locations[location_idx]], dtype=SimDType
+        )
 
     def get_local_array(self) -> NDArray[SimDType]:
         # assumes world was normalized after any modification
-        return np.array([
-            cohorts[0].compartments for cohorts in self.locations
-        ], dtype=SimDType)
+        return np.array(
+            [cohorts[0].compartments for cohorts in self.locations], dtype=SimDType
+        )
 
     def get_local_cohorts(self) -> Iterable[Cohort]:
         """Iterate over all locations returning just the local cohort from each."""
@@ -143,14 +152,16 @@ class ListWorld(World):
         self.normalize()
 
     @overload
-    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None:
-        ...
+    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None: ...
 
     @overload
-    def apply_return(self, tick: Tick, *, return_stats: Literal[True]) -> NDArray[SimDType]:
-        ...
+    def apply_return(
+        self, tick: Tick, *, return_stats: Literal[True]
+    ) -> NDArray[SimDType]: ...
 
-    def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
+    def apply_return(
+        self, tick: Tick, *, return_stats: bool
+    ) -> NDArray[SimDType] | None:
         movers: Any = None
         if return_stats:
             size = (self.nodes, self.nodes, self.compartments)

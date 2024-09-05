@@ -1,4 +1,5 @@
 """Epymorph unit testing utilities."""
+
 from typing import Any, Sequence
 from unittest import TestCase
 
@@ -13,7 +14,9 @@ def _ndarray_signature(arr):
 class EpymorphTestCase(TestCase):
     """A unittest TestCase extension providing some extra utility functions."""
 
-    def assertNpEqual(self, a1: ArrayLike, a2: ArrayLike, msg: str | None = None) -> None:
+    def assertNpEqual(
+        self, a1: ArrayLike, a2: ArrayLike, msg: str | None = None
+    ) -> None:
         """Check that two numpy ArrayLikes are equal."""
         if not np.array_equal(a1, a2):
             if msg is None:
@@ -31,7 +34,9 @@ arrays not equal
 {str(a2)}"""
             self.fail(msg)
 
-    def assertListAlmostEqual(self, list1: Sequence[float], list2: Sequence[float], msg: str | None = None) -> None:
+    def assertListAlmostEqual(
+        self, list1: Sequence[float], list2: Sequence[float], msg: str | None = None
+    ) -> None:
         """Check that two lists of numbers are approximately equal."""
         self.assertEqual(len(list1), len(list2), msg=msg)
         for a, b in zip(list1, list2):

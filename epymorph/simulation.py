@@ -1,11 +1,24 @@
 """General simulation requisites and utility functions."""
+
 from abc import ABC, ABCMeta, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import cache, cached_property
-from typing import (Any, Callable, Generator, Generic, Iterable, NamedTuple,
-                    Self, Sequence, Type, TypeVar, final, overload)
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Generic,
+    Iterable,
+    NamedTuple,
+    Self,
+    Sequence,
+    Type,
+    TypeVar,
+    final,
+    overload,
+)
 
 import numpy as np
 from jsonpickle.util import is_picklable
@@ -13,16 +26,22 @@ from numpy.random import SeedSequence
 from numpy.typing import NDArray
 
 from epymorph.data_shape import DataShape, Shapes, SimDimensions
-from epymorph.data_type import (AttributeArray, AttributeType, AttributeValue,
-                                dtype_as_np, dtype_check)
-from epymorph.database import (AbsoluteName, AttributeName, Database,
-                               ModuleNamespace)
+from epymorph.data_type import (
+    AttributeArray,
+    AttributeType,
+    AttributeValue,
+    dtype_as_np,
+    dtype_check,
+)
+from epymorph.database import AbsoluteName, AttributeName, Database, ModuleNamespace
 from epymorph.error import AttributeException
 from epymorph.geography.scope import GeoScope
 from epymorph.util import acceptable_name, are_instances, are_unique
 
 
-def default_rng(seed: int | SeedSequence | None = None) -> Callable[[], np.random.Generator]:
+def default_rng(
+    seed: int | SeedSequence | None = None,
+) -> Callable[[], np.random.Generator]:
     """
     Convenience constructor to create a factory function for a simulation's random number generator,
     optionally with a given seed.
@@ -75,7 +94,7 @@ class TimeFrame:
         """The last date included in the simulation."""
         return self.start_date + timedelta(days=self.duration_days)
 
-    def is_subset(self, other: 'TimeFrame') -> bool:
+    def is_subset(self, other: "TimeFrame") -> bool:
         """Is the given TimeFrame a subset of this one?"""
         return self.start_date <= other.start_date and self.end_date >= other.end_date
 
@@ -85,6 +104,7 @@ class Tick(NamedTuple):
     A Tick bundles related time-step information. For instance, each time step corresponds to a calendar day,
     a numeric day (i.e., relative to the start of the simulation), which tau step this corresponds to, and so on.
     """
+
     sim_index: int
     """Which simulation step are we on? (0,1,2,3,...)"""
     day: int
@@ -99,6 +119,7 @@ class Tick(NamedTuple):
 
 class TickIndex(NamedTuple):
     """A zero-based index of the simulation tau steps."""
+
     step: int  # which tau step within that day (zero-indexed)
 
 
@@ -109,6 +130,7 @@ class TickDelta(NamedTuple):
     step we start on. We need the Clock configuration to apply a TickDelta, so see
     Clock for the relevant method.
     """
+
     days: int  # number of whole days
     step: int  # which tau step within that day (zero-indexed)
 
@@ -122,8 +144,11 @@ Any Tick plus Never returns Never.
 
 def resolve_tick_delta(dim: SimDimensions, tick: Tick, delta: TickDelta) -> int:
     """Add a delta to a tick to get the index of the resulting tick."""
-    return -1 if delta.days == -1 else \
-        tick.sim_index - tick.step + (dim.tau_steps * delta.days) + delta.step
+    return (
+        -1
+        if delta.days == -1
+        else tick.sim_index - tick.step + (dim.tau_steps * delta.days) + delta.step
+    )
 
 
 def simulation_clock(dim: SimDimensions) -> Iterable[Tick]:
@@ -144,7 +169,7 @@ def simulation_clock(dim: SimDimensions) -> Iterable[Tick]:
 ############################
 
 
-AttributeT = TypeVar('AttributeT', bound=AttributeType)
+AttributeT = TypeVar("AttributeT", bound=AttributeType)
 """The data type of an attribute; maps to the numpy type of the attribute array."""
 
 # NOTE: I had AttributeT as covariant originally but that seems to cause pyright some headache
@@ -156,6 +181,7 @@ AttributeT = TypeVar('AttributeT', bound=AttributeType)
 @dataclass(frozen=True)
 class AttributeKey(Generic[AttributeT]):
     """The identity of a simulation attribute."""
+
     name: str
     type: AttributeT
     shape: DataShape
@@ -166,10 +192,12 @@ class AttributeKey(Generic[AttributeT]):
         try:
             dtype_as_np(self.type)
         except Exception as e:
-            msg = f"AttributeDef's type is not correctly specified: {self.type}\n" \
+            msg = (
+                f"AttributeDef's type is not correctly specified: {self.type}\n"
                 + "See documentation for appropriate type designations."
+            )
             raise ValueError(msg) from e
-        object.__setattr__(self, 'attribute_name', AttributeName(self.name))
+        object.__setattr__(self, "attribute_name", AttributeName(self.name))
 
     @overload
     def dtype(self: "AttributeKey[type[int]]") -> np.dtype[np.int64]: ...
@@ -177,6 +205,7 @@ class AttributeKey(Generic[AttributeT]):
     def dtype(self: "AttributeKey[type[float]]") -> np.dtype[np.float64]: ...
     @overload
     def dtype(self: "AttributeKey[type[str]]") -> np.dtype[np.str_]: ...
+
     # providing overloads for structured types is basically impossible without mapped types,
     # so callers are on their own for that.
 
@@ -189,6 +218,7 @@ class AttributeKey(Generic[AttributeT]):
 @dataclass(frozen=True)
 class AttributeDef(AttributeKey[AttributeT]):
     """Definition of a simulation attribute; the identity plus optional default value and comment."""
+
     name: str
     type: AttributeT
     shape: DataShape
@@ -201,10 +231,14 @@ class AttributeDef(AttributeKey[AttributeT]):
         try:
             dtype_as_np(self.type)
         except Exception as e:
-            msg = f"AttributeDef's type is not correctly specified: {self.type}\n" \
+            msg = (
+                f"AttributeDef's type is not correctly specified: {self.type}\n"
                 + "See documentation for appropriate type designations."
+            )
             raise ValueError(msg) from e
-        if self.default_value is not None and not dtype_check(self.type, self.default_value):
+        if self.default_value is not None and not dtype_check(
+            self.type, self.default_value
+        ):
             msg = "AttributeDef's default value does not align with its dtype."
             raise ValueError(msg)
 
@@ -233,16 +267,21 @@ class _BaseAttributeResolver:
 
         try:
             value = matched.value
-            value = value.astype(attr_key.dtype, casting='safe',
-                                 subok=False, copy=False)
+            value = value.astype(
+                attr_key.dtype, casting="safe", subok=False, copy=False
+            )
             value = attr_key.shape.adapt(self._dim, value, allow_broadcast=True)
         except Exception as e:
-            msg = f"Attribute '{name}' (given as '{matched.pattern}') is not properly specified. " \
+            msg = (
+                f"Attribute '{name}' (given as '{matched.pattern}') is not properly specified. "
                 "Not a compatible type."
+            )
             raise AttributeException(msg) from e
         if value is None:
-            msg = f"Attribute '{name}' (given as '{matched.pattern}') is not properly specified. " \
+            msg = (
+                f"Attribute '{name}' (given as '{matched.pattern}') is not properly specified. "
                 "Not a compatible shape."
+            )
             raise AttributeException(msg)
         return value
 
@@ -254,20 +293,22 @@ class AttributeResolver(_BaseAttributeResolver):
     """
 
     @overload
-    def resolve(self, attr: tuple[AbsoluteName, AttributeKey[type[int]]]) -> NDArray[np.int64]:
-        ...
+    def resolve(
+        self, attr: tuple[AbsoluteName, AttributeKey[type[int]]]
+    ) -> NDArray[np.int64]: ...
 
     @overload
-    def resolve(self, attr: tuple[AbsoluteName, AttributeKey[type[float]]]) -> NDArray[np.float64]:
-        ...
+    def resolve(
+        self, attr: tuple[AbsoluteName, AttributeKey[type[float]]]
+    ) -> NDArray[np.float64]: ...
 
     @overload
-    def resolve(self, attr: tuple[AbsoluteName, AttributeKey[type[str]]]) -> NDArray[np.str_]:
-        ...
+    def resolve(
+        self, attr: tuple[AbsoluteName, AttributeKey[type[str]]]
+    ) -> NDArray[np.str_]: ...
 
     @overload
-    def resolve(self, attr: tuple[AbsoluteName, AttributeKey[Any]]) -> NDArray[Any]:
-        ...
+    def resolve(self, attr: tuple[AbsoluteName, AttributeKey[Any]]) -> NDArray[Any]: ...
 
     def resolve(self, attr: tuple[AbsoluteName, AttributeKey]) -> NDArray:
         """Retrieve the value of a specific attribute, typed and shaped appropriately."""
@@ -293,10 +334,7 @@ class AttributeResolver(_BaseAttributeResolver):
         attr_values = [self.resolve(a) for a in attributes]
 
         for t in range(days):
-            node_values = [
-                [array[t, n] for array in attr_values]
-                for n in range(nodes)
-            ]
+            node_values = [[array[t, n] for array in attr_values] for n in range(nodes)]
             for _ in range(taus):
                 for vals in node_values:
                     yield vals
@@ -310,7 +348,12 @@ class NamespacedAttributeResolver(_BaseAttributeResolver):
 
     _namespace: ModuleNamespace
 
-    def __init__(self, data: Database[AttributeArray], dim: SimDimensions, namespace: ModuleNamespace):
+    def __init__(
+        self,
+        data: Database[AttributeArray],
+        dim: SimDimensions,
+        namespace: ModuleNamespace,
+    ):
         super().__init__(data, dim)
         self._namespace = namespace
 
@@ -350,10 +393,10 @@ class NamespacedAttributeResolver(_BaseAttributeResolver):
 ########################
 
 
-T_co = TypeVar('T_co', covariant=True)
+T_co = TypeVar("T_co", covariant=True)
 """The result type of a SimulationFunction."""
 
-_DeferredT = TypeVar('_DeferredT')
+_DeferredT = TypeVar("_DeferredT")
 """The result type of a SimulationFunction during deference."""
 
 
@@ -362,7 +405,7 @@ class _Context(ABC):
     The evaluation context of a SimulationFunction. We want SimulationFunction
     instances to be able to access properties of the simulation by using
     various methods on `self`. But we also want to instantiate SimulationFunctions
-    before the simulation context exists! Hence this object starts out "empty" 
+    before the simulation context exists! Hence this object starts out "empty"
     and will be swapped for a "real" context when the function is evaluated in
     a simulation context object.
     """
@@ -387,7 +430,11 @@ class _Context(ABC):
         """The simulation's random number generator."""
 
     @abstractmethod
-    def export(self) -> tuple[NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator]:
+    def export(
+        self,
+    ) -> tuple[
+        NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator
+    ]:
         """Tuples the contents of this context so it can be re-used (see: defer())."""
 
 
@@ -407,7 +454,11 @@ class _EmptyContext(_Context):
     def rng(self) -> np.random.Generator:
         raise TypeError("Invalid access of function context.")
 
-    def export(self) -> tuple[NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator]:
+    def export(
+        self,
+    ) -> tuple[
+        NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator
+    ]:
         raise TypeError("Invalid access of function context.")
 
 
@@ -421,7 +472,13 @@ class _RealContext(_Context):
     _scope: GeoScope
     _rng: np.random.Generator
 
-    def __init__(self, data: NamespacedAttributeResolver, dim: SimDimensions, scope: GeoScope, rng: np.random.Generator):
+    def __init__(
+        self,
+        data: NamespacedAttributeResolver,
+        dim: SimDimensions,
+        scope: GeoScope,
+        rng: np.random.Generator,
+    ):
         self._cached_data = cache(data.resolve)
         self._data = data
         self._dim = dim
@@ -447,7 +504,11 @@ class _RealContext(_Context):
     def rng(self) -> np.random.Generator:
         return self._rng
 
-    def export(self) -> tuple[NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator]:
+    def export(
+        self,
+    ) -> tuple[
+        NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator
+    ]:
         return (self._data, self._dim, self._scope, self._rng)
 
 
@@ -459,6 +520,7 @@ class SimulationFunctionClass(ABCMeta):
     The metaclass for SimulationFunctions.
     Used to verify proper class implementation.
     """
+
     def __new__(
         mcs: Type[_TypeT],
         name: str,
@@ -580,9 +642,7 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
         Evaluate this function within a context.
         epymorph calls this function; you generally don't need to.
         """
-        return super()\
-            .with_context(data, dim, scope, rng)\
-            .evaluate()
+        return super().with_context(data, dim, scope, rng).evaluate()
 
     @abstractmethod
     def evaluate(self) -> T_co:
@@ -593,7 +653,7 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
         """
 
     @final
-    def defer(self, other: 'SimulationFunction[_DeferredT]') -> _DeferredT:
+    def defer(self, other: "SimulationFunction[_DeferredT]") -> _DeferredT:
         """Defer processing to another instance of a SimulationFunction."""
         return other.evaluate_in_context(*self._ctx.export())
 
@@ -610,15 +670,13 @@ class SimulationTickFunction(BaseSimulationFunction[T_co]):
         dim: SimDimensions,
         scope: GeoScope,
         rng: np.random.Generator,
-        tick: Tick
+        tick: Tick,
     ) -> T_co:
         """
         Evaluate this function within a context.
         epymorph calls this function; you generally don't need to.
         """
-        return super()\
-            .with_context(data, dim, scope, rng)\
-            .evaluate(tick)
+        return super().with_context(data, dim, scope, rng).evaluate(tick)
 
     @abstractmethod
     def evaluate(self, tick: Tick) -> T_co:
@@ -629,7 +687,9 @@ class SimulationTickFunction(BaseSimulationFunction[T_co]):
         """
 
     @final
-    def defer(self, other: 'SimulationTickFunction[_DeferredT]', tick: Tick) -> _DeferredT:
+    def defer(
+        self, other: "SimulationTickFunction[_DeferredT]", tick: Tick
+    ) -> _DeferredT:
         """Defer processing to another instance of a SimulationTickFunction."""
         return other.evaluate_in_context(*self._ctx.export(), tick)
 

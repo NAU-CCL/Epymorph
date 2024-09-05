@@ -12,17 +12,24 @@ from epymorph.data_shape import SimDimensions
 from epymorph.data_type import AttributeArray, AttributeValue
 from epymorph.database import Database, ModuleNamespace
 from epymorph.geography.scope import CustomScope, GeoScope
-from epymorph.params import (ParamExpressionTimeAndNode, ParamFunctionNode,
-                             ParamFunctionNodeAndCompartment,
-                             ParamFunctionNodeAndNode, ParamFunctionNumpy,
-                             ParamFunctionScalar, ParamFunctionTime,
-                             ParamFunctionTimeAndNode, simulation_symbols)
+from epymorph.params import (
+    ParamExpressionTimeAndNode,
+    ParamFunctionNode,
+    ParamFunctionNodeAndCompartment,
+    ParamFunctionNodeAndNode,
+    ParamFunctionNumpy,
+    ParamFunctionScalar,
+    ParamFunctionTime,
+    ParamFunctionTimeAndNode,
+    simulation_symbols,
+)
 from epymorph.simulation import NamespacedAttributeResolver
 
 
 class ParamFunctionsTest(unittest.TestCase):
-
-    def _dim_data_scope(self) -> tuple[SimDimensions, NamespacedAttributeResolver, GeoScope]:
+    def _dim_data_scope(
+        self,
+    ) -> tuple[SimDimensions, NamespacedAttributeResolver, GeoScope]:
         dim = SimDimensions.build(
             tau_step_lengths=[1 / 3, 2 / 3],
             start_date=date(2021, 1, 1),
@@ -114,12 +121,15 @@ class ParamFunctionsTest(unittest.TestCase):
 
         npt.assert_array_equal(
             f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
-            np.array([
-                [0, 1, 2, 3],
-                [10, 11, 12, 13],
-                [20, 21, 22, 23],
-                [30, 31, 32, 33],
-            ], dtype=np.int64),
+            np.array(
+                [
+                    [0, 1, 2, 3],
+                    [10, 11, 12, 13],
+                    [20, 21, 22, 23],
+                    [30, 31, 32, 33],
+                ],
+                dtype=np.int64,
+            ),
         )
 
     def test_node_and_compartment_1(self):
@@ -128,19 +138,24 @@ class ParamFunctionsTest(unittest.TestCase):
         class TestFunc(ParamFunctionNodeAndCompartment):
             dtype = np.int64
 
-            def evaluate1(self, node_index: int, compartment_index: int) -> AttributeValue:
+            def evaluate1(
+                self, node_index: int, compartment_index: int
+            ) -> AttributeValue:
                 return node_index * 10 + compartment_index
 
         f = TestFunc()
 
         npt.assert_array_equal(
             f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
-            np.array([
-                [0, 1, 2],
-                [10, 11, 12],
-                [20, 21, 22],
-                [30, 31, 32],
-            ], dtype=np.int64),
+            np.array(
+                [
+                    [0, 1, 2],
+                    [10, 11, 12],
+                    [20, 21, 22],
+                    [30, 31, 32],
+                ],
+                dtype=np.int64,
+            ),
         )
 
     def test_time_and_node_1(self):
@@ -157,27 +172,35 @@ class ParamFunctionsTest(unittest.TestCase):
         cosine = np.cos(np.arange(100) / 100, dtype=np.float64)
         npt.assert_array_equal(
             f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
-            np.stack([
-                1.0 * cosine,
-                2.0 * cosine,
-                3.0 * cosine,
-                4.0 * cosine,
-            ], axis=1, dtype=np.float64),
+            np.stack(
+                [
+                    1.0 * cosine,
+                    2.0 * cosine,
+                    3.0 * cosine,
+                    4.0 * cosine,
+                ],
+                axis=1,
+                dtype=np.float64,
+            ),
         )
 
     def test_expr_time_and_node_1(self):
         dim, data, scope = self._dim_data_scope()
 
-        d, n, days = simulation_symbols('day', 'node_index', 'duration_days')
+        d, n, days = simulation_symbols("day", "node_index", "duration_days")
         f = ParamExpressionTimeAndNode((1.0 + n) * sympy.cos(d / days))
 
         cosine = np.cos(np.arange(100) / 100, dtype=np.float64)
         npt.assert_array_equal(
             f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
-            np.stack([
-                1.0 * cosine,
-                2.0 * cosine,
-                3.0 * cosine,
-                4.0 * cosine,
-            ], axis=1, dtype=np.float64),
+            np.stack(
+                [
+                    1.0 * cosine,
+                    2.0 * cosine,
+                    3.0 * cosine,
+                    4.0 * cosine,
+                ],
+                axis=1,
+                dtype=np.float64,
+            ),
         )

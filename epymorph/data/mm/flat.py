@@ -13,11 +13,18 @@ from epymorph.util import row_normalize
 
 class FlatClause(MovementClause):
     """The clause of the flat model."""
+
     requirements = (
-        AttributeDef('population', int, Shapes.N,
-                     comment="The total population at each node."),
-        AttributeDef('commuter_proportion', float, Shapes.S, default_value=0.1,
-                     comment="Decides what proportion of the total population should be commuting normally.")
+        AttributeDef(
+            "population", int, Shapes.N, comment="The total population at each node."
+        ),
+        AttributeDef(
+            "commuter_proportion",
+            float,
+            Shapes.S,
+            default_value=0.1,
+            comment="Decides what proportion of the total population should be commuting normally.",
+        ),
     )
 
     predicate = EveryDay()
@@ -36,18 +43,19 @@ class FlatClause(MovementClause):
         return row_normalize(ones)
 
     def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-        pop = self.data('population')
-        comm_prop = self.data('commuter_proportion')
+        pop = self.data("population")
+        comm_prop = self.data("commuter_proportion")
         n_commuters = np.floor(pop * comm_prop).astype(SimDType)
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
 
 
-@registry.mm('flat')
+@registry.mm("flat")
 class Flat(MovementModel):
     """
     This model evenly weights the probability of movement to all other nodes.
     It uses parameter 'commuter_proportion' to determine how many people should
     be moving, based on the total normal population of each node.
     """
+
     steps = (1 / 3, 2 / 3)
     clauses = (FlatClause(),)

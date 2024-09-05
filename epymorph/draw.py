@@ -13,7 +13,7 @@ from epymorph.compartment_model import BaseCompartmentModel
 
 
 class EdgeTracker:
-    """ class for keeping track of the edges added to the visualization """
+    """class for keeping track of the edges added to the visualization"""
 
     def __init__(self):
         self.edge_dict = {}
@@ -30,13 +30,11 @@ class EdgeTracker:
 
         # check if edge already exists
         if (head, tail) in self.edge_dict:
-
             # update label by appending given label, adding the expressions
             self.edge_dict[(head, tail)] += label
 
         # edge doesn't exist
         else:
-
             # add edge w/ label to edge dict
             self.edge_dict[(head, tail)] = label
 
@@ -47,21 +45,27 @@ def check_draw_requirements() -> bool:
     displays messages to help guide installation
     """
     # check for latex installation
-    latex_check = which('latex')
+    latex_check = which("latex")
 
     # check for graphviz installation
-    graphviz_check = which('dot')
+    graphviz_check = which("dot")
 
     # print errors if needed for latex check
     if latex_check is None:
         print("ERROR: No LaTeX converter found for IPM visualization.")
-        print("We recommend MiKTeX, found at https://miktex.org/download, or TexLive, found at https://tug.org/texlive/.")
-        print("These distributions are recommended by SymPy, a package we use for mathematical expressions.")
+        print(
+            "We recommend MiKTeX, found at https://miktex.org/download, or TexLive, found at https://tug.org/texlive/."
+        )
+        print(
+            "These distributions are recommended by SymPy, a package we use for mathematical expressions."
+        )
 
     # print errors if needed for graphviz check
     if graphviz_check is None:
-        print("ERROR: Graphviz not found for IPM visualization. Installation guides " +
-              "can be found at https://graphviz.org/download/")
+        print(
+            "ERROR: Graphviz not found for IPM visualization. Installation guides "
+            + "can be found at https://graphviz.org/download/"
+        )
 
     return latex_check is not None and graphviz_check is not None
 
@@ -82,10 +86,8 @@ def build_ipm_edge_set(ipm: BaseCompartmentModel) -> EdgeTracker:
 
     # render edges
     for event in ipm_events:
-
         # get the current head and tail of the edge
-        curr_head, curr_tail = str(event.compartment_from), \
-            str(event.compartment_to)
+        curr_head, curr_tail = str(event.compartment_from), str(event.compartment_to)
 
         # add edge to tracker, using the rate as the label
         tracker.track_edge(curr_head, curr_tail, event.rate)
@@ -107,29 +109,28 @@ def edge_to_graphviz(edge_set: EdgeTracker) -> Digraph:
         """
 
         return (
-            f'<<TABLE border="0"><TR><TD><IMG SRC="{png_filepath}"/>' +
-            '</TD></TR></TABLE>>'
+            f'<<TABLE border="0"><TR><TD><IMG SRC="{png_filepath}"/>'
+            + "</TD></TR></TABLE>>"
         )
 
     # init a graph viz directed graph for visualization
-    model_viz = Digraph(format='png', strict=True,
-                        graph_attr={'rankdir': 'LR'},
-                        node_attr={'shape': 'square',
-                                   'width': '.9',
-                                   'height': '.8'},
-                        edge_attr={'minlen': '2.0'})
+    model_viz = Digraph(
+        format="png",
+        strict=True,
+        graph_attr={"rankdir": "LR"},
+        node_attr={"shape": "square", "width": ".9", "height": ".8"},
+        edge_attr={"minlen": "2.0"},
+    )
 
     # iterate through edges in tracker
     for edge, label in edge_set.edge_dict.items():
-
         # get the head and tail for the edge
         head, tail = edge
 
         # create a temporary png file to render LaTeX edge label
-        with NamedTemporaryFile(suffix='.png', delete=False) as temp_png:
-
+        with NamedTemporaryFile(suffix=".png", delete=False) as temp_png:
             # load label as LaTeX png into temp file
-            preview(label, viewer='file', filename=temp_png.name, euler=False)
+            preview(label, viewer="file", filename=temp_png.name, euler=False)
 
             # render edge
             model_viz.edge(head, tail, label=png_to_label(temp_png.name))
@@ -148,7 +149,7 @@ def draw_console(graph: Digraph):
     """draws graph to console"""
 
     # render png of graph
-    model_bytes = graph.pipe(format='png')
+    model_bytes = graph.pipe(format="png")
 
     # convert png bytes to bytesio object
     model_bytes = BytesIO(model_bytes)
@@ -160,7 +161,7 @@ def draw_console(graph: Digraph):
     plt.imshow(ipm_png)
 
     # turn of axes
-    plt.axis('off')
+    plt.axis("off")
 
     # show the model png
     plt.show()
@@ -177,7 +178,6 @@ def draw_and_return(ipm: BaseCompartmentModel, console: bool) -> Digraph | None:
 
     # check for installed software for drawing
     if check_draw_requirements():
-
         # convert events in ipm to a set of edges
         ipm_edge_set = build_ipm_edge_set(ipm)
 
@@ -203,8 +203,9 @@ def render(ipm: BaseCompartmentModel, console: bool = False) -> None:
     draw_and_return(ipm, console)
 
 
-def render_and_save(ipm: BaseCompartmentModel, file_path: str,
-                    console: bool = False) -> None:
+def render_and_save(
+    ipm: BaseCompartmentModel, file_path: str, console: bool = False
+) -> None:
     """
     render function that saves to file system, draws jupyter by default
     """
@@ -225,15 +226,13 @@ def save_model(ipm_graph: Digraph, filepath: str) -> bool:
 
     # ensure filepath not empty
     if filepath:
-
         # get the directory and filename
         directory, filename = path.split(filepath)
 
         # ensure directory exists
         if path.exists(directory):
             # render and save png
-            ipm_graph.render(filename=filename, directory=directory,
-                             cleanup=True)
+            ipm_graph.render(filename=filename, directory=directory, cleanup=True)
 
             # display save succes
             print(f"Model saved successfully at {filepath}")

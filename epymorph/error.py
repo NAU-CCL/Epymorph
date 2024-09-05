@@ -1,6 +1,7 @@
 """
 A common exception framework for epymorph.
 """
+
 from contextlib import contextmanager
 from textwrap import dedent
 from typing import Self
@@ -8,12 +9,14 @@ from typing import Self
 
 class GeographyError(Exception):
     """Exception working with geographic system representations."""
+
     # NOTE: this is *not* for general errors related to the epymorph GEO module,
     # but instead for things like utility functions for working with US Census delineations.
 
 
 class UnknownModel(Exception):
     """Exception for the inability to load a model as specified."""
+
     model_type: str
     name_or_path: str
 
@@ -45,6 +48,7 @@ class AttributeException(ValidationException):
 
 class GeoValidationException(ValidationException):
     """Exception for invalid GEO."""
+
     attribute_errors: list[str] | None
 
     def __init__(self, message: str, attribute_errors: list[str] | None = None):
@@ -110,14 +114,16 @@ class IpmSimExceptionWithFields(IpmSimException):
     """
     Exception during IPM processing where it is appropriate to show specific
     fields within the simulation.
-    To create a new error with fields, create a subclass of this and set the 
+    To create a new error with fields, create a subclass of this and set the
     displayed error message along with the fields to print.
     See 'IpmSimNaNException' for an example.
     """
 
     display_fields: list[tuple[str, dict]]
 
-    def __init__(self, message: str, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+    def __init__(
+        self, message: str, display_fields: tuple[str, dict] | list[tuple[str, dict]]
+    ):
         super().__init__(message)
         if isinstance(display_fields, tuple):
             display_fields = [display_fields]
@@ -138,38 +144,38 @@ class IpmSimNaNException(IpmSimExceptionWithFields):
     """Exception for handling NaN (not a number) rate values"""
 
     def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
-        msg = '''
+        msg = """
               NaN (not a number) rate detected. This is often the result of a divide by zero error.
               When constructing the IPM, ensure that no edge transitions can result in division by zero
               This commonly occurs when defining an S->I edge that is (some rate / sum of the compartments)
               To fix this, change the edge to define the S->I edge as (some rate / Max(1/sum of the the compartments))
               See examples of this in the provided example ipm definitions in the data/ipms folder.
-              '''
+              """
         msg = dedent(msg)
         super().__init__(msg, display_fields)
 
 
 class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
-    """ Exception for handling less than 0 rate values """
+    """Exception for handling less than 0 rate values"""
 
     def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
-        msg = '''
+        msg = """
               Less than zero rate detected. When providing or defining ipm parameters, ensure that
               they will not result in a negative rate. Note: this can often happen unintentionally
               if a function is given as a parameter.
-              '''
+              """
         msg = dedent(msg)
         super().__init__(msg, display_fields)
 
 
 class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
-    """ Exception for handling invalid probability values """
+    """Exception for handling invalid probability values"""
 
     def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
-        msg = '''
+        msg = """
               Invalid probabilities for fork definition detected. Probabilities for a 
               given tick should always be nonnegative and sum to 1
-              '''
+              """
         msg = dedent(msg)
         super().__init__(msg, display_fields)
 
@@ -183,7 +189,9 @@ class SimStateException(SimulationException):
 
 
 @contextmanager
-def error_gate(description: str, exception_type: type[Exception], *reraises: type[Exception]):
+def error_gate(
+    description: str, exception_type: type[Exception], *reraises: type[Exception]
+):
     """
     Provide nice error messaging linked to a phase of the simulation.
     `description` should describe the phase in gerund form.

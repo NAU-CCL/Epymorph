@@ -7,6 +7,7 @@ versus night.) Movement mechanics are expressed using a set of
 clauses which calculate a requested number of individuals move
 between geospatial nodes at a particular time step of the simulation.
 """
+
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from functools import cached_property
@@ -19,17 +20,22 @@ from numpy.typing import NDArray
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
 from epymorph.geography.scope import GeoScope
-from epymorph.simulation import (NEVER, AttributeDef,
-                                 NamespacedAttributeResolver,
-                                 SimulationFunctionClass,
-                                 SimulationTickFunction, Tick, TickDelta,
-                                 TickIndex)
+from epymorph.simulation import (
+    NEVER,
+    AttributeDef,
+    NamespacedAttributeResolver,
+    SimulationFunctionClass,
+    SimulationTickFunction,
+    Tick,
+    TickDelta,
+    TickIndex,
+)
 from epymorph.util import are_instances
 
-DayOfWeek = Literal['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
+DayOfWeek = Literal["M", "T", "W", "Th", "F", "Sa", "Su"]
 """Type for days of the week values."""
 
-ALL_DAYS: tuple[DayOfWeek, ...] = ('M', 'T', 'W', 'Th', 'F', 'Sa', 'Su')
+ALL_DAYS: tuple[DayOfWeek, ...] = ("M", "T", "W", "Th", "F", "Sa", "Su")
 """All days of the week values."""
 
 _day_of_week_pattern = r"\b(M|T|W|Th|F|Sa|Su)\b"
@@ -88,6 +94,7 @@ class MovementClauseClass(SimulationFunctionClass):
     The metaclass for user-defined MovementClause classes.
     Used to verify proper class implementation.
     """
+
     def __new__(
         mcs: Type[_TypeT],
         name: str,
@@ -133,7 +140,9 @@ class MovementClauseClass(SimulationFunctionClass):
         return super().__new__(mcs, name, bases, dct)
 
 
-class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC, metaclass=MovementClauseClass):
+class MovementClause(
+    SimulationTickFunction[NDArray[SimDType]], ABC, metaclass=MovementClauseClass
+):
     """
     A movement clause is basically a function which calculates _how many_ individuals
     should move between all of the geo nodes, and then epymorph decides by random draw
@@ -143,6 +152,7 @@ class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC, metaclass=M
     and when the individuals that were moved by the clause should return home
     (for example, stay for two days and then return at the end of the day).
     """
+
     _abstract_simfunc = True  # marking this abstract skips metaclass validation
 
     # in addition to requirements (from super), movement clauses must also specify:
@@ -174,7 +184,7 @@ class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC, metaclass=M
         dim: SimDimensions,
         scope: GeoScope,
         rng: np.random.Generator,
-        tick: Tick
+        tick: Tick,
     ) -> NDArray[SimDType]:
         """
         Evaluate this function within a context.
@@ -195,6 +205,7 @@ class MovementModelClass(ABCMeta):
     The metaclass for user-defined MovementModel classes.
     Used to verify proper class implementation.
     """
+
     def __new__(
         mcs: Type[_TypeT],
         name: str,
@@ -212,17 +223,13 @@ class MovementModelClass(ABCMeta):
                 f"Invalid steps in {name}: please specify as a list or tuple."
             )
         if not are_instances(steps, float):
-            raise TypeError(
-                f"Invalid steps in {name}: must be floating point numbers."
-            )
+            raise TypeError(f"Invalid steps in {name}: must be floating point numbers.")
         if len(steps) == 0:
             raise TypeError(
                 f"Invalid steps in {name}: please specify at least one tau step length."
             )
         if not isclose(sum(steps), 1.0, abs_tol=1e-6):
-            raise TypeError(
-                f"Invalid steps in {name}: steps must sum to 1."
-            )
+            raise TypeError(f"Invalid steps in {name}: steps must sum to 1.")
         if any(x <= 0 for x in steps):
             raise TypeError(
                 f"Invalid steps in {name}: steps must all be greater than 0."
@@ -274,6 +281,4 @@ class MovementModel(ABC, metaclass=MovementModelClass):
     @cached_property
     def requirements(self) -> Sequence[AttributeDef]:
         """The combined requirements of all of the clauses in this model."""
-        return [req
-                for clause in self.clauses
-                for req in clause.requirements]
+        return [req for clause in self.clauses for req in clause.requirements]

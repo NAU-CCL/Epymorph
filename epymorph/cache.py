@@ -1,4 +1,5 @@
 """epymorph's file caching utilities."""
+
 from hashlib import sha256
 from io import BytesIO
 from math import log
@@ -21,7 +22,7 @@ def _cache_path() -> Path:
         path = Path(path_var)
     else:
         # fall back to platform-specific default path
-        path = user_cache_path(appname='epymorph')
+        path = user_cache_path(appname="epymorph")
     # ensure cache directory exists
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -80,7 +81,7 @@ class CacheMiss(FileError):
 
 class CacheWarning(Warning):
     """
-    Warning issued when we are unable to interact with the file cache but in a situation where 
+    Warning issued when we are unable to interact with the file cache but in a situation where
     program execution can continue, even if less optimally. For example: if we successfully load data
     from an external source but are unable to cache it for later, this is a warning because we assume
     the data is valid and that it could always be loaded again from the same source at a later time.
@@ -116,7 +117,7 @@ def load_file(from_path: str | PathLike[str]) -> BytesIO:
 
         # Read the file into memory
         file_buffer = BytesIO()
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             file_buffer.write(f.read())
         file_buffer.seek(0)
         return file_buffer
@@ -126,7 +127,9 @@ def load_file(from_path: str | PathLike[str]) -> BytesIO:
         raise FileReadError(f"Unable to load file at: {from_path}") from e
 
 
-def save_bundle(to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]) -> None:
+def save_bundle(
+    to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]
+) -> None:
     """
     Save a bundle of files in our tar format with an associated version number.
     `to_path` can be absolute or relative; relative paths will be resolved
@@ -149,7 +152,7 @@ def save_bundle(to_path: str | PathLike[str], version: int, files: dict[str, Byt
         # Create checksums.sha256 file
         sha_file = BytesIO()
         sha_text = "\n".join(sha_entries)
-        sha_file.write(bytes(sha_text, encoding='utf-8'))
+        sha_file.write(bytes(sha_text, encoding="utf-8"))
 
         # Create cache version file
         ver_file = BytesIO()
@@ -164,7 +167,7 @@ def save_bundle(to_path: str | PathLike[str], version: int, files: dict[str, Byt
         # Write the tar to disk
         tar_path = Path(to_path).resolve()
         tar_path.parent.mkdir(parents=True, exist_ok=True)
-        mode = 'w:gz' if tar_path.suffix == '.tgz' else 'w'
+        mode = "w:gz" if tar_path.suffix == ".tgz" else "w"
         with open_tarfile(name=tar_path, mode=mode) as tar:
             for name, contents in tarred_files.items():
                 info = TarInfo(name)
@@ -177,7 +180,9 @@ def save_bundle(to_path: str | PathLike[str], version: int, files: dict[str, Byt
         raise FileWriteError(msg) from e
 
 
-def load_bundle(from_path: str | PathLike[str], version_at_least: int = -1) -> dict[str, BytesIO]:
+def load_bundle(
+    from_path: str | PathLike[str], version_at_least: int = -1
+) -> dict[str, BytesIO]:
     """
     Load a bundle of files in our tar format, optionally enforcing a minimum version.
     An Exception is raised if the file cannot be loaded for any reason, or if its version
@@ -191,14 +196,14 @@ def load_bundle(from_path: str | PathLike[str], version_at_least: int = -1) -> d
 
         # Read the tar file into memory
         tar_buffer = BytesIO()
-        with open(tar_path, 'rb') as f:
+        with open(tar_path, "rb") as f:
             tar_buffer.write(f.read())
         tar_buffer.seek(0)
 
         if not is_tarfile(tar_buffer):
             raise FileReadError(f"Not a tar file at: {tar_path}")
 
-        mode = 'r:gz' if tar_path.suffix == '.tgz' else 'r'
+        mode = "r:gz" if tar_path.suffix == ".tgz" else "r"
         tarred_files: dict[str, BytesIO] = {}
         with open_tarfile(fileobj=tar_buffer, mode=mode) as tar:
             for info in tar.getmembers():
@@ -221,8 +226,8 @@ def load_bundle(from_path: str | PathLike[str], version_at_least: int = -1) -> d
             raise FileReadError("Archive appears to be invalid.")
         sha_file = tarred_files["checksums.sha256"]
         for line_bytes in sha_file.readlines():
-            line = str(line_bytes, encoding='utf-8')
-            [checksum, filename] = line.strip().split('  ')
+            line = str(line_bytes, encoding="utf-8")
+            [checksum, filename] = line.strip().split("  ")
 
             if filename not in tarred_files:
                 raise FileReadError("Archive appears to be invalid.")
@@ -233,8 +238,10 @@ def load_bundle(from_path: str | PathLike[str], version_at_least: int = -1) -> d
             sha.update(contents.read())
             contents.seek(0)
             if checksum != sha.hexdigest():
-                msg = f"Archive checksum did not match (for file {filename}). "\
+                msg = (
+                    f"Archive checksum did not match (for file {filename}). "
                     "It is possible the file is corrupt."
+                )
                 raise FileReadError(msg)
 
         return {
@@ -286,7 +293,7 @@ def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
 def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
     """
     Attempts to load a file from the cache. If it doesn't exist, uses the provided
-    fetch method to load the file, then attempts to save the file to the cache for 
+    fetch method to load the file, then attempts to save the file to the cache for
     next time. (This is a higher-level but still generic building block.)
     Any exceptions raised by `fetch` will not be caught in this method.
     """
@@ -304,7 +311,7 @@ def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
             # raise a warning.
             warn(
                 f"Unable to save file to the cache ({cache_path}). Cause:\n{e}",
-                CacheWarning
+                CacheWarning,
             )
         return file
 
@@ -315,13 +322,17 @@ def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
     the file contents from the given URL, then attempts to save the file to the cache
     for next time.
     """
+
     def fetch_url():
         with urlopen(url) as f:
             return BytesIO(f.read())
+
     return load_or_fetch(cache_path, fetch_url)
 
 
-def save_bundle_to_cache(to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]) -> None:
+def save_bundle_to_cache(
+    to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]
+) -> None:
     """
     Save a tar bundle of files to the cache (overwriting the existing file, if any).
     The tar includes the sha256 checksums of every content file,
@@ -332,7 +343,9 @@ def save_bundle_to_cache(to_path: str | PathLike[str], version: int, files: dict
     save_bundle(_resolve_cache_path(to_path), version, files)
 
 
-def load_bundle_from_cache(from_path: str | PathLike[str], version_at_least: int = -1) -> dict[str, BytesIO]:
+def load_bundle_from_cache(
+    from_path: str | PathLike[str], version_at_least: int = -1
+) -> dict[str, BytesIO]:
     """
     Load a tar bundle of files from the cache. `from_path` must be a relative path.
     `version_at_least` optionally specifies a version number that must be met or beat
@@ -352,7 +365,7 @@ def load_bundle_from_cache(from_path: str | PathLike[str], version_at_least: int
 
 
 # https://en.wikipedia.org/wiki/Metric_prefix
-_suffixes = ('B', 'kiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB', 'RiB', 'QiB')
+_suffixes = ("B", "kiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
 
 
 def format_file_size(size: int) -> str:
@@ -370,6 +383,7 @@ def format_file_size(size: int) -> str:
 
 class Directory(NamedTuple):
     """A directory."""
+
     name: str
     """The directory name."""
     size: int
@@ -380,6 +394,7 @@ class Directory(NamedTuple):
 
 class File(NamedTuple):
     """A file."""
+
     name: str
     """The file name."""
     size: int
@@ -392,6 +407,7 @@ FileTree = Directory | File
 
 def cache_inventory() -> Directory:
     """Lists the contents of epymorph's cache as a FileTree."""
+
     def recurse(directory: Path) -> Directory:
         children = []
         size = 0
@@ -414,7 +430,9 @@ def cache_inventory() -> Directory:
     return recurse(CACHE_PATH)
 
 
-def cache_remove_confirmation(path: str | PathLike[str]) -> tuple[Path, Callable[[], None]]:
+def cache_remove_confirmation(
+    path: str | PathLike[str],
+) -> tuple[Path, Callable[[], None]]:
     """
     Creates a function which removes a directory or file from the cache.
     Also returns the resolved path to the thing that will be removed;
@@ -436,9 +454,11 @@ def cache_remove_confirmation(path: str | PathLike[str]) -> tuple[Path, Callable
             rmtree(to_remove)
 
         # Remove any newly-empty parent directories, up to the cache dir
-        parents = [p for p in to_remove.parents
-                   if p.is_relative_to(CACHE_PATH)
-                   and p != CACHE_PATH]
+        parents = [
+            p
+            for p in to_remove.parents
+            if p.is_relative_to(CACHE_PATH) and p != CACHE_PATH
+        ]
         for p in parents:
             if any(p.iterdir()):
                 break  # parent not empty, we can stop

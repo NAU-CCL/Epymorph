@@ -21,9 +21,13 @@ class NPY(Adrio[Any]):
     array_slice: _ArraySlice | None
     """Optional slice(s) of the array to load."""
 
-    def __init__(self, file_path: PathLike, array_slice: _ArraySlice | None = None) -> None:
-        if Path(file_path).suffix != '.npy':
-            msg = 'Incorrect file type. Only .npy files can be loaded through NPY ADRIOs.'
+    def __init__(
+        self, file_path: PathLike, array_slice: _ArraySlice | None = None
+    ) -> None:
+        if Path(file_path).suffix != ".npy":
+            msg = (
+                "Incorrect file type. Only .npy files can be loaded through NPY ADRIOs."
+            )
             raise DataResourceException(msg)
         self.file_path = file_path
         self.array_slice = array_slice
@@ -36,13 +40,13 @@ class NPY(Adrio[Any]):
                 data = data[self.array_slice]
             return data
         except OSError as e:
-            msg = 'File not found.'
+            msg = "File not found."
             raise DataResourceException(msg) from e
         except ValueError as e:
-            msg = 'Object arrays cannot be loaded.'
+            msg = "Object arrays cannot be loaded."
             raise DataResourceException(msg) from e
         except IndexError as e:
-            msg = 'Specified array slice is invalid for the shape of this data.'
+            msg = "Specified array slice is invalid for the shape of this data."
             raise DataResourceException(msg) from e
 
 
@@ -56,9 +60,16 @@ class NPZ(Adrio[Any]):
     array_slice: _ArraySlice | None
     """Optional slice(s) of the array to load."""
 
-    def __init__(self, file_path: PathLike, array_name: str, array_slice: _ArraySlice | None = None) -> None:
-        if Path(file_path).suffix != '.npz':
-            msg = 'Incorrect file type. Only .npz files can be loaded through NPZ ADRIOs.'
+    def __init__(
+        self,
+        file_path: PathLike,
+        array_name: str,
+        array_slice: _ArraySlice | None = None,
+    ) -> None:
+        if Path(file_path).suffix != ".npz":
+            msg = (
+                "Incorrect file type. Only .npz files can be loaded through NPZ ADRIOs."
+            )
             raise DataResourceException(msg)
         self.file_path = file_path
         self.array_name = array_name
@@ -72,11 +83,11 @@ class NPZ(Adrio[Any]):
                 data = data[self.array_slice]
             return data
         except OSError as e:
-            msg = 'File not found.'
+            msg = "File not found."
             raise DataResourceException(msg) from e
         except ValueError as e:
-            msg = 'Object arrays cannot be loaded.'
+            msg = "Object arrays cannot be loaded."
             raise DataResourceException(msg) from e
         except IndexError as e:
-            msg = 'Specified array slice is invalid for the shape of this data.'
+            msg = "Specified array slice is invalid for the shape of this data."
             raise DataResourceException(msg) from e

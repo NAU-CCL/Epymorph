@@ -1,14 +1,21 @@
 """Implements one epymorph simulation algorithm: the basic simulator."""
+
 from typing import Callable, Mapping, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.database import NamePattern
-from epymorph.error import (AttributeException, CompilationException,
-                            InitException, IpmSimException, MmSimException,
-                            SimValidationException, ValidationException,
-                            error_gate)
+from epymorph.error import (
+    AttributeException,
+    CompilationException,
+    InitException,
+    IpmSimException,
+    MmSimException,
+    SimValidationException,
+    ValidationException,
+    error_gate,
+)
 from epymorph.event import EventBus, OnStart, OnTick
 from epymorph.params import ParamValue
 from epymorph.rume import GEO_LABELS, Rume
@@ -16,14 +23,17 @@ from epymorph.simulation import TimeFrame, simulation_clock
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
-from epymorph.simulator.data import (evaluate_params, initialize_rume,
-                                     validate_requirements)
+from epymorph.simulator.data import (
+    evaluate_params,
+    initialize_rume,
+    validate_requirements,
+)
 from epymorph.simulator.world_list import ListWorld
 
 _events = EventBus()
 
 
-class BasicSimulator():
+class BasicSimulator:
     """
     A simulator for running singular simulation passes and producing time-series output.
     The most basic simulator!
@@ -37,7 +47,8 @@ class BasicSimulator():
         self.rume = rume
 
     def run(
-        self, /,
+        self,
+        /,
         params: Mapping[str, ParamValue] | None = None,
         time_frame: TimeFrame | None = None,
         rng_factory: Callable[[], np.random.Generator] | None = None,
@@ -51,13 +62,16 @@ class BasicSimulator():
         dim = rume.dim
         rng = (rng_factory or np.random.default_rng)()
 
-        with error_gate("evaluating simulation attributes", ValidationException, CompilationException):
+        with error_gate(
+            "evaluating simulation attributes",
+            ValidationException,
+            CompilationException,
+        ):
             try:
                 db = evaluate_params(
                     rume=rume,
                     override_params={
-                        NamePattern.parse(k): v
-                        for k, v in (params or {}).items()
+                        NamePattern.parse(k): v for k, v in (params or {}).items()
                     },
                     rng=rng,
                 )
@@ -66,8 +80,9 @@ class BasicSimulator():
                 msg = f"RUME attribute requirements were not met. See errors:\n- {e}"
                 raise SimValidationException(msg) from None
             except ExceptionGroup as e:
-                msg = "RUME attribute requirements were not met. See errors:" + \
-                    "".join(f"\n- {e}" for e in e.exceptions)
+                msg = "RUME attribute requirements were not met. See errors:" + "".join(
+                    f"\n- {e}" for e in e.exceptions
+                )
                 raise SimValidationException(msg) from None
 
         with error_gate("initializing the simulation", InitException):
@@ -93,13 +108,14 @@ class BasicSimulator():
             ipm_exec = IpmExecutor(rume, world, db, rng)
             movement_exec = MovementExecutor(rume, world, db, rng)
 
-        _events.on_start.publish(
-            OnStart(self.__class__.__name__, dim, rume.time_frame))
+        _events.on_start.publish(OnStart(self.__class__.__name__, dim, rume.time_frame))
 
         # Run the simulation!
         for tick in simulation_clock(dim):
             # First do movement
-            with error_gate("executing the movement model", MmSimException, AttributeException):
+            with error_gate(
+                "executing the movement model", MmSimException, AttributeException
+            ):
                 movement_exec.apply(tick)
 
             # Then do IPM

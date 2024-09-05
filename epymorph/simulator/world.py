@@ -5,6 +5,7 @@ and the compartmental breakdown of individuals in each of those locations.
 They also keep track of groups of individuals which have moved between locations
 and will eventually be returning or moving to another location.
 """
+
 from abc import ABC, abstractmethod
 from typing import Literal, overload
 
@@ -49,16 +50,18 @@ class World(ABC):
 
     @abstractmethod
     @overload
-    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None:
-        ...
+    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None: ...
 
     @abstractmethod
     @overload
-    def apply_return(self, tick: Tick, *, return_stats: Literal[True]) -> NDArray[SimDType]:
-        ...
+    def apply_return(
+        self, tick: Tick, *, return_stats: Literal[True]
+    ) -> NDArray[SimDType]: ...
 
     @abstractmethod
-    def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
+    def apply_return(
+        self, tick: Tick, *, return_stats: bool
+    ) -> NDArray[SimDType] | None:
         """
         Modify the world state as a result of returning all movers that are ready to be returned home.
         If `return_stats` is True, returns an NxNxC array containing the individuals moved during the return.

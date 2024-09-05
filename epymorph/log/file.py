@@ -1,12 +1,19 @@
 """For logging epymorph simulations to a file."""
+
 from contextlib import contextmanager
-from logging import (BASIC_FORMAT, DEBUG, NOTSET, FileHandler, Formatter,
-                     getLogger)
+from logging import BASIC_FORMAT, DEBUG, NOTSET, FileHandler, Formatter, getLogger
 from time import perf_counter
 from typing import Generator
 
-from epymorph.event import (AdrioFinish, EventBus, OnMovementClause,
-                            OnMovementFinish, OnMovementStart, OnStart, OnTick)
+from epymorph.event import (
+    AdrioFinish,
+    EventBus,
+    OnMovementClause,
+    OnMovementFinish,
+    OnMovementStart,
+    OnStart,
+    OnTick,
+)
 from epymorph.util import subscriptions
 
 _events = EventBus()
@@ -14,7 +21,7 @@ _events = EventBus()
 
 @contextmanager
 def file_log(
-    log_file: str = 'debug.log',
+    log_file: str = "debug.log",
     log_level: str | int = DEBUG,
 ) -> Generator[None, None, None]:
     """Enable detailed file logging during a simulation."""
@@ -23,13 +30,13 @@ def file_log(
     log_handler = FileHandler(log_file, "w", "utf8")
     log_handler.setFormatter(Formatter(BASIC_FORMAT))
 
-    epy_log = getLogger('epymorph')
+    epy_log = getLogger("epymorph")
     epy_log.addHandler(log_handler)
     epy_log.setLevel(log_level)
 
-    sim_log = epy_log.getChild('sim')
-    adrio_log = epy_log.getChild('adrio')
-    mm_log = epy_log.getChild('movement')
+    sim_log = epy_log.getChild("sim")
+    adrio_log = epy_log.getChild("adrio")
+    mm_log = epy_log.getChild("movement")
 
     # Define handlers for each of the events we're interested in.
 
@@ -51,7 +58,7 @@ def file_log(
         sim_log.info("Completed simulation tick %d", tick.tick_index)
 
     def on_finish(_: None) -> None:
-        sim_log.info('Complete.')
+        sim_log.info("Complete.")
         end_time = perf_counter()
         if start_time is not None:
             sim_log.info(f"Runtime: {(end_time - start_time):.3f}s")
@@ -70,7 +77,8 @@ def file_log(
             cl_log.debug("requested:\n%s", e.requested)
             if e.is_throttled:
                 cl_log.debug(
-                    "WARNING: movement is throttled due to insufficient population")
+                    "WARNING: movement is throttled due to insufficient population"
+                )
             cl_log.debug("moved:\n%s", e.actual.sum(axis=2))
         cl_log.info("moved %d individuals", e.total)
 

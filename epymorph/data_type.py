@@ -1,6 +1,7 @@
 """
 Types for source data and attributes in epymorph.
 """
+
 from datetime import date
 from typing import Any
 
@@ -48,10 +49,12 @@ def dtype_as_np(dtype: AttributeType) -> np.dtype:
         if len(fields) == 0:
             raise ValueError(f"Unsupported dtype: {dtype}")
         try:
-            return np.dtype([
-                (field_name, dtype_as_np(field_dtype))
-                for field_name, field_dtype in fields
-            ])
+            return np.dtype(
+                [
+                    (field_name, dtype_as_np(field_dtype))
+                    for field_name, field_dtype in fields
+                ]
+            )
         except (TypeError, ValueError):
             raise ValueError(f"Unsupported dtype: {dtype}") from None
     raise ValueError(f"Unsupported dtype: {dtype}")
@@ -92,14 +95,16 @@ def dtype_check(dtype: AttributeType, value: Any) -> bool:
             return False
         if len(value) != len(fields):
             return False
-        return all((
-            dtype_check(field_dtype, field_value)
-            for ((_, field_dtype), field_value) in zip(fields, value)
-        ))
+        return all(
+            (
+                dtype_check(field_dtype, field_value)
+                for ((_, field_dtype), field_value) in zip(fields, value)
+            )
+        )
     raise ValueError(f"Unsupported dtype: {dtype}")
 
 
-CentroidType: AttributeType = (('longitude', float), ('latitude', float))
+CentroidType: AttributeType = (("longitude", float), ("latitude", float))
 """Structured epymorph type declaration for long/lat coordinates."""
 CentroidDType: DTypeLike = dtype_as_np(CentroidType)
 """The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates)."""
@@ -115,8 +120,8 @@ they should take pains to use this type at all times (if possible).
 SimArray = NDArray[SimDType]
 
 __all__ = [
-    'AttributeType',
-    'AttributeArray',
-    'CentroidType',
-    'SimDType',
+    "AttributeType",
+    "AttributeArray",
+    "CentroidType",
+    "SimDType",
 ]

@@ -16,8 +16,8 @@ class TestUtil(unittest.TestCase):
             self.assertEqual(t, util.identity(t))
 
     def test_stutter(self):
-        act = list(util.stutter(['a', 'b', 'c'], 3))
-        exp = ['a', 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c']
+        act = list(util.stutter(["a", "b", "c"], 3))
+        exp = ["a", "a", "a", "b", "b", "b", "c", "c", "c"]
         self.assertEqual(act, exp)
 
     def test_stridesum(self):
@@ -36,13 +36,13 @@ class TestUtil(unittest.TestCase):
         self.assertTrue(all(np.equal(act3, exp3)))
 
     def test_filter_unique(self):
-        act = util.filter_unique(['a', 'b', 'b', 'c', 'a'])
-        exp = ['a', 'b', 'c']
+        act = util.filter_unique(["a", "b", "b", "c", "a"])
+        exp = ["a", "b", "c"]
         self.assertListEqual(act, exp)
 
     def test_list_not_none(self):
-        act = util.list_not_none(['a', None, 'b', None, None, 'c', None])
-        exp = ['a', 'b', 'c']
+        act = util.list_not_none(["a", None, "b", None, None, "c", None])
+        exp = ["a", "b", "c"]
         self.assertListEqual(act, exp)
 
     def test_check_ndarray_01(self):
@@ -56,18 +56,24 @@ class TestUtil(unittest.TestCase):
         util.check_ndarray(arr)
         util.check_ndarray(arr, dtype=m.dtype(np.int64))
         util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.N, dim, True))
-        util.check_ndarray(arr,
-                           dtype=m.dtype(np.int64),
-                           shape=DataShapeMatcher(Shapes.N, dim, True))
-        util.check_ndarray(arr,
-                           dtype=m.dtype(np.int64, np.float64),
-                           shape=DataShapeMatcher(Shapes.N, dim, True))
-        util.check_ndarray(arr,
-                           dtype=m.dtype(np.float64, np.int64),
-                           shape=DataShapeMatcher(Shapes.N, dim, False))
-        util.check_ndarray(arr,
-                           dtype=m.dtype(np.int64, np.float64),
-                           shape=DataShapeMatcher(Shapes.TxN, dim, True))
+        util.check_ndarray(
+            arr, dtype=m.dtype(np.int64), shape=DataShapeMatcher(Shapes.N, dim, True)
+        )
+        util.check_ndarray(
+            arr,
+            dtype=m.dtype(np.int64, np.float64),
+            shape=DataShapeMatcher(Shapes.N, dim, True),
+        )
+        util.check_ndarray(
+            arr,
+            dtype=m.dtype(np.float64, np.int64),
+            shape=DataShapeMatcher(Shapes.N, dim, False),
+        )
+        util.check_ndarray(
+            arr,
+            dtype=m.dtype(np.int64, np.float64),
+            shape=DataShapeMatcher(Shapes.TxN, dim, True),
+        )
 
     def test_check_ndarray_02(self):
         # Raises exception for anything that's not a numpy array

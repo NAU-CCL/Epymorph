@@ -2,6 +2,7 @@
 Contexts which provide console messaging for epymorph processes like simulation runs and geo fetching.
 It's nice to have some console output to show progress during long running tasks!
 """
+
 from contextlib import contextmanager
 from time import perf_counter
 from typing import Generator

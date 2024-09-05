@@ -1,4 +1,5 @@
 """World implementation: HypercubeWorld."""
+
 from typing import Literal, Self, overload
 
 import numpy as np
@@ -70,7 +71,9 @@ class HypercubeWorld(World):
     """
 
     @classmethod
-    def from_initials(cls, dim: SimDimensions, initial_compartments: NDArray[SimDType]) -> Self:
+    def from_initials(
+        cls, dim: SimDimensions, initial_compartments: NDArray[SimDType]
+    ) -> Self:
         """
         Create a world with the given initial compartments:
         assumes everyone starts at home, no travelers initially.
@@ -113,21 +116,26 @@ class HypercubeWorld(World):
         self.time_frontier = max(self.time_frontier, return_tick + 2)
 
     @overload
-    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None:
-        ...
+    def apply_return(self, tick: Tick, *, return_stats: Literal[False]) -> None: ...
 
     @overload
-    def apply_return(self, tick: Tick, *, return_stats: Literal[True]) -> NDArray[SimDType]:
-        ...
+    def apply_return(
+        self, tick: Tick, *, return_stats: Literal[True]
+    ) -> NDArray[SimDType]: ...
 
-    def apply_return(self, tick: Tick, *, return_stats: bool) -> NDArray[SimDType] | None:
+    def apply_return(
+        self, tick: Tick, *, return_stats: bool
+    ) -> NDArray[SimDType] | None:
         # we have to transpose the movers "stats" result since they're being stored here as
         # (home, visiting) and our result needs to be
         # (moving from "visiting", moving to "home")
         movers = self.ledger[self.time_offset + 1, :, :, :].transpose((1, 0, 2)).copy()
-        movers_by_home = self.ledger[self.time_offset + 1, :, :, :].sum(
-            axis=1, dtype=SimDType) * self._ident
-        self.ledger[self.time_offset + 1, :, :, :] = movers_by_home + \
-            self.ledger[self.time_offset, :, :, :]
+        movers_by_home = (
+            self.ledger[self.time_offset + 1, :, :, :].sum(axis=1, dtype=SimDType)
+            * self._ident
+        )
+        self.ledger[self.time_offset + 1, :, :, :] = (
+            movers_by_home + self.ledger[self.time_offset, :, :, :]
+        )
         self.time_offset += 1  # assumes there's only ever one return clause per tick
         return movers if return_stats else None

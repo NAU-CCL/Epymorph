@@ -3,33 +3,31 @@ The basis of the intra-population model (disease mechanics) system in epymorph.
 This represents disease mechanics using a compartmental model for tracking
 populations as groupings of integer-numbered individuals.
 """
+
 import dataclasses
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import (Any, Callable, Iterable, Iterator, OrderedDict, Sequence,
-                    Type)
+from typing import Any, Callable, Iterable, Iterator, OrderedDict, Sequence, Type
 
 from sympy import Expr, Float, Integer, Symbol
 
 from epymorph.database import AbsoluteName
 from epymorph.error import IpmValidationException
-from epymorph.simulation import (DEFAULT_STRATA, META_STRATA, AttributeDef,
-                                 gpm_strata)
+from epymorph.simulation import DEFAULT_STRATA, META_STRATA, AttributeDef, gpm_strata
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
-from epymorph.util import (acceptable_name, are_instances, are_unique,
-                           iterator_length)
+from epymorph.util import acceptable_name, are_instances, are_unique, iterator_length
 
 ############################################################
 # Model Transitions
 ############################################################
 
 
-BIRTH = Symbol('birth_exogenous')
+BIRTH = Symbol("birth_exogenous")
 """An IPM psuedo-compartment representing exogenous input of individuals."""
 
-DEATH = Symbol('death_exogenous')
+DEATH = Symbol("death_exogenous")
 """An IPM psuedo-compartment representing exogenous removal of individuals."""
 
 exogenous_states = (BIRTH, DEATH)
@@ -39,12 +37,15 @@ exogenous_states = (BIRTH, DEATH)
 @dataclass(frozen=True)
 class EdgeDef:
     """Defines a single edge transitions in a compartment model."""
+
     rate: Expr
     compartment_from: Symbol
     compartment_to: Symbol
 
 
-def edge(compartment_from: Symbol, compartment_to: Symbol, rate: Expr | int | float) -> EdgeDef:
+def edge(
+    compartment_from: Symbol, compartment_to: Symbol, rate: Expr | int | float
+) -> EdgeDef:
     """Define a transition edge going from one compartment to another at the given rate."""
     if isinstance(rate, int):
         _rate = Integer(rate)
@@ -58,6 +59,7 @@ def edge(compartment_from: Symbol, compartment_to: Symbol, rate: Expr | int | fl
 @dataclass(frozen=True)
 class ForkDef:
     """Defines a fork-style transition in a compartment model."""
+
     rate: Expr
     edges: list[EdgeDef]
     probs: list[Expr]
@@ -126,13 +128,16 @@ def _remap_fork(f: ForkDef, symbol_mapping: dict[Symbol, Symbol]) -> ForkDef:
     )
 
 
-def _remap_transition(t: TransitionDef, symbol_mapping: dict[Symbol, Symbol]) -> TransitionDef:
+def _remap_transition(
+    t: TransitionDef, symbol_mapping: dict[Symbol, Symbol]
+) -> TransitionDef:
     """Replaces all symbols used in the transition using substitution from `symbol_mapping`."""
     match t:
         case EdgeDef():
             return _remap_edge(t, symbol_mapping)
         case ForkDef():
             return _remap_fork(t, symbol_mapping)
+
 
 ############################################################
 # Model Compartments
@@ -142,6 +147,7 @@ def _remap_transition(t: TransitionDef, symbol_mapping: dict[Symbol, Symbol]) ->
 @dataclass(frozen=True)
 class CompartmentDef:
     """Defines an IPM compartment."""
+
     name: str
     tags: list[str]
     description: str | None = field(default=None)
@@ -151,7 +157,9 @@ class CompartmentDef:
             raise ValueError(f"Invalid compartment name: {self.name}")
 
 
-def compartment(name: str, tags: list[str] | None = None, description: str | None = None) -> CompartmentDef:
+def compartment(
+    name: str, tags: list[str] | None = None, description: str | None = None
+) -> CompartmentDef:
     """Define an IPM compartment."""
     return CompartmentDef(name, tags or [], description)
 
@@ -182,9 +190,11 @@ class ModelSymbols:
     _rsymbols: dict[str, Symbol]
     """Mapping of requirement name to symbol."""
 
-    def __init__(self,
-                 compartments: Sequence[tuple[str, str]],
-                 requirements: Sequence[tuple[str, str]]):
+    def __init__(
+        self,
+        compartments: Sequence[tuple[str, str]],
+        requirements: Sequence[tuple[str, str]],
+    ):
         # NOTE: the arguments here are tuples of name and symbolic name; this is redundant for
         # single-strata models, but allows multistrata models to keep fine-grained control over
         # symbol substitution while allowing the user to refer to the names they already know.
@@ -206,6 +216,7 @@ class ModelSymbols:
 
 class BaseCompartmentModel(ABC):
     """Shared base-class for compartment models."""
+
     _abstract_model = True  # marking this abstract skips metaclass validation
 
     compartments: Sequence[CompartmentDef] = ()
@@ -254,8 +265,7 @@ class BaseCompartmentModel(ABC):
     @cached_property
     def event_names(self) -> Sequence[str]:
         """The names of all events in the order they were declared."""
-        return [f"{e.compartment_from} → {e.compartment_to}"
-                for e in self.events]
+        return [f"{e.compartment_from} → {e.compartment_to}" for e in self.events]
 
     @cached_property
     def event_src_dst(self) -> Sequence[tuple[str, str]]:
@@ -266,7 +276,7 @@ class BaseCompartmentModel(ABC):
         """Turn a pattern string (which is custom syntax) into a regular expression."""
         # We're not interpreting pattern as a regex directly, so escape any special characters.
         # Then replace '*' with the necessary regex.
-        escaped_pattern = re.escape(pattern).replace(r'\*', '[^_]+')
+        escaped_pattern = re.escape(pattern).replace(r"\*", "[^_]+")
         # Compile with anchors so it matches the entire string.
         return re.compile(f"^{escaped_pattern}$")
 
@@ -277,7 +287,9 @@ class BaseCompartmentModel(ABC):
         matching anything besides underscores.
         """
         regex = self._compile_pattern(pattern)
-        return tuple((i for i, (src, _) in enumerate(self.event_src_dst) if regex.match(src)))
+        return tuple(
+            (i for i, (src, _) in enumerate(self.event_src_dst) if regex.match(src))
+        )
 
     def events_by_dst(self, pattern: str) -> tuple[int, ...]:
         """
@@ -286,7 +298,9 @@ class BaseCompartmentModel(ABC):
         matching anything besides underscores.
         """
         regex = self._compile_pattern(pattern)
-        return tuple((i for i, (_, dst) in enumerate(self.event_src_dst) if regex.match(dst)))
+        return tuple(
+            (i for i, (_, dst) in enumerate(self.event_src_dst) if regex.match(dst))
+        )
 
     def event_by_name(self, name: str) -> int:
         """Get a single event index by name. For example: "S->I". Only exact matches are allowed."""
@@ -303,9 +317,11 @@ class BaseCompartmentModel(ABC):
             raise ValueError(f"Invalid event name syntax: {name}") from None
 
         try:
-            return next(i for i, (s, d)
-                        in enumerate(self.event_src_dst)
-                        if s == src and d == dst)
+            return next(
+                i
+                for i, (s, d) in enumerate(self.event_src_dst)
+                if s == src and d == dst
+            )
         except StopIteration:
             msg = f"No matching event found for name: {name}"
             raise ValueError(msg) from None
@@ -317,14 +333,14 @@ class BaseCompartmentModel(ABC):
         matching anything besides underscores.
         """
         regex = self._compile_pattern(pattern)
-        return tuple((i for i, c in enumerate(self.compartments) if regex.match(c.name)))
+        return tuple(
+            (i for i, c in enumerate(self.compartments) if regex.match(c.name))
+        )
 
     def compartment_by_name(self, name: str) -> int:
         """Get a single compartment index by name. Only exact matches are allowed."""
         try:
-            return next(i for i, c
-                        in enumerate(self.compartments)
-                        if c.name == name)
+            return next(i for i, c in enumerate(self.compartments) if c.name == name)
         except StopIteration:
             msg = f"No matching compartment found for name: {name}"
             raise ValueError(msg) from None
@@ -340,12 +356,13 @@ class CompartmentModelClass(ABCMeta):
     The metaclass for user-defined CompartmentModel classes.
     Used to verify proper class implementation.
     """
+
     def __new__(
-        mcs: Type['CompartmentModelClass'],
+        mcs: Type["CompartmentModelClass"],
         name: str,
         bases: tuple[type, ...],
         dct: dict[str, Any],
-    ) -> 'CompartmentModelClass':
+    ) -> "CompartmentModelClass":
         # Skip these checks for classes we want to treat as abstract:
         if dct.get("_abstract_model", False):
             return super().__new__(mcs, name, bases, dct)
@@ -378,8 +395,11 @@ class CompartmentModelClass(ABCMeta):
         trxs = instance.transitions
 
         # transitions cannot have the source and destination both be exogenous; this would be madness.
-        if any(edge.compartment_from in exogenous_states and edge.compartment_to in exogenous_states
-                for edge in _as_events(trxs)):
+        if any(
+            edge.compartment_from in exogenous_states
+            and edge.compartment_to in exogenous_states
+            for edge in _as_events(trxs)
+        ):
             raise TypeError(
                 f"Invalid transitions in {name}: "
                 "transitions cannot use exogenous states (BIRTH/DEATH) as both source and destination."
@@ -399,7 +419,8 @@ class CompartmentModelClass(ABCMeta):
         trx_reqs = set(
             symbol
             for e in _as_events(trxs)
-            for symbol in e.rate.free_symbols if isinstance(symbol, Symbol)
+            for symbol in e.rate.free_symbols
+            if isinstance(symbol, Symbol)
         ).difference(trx_comps)
 
         # transition compartments minus declared compartments should be empty
@@ -429,6 +450,7 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
     Effectively, a collection of compartments, transitions between compartments,
     and the data parameters which are required to compute the transitions.
     """
+
     _abstract_model = True  # marking this abstract skips metaclass validation
 
     @cached_property
@@ -436,15 +458,18 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
         """The symbols which represent parts of this model."""
         return ModelSymbols(
             [(c.name, c.name) for c in self.compartments],
-            [(r.name, r.name) for r in self.requirements])
+            [(r.name, r.name) for r in self.requirements],
+        )
 
     @cached_property
     def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
         """The attributes required by this model."""
-        return OrderedDict([
-            (AbsoluteName(gpm_strata(DEFAULT_STRATA), "ipm", r.name), r)
-            for r in self.requirements
-        ])
+        return OrderedDict(
+            [
+                (AbsoluteName(gpm_strata(DEFAULT_STRATA), "ipm", r.name), r)
+                for r in self.requirements
+            ]
+        )
 
     @cached_property
     def transitions(self) -> Sequence[TransitionDef]:
@@ -484,9 +509,11 @@ class MultistrataModelSymbols(ModelSymbols):
     The symbols within use their original names.
     """
 
-    def __init__(self,
-                 strata: Sequence[tuple[str, CompartmentModel]],
-                 meta_requirements: Sequence[AttributeDef]):
+    def __init__(
+        self,
+        strata: Sequence[tuple[str, CompartmentModel]],
+        meta_requirements: Sequence[AttributeDef],
+    ):
         # These are all tuples of:
         # (original name, strata name, symbolic name)
         # where the symbolic name is disambiguated by appending
@@ -501,42 +528,31 @@ class MultistrataModelSymbols(ModelSymbols):
             for strata_name, ipm in strata
             for r in ipm.requirements
         ]
-        ms = [
-            (r.name, "meta", f"{r.name}_meta")
-            for r in meta_requirements
-        ]
+        ms = [(r.name, "meta", f"{r.name}_meta") for r in meta_requirements]
 
         super().__init__(
             compartments=[(sym, sym) for _, _, sym in cs],
             requirements=[
                 *((sym, sym) for _, _, sym in rs),
                 *((orig, sym) for orig, _, sym in ms),
-            ]
+            ],
         )
 
         self.strata = [strata_name for strata_name, _ in strata]
         self._strata_symbols = {
             strata_name: ModelSymbols(
                 compartments=[
-                    (orig, sym) for orig, strt, sym in cs
-                    if strt == strata_name
+                    (orig, sym) for orig, strt, sym in cs if strt == strata_name
                 ],
                 requirements=[
-                    (orig, sym) for orig, strt, sym in rs
-                    if strt == strata_name
-                ]
+                    (orig, sym) for orig, strt, sym in rs if strt == strata_name
+                ],
             )
             for strata_name, _ in strata
         }
 
-        self.all_meta_requirements = [
-            to_symbol(sym)
-            for _, _, sym in ms
-        ]
-        self._msymbols = {
-            orig: to_symbol(sym)
-            for orig, _, sym in ms
-        }
+        self.all_meta_requirements = [to_symbol(sym) for _, _, sym in ms]
+        self._msymbols = {orig: to_symbol(sym) for orig, _, sym in ms}
 
     def strata_compartments(self, strata: str, *names: str) -> Sequence[Symbol]:
         """
@@ -573,11 +589,12 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     _meta_requirements: Sequence[AttributeDef]
     _meta_edges: MetaEdgeBuilder
 
-    def __init__(self,
-                 strata: Sequence[tuple[str, CompartmentModel]],
-                 meta_requirements: Sequence[AttributeDef],
-                 meta_edges: MetaEdgeBuilder):
-
+    def __init__(
+        self,
+        strata: Sequence[tuple[str, CompartmentModel]],
+        meta_requirements: Sequence[AttributeDef],
+        meta_edges: MetaEdgeBuilder,
+    ):
         self._strata = strata
         self._meta_requirements = meta_requirements
         self._meta_edges = meta_edges
@@ -597,8 +614,8 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     def symbols(self) -> MultistrataModelSymbols:
         """The symbols which represent parts of this model."""
         return MultistrataModelSymbols(
-            strata=self._strata,
-            meta_requirements=self._meta_requirements)
+            strata=self._strata, meta_requirements=self._meta_requirements
+        )
 
     @cached_property
     def transitions(self) -> Sequence[TransitionDef]:
@@ -619,18 +636,26 @@ class CombinedCompartmentModel(BaseCompartmentModel):
             strata_mapping.append(mapping)
 
         return [
-            *(_remap_transition(trx, mapping)
+            *(
+                _remap_transition(trx, mapping)
                 for (_, ipm), mapping in zip(self._strata, strata_mapping)
-                for trx in ipm.transitions),
+                for trx in ipm.transitions
+            ),
             *self._meta_edges(symbols),
         ]
 
     @cached_property
     def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
-        return OrderedDict([
-            *((AbsoluteName(gpm_strata(strata_name), "ipm", r.name), r)
-              for strata_name, ipm in self._strata
-              for r in ipm.requirements),
-            *((AbsoluteName(META_STRATA, "ipm", r.name), r)
-              for r in self._meta_requirements),
-        ])
+        return OrderedDict(
+            [
+                *(
+                    (AbsoluteName(gpm_strata(strata_name), "ipm", r.name), r)
+                    for strata_name, ipm in self._strata
+                    for r in ipm.requirements
+                ),
+                *(
+                    (AbsoluteName(META_STRATA, "ipm", r.name), r)
+                    for r in self._meta_requirements
+                ),
+            ]
+        )

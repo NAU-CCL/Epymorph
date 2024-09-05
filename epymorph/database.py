@@ -11,6 +11,7 @@ Hierarchical Database instances are also included which provide the ability to "
 for a simulation -- if the outermost database has a matching value, that value is used, otherwise
 the search for a match proceeds to the inner layers (recursively).
 """
+
 from dataclasses import dataclass
 from typing import Generic, NamedTuple, Self, TypeVar, overload
 
@@ -40,6 +41,7 @@ def _validate_pattern_segments(*names: str) -> None:
 @dataclass(frozen=True)
 class ModuleNamespace:
     """A namespace with a specified strata and module."""
+
     strata: str
     module: str
 
@@ -57,7 +59,7 @@ class ModuleNamespace:
     def __str__(self) -> str:
         return f"{self.strata}::{self.module}"
 
-    def to_absolute(self, attrib_id: str) -> 'AbsoluteName':
+    def to_absolute(self, attrib_id: str) -> "AbsoluteName":
         """Creates an absolute name by providing the attribute ID."""
         return AbsoluteName(self.strata, self.module, attrib_id)
 
@@ -65,6 +67,7 @@ class ModuleNamespace:
 @dataclass(frozen=True)
 class AbsoluteName:
     """A fully-specified name (strata, module, and attribute ID)."""
+
     strata: str
     module: str
     id: str
@@ -86,6 +89,7 @@ class AbsoluteName:
         Parse a module name from a ::-delimited string, where strata and module
         can be omitted to be filled from defaults.
         """
+
         def replace_star(string: str, default_value: str) -> str:
             return default_value if string == "*" else string
 
@@ -103,7 +107,7 @@ class AbsoluteName:
     def __str__(self) -> str:
         return f"{self.strata}::{self.module}::{self.id}"
 
-    def in_strata(self, strata: str) -> 'AbsoluteName':
+    def in_strata(self, strata: str) -> "AbsoluteName":
         """Creates a new AbsoluteName that is a copy of this name but with the given strata."""
         return AbsoluteName(strata, self.module, self.id)
 
@@ -111,7 +115,7 @@ class AbsoluteName:
         """Extracts the module namespace of this name."""
         return ModuleNamespace(self.strata, self.module)
 
-    def to_pattern(self) -> 'NamePattern':
+    def to_pattern(self) -> "NamePattern":
         """Converts this name to a pattern that is an exact match for this name."""
         return NamePattern(self.strata, self.module, self.id)
 
@@ -119,6 +123,7 @@ class AbsoluteName:
 @dataclass(frozen=True)
 class ModuleName:
     """A partially-specified name with module and attribute ID."""
+
     module: str
     id: str
 
@@ -144,6 +149,7 @@ class ModuleName:
 @dataclass(frozen=True)
 class AttributeName:
     """A partially-specified name with just an attribute ID."""
+
     id: str
 
     def __post_init__(self):
@@ -159,6 +165,7 @@ class NamePattern:
     A name with a strata, module, and attribute ID that allows wildcards (*) so it can act
     as a pattern to match against AbsoluteNames.
     """
+
     strata: str
     module: str
     id: str
@@ -184,7 +191,7 @@ class NamePattern:
             case _:
                 raise ValueError("Invalid number of parts for name pattern.")
 
-    def match(self, name: 'AbsoluteName | NamePattern') -> bool:
+    def match(self, name: "AbsoluteName | NamePattern") -> bool:
         """
         Test this pattern to see if it matches the given AbsoluteName or NamePattern.
         The ability to match against NamePatterns is useful to see if two patterns conflict
@@ -222,6 +229,7 @@ class ModuleNamePattern:
     a concept of which strata they belong to. A ModuleNamePattern can be
     transformed into a full NamePattern by adding the strata.
     """
+
     module: str
     id: str
 
@@ -258,12 +266,13 @@ class ModuleNamePattern:
 ############
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 """Type of database values."""
 
 
 class Match(NamedTuple, Generic[T]):
     """The result of a database query."""
+
     pattern: NamePattern
     value: T
 
@@ -276,6 +285,7 @@ class Database(Generic[T]):
     Values are permitted to be assigned with wildcards (specified by asterisks),
     so that key "*::b::c" matches queries for "a::b::c" as well as "z::b::c".
     """
+
     _data: dict[NamePattern, T]
 
     def __init__(self, data: dict[NamePattern, T]):
@@ -318,8 +328,10 @@ class Database(Generic[T]):
             ]
 
             if len(conflicts) > 0:
-                msg = "Adding this key would make key resolution ambiguous; " \
+                msg = (
+                    "Adding this key would make key resolution ambiguous; "
                     f"conflicts:\n{', '.join(map(str, conflicts))}"
+                )
                 raise ValueError(msg)
 
         self._data[pattern] = value
@@ -330,6 +342,7 @@ class DatabaseWithFallback(Database[T]):
     A specialization of Database which has a fallback Database.
     If a match is not found in this DB's keys, the fallback is checked (recursively).
     """
+
     _fallback: Database[T]
 
     def __init__(self, data: dict[NamePattern, T], fallback: Database[T]):
@@ -355,10 +368,11 @@ class DatabaseWithFallback(Database[T]):
 class DatabaseWithStrataFallback(Database[T]):
     """
     A specialization of Database which has a set of fallback Databases, one per strata.
-    For example, we might query this DB for "a::b::c". If we do not have a match in our 
-    own key/values, but we do have a fallback DB for "a", we will query that fallback 
+    For example, we might query this DB for "a::b::c". If we do not have a match in our
+    own key/values, but we do have a fallback DB for "a", we will query that fallback
     (which could continue recursively).
     """
+
     _children: dict[str, Database[T]]
 
     def __init__(self, data: dict[NamePattern, T], children: dict[str, Database[T]]):
@@ -382,14 +396,14 @@ class DatabaseWithStrataFallback(Database[T]):
 
 
 __all__ = [
-    'ModuleNamespace',
-    'AbsoluteName',
-    'ModuleName',
-    'AttributeName',
-    'NamePattern',
-    'ModuleNamePattern',
-    'Match',
-    'Database',
-    'DatabaseWithFallback',
-    'DatabaseWithStrataFallback',
+    "ModuleNamespace",
+    "AbsoluteName",
+    "ModuleName",
+    "AttributeName",
+    "NamePattern",
+    "ModuleNamePattern",
+    "Match",
+    "Database",
+    "DatabaseWithFallback",
+    "DatabaseWithStrataFallback",
 ]

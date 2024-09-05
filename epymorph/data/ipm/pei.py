@@ -1,4 +1,5 @@
 """Defines a compartmental IPM mirroring the Pei paper's beta treatment."""
+
 from sympy import Max, exp, log
 
 from epymorph.compartment_model import CompartmentModel, compartment, edge
@@ -7,19 +8,20 @@ from epymorph.data_shape import Shapes
 from epymorph.simulation import AttributeDef
 
 
-@registry.ipm('pei')
+@registry.ipm("pei")
 class Pei(CompartmentModel):
     """The 'pei' IPM: an SIRS model driven by humidity."""
+
     compartments = [
-        compartment('S'),
-        compartment('I'),
-        compartment('R'),
+        compartment("S"),
+        compartment("I"),
+        compartment("R"),
     ]
 
     requirements = [
-        AttributeDef('infection_duration', float, Shapes.TxN),
-        AttributeDef('immunity_duration', float, Shapes.TxN),
-        AttributeDef('humidity', float, Shapes.TxN),
+        AttributeDef("infection_duration", float, Shapes.TxN),
+        AttributeDef("immunity_duration", float, Shapes.TxN),
+        AttributeDef("humidity", float, Shapes.TxN),
     ]
 
     def edges(self, symbols):

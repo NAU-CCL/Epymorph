@@ -6,24 +6,36 @@ from epymorph.data_shape import Shapes
 from epymorph.simulation import AttributeDef
 
 
-@registry.ipm('seirs')
+@registry.ipm("seirs")
 class Seirs(CompartmentModel):
     """A basic SEIRS model."""
+
     compartments = [
-        compartment('S'),
-        compartment('E'),
-        compartment('I'),
-        compartment('R'),
+        compartment("S"),
+        compartment("E"),
+        compartment("I"),
+        compartment("R"),
     ]
     requirements = [
-        AttributeDef('beta', type=float, shape=Shapes.TxN,
-                     comment='infectivity'),
-        AttributeDef('sigma', type=float, shape=Shapes.TxN,
-                     comment='progression from exposed to infected'),
-        AttributeDef('gamma', type=float, shape=Shapes.TxN,
-                     comment='progression from infected to recovered'),
-        AttributeDef('xi', type=float, shape=Shapes.TxN,
-                     comment='progression from recovered to susceptible'),
+        AttributeDef("beta", type=float, shape=Shapes.TxN, comment="infectivity"),
+        AttributeDef(
+            "sigma",
+            type=float,
+            shape=Shapes.TxN,
+            comment="progression from exposed to infected",
+        ),
+        AttributeDef(
+            "gamma",
+            type=float,
+            shape=Shapes.TxN,
+            comment="progression from infected to recovered",
+        ),
+        AttributeDef(
+            "xi",
+            type=float,
+            shape=Shapes.TxN,
+            comment="progression from recovered to susceptible",
+        ),
     ]
 
     def edges(self, symbols):

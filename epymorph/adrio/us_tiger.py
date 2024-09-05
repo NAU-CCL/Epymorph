@@ -1,4 +1,5 @@
 """ADRIOs that access the US Census TIGER geography files."""
+
 import numpy as np
 from geopandas import GeoDataFrame
 from pandas import DataFrame, to_numeric
@@ -9,19 +10,23 @@ from epymorph.data_type import CentroidDType, StructDType
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import STATE, CensusScope
-from epymorph.geography.us_tiger import (TigerYear, get_block_groups_geo,
-                                         get_block_groups_info,
-                                         get_counties_geo, get_counties_info,
-                                         get_states_geo, get_states_info,
-                                         get_tracts_geo, get_tracts_info,
-                                         is_tiger_year)
+from epymorph.geography.us_tiger import (
+    TigerYear,
+    get_block_groups_geo,
+    get_block_groups_info,
+    get_counties_geo,
+    get_counties_info,
+    get_states_geo,
+    get_states_info,
+    get_tracts_geo,
+    get_tracts_info,
+    is_tiger_year,
+)
 
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
-        raise DataResourceException(
-            "Census scope is required for us_tiger attributes."
-        )
+        raise DataResourceException("Census scope is required for us_tiger attributes.")
     return scope
 
 
@@ -37,43 +42,47 @@ def _validate_year(scope: CensusScope) -> TigerYear:
 def _get_geo(scope: CensusScope) -> GeoDataFrame:
     year = _validate_year(scope)
     match scope.granularity:
-        case 'state':
+        case "state":
             gdf = get_states_geo(year)
-        case 'county':
+        case "county":
             gdf = get_counties_geo(year)
-        case 'tract':
-            gdf = get_tracts_geo(year, list({STATE.extract(x)
-                                             for x in scope.get_node_ids()}))
-        case 'block group':
-            gdf = get_block_groups_geo(year, list({STATE.extract(x)
-                                                   for x in scope.get_node_ids()}))
+        case "tract":
+            gdf = get_tracts_geo(
+                year, list({STATE.extract(x) for x in scope.get_node_ids()})
+            )
+        case "block group":
+            gdf = get_block_groups_geo(
+                year, list({STATE.extract(x) for x in scope.get_node_ids()})
+            )
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
-    df = DataFrame({'GEOID': scope.get_node_ids()})
-    return GeoDataFrame(df.merge(gdf, on='GEOID', how='left', sort=True))
+    df = DataFrame({"GEOID": scope.get_node_ids()})
+    return GeoDataFrame(df.merge(gdf, on="GEOID", how="left", sort=True))
 
 
 def _get_info(scope: CensusScope) -> DataFrame:
     year = _validate_year(scope)
     match scope.granularity:
-        case 'state':
+        case "state":
             gdf = get_states_info(year)
-        case 'county':
+        case "county":
             gdf = get_counties_info(year)
-        case 'tract':
-            gdf = get_tracts_info(year, list({STATE.extract(x)
-                                  for x in scope.get_node_ids()}))
-        case 'block group':
-            gdf = get_block_groups_info(year, list({STATE.extract(x)
-                                        for x in scope.get_node_ids()}))
+        case "tract":
+            gdf = get_tracts_info(
+                year, list({STATE.extract(x) for x in scope.get_node_ids()})
+            )
+        case "block group":
+            gdf = get_block_groups_info(
+                year, list({STATE.extract(x) for x in scope.get_node_ids()})
+            )
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
-    df = DataFrame({'GEOID': scope.get_node_ids()})
-    return df.merge(gdf, on='GEOID', how='left', sort=True)
+    df = DataFrame({"GEOID": scope.get_node_ids()})
+    return df.merge(gdf, on="GEOID", how="left", sort=True)
 
 
 class GeometricCentroid(Adrio[StructDType]):
@@ -82,9 +91,11 @@ class GeometricCentroid(Adrio[StructDType]):
     @override
     def evaluate(self):
         scope = _validate_scope(self.scope)
-        return _get_geo(scope)['geometry']\
-            .apply(lambda x: x.centroid.coords[0])\
+        return (
+            _get_geo(scope)["geometry"]
+            .apply(lambda x: x.centroid.coords[0])
             .to_numpy(dtype=CentroidDType)
+        )
 
 
 class InternalPoint(Adrio[StructDType]):
@@ -98,10 +109,10 @@ class InternalPoint(Adrio[StructDType]):
     def evaluate(self):
         scope = _validate_scope(self.scope)
         df = _get_info(scope)
-        return np.array([x for x in zip(
-            to_numeric(df['INTPTLON']),
-            to_numeric(df['INTPTLAT'])
-        )], dtype=CentroidDType)
+        return np.array(
+            [x for x in zip(to_numeric(df["INTPTLON"]), to_numeric(df["INTPTLAT"]))],
+            dtype=CentroidDType,
+        )
 
 
 class Name(Adrio[np.str_]):
@@ -110,8 +121,8 @@ class Name(Adrio[np.str_]):
     @override
     def evaluate(self):
         scope = _validate_scope(self.scope)
-        if scope.granularity in ('state', 'county'):
-            return _get_info(scope)['NAME'].to_numpy(dtype=np.str_)
+        if scope.granularity in ("state", "county"):
+            return _get_info(scope)["NAME"].to_numpy(dtype=np.str_)
         else:
             # There aren't good names for Tracts or CBGs, just use GEOID
             return scope.get_node_ids()
@@ -123,11 +134,11 @@ class PostalCode(Adrio[np.str_]):
     @override
     def evaluate(self):
         scope = _validate_scope(self.scope)
-        if scope.granularity != 'state':
+        if scope.granularity != "state":
             raise DataResourceException(
                 "PostalCode is only available at state granularity."
             )
-        return _get_info(scope)['STUSPS'].to_numpy(dtype=np.str_)
+        return _get_info(scope)["STUSPS"].to_numpy(dtype=np.str_)
 
 
 class LandAreaM2(Adrio[np.float64]):
@@ -139,4 +150,4 @@ class LandAreaM2(Adrio[np.float64]):
     @override
     def evaluate(self):
         scope = _validate_scope(self.scope)
-        return _get_info(scope)['ALAND'].to_numpy(dtype=np.float64)
+        return _get_info(scope)["ALAND"].to_numpy(dtype=np.float64)

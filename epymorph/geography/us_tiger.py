@@ -3,6 +3,7 @@ Functions for fetching TIGER files for common US Census geographic delineations.
 This is designed to return information for the entire United States, including territories,
 and handles quirks and differences between the supported census years.
 """
+
 from io import BytesIO
 from pathlib import Path
 from typing import Literal, Sequence, TypeGuard
@@ -39,12 +40,44 @@ from epymorph.error import GeographyError
 
 # NOTE: TIGER files express areas in meters-squared.
 
-TigerYear = Literal[2000, 2009, 2010, 2011, 2012, 2013, 2014,
-                    2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+TigerYear = Literal[
+    2000,
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+]
 """A supported TIGER file year."""
 
-TIGER_YEARS: Sequence[TigerYear] = (2000, 2009, 2010, 2011, 2012, 2013, 2014,
-                                    2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023)
+TIGER_YEARS: Sequence[TigerYear] = (
+    2000,
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+)
 """All supported TIGER file years."""
 
 _TIGER_URL = "https://www2.census.gov/geo/tiger"
@@ -52,17 +85,66 @@ _TIGER_URL = "https://www2.census.gov/geo/tiger"
 _TIGER_CACHE_PATH = module_cache_path(__name__)
 
 # _SUPPORTED_STATE_FILES = ['us', '60', '66', '69', '78']
-_SUPPORTED_STATE_FILES = ['us']
+_SUPPORTED_STATE_FILES = ["us"]
 """
 The IDs of TIGER files that are included in our set of supported states.
 In some TIGER years, data for the 4 territories were given in separate files.
 """
 
-_SUPPORTED_STATES = ['01', '02', '04', '05', '06', '08', '09', '10', '11', '12', '13',
-                     '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25',
-                     '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36',
-                     '37', '38', '39', '40', '41', '42', '44', '45', '46', '47', '48',
-                     '49', '50', '51', '53', '54', '55', '56', '72']
+_SUPPORTED_STATES = [
+    "01",
+    "02",
+    "04",
+    "05",
+    "06",
+    "08",
+    "09",
+    "10",
+    "11",
+    "12",
+    "13",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "30",
+    "31",
+    "32",
+    "33",
+    "34",
+    "35",
+    "36",
+    "37",
+    "38",
+    "39",
+    "40",
+    "41",
+    "42",
+    "44",
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51",
+    "53",
+    "54",
+    "55",
+    "56",
+    "72",
+]
 #  '60', '66', '69', '78']
 """
 The FIPS IDs of states which are included in our set of supported states.
@@ -76,10 +158,7 @@ def _load_urls(urls: list[str]) -> list[BytesIO]:
     If the files are not cached, they will be saved to our TIGER cache path.
     """
     try:
-        return [
-            load_or_fetch_url(u, _TIGER_CACHE_PATH / Path(u).name)
-            for u in urls
-        ]
+        return [load_or_fetch_url(u, _TIGER_CACHE_PATH / Path(u).name) for u in urls]
     except Exception as e:
         msg = "Unable to retrieve TIGER files for US Census geography."
         raise GeographyError(msg) from e
@@ -89,25 +168,35 @@ def _get_geo(cols: list[str], urls: list[str], result_cols: list[str]) -> GeoDat
     """Universal logic for loading a data set with its geography."""
     files = _load_urls(urls)
     gdf = GeoDataFrame(
-        pd_concat([
-            gp_read_file(f, engine="fiona", ignore_geometry=False, include_fields=cols)
-            for f in files
-        ], ignore_index=True)
+        pd_concat(
+            [
+                gp_read_file(
+                    f, engine="fiona", ignore_geometry=False, include_fields=cols
+                )
+                for f in files
+            ],
+            ignore_index=True,
+        )
     )
     gdf.rename(columns=dict(zip(cols, result_cols)), inplace=True)
-    return GeoDataFrame(gdf[gdf['GEOID'].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)])
+    return GeoDataFrame(
+        gdf[gdf["GEOID"].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)]
+    )
 
 
 def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataFrame:
     """Universal logic for loading a data set without its geography."""
     files = _load_urls(urls)
-    df = pd_concat([
-        gp_read_file(f, engine="fiona", ignore_geometry=True, include_fields=cols)
-        for f in files
-    ], ignore_index=True)
+    df = pd_concat(
+        [
+            gp_read_file(f, engine="fiona", ignore_geometry=True, include_fields=cols)
+            for f in files
+        ],
+        ignore_index=True,
+    )
     df.rename(columns=dict(zip(cols, result_cols)), inplace=True)
     df.drop_duplicates(inplace=True)
-    return df[df['GEOID'].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)]
+    return df[df["GEOID"].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)]
 
 
 def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
@@ -125,25 +214,39 @@ def _get_states_config(year: TigerYear) -> tuple[list[str], list[str], list[str]
     match year:
         case year if year in range(2011, 2024):
             cols = ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
-            urls = [
-                f"{_TIGER_URL}/TIGER{year}/STATE/tl_{year}_us_state.zip"
-            ]
+            urls = [f"{_TIGER_URL}/TIGER{year}/STATE/tl_{year}_us_state.zip"]
         case 2010:
-            cols = ["GEOID10", "NAME10", "STUSPS10",
-                    "ALAND10", "INTPTLAT10", "INTPTLON10"]
+            cols = [
+                "GEOID10",
+                "NAME10",
+                "STUSPS10",
+                "ALAND10",
+                "INTPTLAT10",
+                "INTPTLON10",
+            ]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/STATE/2010/tl_2010_{xx}_state10.zip"
                 for xx in _SUPPORTED_STATE_FILES
             ]
         case 2009:
-            cols = ["STATEFP00", "NAME00", "STUSPS00",
-                    "ALAND00", "INTPTLAT00", "INTPTLON00"]
-            urls = [
-                f"{_TIGER_URL}/TIGER2009/tl_2009_us_state00.zip"
+            cols = [
+                "STATEFP00",
+                "NAME00",
+                "STUSPS00",
+                "ALAND00",
+                "INTPTLAT00",
+                "INTPTLON00",
             ]
+            urls = [f"{_TIGER_URL}/TIGER2009/tl_2009_us_state00.zip"]
         case 2000:
-            cols = ["STATEFP00", "NAME00", "STUSPS00",
-                    "ALAND00", "INTPTLAT00", "INTPTLON00"]
+            cols = [
+                "STATEFP00",
+                "NAME00",
+                "STUSPS00",
+                "ALAND00",
+                "INTPTLAT00",
+                "INTPTLON00",
+            ]
             urls = [
                 f"{_TIGER_URL}/TIGER2010/STATE/2000/tl_2010_{xx}_state00.zip"
                 for xx in _SUPPORTED_STATE_FILES
@@ -173,9 +276,7 @@ def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[st
     match year:
         case year if year in range(2011, 2024):
             cols = ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"]
-            urls = [
-                f"{_TIGER_URL}/TIGER{year}/COUNTY/tl_{year}_us_county.zip"
-            ]
+            urls = [f"{_TIGER_URL}/TIGER{year}/COUNTY/tl_{year}_us_county.zip"]
         case 2010:
             cols = ["GEOID10", "NAME10", "ALAND10", "INTPTLAT10", "INTPTLON10"]
             urls = [
@@ -183,11 +284,15 @@ def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[st
                 for xx in _SUPPORTED_STATE_FILES
             ]
         case 2009:
-            cols = ["CNTYIDFP00", "NAME00", "ALAND00",
-                    "AWATER00", "INTPTLAT00", "INTPTLON00"]
-            urls = [
-                f"{_TIGER_URL}/TIGER2009/tl_2009_us_county00.zip"
+            cols = [
+                "CNTYIDFP00",
+                "NAME00",
+                "ALAND00",
+                "AWATER00",
+                "INTPTLAT00",
+                "INTPTLON00",
             ]
+            urls = [f"{_TIGER_URL}/TIGER2009/tl_2009_us_county00.zip"]
         case 2000:
             cols = ["CNTYIDFP00", "NAME00", "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
@@ -214,7 +319,9 @@ def get_counties_info(year: TigerYear) -> DataFrame:
 ##########
 
 
-def _get_tracts_config(year: TigerYear, state_id: Sequence[str] | None = None) -> tuple[list[str], list[str], list[str]]:
+def _get_tracts_config(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (tracts)."""
     states = get_states_info(year)
     if state_id is not None:
@@ -234,6 +341,7 @@ def _get_tracts_config(year: TigerYear, state_id: Sequence[str] | None = None) -
                 for xx in states["GEOID"]
             ]
         case 2009:
+
             def state_folder(fips, name):
                 return f"{fips}_{name.upper().replace(' ', '_')}"
 
@@ -253,12 +361,16 @@ def _get_tracts_config(year: TigerYear, state_id: Sequence[str] | None = None) -
     return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
-def get_tracts_geo(year: TigerYear, state_id: Sequence[str] | None = None) -> GeoDataFrame:
+def get_tracts_geo(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> GeoDataFrame:
     """Get all US census tracts for the given census year, with geography."""
     return _get_geo(*_get_tracts_config(year, state_id))
 
 
-def get_tracts_info(year: TigerYear, state_id: Sequence[str] | None = None) -> DataFrame:
+def get_tracts_info(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> DataFrame:
     """Get all US census tracts for the given census year, without geography."""
     return _get_info(*_get_tracts_config(year, state_id))
 
@@ -268,7 +380,9 @@ def get_tracts_info(year: TigerYear, state_id: Sequence[str] | None = None) -> D
 ################
 
 
-def _get_block_groups_config(year: TigerYear, state_id: Sequence[str] | None = None) -> tuple[list[str], list[str], list[str]]:
+def _get_block_groups_config(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> tuple[list[str], list[str], list[str]]:
     """Produce the args for _get_info or _get_geo (block groups)."""
     states = get_states_info(year)
     if state_id is not None:
@@ -288,6 +402,7 @@ def _get_block_groups_config(year: TigerYear, state_id: Sequence[str] | None = N
                 for xx in states["GEOID"]
             ]
         case 2009:
+
             def state_folder(fips, name):
                 return f"{fips}_{name.upper().replace(' ', '_')}"
 
@@ -307,11 +422,15 @@ def _get_block_groups_config(year: TigerYear, state_id: Sequence[str] | None = N
     return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
 
 
-def get_block_groups_geo(year: TigerYear, state_id: Sequence[str] | None = None) -> GeoDataFrame:
+def get_block_groups_geo(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> GeoDataFrame:
     """Get all US census block groups for the given census year, with geography."""
     return _get_geo(*_get_block_groups_config(year, state_id))
 
 
-def get_block_groups_info(year: TigerYear, state_id: Sequence[str] | None = None) -> DataFrame:
+def get_block_groups_info(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> DataFrame:
     """Get all US census block groups for the given census year, without geography."""
     return _get_info(*_get_block_groups_config(year, state_id))

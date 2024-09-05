@@ -3,6 +3,7 @@ Users may wish to express simulation parameters as functions of simulation dimen
 and/or of other simulation attributes. These classes provide a way to do that.
 This module also defines the types of acceptable input values for simulation parameters.
 """
+
 from abc import ABC, abstractmethod
 from typing import Literal, Sequence, TypeVar, Union, final
 
@@ -11,12 +12,17 @@ from numpy.typing import NDArray
 from sympy import Expr, Symbol
 
 from epymorph.adrio.adrio import Adrio
-from epymorph.data_type import (AttributeValue, ScalarDType, ScalarValue,
-                                StructDType, StructValue)
+from epymorph.data_type import (
+    AttributeValue,
+    ScalarDType,
+    ScalarValue,
+    StructDType,
+    StructValue,
+)
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
 
-T_co = TypeVar('T_co', bound=np.generic, covariant=True)
+T_co = TypeVar("T_co", bound=np.generic, covariant=True)
 """The result type of a ParamFunction."""
 
 
@@ -85,8 +91,10 @@ class ParamFunctionNodeAndNode(_ParamFunction1[T_co]):
 
     @final
     def evaluate(self) -> NDArray[T_co]:
-        result = [[self.evaluate1(n1, n2) for n2 in range(self.dim.nodes)]
-                  for n1 in range(self.dim.nodes)]
+        result = [
+            [self.evaluate1(n1, n2) for n2 in range(self.dim.nodes)]
+            for n1 in range(self.dim.nodes)
+        ]
         return np.array(result, dtype=self.dtype)
 
     @abstractmethod
@@ -99,8 +107,10 @@ class ParamFunctionNodeAndCompartment(_ParamFunction1[T_co]):
 
     @final
     def evaluate(self) -> NDArray[T_co]:
-        result = [[self.evaluate1(n, c) for c in range(self.dim.compartments)]
-                  for n in range(self.dim.nodes)]
+        result = [
+            [self.evaluate1(n, c) for c in range(self.dim.compartments)]
+            for n in range(self.dim.nodes)
+        ]
         return np.array(result, dtype=self.dtype)
 
     @abstractmethod
@@ -113,13 +123,16 @@ class ParamFunctionTimeAndNode(_ParamFunction1[T_co]):
 
     @final
     def evaluate(self) -> NDArray[T_co]:
-        result = [[self.evaluate1(day, n) for n in range(self.dim.nodes)]
-                  for day in range(self.dim.days)]
+        result = [
+            [self.evaluate1(day, n) for n in range(self.dim.nodes)]
+            for day in range(self.dim.days)
+        ]
         return np.array(result, dtype=self.dtype)
 
     @abstractmethod
     def evaluate1(self, day: int, node_index: int) -> AttributeValue:
         """Produce a scalar value for this parameter by day and node in the given simulation context."""
+
 
 # NOTE: data_shape does not yet support TxNxN attributes, so this type of function is moot for now
 #       (commented out to prevent confusion)
@@ -138,11 +151,11 @@ class ParamFunctionTimeAndNode(_ParamFunction1[T_co]):
 #         """Produce a scalar value for this parameter by day and node-pair in the given simulation context."""
 
 
-_ALL_PARAMS = ('day', 'node_index', 'duration_days', 'nodes')
+_ALL_PARAMS = ("day", "node_index", "duration_days", "nodes")
 _ALL_PARAM_SYMBOLS = [to_symbol(x) for x in _ALL_PARAMS]
 _PARAMS_MAP = dict(zip(_ALL_PARAMS, _ALL_PARAM_SYMBOLS))
 
-ParamSymbol = Literal['day', 'node_index', 'duration_days', 'nodes']
+ParamSymbol = Literal["day", "node_index", "duration_days", "nodes"]
 
 
 def simulation_symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
@@ -159,8 +172,7 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
 
     def __init__(self, expression: Expr):
         bad_symbols = [
-            x for x in expression.free_symbols
-            if x not in _ALL_PARAM_SYMBOLS
+            x for x in expression.free_symbols if x not in _ALL_PARAM_SYMBOLS
         ]
         if len(bad_symbols) > 0:
             bs = ", ".join(map(str, bad_symbols))
@@ -184,7 +196,14 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
         return np.broadcast_to(np.array(result, dtype=np.float64), (D, N))
 
 
-ListValue = Sequence[Union[ScalarValue, StructValue, 'ListValue']]
-ParamValue = ScalarValue | StructValue | ListValue | ParamFunction | Adrio | Expr \
+ListValue = Sequence[Union[ScalarValue, StructValue, "ListValue"]]
+ParamValue = (
+    ScalarValue
+    | StructValue
+    | ListValue
+    | ParamFunction
+    | Adrio
+    | Expr
     | NDArray[ScalarDType | StructDType]
+)
 """All acceptable input forms for parameter values."""

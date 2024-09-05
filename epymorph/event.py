@@ -1,8 +1,9 @@
 """
 epymorph's event frameworks.
-The idea is to have a set of classes which define event protocols for 
+The idea is to have a set of classes which define event protocols for
 logical components of epymorph.
 """
+
 from typing import NamedTuple
 
 from numpy.typing import NDArray
@@ -20,6 +21,7 @@ from epymorph.util import Event, Singleton
 
 class OnStart(NamedTuple):
     """The payload of a simulation on_start event."""
+
     simulator: str
     """Name of the simulator class."""
     dim: SimDimensions
@@ -30,6 +32,7 @@ class OnStart(NamedTuple):
 
 class OnTick(NamedTuple):
     """The payload of a Simulation tick event."""
+
     tick_index: int
     percent_complete: float
 
@@ -41,6 +44,7 @@ class OnTick(NamedTuple):
 
 class OnMovementStart(NamedTuple):
     """The payload for the event when movement processing starts for a tick."""
+
     tick: int
     """Which simulation tick."""
     day: int
@@ -51,6 +55,7 @@ class OnMovementStart(NamedTuple):
 
 class OnMovementClause(NamedTuple):
     """The payload for the event when a single movement clause has been processed."""
+
     tick: int
     """Which simulation tick."""
     day: int
@@ -74,6 +79,7 @@ class OnMovementClause(NamedTuple):
 
 class OnMovementFinish(NamedTuple):
     """The payload for the event when movement processing finishes for one simulation tick."""
+
     tick: int
     """Which simulation tick."""
     day: int
@@ -91,6 +97,7 @@ class OnMovementFinish(NamedTuple):
 
 class AdrioStart(NamedTuple):
     """The payload of AdrioEvents.on_adrio_start"""
+
     adrio_name: str
     """The name of the ADRIO."""
     attribute: AbsoluteName
@@ -99,6 +106,7 @@ class AdrioStart(NamedTuple):
 
 class AdrioFinish(NamedTuple):
     """The payload of AdrioEvents.on_adrio_finish"""
+
     adrio_name: str
     """The name of the ADRIO."""
     attribute: AbsoluteName

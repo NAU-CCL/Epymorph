@@ -1,35 +1,40 @@
 """Defines a compartmental IPM for a generic SIRH model."""
+
 from sympy import Max
 
-from epymorph.compartment_model import (CompartmentModel, compartment, edge,
-                                        fork)
+from epymorph.compartment_model import CompartmentModel, compartment, edge, fork
 from epymorph.data import registry
 from epymorph.data_shape import Shapes
 from epymorph.simulation import AttributeDef
 
 
-@registry.ipm('sirh')
+@registry.ipm("sirh")
 class Sirh(CompartmentModel):
     """A basic SIRH model."""
 
     compartments = [
-        compartment('S'),
-        compartment('I'),
-        compartment('R'),
-        compartment('H', tags=['immobile']),
+        compartment("S"),
+        compartment("I"),
+        compartment("R"),
+        compartment("H", tags=["immobile"]),
     ]
 
     requirements = [
-        AttributeDef('beta', type=float, shape=Shapes.TxN,
-                     comment='infectivity'),
-        AttributeDef('gamma', type=float, shape=Shapes.TxN,
-                     comment='recovery rate'),
-        AttributeDef('xi', type=float, shape=Shapes.TxN,
-                     comment='immune waning rate'),
-        AttributeDef('hospitalization_prob', type=float, shape=Shapes.TxN,
-                     comment='a ratio of cases which are expected to require hospitalization'),
-        AttributeDef('hospitalization_duration', type=float, shape=Shapes.TxN,
-                     comment='the mean duration of hospitalization, in days'),
+        AttributeDef("beta", type=float, shape=Shapes.TxN, comment="infectivity"),
+        AttributeDef("gamma", type=float, shape=Shapes.TxN, comment="recovery rate"),
+        AttributeDef("xi", type=float, shape=Shapes.TxN, comment="immune waning rate"),
+        AttributeDef(
+            "hospitalization_prob",
+            type=float,
+            shape=Shapes.TxN,
+            comment="a ratio of cases which are expected to require hospitalization",
+        ),
+        AttributeDef(
+            "hospitalization_duration",
+            type=float,
+            shape=Shapes.TxN,
+            comment="the mean duration of hospitalization, in days",
+        ),
     ]
 
     def edges(self, symbols):

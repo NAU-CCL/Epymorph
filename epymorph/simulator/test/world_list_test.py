@@ -10,7 +10,6 @@ from epymorph.test import EpymorphTestCase
 
 
 class TestCohort(EpymorphTestCase):
-
     def test_can_merge(self):
         c1 = Cohort(np.array([100]), 0, ListWorld.HOME_TICK)
         c2 = Cohort(np.array([200]), 0, ListWorld.HOME_TICK)
@@ -48,8 +47,9 @@ HOME_TICK = ListWorld.HOME_TICK
 
 
 class TestListWorld(EpymorphTestCase):
-
-    def assertWorld(self, world_a: list[list[Cohort]], world_b: list[list[Cohort]]) -> None:
+    def assertWorld(
+        self, world_a: list[list[Cohort]], world_b: list[list[Cohort]]
+    ) -> None:
         if len(world_a) != len(world_b):
             msg = f"Worlds contained a different number of locations: {len(world_a)} vs. {len(world_b)}"
             self.fail(msg)
@@ -66,10 +66,14 @@ class TestListWorld(EpymorphTestCase):
 
     def test_normalize_01(self):
         # simple normalization: just two cohorts
-        actual = ListWorld([[
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([200]), 0, HOME_TICK),
-        ]])
+        actual = ListWorld(
+            [
+                [
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([200]), 0, HOME_TICK),
+                ]
+            ]
+        )
 
         expected = [[Cohort(np.array([300]), 0, HOME_TICK)]]
 
@@ -79,18 +83,24 @@ class TestListWorld(EpymorphTestCase):
 
     def test_normalize_02(self):
         # more complex normalization: some cohorts to combine, not already sorted
-        actual = ListWorld([[
-            Cohort(np.array([200]), 0, HOME_TICK),
-            Cohort(np.array([75]), 2, 2),
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([50]), 1, 2),
-        ]])
+        actual = ListWorld(
+            [
+                [
+                    Cohort(np.array([200]), 0, HOME_TICK),
+                    Cohort(np.array([75]), 2, 2),
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([50]), 1, 2),
+                ]
+            ]
+        )
 
-        expected = [[
-            Cohort(np.array([300]), 0, HOME_TICK),
-            Cohort(np.array([50]), 1, 2),
-            Cohort(np.array([75]), 2, 2),
-        ]]
+        expected = [
+            [
+                Cohort(np.array([300]), 0, HOME_TICK),
+                Cohort(np.array([50]), 1, 2),
+                Cohort(np.array([75]), 2, 2),
+            ]
+        ]
 
         actual.normalize()
 
@@ -98,166 +108,217 @@ class TestListWorld(EpymorphTestCase):
 
     def test_normalize_03(self):
         # normalization of a bunch of mergeable cohorts
-        actual = ListWorld([[
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([100]), 0, HOME_TICK),
-        ]])
+        actual = ListWorld(
+            [
+                [
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                ]
+            ]
+        )
 
-        expected = [[
-            Cohort(np.array([500]), 0, HOME_TICK),
-        ]]
+        expected = [
+            [
+                Cohort(np.array([500]), 0, HOME_TICK),
+            ]
+        ]
 
         actual.normalize()
 
         self.assertWorld(actual.locations, expected)
 
     def test_cohort_array(self):
-        world = ListWorld([[
-            Cohort(np.array([3]), 0, HOME_TICK),
-            Cohort(np.array([5]), 1, 1),
-            Cohort(np.array([7]), 1, 2),
-        ], [
-            Cohort(np.array([13]), 1, HOME_TICK),
-            Cohort(np.array([15]), 0, 1),
-            Cohort(np.array([17]), 0, 2),
-        ]])
-        self.assertNpEqual(
-            world.get_cohort_array(0),
-            np.array([[3], [5], [7]], dtype=SimDType)
+        world = ListWorld(
+            [
+                [
+                    Cohort(np.array([3]), 0, HOME_TICK),
+                    Cohort(np.array([5]), 1, 1),
+                    Cohort(np.array([7]), 1, 2),
+                ],
+                [
+                    Cohort(np.array([13]), 1, HOME_TICK),
+                    Cohort(np.array([15]), 0, 1),
+                    Cohort(np.array([17]), 0, 2),
+                ],
+            ]
         )
         self.assertNpEqual(
-            world.get_cohort_array(1),
-            np.array([[13], [15], [17]], dtype=SimDType)
+            world.get_cohort_array(0), np.array([[3], [5], [7]], dtype=SimDType)
+        )
+        self.assertNpEqual(
+            world.get_cohort_array(1), np.array([[13], [15], [17]], dtype=SimDType)
         )
 
     def test_local_array(self):
-        world = ListWorld([[
-            Cohort(np.array([3]), 0, HOME_TICK),
-            Cohort(np.array([5]), 1, 1),
-            Cohort(np.array([7]), 1, 2),
-        ], [
-            Cohort(np.array([13]), 1, HOME_TICK),
-            Cohort(np.array([15]), 0, 1),
-            Cohort(np.array([17]), 0, 2),
-        ]])
+        world = ListWorld(
+            [
+                [
+                    Cohort(np.array([3]), 0, HOME_TICK),
+                    Cohort(np.array([5]), 1, 1),
+                    Cohort(np.array([7]), 1, 2),
+                ],
+                [
+                    Cohort(np.array([13]), 1, HOME_TICK),
+                    Cohort(np.array([15]), 0, 1),
+                    Cohort(np.array([17]), 0, 2),
+                ],
+            ]
+        )
         self.assertNpEqual(
-            world.get_local_array(),
-            np.array([[3], [13]], dtype=SimDType)
+            world.get_local_array(), np.array([[3], [13]], dtype=SimDType)
         )
 
     def test_apply_delta(self):
-        world = ListWorld([[
-            Cohort(np.array([100, 10]), 0, HOME_TICK),
-            Cohort(np.array([200, 20]), 1, 1),
-            Cohort(np.array([300, 30]), 1, 2),
-        ], [
-            Cohort(np.array([100, 10]), 0, HOME_TICK),
-            Cohort(np.array([200, 20]), 1, 1),
-            Cohort(np.array([300, 30]), 1, 2),
-        ]])
+        world = ListWorld(
+            [
+                [
+                    Cohort(np.array([100, 10]), 0, HOME_TICK),
+                    Cohort(np.array([200, 20]), 1, 1),
+                    Cohort(np.array([300, 30]), 1, 2),
+                ],
+                [
+                    Cohort(np.array([100, 10]), 0, HOME_TICK),
+                    Cohort(np.array([200, 20]), 1, 1),
+                    Cohort(np.array([300, 30]), 1, 2),
+                ],
+            ]
+        )
 
-        world.apply_cohort_delta(1, np.array([
-            [-10, 10], [-20, 20], [-30, 30]
-        ], dtype=SimDType))
+        world.apply_cohort_delta(
+            1, np.array([[-10, 10], [-20, 20], [-30, 30]], dtype=SimDType)
+        )
 
         self.assertWorld(
             world.locations,
-            [[
-                Cohort(np.array([100, 10]), 0, HOME_TICK),
-                Cohort(np.array([200, 20]), 1, 1),
-                Cohort(np.array([300, 30]), 1, 2),
-            ], [
-                Cohort(np.array([90, 20]), 0, HOME_TICK),
-                Cohort(np.array([180, 40]), 1, 1),
-                Cohort(np.array([270, 60]), 1, 2),
-            ]]
+            [
+                [
+                    Cohort(np.array([100, 10]), 0, HOME_TICK),
+                    Cohort(np.array([200, 20]), 1, 1),
+                    Cohort(np.array([300, 30]), 1, 2),
+                ],
+                [
+                    Cohort(np.array([90, 20]), 0, HOME_TICK),
+                    Cohort(np.array([180, 40]), 1, 1),
+                    Cohort(np.array([270, 60]), 1, 2),
+                ],
+            ],
         )
 
     def test_travel_01(self):
         # Test simple travel.
-        world = ListWorld([[
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([22]), 1, 1),
-        ], [
-            Cohort(np.array([200]), 1, HOME_TICK),
-            Cohort(np.array([11]), 0, 1),
-        ]])
+        world = ListWorld(
+            [
+                [
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([22]), 1, 1),
+                ],
+                [
+                    Cohort(np.array([200]), 1, HOME_TICK),
+                    Cohort(np.array([11]), 0, 1),
+                ],
+            ]
+        )
 
         world.apply_travel(
-            travelers=np.array([
-                [[0], [19]],
-                [[29], [0]],
-            ], dtype=SimDType),
-            return_tick=2
+            travelers=np.array(
+                [
+                    [[0], [19]],
+                    [[29], [0]],
+                ],
+                dtype=SimDType,
+            ),
+            return_tick=2,
         )
 
         # Movement cohorts maintain their identity.
         self.assertWorld(
             world.locations,
-            [[
-                Cohort(np.array([81]), 0, HOME_TICK),
-                Cohort(np.array([22]), 1, 1),
-                Cohort(np.array([29]), 1, 2),
-            ], [
-                Cohort(np.array([171]), 1, HOME_TICK),
-                Cohort(np.array([11]), 0, 1),
-                Cohort(np.array([19]), 0, 2),
-            ]]
+            [
+                [
+                    Cohort(np.array([81]), 0, HOME_TICK),
+                    Cohort(np.array([22]), 1, 1),
+                    Cohort(np.array([29]), 1, 2),
+                ],
+                [
+                    Cohort(np.array([171]), 1, HOME_TICK),
+                    Cohort(np.array([11]), 0, 1),
+                    Cohort(np.array([19]), 0, 2),
+                ],
+            ],
         )
 
     def test_travel_02(self):
         # Test travel with a "never" return tick.
-        world = ListWorld([[
-            Cohort(np.array([100]), 0, HOME_TICK),
-            Cohort(np.array([22]), 1, 1),
-        ], [
-            Cohort(np.array([200]), 1, HOME_TICK),
-            Cohort(np.array([11]), 0, 1),
-        ]])
+        world = ListWorld(
+            [
+                [
+                    Cohort(np.array([100]), 0, HOME_TICK),
+                    Cohort(np.array([22]), 1, 1),
+                ],
+                [
+                    Cohort(np.array([200]), 1, HOME_TICK),
+                    Cohort(np.array([11]), 0, 1),
+                ],
+            ]
+        )
 
         world.apply_travel(
-            travelers=np.array([
-                [[0], [19]],
-                [[29], [0]],
-            ], dtype=SimDType),
-            return_tick=-1
+            travelers=np.array(
+                [
+                    [[0], [19]],
+                    [[29], [0]],
+                ],
+                dtype=SimDType,
+            ),
+            return_tick=-1,
         )
 
         # Movement cohorts merge with locals.
         self.assertWorld(
             world.locations,
-            [[
-                Cohort(np.array([110]), 0, HOME_TICK),
-                Cohort(np.array([22]), 1, 1),
-            ], [
-                Cohort(np.array([190]), 1, HOME_TICK),
-                Cohort(np.array([11]), 0, 1),
-            ]]
+            [
+                [
+                    Cohort(np.array([110]), 0, HOME_TICK),
+                    Cohort(np.array([22]), 1, 1),
+                ],
+                [
+                    Cohort(np.array([190]), 1, HOME_TICK),
+                    Cohort(np.array([11]), 0, 1),
+                ],
+            ],
         )
 
     def test_return(self):
-        world = ListWorld([[
-            Cohort(np.array([81]), 0, HOME_TICK),
-            Cohort(np.array([22]), 1, 1),
-            Cohort(np.array([29]), 1, 2),
-        ], [
-            Cohort(np.array([171]), 1, HOME_TICK),
-            Cohort(np.array([11]), 0, 1),
-            Cohort(np.array([19]), 0, 2),
-        ]])
+        world = ListWorld(
+            [
+                [
+                    Cohort(np.array([81]), 0, HOME_TICK),
+                    Cohort(np.array([22]), 1, 1),
+                    Cohort(np.array([29]), 1, 2),
+                ],
+                [
+                    Cohort(np.array([171]), 1, HOME_TICK),
+                    Cohort(np.array([11]), 0, 1),
+                    Cohort(np.array([19]), 0, 2),
+                ],
+            ]
+        )
 
         world.apply_return(Tick(1, 1, date(2023, 1, 1), 0, 1.0), return_stats=False)
 
         self.assertWorld(
             world.locations,
-            [[
-                Cohort(np.array([92]), 0, HOME_TICK),
-                Cohort(np.array([29]), 1, 2),
-            ], [
-                Cohort(np.array([193]), 1, HOME_TICK),
-                Cohort(np.array([19]), 0, 2),
-            ]]
+            [
+                [
+                    Cohort(np.array([92]), 0, HOME_TICK),
+                    Cohort(np.array([29]), 1, 2),
+                ],
+                [
+                    Cohort(np.array([193]), 1, HOME_TICK),
+                    Cohort(np.array([19]), 0, 2),
+                ],
+            ],
         )

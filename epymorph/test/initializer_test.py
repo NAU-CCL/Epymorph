@@ -25,16 +25,13 @@ def test_context(additional_data: dict[str, NDArray] | None = None):
         events=3,
     )
     params = {
-        'label': scope.get_node_ids(),
-        'population': np.array([100, 200, 300, 400, 500], dtype=SimDType),
-        'foosball_championships': np.array([2, 4, 1, 9, 6]),
+        "label": scope.get_node_ids(),
+        "population": np.array([100, 200, 300, 400, 500], dtype=SimDType),
+        "foosball_championships": np.array([2, 4, 1, 9, 6]),
         **(additional_data or {}),
     }
     data = NamespacedAttributeResolver(
-        data=Database({
-            NamePattern.parse(k): v
-            for k, v in params.items()
-        }),
+        data=Database({NamePattern.parse(k): v for k, v in params.items()}),
         dim=dim,
         namespace=ModuleNamespace("gpm:all", "init"),
     )
@@ -45,48 +42,54 @@ _FOOSBALL_CHAMPIONSHIPS = AttributeDef("foosball_championships", int, Shapes.N)
 
 
 class TestExplicitInitializer(unittest.TestCase):
-
     def test_explicit(self):
-        initials = np.array([
-            [50, 20, 30],
-            [50, 120, 30],
-            [100, 100, 100],
-            [300, 100, 0],
-            [0, 0, 500],
-        ])
+        initials = np.array(
+            [
+                [50, 20, 30],
+                [50, 120, 30],
+                [100, 100, 100],
+                [300, 100, 0],
+                [0, 0, 500],
+            ]
+        )
         exp = initials.copy()
         act = init.Explicit(initials).evaluate_in_context(*test_context())
         np.testing.assert_array_equal(act, exp)
 
 
 class TestProportionalInitializer(unittest.TestCase):
-
     def test_proportional(self):
         # All three of these cases should be equivalent.
         # Should work if the ratios are the same as the explicit numbers.
-        ratios1 = np.array([
-            [50, 20, 30],
-            [50, 120, 30],
-            [100, 100, 100],
-            [300, 100, 0],
-            [0, 0, 500],
-        ])
+        ratios1 = np.array(
+            [
+                [50, 20, 30],
+                [50, 120, 30],
+                [100, 100, 100],
+                [300, 100, 0],
+                [0, 0, 500],
+            ]
+        )
 
-        ratios2 = np.array([
-            [5, 2, 3],
-            [5, 12, 3],
-            [1, 1, 1],
-            [3, 1, 0],
-            [0, 0, 5],
-        ])
+        ratios2 = np.array(
+            [
+                [5, 2, 3],
+                [5, 12, 3],
+                [1, 1, 1],
+                [3, 1, 0],
+                [0, 0, 5],
+            ]
+        )
 
-        ratios3 = np.array([
-            [.5, .2, .3],
-            [.25, .6, .15],
-            [1 / 3, 1 / 3, 1 / 3],
-            [0.75, 0.25, 0],
-            [0, 0, 1],
-        ])
+        ratios3 = np.array(
+            [
+                [0.5, 0.2, 0.3],
+                [0.25, 0.6, 0.15],
+                [1 / 3, 1 / 3, 1 / 3],
+                [0.75, 0.25, 0],
+                [0, 0, 1],
+            ]
+        )
 
         exp = ratios1.copy()
         for ratios in [ratios1, ratios2, ratios3]:
@@ -96,29 +99,32 @@ class TestProportionalInitializer(unittest.TestCase):
     def test_bad_args(self):
         with self.assertRaises(InitException):
             # row sums to zero!
-            ratios = np.array([
-                [50, 20, 30],
-                [50, 120, 30],
-                [0, 0, 0],
-                [300, 100, 0],
-                [0, 0, 500],
-            ])
+            ratios = np.array(
+                [
+                    [50, 20, 30],
+                    [50, 120, 30],
+                    [0, 0, 0],
+                    [300, 100, 0],
+                    [0, 0, 500],
+                ]
+            )
             init.Proportional(ratios).evaluate_in_context(*test_context())
 
         with self.assertRaises(InitException):
             # row sums to negative!
-            ratios = np.array([
-                [50, 20, 30],
-                [50, 120, 30],
-                [0, -50, -50],
-                [300, 100, 0],
-                [0, 0, 500],
-            ])
+            ratios = np.array(
+                [
+                    [50, 20, 30],
+                    [50, 120, 30],
+                    [0, -50, -50],
+                    [300, 100, 0],
+                    [0, 0, 500],
+                ]
+            )
             init.Proportional(ratios).evaluate_in_context(*test_context())
 
 
 class TestIndexedInitializer(unittest.TestCase):
-
     def test_indexed_locations(self):
         out = init.IndexedLocations(
             selection=np.array([1, -2], dtype=np.intp),  # Negative indices work, too.
@@ -153,7 +159,6 @@ class TestIndexedInitializer(unittest.TestCase):
 
 
 class TestLabeledInitializer(unittest.TestCase):
-
     def test_labeled_locations(self):
         out = init.LabeledLocations(
             labels=np.array(["B", "D"]),
@@ -175,15 +180,16 @@ class TestLabeledInitializer(unittest.TestCase):
 
 
 class TestSingleInitializer(unittest.TestCase):
-
     def test_single_loc(self):
-        exp = np.array([
-            [100, 0, 0],
-            [200, 0, 0],
-            [201, 99, 0],
-            [400, 0, 0],
-            [500, 0, 0],
-        ])
+        exp = np.array(
+            [
+                [100, 0, 0],
+                [200, 0, 0],
+                [201, 99, 0],
+                [400, 0, 0],
+                [500, 0, 0],
+            ]
+        )
         act = init.SingleLocation(
             location=2,
             seed_size=99,
@@ -192,7 +198,6 @@ class TestSingleInitializer(unittest.TestCase):
 
 
 class TestTopInitializer(unittest.TestCase):
-
     def test_top(self):
         out = init.TopLocations(
             top_attribute=_FOOSBALL_CHAMPIONSHIPS,
@@ -221,9 +226,15 @@ class TestTopInitializer(unittest.TestCase):
                 num_locations=3,
                 seed_size=100,
             )
-            i.evaluate_in_context(*test_context({
-                "quidditch_championships": np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64),
-            }))
+            i.evaluate_in_context(
+                *test_context(
+                    {
+                        "quidditch_championships": np.array(
+                            [1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64
+                        ),
+                    }
+                )
+            )
 
     def test_invalid_size_attribute(self):
         with self.assertRaises(InitException):
@@ -233,13 +244,18 @@ class TestTopInitializer(unittest.TestCase):
                 num_locations=3,
                 seed_size=100,
             )
-            i.evaluate_in_context(*test_context({
-                "quidditch_relative_rank": np.arange(25, dtype=np.float64).reshape((5, 5)),
-            }))
+            i.evaluate_in_context(
+                *test_context(
+                    {
+                        "quidditch_relative_rank": np.arange(
+                            25, dtype=np.float64
+                        ).reshape((5, 5)),
+                    }
+                )
+            )
 
 
 class TestBottomInitializer(unittest.TestCase):
-
     def test_bottom(self):
         out = init.BottomLocations(
             bottom_attribute=_FOOSBALL_CHAMPIONSHIPS,
@@ -265,10 +281,17 @@ class TestBottomInitializer(unittest.TestCase):
             # what does "bottom" mean in an NxN array? too ambiguous
             i = init.BottomLocations(
                 bottom_attribute=AttributeDef(
-                    "quidditch_relative_rank", int, Shapes.NxN),
+                    "quidditch_relative_rank", int, Shapes.NxN
+                ),
                 num_locations=3,
                 seed_size=100,
             )
-            i.evaluate_in_context(*test_context({
-                "quidditch_relative_rank": np.arange(25, dtype=np.float64).reshape((5, 5)),
-            }))
+            i.evaluate_in_context(
+                *test_context(
+                    {
+                        "quidditch_relative_rank": np.arange(
+                            25, dtype=np.float64
+                        ).reshape((5, 5)),
+                    }
+                )
+            )

@@ -5,6 +5,7 @@ There are potentially many ways to do this, driven by source data from
 the geo or simulation parameters, so this module provides a uniform interface
 to accomplish the task, as well as a few common implementations.
 """
+
 from abc import ABC
 from typing import cast
 
@@ -15,8 +16,11 @@ from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
 from epymorph.data_type import SimArray, SimDType
 from epymorph.error import InitException
 from epymorph.geography.scope import GeoScope
-from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
-                                 SimulationFunction)
+from epymorph.simulation import (
+    AttributeDef,
+    NamespacedAttributeResolver,
+    SimulationFunction,
+)
 from epymorph.util import NumpyTypeError, check_ndarray, match
 
 
@@ -26,7 +30,13 @@ class Initializer(SimulationFunction[SimArray], ABC):
     of populations by IPM compartment for every simulation node.
     """
 
-    def evaluate_in_context(self, data: NamespacedAttributeResolver, dim: SimDimensions, scope: GeoScope, rng: np.random.Generator) -> SimArray:
+    def evaluate_in_context(
+        self,
+        data: NamespacedAttributeResolver,
+        dim: SimDimensions,
+        scope: GeoScope,
+        rng: np.random.Generator,
+    ) -> SimArray:
         result = super().evaluate_in_context(data, dim, scope, rng)
 
         # Result validation: it must be an NxC array of integers where no value is less than zero.
@@ -60,30 +70,30 @@ def _pop_array(dim: SimDimensions, pop: SimArray, initial_compartment: int) -> S
     return array
 
 
-def _transition_1(array: SimArray,
-                  from_compartment: int,
-                  to_compartment: int,
-                  row: int,
-                  count: int) -> None:
+def _transition_1(
+    array: SimArray, from_compartment: int, to_compartment: int, row: int, count: int
+) -> None:
     array[row, from_compartment] -= count
     array[row, to_compartment] += count
 
 
-def _transition_N(array: SimArray,
-                  from_compartment: int,
-                  to_compartment: int,
-                  count: SimArray) -> None:
+def _transition_N(
+    array: SimArray, from_compartment: int, to_compartment: int, count: SimArray
+) -> None:
     array[:, from_compartment] -= count
     array[:, to_compartment] += count
+
 
 # Pre-baked initializer implementations
 
 
-_POPULATION_ATTR = AttributeDef('population', int, Shapes.N,
-                                comment="The population at each geo node.")
+_POPULATION_ATTR = AttributeDef(
+    "population", int, Shapes.N, comment="The population at each geo node."
+)
 
-_LABEL_ATTR = AttributeDef('label', str, Shapes.N,
-                           comment="A label associated with each geo node.")
+_LABEL_ATTR = AttributeDef(
+    "label", str, Shapes.N, comment="A label associated with each geo node."
+)
 
 
 class NoInfection(Initializer):
@@ -143,7 +153,7 @@ class Proportional(Initializer):
             check_ndarray(
                 self.ratios,
                 dtype=match.dtype(np.int64, np.float64),
-                shape=DataShapeMatcher(Shapes.NxC, self.dim, True)
+                shape=DataShapeMatcher(Shapes.NxC, self.dim, True),
             )
         except NumpyTypeError as e:
             raise InitException(
@@ -159,7 +169,7 @@ class Proportional(Initializer):
         row_sums = cast(NDArray[np.float64], np.sum(ratios, axis=1, dtype=np.float64))
 
         if np.any(row_sums <= 0):
-            msg = 'One or more rows sum to zero or less.'
+            msg = "One or more rows sum to zero or less."
             raise InitException(msg)
 
         pop = self.data(_POPULATION_ATTR)
@@ -198,12 +208,16 @@ class SeededInfection(Initializer, ABC):
         """Child classes should call this during `initialize` to check that the given compartment indices are valid."""
         C = self.dim.compartments
         if not 0 <= self.initial_compartment < C:
-            msg = "Initializer argument `initial_compartment` must be an index of the IPM compartments "\
+            msg = (
+                "Initializer argument `initial_compartment` must be an index of the IPM compartments "
                 f"(0 to {C-1}, inclusive)."
+            )
             raise InitException(msg)
         if not 0 <= self.infection_compartment < C:
-            msg = "Initializer argument `infection_compartment` must be an index of the IPM compartments "\
+            msg = (
+                "Initializer argument `infection_compartment` must be an index of the IPM compartments "
                 f"(0 to {C-1}, inclusive)."
+            )
             raise InitException(msg)
 
 
@@ -236,7 +250,9 @@ class IndexedLocations(SeededInfection):
             msg = "Initializer argument 'selection' must be a 1-dimensional array."
             raise InitException(msg)
         if seed_size < 0:
-            msg = "Initializer argument 'seed_size' must be a non-negative integer value."
+            msg = (
+                "Initializer argument 'seed_size' must be a non-negative integer value."
+            )
             raise InitException(msg)
 
         self.selection = selection
@@ -271,8 +287,9 @@ class IndexedLocations(SeededInfection):
             return result
 
         for i, n in zip(sel, infected):
-            _transition_1(result, self.initial_compartment,
-                          self.infection_compartment, i, n)
+            _transition_1(
+                result, self.initial_compartment, self.infection_compartment, i, n
+            )
         return result
 
 
@@ -344,7 +361,8 @@ class LabeledLocations(SeededInfection):
             selection=selection,
             seed_size=self.seed_size,
             initial_compartment=self.initial_compartment,
-            infection_compartment=self.infection_compartment)
+            infection_compartment=self.infection_compartment,
+        )
         return self.defer(sub)
 
 
@@ -440,7 +458,7 @@ class TopLocations(SeededInfection):
         # then slice using [-k:] to get just those indices.
         # This should be O(k log k) and saves us from copying+sorting (or some-such)
         arr = self.data(self.top_attribute)
-        selection = np.argpartition(arr, -self.num_locations)[-self.num_locations:]
+        selection = np.argpartition(arr, -self.num_locations)[-self.num_locations :]
         sub = IndexedLocations(
             selection=selection,
             seed_size=self.seed_size,
@@ -476,7 +494,9 @@ class BottomLocations(SeededInfection):
         super().__init__(initial_compartment, infection_compartment)
 
         if not bottom_attribute.shape == Shapes.N:
-            msg = "Initializer argument `bottom_locations` must be an N-shaped attribute."
+            msg = (
+                "Initializer argument `bottom_locations` must be an N-shaped attribute."
+            )
             raise InitException(msg)
 
         self.bottom_attribute = bottom_attribute
@@ -499,7 +519,7 @@ class BottomLocations(SeededInfection):
         # then slice using [:k] to get just those indices.
         # This should be O(k log k) and saves us from copying+sorting (or some-such)
         arr = self.data(self.bottom_attribute)
-        selection = np.argpartition(arr, self.num_locations)[:self.num_locations]
+        selection = np.argpartition(arr, self.num_locations)[: self.num_locations]
         sub = IndexedLocations(
             selection=selection,
             seed_size=self.seed_size,
@@ -510,14 +530,14 @@ class BottomLocations(SeededInfection):
 
 
 initializer_library: dict[str, type[Initializer]] = {
-    'no_infection': NoInfection,
-    'explicit': Explicit,
-    'proportional': Proportional,
-    'indexed_locations': IndexedLocations,
-    'single_location': SingleLocation,
-    'labeled_locations': LabeledLocations,
-    'random_locations': RandomLocations,
-    'top_locations': TopLocations,
-    'bottom_locations': BottomLocations,
+    "no_infection": NoInfection,
+    "explicit": Explicit,
+    "proportional": Proportional,
+    "indexed_locations": IndexedLocations,
+    "single_location": SingleLocation,
+    "labeled_locations": LabeledLocations,
+    "random_locations": RandomLocations,
+    "top_locations": TopLocations,
+    "bottom_locations": BottomLocations,
 }
 """A library for the built-in initializer functions."""

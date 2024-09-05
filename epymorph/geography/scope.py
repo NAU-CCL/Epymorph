@@ -41,6 +41,7 @@ class ScopeFilter(GeoScope):
     """
     A scope for filtering out specific nodes from another scope instance.
     """
+
     # NOTE: I'm not convinced this is the _best_ way to do this but it works for now.
 
     _parent: GeoScope

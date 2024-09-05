@@ -6,8 +6,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import numpy.testing as npt
 
-from epymorph.compartment_model import (BIRTH, DEATH, CompartmentModel,
-                                        compartment, edge)
+from epymorph.compartment_model import BIRTH, DEATH, CompartmentModel, compartment, edge
 from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import AttributeArray, SimDType
 from epymorph.database import Database
@@ -19,13 +18,13 @@ from epymorph.simulator.world_list import ListWorld
 
 class Sir(CompartmentModel):
     compartments = [
-        compartment('S', tags=['test_tag']),
-        compartment('I'),
-        compartment('R'),
+        compartment("S", tags=["test_tag"]),
+        compartment("I"),
+        compartment("R"),
     ]
     requirements = [
-        AttributeDef('beta', float, Shapes.TxN),
-        AttributeDef('gamma', float, Shapes.TxN),
+        AttributeDef("beta", float, Shapes.TxN),
+        AttributeDef("gamma", float, Shapes.TxN),
     ]
 
     def edges(self, symbols):
@@ -39,16 +38,16 @@ class Sir(CompartmentModel):
 
 class Sirbd(CompartmentModel):
     compartments = [
-        compartment('S'),
-        compartment('I'),
-        compartment('R'),
+        compartment("S"),
+        compartment("I"),
+        compartment("R"),
     ]
 
     requirements = [
-        AttributeDef('beta', float, Shapes.TxN),
-        AttributeDef('gamma', float, Shapes.TxN),
-        AttributeDef('b', float, Shapes.TxN),  # birth rate
-        AttributeDef('d', float, Shapes.TxN),  # death rate
+        AttributeDef("beta", float, Shapes.TxN),
+        AttributeDef("gamma", float, Shapes.TxN),
+        AttributeDef("b", float, Shapes.TxN),  # birth rate
+        AttributeDef("d", float, Shapes.TxN),  # death rate
     ]
 
     def edges(self, symbols):
@@ -66,7 +65,6 @@ class Sirbd(CompartmentModel):
 
 
 class StandardIpmExecutorTest(unittest.TestCase):
-
     def test_init_01(self):
         ipm = Sir()
 
@@ -78,7 +76,8 @@ class StandardIpmExecutorTest(unittest.TestCase):
             days=100,
             nodes=1,
             compartments=ipm.num_compartments,
-            events=ipm.num_events)
+            events=ipm.num_events,
+        )
 
         world = MagicMock(spec=ListWorld)
         data = MagicMock(spec=Database[AttributeArray])
@@ -90,10 +89,13 @@ class StandardIpmExecutorTest(unittest.TestCase):
         self.assertEqual(exe._source_compartment_for_event, [0, 1])
         npt.assert_array_equal(
             exe._apply_matrix,
-            np.array([
-                [-1, +1, 0],
-                [0, -1, +1],
-            ], dtype=SimDType)
+            np.array(
+                [
+                    [-1, +1, 0],
+                    [0, -1, +1],
+                ],
+                dtype=SimDType,
+            ),
         )
 
     def test_init_02(self):
@@ -107,7 +109,8 @@ class StandardIpmExecutorTest(unittest.TestCase):
             days=100,
             nodes=1,
             compartments=ipm.num_compartments,
-            events=ipm.num_events)
+            events=ipm.num_events,
+        )
 
         world = MagicMock(spec=ListWorld)
         data = MagicMock(spec=Database[AttributeArray])
@@ -118,12 +121,15 @@ class StandardIpmExecutorTest(unittest.TestCase):
         self.assertEqual(exe._source_compartment_for_event, [0, -1, 1, 0, 1, 2])
         npt.assert_array_equal(
             exe._apply_matrix,
-            np.array([
-                [-1, +1, 0],
-                [+1, 0, 0],
-                [0, -1, +1],
-                [-1, 0, 0],
-                [0, -1, 0],
-                [0, 0, -1],
-            ], dtype=SimDType)
+            np.array(
+                [
+                    [-1, +1, 0],
+                    [+1, 0, 0],
+                    [0, -1, +1],
+                    [-1, 0, 0],
+                    [0, -1, 0],
+                    [0, 0, -1],
+                ],
+                dtype=SimDType,
+            ),
         )

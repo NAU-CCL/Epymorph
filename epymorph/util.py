@@ -1,10 +1,23 @@
 """epymorph general utility functions and classes."""
+
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
 from re import compile as re_compile
-from typing import (Any, Callable, Generator, Generic, Iterable, Literal,
-                    Mapping, OrderedDict, Self, TypeGuard, TypeVar, overload)
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Generic,
+    Iterable,
+    Literal,
+    Mapping,
+    OrderedDict,
+    Self,
+    TypeGuard,
+    TypeVar,
+    overload,
+)
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -16,9 +29,9 @@ acceptable_name = re_compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 # function utilities
 
 
-T = TypeVar('T')
-A = TypeVar('A')
-B = TypeVar('B')
+T = TypeVar("T")
+A = TypeVar("A")
+B = TypeVar("B")
 
 
 def identity(x: T) -> T:
@@ -92,7 +105,9 @@ def are_instances(xs: list[Any], of_type: type[T]) -> TypeGuard[list[T]]: ...
 def are_instances(xs: tuple[Any], of_type: type[T]) -> TypeGuard[tuple[T]]: ...
 
 
-def are_instances(xs: list[Any] | tuple[Any], of_type: type[T]) -> TypeGuard[list[T] | tuple[T]]:
+def are_instances(
+    xs: list[Any] | tuple[Any], of_type: type[T]
+) -> TypeGuard[list[T] | tuple[T]]:
     """TypeGuards a collection to check that all items are instances of the given type (`of_type`)."""
     # NOTE: TypeVars can't be generic so we can't do TypeGuard[C[T]] :(
     # Thus this only supports the types of collections we specify explicitly.
@@ -110,7 +125,9 @@ def filter_unique(xs: Iterable[T]) -> list[T]:
     return ys
 
 
-def filter_with_mask(xs: Iterable[A], predicate: Callable[[A], TypeGuard[B]]) -> tuple[list[B], list[bool]]:
+def filter_with_mask(
+    xs: Iterable[A], predicate: Callable[[A], TypeGuard[B]]
+) -> tuple[list[B], list[bool]]:
     """
     Filters the given iterable for items which match `predicate`, and also
     returns a boolean mask the same length as the iterable with the results of `predicate` for each item.
@@ -130,8 +147,8 @@ def as_list(x: T | list[T]) -> list[T]:
     return x if isinstance(x, list) else [x]
 
 
-K = TypeVar('K')
-V = TypeVar('V')
+K = TypeVar("K")
+V = TypeVar("V")
 
 
 def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
@@ -168,7 +185,7 @@ class MemoDict(dict[K, V]):
 # numpy utilities
 
 
-N = TypeVar('N', bound=np.number)
+N = TypeVar("N", bound=np.number)
 
 NDIndices = NDArray[np.intp]
 
@@ -176,7 +193,7 @@ NDIndices = NDArray[np.intp]
 @deprecated("Don't use this; use np.repeat")
 def stutter(it: Iterable[T], times: int) -> Iterable[T]:
     """Make the iterable `it` repeat each item `times` times.
-       (Unlike `itertools.repeat` which repeats whole sequences in order.)"""
+    (Unlike `itertools.repeat` which repeats whole sequences in order.)"""
     return (xs for x in it for xs in (x,) * times)
 
 
@@ -185,10 +202,7 @@ def stridesum(arr: NDArray[N], n: int, dtype: DTypeLike = None) -> NDArray[N]:
     """Compute a new array by grouping every `n` rows and summing them together."""
     if len(arr) % n != 0:
         pad = n - (len(arr) % n)
-        arr = np.pad(arr,
-                     pad_width=(0, pad),
-                     mode='constant',
-                     constant_values=0)
+        arr = np.pad(arr, pad_width=(0, pad), mode="constant", constant_values=0)
     return arr.reshape((-1, n)).sum(axis=1, dtype=dtype)
 
 
@@ -201,7 +215,9 @@ def normalize(arr: NDArray[N]) -> NDArray[N]:
     return (arr - min_val) / (max_val - min_val)
 
 
-def row_normalize(arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DTypeLike = None) -> NDArray[N]:
+def row_normalize(
+    arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DTypeLike = None
+) -> NDArray[N]:
     """
     Assuming `arr` is a 2D array, normalize values across each row by dividing by the row sum.
     If you've already calculated row sums, you can pass those in, otherwise they will be computed.
@@ -223,7 +239,9 @@ def prefix(length: int) -> Callable[[NDArray[np.str_]], NDArray[np.str_]]:
 RADIUS_MI = 3959.87433  # radius of earth in mi
 
 
-def pairwise_haversine(longitudes: NDArray[np.float64], latitudes: NDArray[np.float64]) -> NDArray[np.float64]:
+def pairwise_haversine(
+    longitudes: NDArray[np.float64], latitudes: NDArray[np.float64]
+) -> NDArray[np.float64]:
     """Compute the distances in miles between all pairs of coordinates."""
     # https://www.themathdoctors.org/distances-on-earth-2-the-haversine-formula
     lng = np.radians(longitudes)
@@ -232,9 +250,10 @@ def pairwise_haversine(longitudes: NDArray[np.float64], latitudes: NDArray[np.fl
     dlat = lat[:, np.newaxis] - lat[np.newaxis, :]
     cos_lat = np.cos(lat)
 
-    a = np.sin(dlat / 2.0) ** 2 \
-        + (cos_lat[:, np.newaxis] * cos_lat[np.newaxis, :]) \
-        * np.sin(dlng / 2.0) ** 2
+    a = (
+        np.sin(dlat / 2.0) ** 2
+        + (cos_lat[:, np.newaxis] * cos_lat[np.newaxis, :]) * np.sin(dlng / 2.0) ** 2
+    )
     return 2 * RADIUS_MI * np.arcsin(np.sqrt(a))
 
 
@@ -259,7 +278,7 @@ def is_square(arr: NDArray) -> bool:
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
 
 
-def shape_matches(arr: NDArray, expected: tuple[int | Literal['?'], ...]) -> bool:
+def shape_matches(arr: NDArray, expected: tuple[int | Literal["?"], ...]) -> bool:
     """
     Does the shape of the given array match this expression?
     Shape expressions are a tuple where each dimension is either an integer
@@ -268,7 +287,7 @@ def shape_matches(arr: NDArray, expected: tuple[int | Literal['?'], ...]) -> boo
     if len(arr.shape) != len(expected):
         return False
     for actual, exp in zip(arr.shape, expected):
-        if exp == '?':
+        if exp == "?":
             continue
         if exp != actual:
             return False
@@ -288,13 +307,14 @@ def dtype_name(d: np.dtype) -> str:
     return str(d)
 
 
-T_contra = TypeVar('T_contra', contravariant=True)
+T_contra = TypeVar("T_contra", contravariant=True)
 
 
 class Matcher(Generic[T_contra], ABC):
     """
     A generic matcher. Returns True if a match, False otherwise.
     """
+
     # Note: Matchers are contravariant: you can substitute a Matcher of a broader type
     # when something asks for a Matcher of a more specific type.
     # For example, a Matcher[Any] can be provided in place of a Matcher[str].
@@ -386,7 +406,7 @@ class MatchDTypeCast(Matcher[DTypeLike]):
             return f"one of [{', '.join((dtype_name(x) for x in self._acceptable))}]"
 
     def __call__(self, value: DTypeLike) -> bool:
-        return any((np.can_cast(value, x, casting='safe') for x in self._acceptable))
+        return any((np.can_cast(value, x, casting="safe") for x in self._acceptable))
 
 
 class MatchShapeLiteral(Matcher[NDArray]):
@@ -441,7 +461,8 @@ match = _Matchers()
 
 
 def check_ndarray(
-    value: Any, *,
+    value: Any,
+    *,
     dtype: Matcher[DTypeLike] = MatchAny(),
     shape: Matcher[NDArray] = MatchAny(),
 ) -> None:
@@ -450,10 +471,10 @@ def check_ndarray(
     Raises a NumpyTypeError if a check doesn't pass.
     """
     if value is None:
-        raise NumpyTypeError('Value is None.')
+        raise NumpyTypeError("Value is None.")
 
     if not isinstance(value, np.ndarray):
-        raise NumpyTypeError('Not a numpy array.')
+        raise NumpyTypeError("Not a numpy array.")
 
     if not dtype(value.dtype):
         msg = f"Not a numpy dtype match; got {dtype_name(value.dtype)}, required {dtype.expected()}"
@@ -471,7 +492,7 @@ def progress(percent: float) -> str:
     """Creates a progress bar string."""
     p = 100 * max(0.0, min(percent, 1.0))
     n = int(p // 5)
-    bar = ('#' * n) + (' ' * (20 - n))
+    bar = ("#" * n) + (" " * (20 - n))
     return f"|{bar}| {p:.0f}% "
 
 
@@ -480,6 +501,7 @@ def progress(percent: float) -> str:
 
 class Event(Generic[T]):
     """A typed pub-sub event."""
+
     _subscribers: list[Callable[[T], None]]
 
     def __init__(self):
@@ -491,6 +513,7 @@ class Event(Generic[T]):
 
         def unsubscribe() -> None:
             self._subscribers.remove(sub)
+
         return unsubscribe
 
     def publish(self, event: T) -> None:
@@ -544,9 +567,9 @@ def subscriptions() -> Generator[Subscriber, None, None]:
 class Singleton(type):
     """A metaclass for classes you want to treat as singletons."""
 
-    _instances: dict[type['Singleton'], 'Singleton'] = {}
+    _instances: dict[type["Singleton"], "Singleton"] = {}
 
-    def __call__(cls: type['Singleton'], *args: Any, **kwargs: Any) -> 'Singleton':
+    def __call__(cls: type["Singleton"], *args: Any, **kwargs: Any) -> "Singleton":
         if cls not in cls._instances:
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
@@ -577,7 +600,13 @@ class StringBuilder:
         return self
 
     @contextmanager
-    def block(self, indent: str = "    ", *, opener: str | None = None, closer: str | None = None) -> Generator['StringBuilder', None, None]:
+    def block(
+        self,
+        indent: str = "    ",
+        *,
+        opener: str | None = None,
+        closer: str | None = None,
+    ) -> Generator["StringBuilder", None, None]:
         if opener is not None:
             # opener is printed at the parent's indent level
             self.line(opener)
@@ -599,7 +628,9 @@ class StringBuilder:
 
 
 @contextmanager
-def string_builder(indent: str = "", *, opener: str | None = None, closer: str | None = None) -> Generator[StringBuilder, None, None]:
+def string_builder(
+    indent: str = "", *, opener: str | None = None, closer: str | None = None
+) -> Generator[StringBuilder, None, None]:
     s = StringBuilder(indent)
     if opener is not None:
         s.line(opener)

@@ -1,4 +1,5 @@
 """For capturing extremely detailed movement data from a simulation."""
+
 from abc import abstractmethod
 from contextlib import contextmanager
 from typing import Generator, NamedTuple, Protocol
@@ -50,6 +51,7 @@ class MovementData(Protocol):
 
 class _Entry(NamedTuple):
     """The data associated with a movement clause firing on a given tick."""
+
     name: str
     tick: int
     data: NDArray[SimDType]
@@ -85,7 +87,7 @@ class _MovementDataBuilder(MovementData):
     def requested_by(self, clause: str) -> NDArray[SimDType]:
         T, N, _, _ = self._get_dim().TNCE
         result = np.zeros((T, N, N), dtype=SimDType)
-        for (name, tick, data) in self.requested:
+        for name, tick, data in self.requested:
             if name == clause:
                 result[tick, :, :] = data
         return result
@@ -93,7 +95,7 @@ class _MovementDataBuilder(MovementData):
     def actual_by(self, clause: str) -> NDArray[SimDType]:
         T, N, C, _ = self._get_dim().TNCE
         result = np.zeros((T, N, N, C), dtype=SimDType)
-        for (name, tick, data) in self.actual:
+        for name, tick, data in self.actual:
             if name == clause:
                 result[tick, :, :, :] = data
         return result
@@ -101,14 +103,14 @@ class _MovementDataBuilder(MovementData):
     def requested_all(self) -> NDArray[SimDType]:
         T, N, _, _ = self._get_dim().TNCE
         result = np.zeros((T, N, N), dtype=SimDType)
-        for (_name, tick, data) in self.requested:
+        for _name, tick, data in self.requested:
             result[tick, :, :] += data
         return result
 
     def actual_all(self) -> NDArray[SimDType]:
         T, N, C, _ = self._get_dim().TNCE
         result = np.zeros((T, N, N, C), dtype=SimDType)
-        for (_name, tick, data) in self.actual:
+        for _name, tick, data in self.actual:
             result[tick, :, :, :] += data
         return result
 

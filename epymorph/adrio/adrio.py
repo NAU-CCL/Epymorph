@@ -1,4 +1,5 @@
 """Implements the base class for all ADRIOs, as well as some general-purpose ADRIO implementations."""
+
 import functools
 from typing import TypeVar
 
@@ -9,7 +10,7 @@ from typing_extensions import override
 from epymorph.data_shape import Shapes
 from epymorph.simulation import AttributeDef, SimulationFunction
 
-T_co = TypeVar('T_co', bound=np.generic, covariant=True)
+T_co = TypeVar("T_co", bound=np.generic, covariant=True)
 """The result type of an Adrio."""
 
 
@@ -21,7 +22,7 @@ class Adrio(SimulationFunction[NDArray[T_co]]):
     """
 
 
-AdrioClassT = TypeVar('AdrioClassT', bound=type[Adrio])
+AdrioClassT = TypeVar("AdrioClassT", bound=type[Adrio])
 
 
 def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
@@ -71,8 +72,8 @@ class Scale(Adrio[np.float64]):
 class PopulationPerKm2(Adrio[np.float64]):
     """Calculates population density by combining the values from `population` and `land_area_km2`."""
 
-    POPULATION = AttributeDef('population', int, Shapes.N)
-    LAND_AREA_KM2 = AttributeDef('land_area_km2', float, Shapes.N)
+    POPULATION = AttributeDef("population", int, Shapes.N)
+    LAND_AREA_KM2 = AttributeDef("land_area_km2", float, Shapes.N)
 
     requirements = [POPULATION, LAND_AREA_KM2]
 

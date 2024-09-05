@@ -2,14 +2,21 @@
 import unittest
 from typing import TypeVar
 
-from epymorph.database import (AbsoluteName, AttributeName, Database,
-                               DatabaseWithFallback,
-                               DatabaseWithStrataFallback, Match, ModuleName,
-                               ModuleNamePattern, ModuleNamespace, NamePattern)
+from epymorph.database import (
+    AbsoluteName,
+    AttributeName,
+    Database,
+    DatabaseWithFallback,
+    DatabaseWithStrataFallback,
+    Match,
+    ModuleName,
+    ModuleNamePattern,
+    ModuleNamespace,
+    NamePattern,
+)
 
 
 class ModuleNamespaceTest(unittest.TestCase):
-
     def test_post_init_empty(self):
         with self.assertRaises(ValueError):
             ModuleNamespace("", "module")
@@ -55,7 +62,6 @@ class ModuleNamespaceTest(unittest.TestCase):
 
 
 class AbsoluteNameTest(unittest.TestCase):
-
     def test_post_init_empty(self):
         with self.assertRaises(ValueError):
             AbsoluteName("", "module", "id")
@@ -92,39 +98,45 @@ class AbsoluteNameTest(unittest.TestCase):
 
     def test_parse_with_defaults_one_part(self):
         name = AbsoluteName.parse_with_defaults(
-            "id", "default_strata", "default_module")
+            "id", "default_strata", "default_module"
+        )
         self.assertEqual(name.strata, "default_strata")
         self.assertEqual(name.module, "default_module")
         self.assertEqual(name.id, "id")
 
     def test_parse_with_defaults_two_parts(self):
         name = AbsoluteName.parse_with_defaults(
-            "module::id", "default_strata", "default_module")
+            "module::id", "default_strata", "default_module"
+        )
         self.assertEqual(name.strata, "default_strata")
         self.assertEqual(name.module, "module")
         self.assertEqual(name.id, "id")
 
     def test_parse_with_defaults_wildcards(self):
         name = AbsoluteName.parse_with_defaults(
-            "gpm:alpha::*::id", "default_strata", "default_module")
+            "gpm:alpha::*::id", "default_strata", "default_module"
+        )
         self.assertEqual(name.strata, "gpm:alpha")
         self.assertEqual(name.module, "default_module")
         self.assertEqual(name.id, "id")
 
         name = AbsoluteName.parse_with_defaults(
-            "*::mm::id", "default_strata", "default_module")
+            "*::mm::id", "default_strata", "default_module"
+        )
         self.assertEqual(name.strata, "default_strata")
         self.assertEqual(name.module, "mm")
         self.assertEqual(name.id, "id")
 
         name = AbsoluteName.parse_with_defaults(
-            "*::*::id", "default_strata", "default_module")
+            "*::*::id", "default_strata", "default_module"
+        )
         self.assertEqual(name.strata, "default_strata")
         self.assertEqual(name.module, "default_module")
         self.assertEqual(name.id, "id")
 
         name = AbsoluteName.parse_with_defaults(
-            "*::id", "default_strata", "default_module")
+            "*::id", "default_strata", "default_module"
+        )
         self.assertEqual(name.strata, "default_strata")
         self.assertEqual(name.module, "default_module")
         self.assertEqual(name.id, "id")
@@ -158,7 +170,6 @@ class AbsoluteNameTest(unittest.TestCase):
 
 
 class ModuleNameTest(unittest.TestCase):
-
     def test_post_init_empty(self):
         with self.assertRaises(ValueError):
             ModuleName("module", "")
@@ -208,7 +219,6 @@ class ModuleNameTest(unittest.TestCase):
 
 
 class AttributeNameTest(unittest.TestCase):
-
     def test_post_init_empty(self):
         with self.assertRaises(ValueError):
             AttributeName("")
@@ -227,7 +237,6 @@ class AttributeNameTest(unittest.TestCase):
 
 
 class NamePatternTest(unittest.TestCase):
-
     def test_post_init_empty(self):
         with self.assertRaises(ValueError):
             NamePattern("", "module", "id")
@@ -309,7 +318,6 @@ class NamePatternTest(unittest.TestCase):
 
 
 class ModuleNamePatternTest(unittest.TestCase):
-
     def test_post_init_empty(self):
         with self.assertRaises(ValueError):
             ModuleNamePattern("", "id")
@@ -353,11 +361,10 @@ class ModuleNamePatternTest(unittest.TestCase):
         self.assertEqual(str(pattern), "module::id")
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class _DatabaseTestCase(unittest.TestCase):
-
     def assert_match(self, expected: T, test: Match[T] | None):
         if test is None:
             self.fail("Expected a match, but it was None.")
@@ -365,14 +372,15 @@ class _DatabaseTestCase(unittest.TestCase):
 
 
 class DatabaseTest(_DatabaseTestCase):
-
     def test_basic_usage(self):
-        db = Database[int]({
-            NamePattern("gpm:1", "ipm", "beta"): 1,
-            NamePattern("*", "ipm", "delta"): 2,
-            NamePattern("*", "*", "gamma"): 3,
-            NamePattern("gpm:2", "ipm", "beta"): 4,
-        })
+        db = Database[int](
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 1,
+                NamePattern("*", "ipm", "delta"): 2,
+                NamePattern("*", "*", "gamma"): 3,
+                NamePattern("gpm:2", "ipm", "beta"): 4,
+            }
+        )
 
         self.assert_match(1, db.query(AbsoluteName("gpm:1", "ipm", "beta")))
         self.assert_match(1, db.query("gpm:1::ipm::beta"))
@@ -390,12 +398,14 @@ class DatabaseTest(_DatabaseTestCase):
         self.assert_match(3, db.query("gpm:1::init::gamma"))
 
     def test_update(self):
-        db = Database[int]({
-            NamePattern("gpm:1", "ipm", "beta"): 1,
-            NamePattern("*", "ipm", "delta"): 2,
-            NamePattern("*", "*", "gamma"): 3,
-            NamePattern("gpm:2", "ipm", "beta"): 4,
-        })
+        db = Database[int](
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 1,
+                NamePattern("*", "ipm", "delta"): 2,
+                NamePattern("*", "*", "gamma"): 3,
+                NamePattern("gpm:2", "ipm", "beta"): 4,
+            }
+        )
 
         self.assert_match(1, db.query(AbsoluteName("gpm:1", "ipm", "beta")))
         self.assert_match(1, db.query("gpm:1::ipm::beta"))
@@ -417,20 +427,24 @@ class DatabaseTest(_DatabaseTestCase):
 
     def test_ambiguous_values(self):
         with self.assertRaises(ValueError) as e:
-            Database[int]({
-                NamePattern("*", "*", "beta"): 1,
-                NamePattern("gpm:1", "*", "beta"): 2,
-                NamePattern("*", "ipm", "beta"): 3,
-            })
+            Database[int](
+                {
+                    NamePattern("*", "*", "beta"): 1,
+                    NamePattern("gpm:1", "*", "beta"): 2,
+                    NamePattern("*", "ipm", "beta"): 3,
+                }
+            )
         self.assertIn("ambiguous", str(e.exception))
 
     def test_update_ambiguous_values(self):
-        db = Database[int]({
-            NamePattern("gpm:1", "ipm", "beta"): 1,
-            NamePattern("*", "ipm", "delta"): 2,
-            NamePattern("*", "*", "gamma"): 3,
-            NamePattern("gpm:2", "ipm", "beta"): 4,
-        })
+        db = Database[int](
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 1,
+                NamePattern("*", "ipm", "delta"): 2,
+                NamePattern("*", "*", "gamma"): 3,
+                NamePattern("gpm:2", "ipm", "beta"): 4,
+            }
+        )
 
         with self.assertRaises(ValueError) as e:
             db.update(NamePattern("gpm:1", "*", "beta"), 777)
@@ -438,21 +452,25 @@ class DatabaseTest(_DatabaseTestCase):
 
 
 class DatabaseWithFallbackTest(_DatabaseTestCase):
-
     def test_basic_usage(self):
-        fallback = Database[int]({
-            NamePattern("gpm:1", "ipm", "beta"): 1,
-            NamePattern("*", "ipm", "delta"): 2,
-            NamePattern("*", "ipm", "gamma"): 3,
-            NamePattern("gpm:2", "ipm", "beta"): 4,
-            NamePattern("gpm:3", "init", "alpha"): 6,
-        })
+        fallback = Database[int](
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 1,
+                NamePattern("*", "ipm", "delta"): 2,
+                NamePattern("*", "ipm", "gamma"): 3,
+                NamePattern("gpm:2", "ipm", "beta"): 4,
+                NamePattern("gpm:3", "init", "alpha"): 6,
+            }
+        )
 
-        db = DatabaseWithFallback({
-            NamePattern("gpm:1", "ipm", "beta"): 11,
-            NamePattern("gpm:2", "*", "beta"): 44,
-            NamePattern("gpm:3", "*", "*"): 55,
-        }, fallback)
+        db = DatabaseWithFallback(
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 11,
+                NamePattern("gpm:2", "*", "beta"): 44,
+                NamePattern("gpm:3", "*", "*"): 55,
+            },
+            fallback,
+        )
 
         self.assert_match(11, db.query("gpm:1::ipm::beta"))
         self.assert_match(44, db.query("gpm:2::ipm::beta"))
@@ -469,32 +487,40 @@ class DatabaseWithFallbackTest(_DatabaseTestCase):
 
 
 class DatabaseWithStrataFallbackTest(_DatabaseTestCase):
-
     def test_basic_usage(self):
-        strata1 = Database[int]({
-            NamePattern("gpm:1", "ipm", "beta"): 1,
-            NamePattern("gpm:1", "ipm", "delta"): 2,
-        })
+        strata1 = Database[int](
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 1,
+                NamePattern("gpm:1", "ipm", "delta"): 2,
+            }
+        )
 
-        strata2 = Database[int]({
-            NamePattern("gpm:2", "ipm", "beta"): 3,
-            NamePattern("gpm:2", "ipm", "delta"): 4,
-        })
+        strata2 = Database[int](
+            {
+                NamePattern("gpm:2", "ipm", "beta"): 3,
+                NamePattern("gpm:2", "ipm", "delta"): 4,
+            }
+        )
 
-        strata3 = Database[int]({
-            NamePattern("gpm:3", "ipm", "beta"): 5,
-            NamePattern("gpm:3", "ipm", "delta"): 6,
-        })
+        strata3 = Database[int](
+            {
+                NamePattern("gpm:3", "ipm", "beta"): 5,
+                NamePattern("gpm:3", "ipm", "delta"): 6,
+            }
+        )
 
-        db = DatabaseWithStrataFallback({
-            NamePattern("gpm:1", "ipm", "beta"): 11,
-            NamePattern("gpm:2", "ipm", "beta"): 33,
-            NamePattern("gpm:3", "*", "*"): 55,
-        }, {
-            'gpm:1': strata1,
-            'gpm:2': strata2,
-            'gpm:3': strata3,
-        })
+        db = DatabaseWithStrataFallback(
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 11,
+                NamePattern("gpm:2", "ipm", "beta"): 33,
+                NamePattern("gpm:3", "*", "*"): 55,
+            },
+            {
+                "gpm:1": strata1,
+                "gpm:2": strata2,
+                "gpm:3": strata3,
+            },
+        )
 
         self.assert_match(11, db.query("gpm:1::ipm::beta"))
         self.assert_match(33, db.query("gpm:2::ipm::beta"))

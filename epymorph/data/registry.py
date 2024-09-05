@@ -1,6 +1,7 @@
 """
 Library registration for built-in IPMs and MMs.
 """
+
 from importlib import import_module
 from importlib.resources import files
 from inspect import isclass
@@ -10,7 +11,7 @@ from epymorph.compartment_model import CompartmentModel
 from epymorph.movement_model import MovementModel
 from epymorph.util import as_sorted_dict
 
-ModelT = TypeVar('ModelT')
+ModelT = TypeVar("ModelT")
 LoaderFunc = Callable[[], ModelT]
 Library = Mapping[str, LoaderFunc[ModelT]]
 ClassLibrary = Mapping[str, type[ModelT]]
@@ -18,17 +19,18 @@ ClassLibrary = Mapping[str, type[ModelT]]
 
 class _ModelRegistryInfo(NamedTuple):
     """Info about how a model type should be managed by epymorph's model library."""
+
     name: str
 
     @property
     def path(self) -> str:
         """Get the data path for this model type."""
-        return f'epymorph.data.{self.name}'
+        return f"epymorph.data.{self.name}"
 
     @property
     def annotation(self) -> str:
         """Get the ID annotation name for this model type."""
-        return f'__epymorph_{self.name}_id__'
+        return f"__epymorph_{self.name}_id__"
 
     def get_model_id(self, obj: object) -> str:
         """Retrieves the tagged model ID."""
@@ -43,8 +45,8 @@ class _ModelRegistryInfo(NamedTuple):
         setattr(obj, self.annotation, model_id)
 
 
-IPM_REGISTRY = _ModelRegistryInfo('ipm')
-MM_REGISTRY = _ModelRegistryInfo('mm')
+IPM_REGISTRY = _ModelRegistryInfo("ipm")
+MM_REGISTRY = _ModelRegistryInfo("mm")
 
 
 # Model registration decorators
@@ -52,27 +54,33 @@ MM_REGISTRY = _ModelRegistryInfo('mm')
 
 def ipm(ipm_id: str):
     """Decorates an IPM class so we can register it with the system."""
+
     def make_decorator(model: type[CompartmentModel]) -> type[CompartmentModel]:
         IPM_REGISTRY.set_model_id(model, ipm_id)
         return model
+
     return make_decorator
 
 
 def mm(mm_id: str):
     """Decorates an MM class so we can register it with the system."""
+
     def make_decorator(model: type[MovementModel]) -> type[MovementModel]:
         MM_REGISTRY.set_model_id(model, mm_id)
         return model
+
     return make_decorator
 
 
 # Discovery and loading utilities
 
 
-DiscoverT = TypeVar('DiscoverT', bound=CompartmentModel | MovementModel)
+DiscoverT = TypeVar("DiscoverT", bound=CompartmentModel | MovementModel)
 
 
-def _discover_classes(model: _ModelRegistryInfo, library_type: type[DiscoverT]) -> ClassLibrary[DiscoverT]:
+def _discover_classes(
+    model: _ModelRegistryInfo, library_type: type[DiscoverT]
+) -> ClassLibrary[DiscoverT]:
     """
     Search for the specified type of model, implemented by the specified Python class.
     """
@@ -84,7 +92,7 @@ def _discover_classes(model: _ModelRegistryInfo, library_type: type[DiscoverT]) 
     modules = [
         import_module(f"{in_path}.{f.name.removesuffix('.py')}")
         for f in files(in_path).iterdir()
-        if f.name != "__init__.py" and f.name.endswith('.py')
+        if f.name != "__init__.py" and f.name.endswith(".py")
     ]
 
     return {
@@ -98,13 +106,17 @@ def _discover_classes(model: _ModelRegistryInfo, library_type: type[DiscoverT]) 
 # The model libraries
 
 
-ipm_library: ClassLibrary[CompartmentModel] = as_sorted_dict({
-    **_discover_classes(IPM_REGISTRY, CompartmentModel),
-})
+ipm_library: ClassLibrary[CompartmentModel] = as_sorted_dict(
+    {
+        **_discover_classes(IPM_REGISTRY, CompartmentModel),
+    }
+)
 """All epymorph intra-population models (by id)."""
 
 
-mm_library: ClassLibrary[MovementModel] = as_sorted_dict({
-    **_discover_classes(MM_REGISTRY, MovementModel),
-})
+mm_library: ClassLibrary[MovementModel] = as_sorted_dict(
+    {
+        **_discover_classes(MM_REGISTRY, MovementModel),
+    }
+)
 """All epymorph movement models (by id)."""

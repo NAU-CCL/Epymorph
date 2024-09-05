@@ -3,6 +3,7 @@ Utility classes to verify the shape of data as numpy arrays
 whose dimensions can be relative to the simulation context,
 and to adapt equivalent shapes.
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -13,7 +14,7 @@ from numpy.typing import NDArray
 
 from epymorph.util import Matcher
 
-T = TypeVar('T', bound=np.generic)
+T = TypeVar("T", bound=np.generic)
 
 
 class SimDimensions(NamedTuple):
@@ -33,9 +34,16 @@ class SimDimensions(NamedTuple):
         tau_steps = len(tau_step_lengths)
         ticks = tau_steps * days
         return cls(
-            tuple(tau_step_lengths), tau_steps, start_date, days, ticks,
-            nodes, compartments, events,
-            (ticks, nodes, compartments, events))
+            tuple(tau_step_lengths),
+            tau_steps,
+            start_date,
+            days,
+            ticks,
+            nodes,
+            compartments,
+            events,
+            (ticks, nodes, compartments, events),
+        )
 
     tau_step_lengths: tuple[float, ...]
     """The lengths of each tau step in the MM."""
@@ -72,11 +80,15 @@ class DataShape(ABC):
     """Description of a data attribute's shape relative to a simulation context."""
 
     @abstractmethod
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         """Does the given value match this shape expression?"""
 
     @abstractmethod
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         """Adapt the given value to this shape, if possible."""
 
 
@@ -84,10 +96,14 @@ class DataShape(ABC):
 class Scalar(DataShape):
     """A scalar value."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         return value.shape == tuple()
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         if not self.matches(dim, value, allow_broadcast):
             return None
         return value
@@ -100,14 +116,18 @@ class Scalar(DataShape):
 class Time(DataShape):
     """An array of at least size T (the number of simulation days)."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         if value.ndim == 1 and value.shape[0] >= dim.days:
             return True
         if allow_broadcast and value.shape == tuple():
             return True
         return False
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         if value.ndim == 1 and value.shape[0] >= dim.days:
             return value[: dim.days]
         if allow_broadcast and value.shape == tuple():
@@ -122,14 +142,18 @@ class Time(DataShape):
 class Node(DataShape):
     """An array of size N (the number of simulation nodes)."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         if value.ndim == 1 and value.shape[0] == dim.nodes:
             return True
         if allow_broadcast and value.shape == tuple():
             return True
         return False
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         if value.ndim == 1 and value.shape[0] == dim.nodes:
             return value
         if allow_broadcast and value.shape == tuple():
@@ -144,7 +168,9 @@ class Node(DataShape):
 class NodeAndNode(DataShape):
     """An array of size NxN."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         if value.shape == (dim.nodes, dim.nodes):
             return True
         if allow_broadcast:
@@ -152,7 +178,9 @@ class NodeAndNode(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         if value.shape == (dim.nodes, dim.nodes):
             return value
         if allow_broadcast and value.shape == tuple():
@@ -167,7 +195,9 @@ class NodeAndNode(DataShape):
 class NodeAndCompartment(DataShape):
     """An array of size NxC."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         N, C = dim.nodes, dim.compartments
         if value.shape == (N, C):
             return True
@@ -180,7 +210,9 @@ class NodeAndCompartment(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         N, C = dim.nodes, dim.compartments
         if value.shape == (N, C):
             return value
@@ -201,8 +233,14 @@ class NodeAndCompartment(DataShape):
 class TimeAndNode(DataShape):
     """An array of size at-least-T by exactly-N."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        if value.ndim == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
+        if (
+            value.ndim == 2
+            and value.shape[0] >= dim.days
+            and value.shape[1] == dim.nodes
+        ):
             return True
         if allow_broadcast:
             if value.shape == tuple():
@@ -213,8 +251,14 @@ class TimeAndNode(DataShape):
                 return True
         return False
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
-        if value.ndim == 2 and value.shape[0] >= dim.days and value.shape[1] == dim.nodes:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
+        if (
+            value.ndim == 2
+            and value.shape[0] >= dim.days
+            and value.shape[1] == dim.nodes
+        ):
             return value[: dim.days, :]
         if allow_broadcast:
             if value.shape == tuple():
@@ -222,7 +266,9 @@ class TimeAndNode(DataShape):
             if value.shape == (dim.nodes,):
                 return np.broadcast_to(value, shape=(dim.days, dim.nodes))
             if value.ndim == 1 and value.shape[0] >= dim.days:
-                return np.broadcast_to(value[: dim.days, np.newaxis], shape=(dim.days, dim.nodes))
+                return np.broadcast_to(
+                    value[: dim.days, np.newaxis], shape=(dim.days, dim.nodes)
+                )
         return None
 
     def __str__(self):
@@ -232,12 +278,16 @@ class TimeAndNode(DataShape):
 class NodeAndArbitrary(DataShape):
     """An array of size exactly-N by any dimension."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         if value.ndim == 2 and value.shape[0] == dim.nodes:
             return True
         return False
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         return value if self.matches(dim, value, allow_broadcast) else None
 
     def __str__(self):
@@ -247,12 +297,16 @@ class NodeAndArbitrary(DataShape):
 class ArbitraryAndNode(DataShape):
     """An array of size any dimension by exactly-N."""
 
-    def matches(self, dim: SimDimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def matches(
+        self, dim: SimDimensions, value: NDArray, allow_broadcast: bool
+    ) -> bool:
         if value.ndim == 2 and value.shape[1] == dim.nodes:
             return True
         return False
 
-    def adapt(self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool) -> NDArray[T] | None:
+    def adapt(
+        self, dim: SimDimensions, value: NDArray[T], allow_broadcast: bool
+    ) -> NDArray[T] | None:
         return value if self.matches(dim, value, allow_broadcast) else None
 
     def __str__(self):
@@ -305,6 +359,7 @@ def parse_shape(shape: str) -> DataShape:
 
 class DataShapeMatcher(Matcher[NDArray]):
     """Matches a DataShape, given the SimDimensions."""
+
     _shape: DataShape
     _dim: SimDimensions
     _allow_broadcast: bool

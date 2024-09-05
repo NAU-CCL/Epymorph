@@ -1,4 +1,5 @@
 """Functions for managing simulation data."""
+
 from time import perf_counter
 from typing import Callable, Generator, Mapping, Sequence, TypeVar
 
@@ -8,13 +9,17 @@ from sympy import Expr
 from epymorph.adrio.adrio import Adrio
 from epymorph.data_shape import DataShapeMatcher, SimDimensions
 from epymorph.data_type import AttributeArray, SimArray
-from epymorph.database import (AbsoluteName, Database, DatabaseWithFallback,
-                               DatabaseWithStrataFallback, ModuleNamespace,
-                               NamePattern)
+from epymorph.database import (
+    AbsoluteName,
+    Database,
+    DatabaseWithFallback,
+    DatabaseWithStrataFallback,
+    ModuleNamespace,
+    NamePattern,
+)
 from epymorph.error import AttributeException, InitException
 from epymorph.event import AdrioFinish, AdrioStart, EventBus
-from epymorph.params import (ParamExpressionTimeAndNode, ParamFunction,
-                             ParamValue)
+from epymorph.params import ParamExpressionTimeAndNode, ParamFunction, ParamValue
 from epymorph.rume import GEO_LABELS, Gpm, Rume
 from epymorph.simulation import NamespacedAttributeResolver, gpm_strata
 from epymorph.util import NumpyTypeError, check_ndarray, match
@@ -22,11 +27,10 @@ from epymorph.util import NumpyTypeError, check_ndarray, match
 _events = EventBus()
 
 _EvalFunction = Callable[
-    [AbsoluteName, list[AbsoluteName], ParamValue | None],
-    AttributeArray
+    [AbsoluteName, list[AbsoluteName], ParamValue | None], AttributeArray
 ]
 
-ParamValueT = TypeVar('ParamValueT')
+ParamValueT = TypeVar("ParamValueT")
 
 
 def _evaluation_context(
@@ -42,10 +46,9 @@ def _evaluation_context(
         data={**rume.params},
         children={
             # which falls back to GPM params, as scoped to that GPM
-            gpm_strata(gpm.name): Database[ParamValue]({
-                k.to_absolute(gpm_strata(gpm.name)): v
-                for k, v in gpm.params.items()
-            })
+            gpm_strata(gpm.name): Database[ParamValue](
+                {k.to_absolute(gpm_strata(gpm.name)): v for k, v in gpm.params.items()}
+            )
             for gpm in rume.strata
         },
     )
@@ -64,7 +67,8 @@ def _evaluation_context(
         name: NamePattern,
         raw_value: ParamValueT,
         or_else: Callable[[ParamValueT], AttributeArray],
-        *, cache: dict[NamePattern, AttributeArray] = {},
+        *,
+        cache: dict[NamePattern, AttributeArray] = {},
         # WARNING: I am deliberately (ab)using a dict value as a default parameter here,
         # which will be the same instance for every function call. This is not typical python.
         # However in this case it has the nice effect of limiting `cache`'s scope so it can
@@ -86,7 +90,9 @@ def _evaluation_context(
         cache[name] = value
         return value
 
-    def evaluate(name: AbsoluteName, chain: list[AbsoluteName], default_value: ParamValue | None) -> AttributeArray:
+    def evaluate(
+        name: AbsoluteName, chain: list[AbsoluteName], default_value: ParamValue | None
+    ) -> AttributeArray:
         # Evaluate a parameter and store its value to `attr_db`
 
         # `chain` tracks the path of nested attribute resolutions involved.
@@ -146,24 +152,28 @@ def _evaluation_context(
                 _events.on_adrio_finish.publish(AdrioFinish(adrio_name, name, t1 - t0))
 
         elif isinstance(raw_value, type) and issubclass(raw_value, ParamFunction):
-            msg = f"Invalid parameter: '{format_name(match_pattern)}' "\
+            msg = (
+                f"Invalid parameter: '{format_name(match_pattern)}' "
                 "is a ParamFunction class instead of an instance."
+            )
             raise AttributeException(msg)
 
         elif isinstance(raw_value, np.ndarray):
             # numpy array: make a copy so we don't risk unexpected mutations
-            value = use_eval_cache(match_pattern, raw_value,
-                                   lambda x: x.copy())
+            value = use_eval_cache(match_pattern, raw_value, lambda x: x.copy())
 
         elif isinstance(raw_value, int | float | str | tuple | Sequence):
             # scalar value or python collection: re-pack it as a numpy array
-            value = use_eval_cache(match_pattern, raw_value,
-                                   lambda x: np.asarray(x, dtype=None))
+            value = use_eval_cache(
+                match_pattern, raw_value, lambda x: np.asarray(x, dtype=None)
+            )
 
         else:
             # bad value!
-            msg = f"Invalid parameter: '{format_name(match_pattern)}' "\
+            msg = (
+                f"Invalid parameter: '{format_name(match_pattern)}' "
                 f"is not a supported type (found: {type(raw_value)})"
+            )
             raise AttributeException(msg)
 
         # Store the value to our database and the eval cache.
@@ -235,6 +245,7 @@ def validate_requirements(
     """
     Validate all attributes requirements in a RUME; raises an ExceptionGroup containing all errors.
     """
+
     def validate() -> Generator[AttributeException, None, None]:
         for name, attr in rume.requirements.items():
             attr_match = data.query(name)
@@ -247,7 +258,8 @@ def validate_requirements(
                         attr_match.value,
                         dtype=match.dtype_cast(attr.dtype),
                         shape=DataShapeMatcher(
-                            attr.shape, rume.dim, allow_broadcast=True),
+                            attr.shape, rume.dim, allow_broadcast=True
+                        ),
                     )
                 except NumpyTypeError as e:
                     msg = f"Attribute '{attr_match.pattern}' is not properly specified. {e}"
@@ -268,6 +280,7 @@ def initialize_rume(
     Executes Initializers for a multi-strata simulation by running each strata's
     Initializer and combining the results. Raises InitException if anything goes wrong.
     """
+
     def init_strata(gpm: Gpm) -> SimArray:
         namespace = ModuleNamespace(gpm_strata(gpm.name), "init")
         strata_dim = SimDimensions.build(
@@ -282,10 +295,7 @@ def initialize_rume(
         return gpm.init.evaluate_in_context(strata_data, strata_dim, rume.scope, rng)
 
     try:
-        return np.column_stack([
-            init_strata(gpm)
-            for gpm in rume.strata
-        ])
+        return np.column_stack([init_strata(gpm) for gpm in rume.strata])
     except InitException as e:
         raise e
     except Exception as e:

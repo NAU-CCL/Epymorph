@@ -1,19 +1,27 @@
 """
 IPM executor classes handle the logic for processing the IPM step of the simulation.
 """
+
 from dataclasses import dataclass
 from typing import ClassVar, Generator, Iterable, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.compartment_model import (BaseCompartmentModel, EdgeDef, ForkDef,
-                                        TransitionDef, exogenous_states)
-from epymorph.data_type import (AttributeArray, AttributeValue, SimArray,
-                                SimDType)
+from epymorph.compartment_model import (
+    BaseCompartmentModel,
+    EdgeDef,
+    ForkDef,
+    TransitionDef,
+    exogenous_states,
+)
+from epymorph.data_type import AttributeArray, AttributeValue, SimArray, SimDType
 from epymorph.database import Database
-from epymorph.error import (IpmSimInvalidProbsException,
-                            IpmSimLessThanZeroException, IpmSimNaNException)
+from epymorph.error import (
+    IpmSimInvalidProbsException,
+    IpmSimLessThanZeroException,
+    IpmSimNaNException,
+)
 from epymorph.rume import Rume
 from epymorph.simulation import AttributeResolver, Tick
 from epymorph.simulator.world import World
@@ -38,6 +46,7 @@ class Result(NamedTuple):
 @dataclass(frozen=True)
 class CompiledEdge:
     """Lambdified EdgeDef (no fork). Effectively: `poisson(rate * tau)`"""
+
     size: ClassVar[int] = 1
     rate_lambda: SympyLambda
 
@@ -45,6 +54,7 @@ class CompiledEdge:
 @dataclass(frozen=True)
 class CompiledFork:
     """Lambdified ForkDef. Effectively: `multinomial(poisson(rate * tau), prob)`"""
+
     size: int
     rate_lambda: SympyLambda
     prob_lambda: SympyLambda
@@ -114,19 +124,26 @@ class IpmExecutor:
     _attribute_values_txn: Generator[Iterable[AttributeValue], None, None]
     """a generator for the list of arguments (from attributes) needed to evaluate transition functions"""
 
-    def __init__(self, rume: Rume, world: World, data: Database[AttributeArray], rng: np.random.Generator):
+    def __init__(
+        self,
+        rume: Rume,
+        world: World,
+        data: Database[AttributeArray],
+        rng: np.random.Generator,
+    ):
         ipm = rume.ipm
         csymbols = ipm.symbols.all_compartments
 
         # Calc list of events leaving each compartment (each may have 0, 1, or more)
-        events_leaving_compartment = [[eidx
-                                       for eidx, e in enumerate(ipm.events)
-                                       if e.compartment_from == c]
-                                      for c in csymbols]
+        events_leaving_compartment = [
+            [eidx for eidx, e in enumerate(ipm.events) if e.compartment_from == c]
+            for c in csymbols
+        ]
 
         # Calc the source compartment for each event
-        source_compartment_for_event = [index_of(csymbols, e.compartment_from)
-                                        for e in ipm.events]
+        source_compartment_for_event = [
+            index_of(csymbols, e.compartment_from) for e in ipm.events
+        ]
 
         self._rume = rume
         self._world = world
@@ -137,8 +154,9 @@ class IpmExecutor:
         self._apply_matrix = _make_apply_matrix(ipm)
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
-        self._attribute_values_txn = AttributeResolver(data, rume.dim)\
-            .resolve_txn_series(list(ipm.requirements_dict.items()))
+        self._attribute_values_txn = AttributeResolver(
+            data, rume.dim
+        ).resolve_txn_series(list(ipm.requirements_dict.items()))
 
     def apply(self, tick: Tick) -> Result:
         """
@@ -181,8 +199,7 @@ class IpmExecutor:
                         rate = rate_lambda(rate_args)
                     except (ZeroDivisionError, FloatingPointError):
                         raise IpmSimNaNException(
-                            self._get_zero_division_args(
-                                rate_args, node, tick, t)
+                            self._get_zero_division_args(rate_args, node, tick, t)
                         ) from None
                     # check for < 0 rate, throw error in this case
                     if rate < 0:
@@ -196,8 +213,7 @@ class IpmExecutor:
                         rate = rate_lambda(rate_args)
                     except (ZeroDivisionError, FloatingPointError):
                         raise IpmSimNaNException(
-                            self._get_zero_division_args(
-                                rate_args, node, tick, t)
+                            self._get_zero_division_args(rate_args, node, tick, t)
                         ) from None
                     # check for < 0 base, throw error in this case
                     if rate < 0:
@@ -212,8 +228,7 @@ class IpmExecutor:
                             self._get_invalid_prob_args(rate_args, node, tick, t)
                         )
                     stop = index + size
-                    occur[index:stop] = self._rng.multinomial(
-                        base, prob)
+                    occur[index:stop] = self._rng.multinomial(base, prob)
             index += t.size
 
         # Check for event overruns leaving each compartment and correct counts.
@@ -232,8 +247,7 @@ class IpmExecutor:
                 # use hypergeo to select which events "actually" happened.
                 desired0, desired1 = occur[eidxs]
                 if desired0 + desired1 > available:
-                    drawn0 = self._rng.hypergeometric(
-                        desired0, desired1, available)
+                    drawn0 = self._rng.hypergeometric(desired0, desired1, available)
                     occur[eidxs] = [drawn0, available - drawn0]
             else:
                 # Compartment has more than two outwards edges:
@@ -241,64 +255,105 @@ class IpmExecutor:
                 desired = occur[eidxs]
                 if np.sum(desired) > available:
                     occur[eidxs] = self._rng.multivariate_hypergeometric(
-                        desired, available)
+                        desired, available
+                    )
         return occur
 
-    def _get_default_error_args(self, rate_attrs: list, node: int, tick: Tick) -> list[tuple[str, dict]]:
+    def _get_default_error_args(
+        self, rate_attrs: list, node: int, tick: Tick
+    ) -> list[tuple[str, dict]]:
         arg_list = []
         arg_list.append(("Node : Timestep", {node: tick.step}))
-        arg_list.append(("compartment values", {
-            name: value
-            for name, value
-            in zip([c.name for c in self._rume.ipm.compartments],
-                   rate_attrs[:self._rume.dim.compartments])
-        }))
-        arg_list.append(("ipm params", {
-            attribute.name: value
-            for attribute, value
-            in zip(self._rume.ipm.requirements,
-                   rate_attrs[self._rume.dim.compartments:])
-        }))
+        arg_list.append(
+            (
+                "compartment values",
+                {
+                    name: value
+                    for name, value in zip(
+                        [c.name for c in self._rume.ipm.compartments],
+                        rate_attrs[: self._rume.dim.compartments],
+                    )
+                },
+            )
+        )
+        arg_list.append(
+            (
+                "ipm params",
+                {
+                    attribute.name: value
+                    for attribute, value in zip(
+                        self._rume.ipm.requirements,
+                        rate_attrs[self._rume.dim.compartments :],
+                    )
+                },
+            )
+        )
 
         return arg_list
 
-    def _get_invalid_prob_args(self, rate_attrs: list, node: int, tick: Tick,
-                               transition: CompiledFork) -> list[tuple[str, dict]]:
+    def _get_invalid_prob_args(
+        self, rate_attrs: list, node: int, tick: Tick, transition: CompiledFork
+    ) -> list[tuple[str, dict]]:
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
         corr_transition = self._rume.ipm.transitions[transition_index]
         if isinstance(corr_transition, ForkDef):
-            to_compartments = ", ".join([str(edge.compartment_to)
-                                        for edge in corr_transition.edges])
+            to_compartments = ", ".join(
+                [str(edge.compartment_to) for edge in corr_transition.edges]
+            )
             from_compartment = corr_transition.edges[0].compartment_from
-            arg_list.append(("corresponding fork transition and probabilities",
-                             {
-                                 f"{from_compartment}->({to_compartments})": corr_transition.rate,
-                                 "Probabilities": ', '.join([str(expr) for expr in corr_transition.probs]),
-                             }))
+            arg_list.append(
+                (
+                    "corresponding fork transition and probabilities",
+                    {
+                        f"{from_compartment}->({to_compartments})": corr_transition.rate,
+                        "Probabilities": ", ".join(
+                            [str(expr) for expr in corr_transition.probs]
+                        ),
+                    },
+                )
+            )
 
         return arg_list
 
-    def _get_zero_division_args(self, rate_attrs: list, node: int, tick: Tick,
-                                transition: CompiledEdge | CompiledFork) -> list[tuple[str, dict]]:
+    def _get_zero_division_args(
+        self,
+        rate_attrs: list,
+        node: int,
+        tick: Tick,
+        transition: CompiledEdge | CompiledFork,
+    ) -> list[tuple[str, dict]]:
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
         corr_transition = self._rume.ipm.transitions[transition_index]
         if isinstance(corr_transition, EdgeDef):
-            arg_list.append(("corresponding transition", {
-                            f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate}))
+            arg_list.append(
+                (
+                    "corresponding transition",
+                    {
+                        f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate
+                    },
+                )
+            )
         if isinstance(corr_transition, ForkDef):
-            to_compartments = ", ".join([str(edge.compartment_to)
-                                        for edge in corr_transition.edges])
+            to_compartments = ", ".join(
+                [str(edge.compartment_to) for edge in corr_transition.edges]
+            )
             from_compartment = corr_transition.edges[0].compartment_from
-            arg_list.append(("corresponding fork transition", {
-                            f"{from_compartment}->({to_compartments})": corr_transition.rate}))
+            arg_list.append(
+                (
+                    "corresponding fork transition",
+                    {f"{from_compartment}->({to_compartments})": corr_transition.rate},
+                )
+            )
 
         return arg_list
 
-    def _distribute(self, cohorts: NDArray[SimDType], events: NDArray[SimDType]) -> NDArray[SimDType]:
+    def _distribute(
+        self, cohorts: NDArray[SimDType], events: NDArray[SimDType]
+    ) -> NDArray[SimDType]:
         """Distribute all events across a location's cohorts and return the compartment deltas for each."""
         x = cohorts.shape[0]
         e = self._rume.dim.events
@@ -312,8 +367,7 @@ class IpmExecutor:
             else:
                 # event is coming from a modeled compartment
                 selected = self._rng.multivariate_hypergeometric(
-                    cohorts[:, cidx],
-                    occur
+                    cohorts[:, cidx], occur
                 ).astype(SimDType)
                 occurrences[:, eidx] = selected
                 cohorts[:, cidx] -= selected

@@ -8,9 +8,14 @@ import numpy as np
 
 from epymorph.data_shape import Shapes
 from epymorph.geography.scope import GeoScope
-from epymorph.simulation import (AttributeDef, NamespacedAttributeResolver,
-                                 SimDimensions, SimulationFunction, Tick,
-                                 simulation_clock)
+from epymorph.simulation import (
+    AttributeDef,
+    NamespacedAttributeResolver,
+    SimDimensions,
+    SimulationFunction,
+    Tick,
+    simulation_clock,
+)
 
 
 class TestClock(unittest.TestCase):
@@ -20,7 +25,9 @@ class TestClock(unittest.TestCase):
             start_date=date(2023, 1, 1),
             days=6,
             # sim clock doesn't depend on GEO/IPM dimensions
-            nodes=99, compartments=99, events=99,
+            nodes=99,
+            compartments=99,
+            events=99,
         )
         clock = simulation_clock(dim)
         act = list(clock)
@@ -42,7 +49,6 @@ class TestClock(unittest.TestCase):
 
 
 class TestSimulationFunction(unittest.TestCase):
-
     def context(self, bar: int):
         data = MagicMock(spec=NamespacedAttributeResolver)
         data.resolve.return_value = np.array([bar])
@@ -53,7 +59,7 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_basic_usage(self):
         class Foo(SimulationFunction[int]):
-            requirements = [AttributeDef('bar', int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.S)]
 
             baz: int
 
@@ -61,7 +67,7 @@ class TestSimulationFunction(unittest.TestCase):
                 self.baz = baz
 
             def evaluate(self) -> int:
-                return 7 * self.baz * self.data('bar')[0]
+                return 7 * self.baz * self.data("bar")[0]
 
         f = Foo(3)
 
@@ -75,10 +81,10 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_immutable_requirements(self):
         class Foo(SimulationFunction[int]):
-            requirements = [AttributeDef('bar', int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.S)]
 
             def evaluate(self) -> int:
-                return 7 * self.data('bar')[0]
+                return 7 * self.data("bar")[0]
 
         f = Foo()
         self.assertEqual(Foo.requirements, f.requirements)
@@ -87,10 +93,10 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_undefined_requirement(self):
         class Foo(SimulationFunction[int]):
-            requirements = [AttributeDef('bar', int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.S)]
 
             def evaluate(self) -> int:
-                return 7 * self.data('quux')[0]
+                return 7 * self.data("quux")[0]
 
         with self.assertRaises(ValueError) as e:
             Foo().evaluate_in_context(*self.context(bar=2))
@@ -98,37 +104,45 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_bad_definition(self):
         with self.assertRaises(TypeError) as e:
+
             class Foo1(SimulationFunction[int]):
                 requirements = "hey"  # type: ignore
 
                 def evaluate(self) -> int:
                     return 42
+
         self.assertIn("invalid requirements", str(e.exception).lower())
 
         with self.assertRaises(TypeError) as e:
+
             class Foo2(SimulationFunction[int]):
                 requirements = ["hey"]  # type: ignore
 
                 def evaluate(self) -> int:
                     return 42
+
         self.assertIn("invalid requirements", str(e.exception).lower())
 
         with self.assertRaises(TypeError) as e:
+
             class Foo3(SimulationFunction[int]):
-                requirements = [AttributeDef("foo", int, Shapes.S),
-                                AttributeDef("foo", int, Shapes.S)]
+                requirements = [
+                    AttributeDef("foo", int, Shapes.S),
+                    AttributeDef("foo", int, Shapes.S),
+                ]
 
                 def evaluate(self) -> int:
                     return 42
+
         self.assertIn("invalid requirements", str(e.exception).lower())
 
     def test_cached_properties(self):
         class Foo(SimulationFunction[int]):
-            requirements = [AttributeDef('bar', int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.S)]
 
             @cached_property
             def baz(self):
-                return self.data('bar')[0] * 2
+                return self.data("bar")[0] * 2
 
             def evaluate(self) -> int:
                 return 7 * self.baz

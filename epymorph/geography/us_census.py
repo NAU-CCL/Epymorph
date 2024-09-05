@@ -4,29 +4,42 @@ This system comprises a set of perfectly-nested granularities,
 and a structured ID system for labeling all delineations
 (sometimes loosely called FIPS codes or GEOIDs).
 """
+
 import re
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import cache
 from io import BytesIO
-from typing import (Callable, Iterable, Literal, Mapping, NamedTuple,
-                    ParamSpec, Sequence, TypeVar)
+from typing import (
+    Callable,
+    Iterable,
+    Literal,
+    Mapping,
+    NamedTuple,
+    ParamSpec,
+    Sequence,
+    TypeVar,
+)
 
 import numpy as np
 from numpy.typing import NDArray
 
 import epymorph.geography.us_tiger as us_tiger
-from epymorph.cache import (CacheMiss, load_bundle_from_cache,
-                            module_cache_path, save_bundle_to_cache)
+from epymorph.cache import (
+    CacheMiss,
+    load_bundle_from_cache,
+    module_cache_path,
+    save_bundle_to_cache,
+)
 from epymorph.error import GeographyError
 from epymorph.geography.scope import GeoScope
 from epymorph.util import filter_unique, prefix
 
-CensusGranularityName = Literal['state', 'county', 'tract', 'block group', 'block']
+CensusGranularityName = Literal["state", "county", "tract", "block group", "block"]
 """The name of a supported Census granularity."""
 
-CENSUS_HIERARCHY = ('state', 'county', 'tract', 'block group', 'block')
+CENSUS_HIERARCHY = ("state", "county", "tract", "block group", "block")
 """The granularities in hierarchy order (largest to smallest)."""
 
 
@@ -45,12 +58,14 @@ class CensusGranularity(ABC):
     _decompose_pattern: re.Pattern[str]
     """The pattern used for decomposing GEOIDs of this granularity."""
 
-    def __init__(self,
-                 name: CensusGranularityName,
-                 length: int,
-                 match_pattern: str,
-                 extract_pattern: str,
-                 decompose_pattern: str):
+    def __init__(
+        self,
+        name: CensusGranularityName,
+        length: int,
+        match_pattern: str,
+        extract_pattern: str,
+        decompose_pattern: str,
+    ):
         self._name = name
         self._length = length
         self._match_pattern = re.compile(match_pattern)
@@ -91,7 +106,7 @@ class CensusGranularity(ABC):
         Truncates the given GEOID to this level of granularity.
         If the given GEOID is for a granularity larger than this level, the GEOID will be returned unchanged.
         """
-        return geoid[:self.length]
+        return geoid[: self.length]
 
     def truncate_list(self, geoids: Iterable[str]) -> list[str]:
         """
@@ -111,7 +126,9 @@ class CensusGranularity(ABC):
         """
         match = self._decompose_pattern.match(geoid)
         if match is None:
-            msg = f"Unable to decompose {self.name} info from ID {id}; check its format."
+            msg = (
+                f"Unable to decompose {self.name} info from ID {id}; check its format."
+            )
             raise GeographyError(msg)
         return match
 
@@ -138,7 +155,7 @@ class State(CensusGranularity):
 
     def __init__(self):
         super().__init__(
-            name='state',
+            name="state",
             length=2,
             match_pattern=r"^\d{2}$",
             extract_pattern=r"^(\d{2})\d*$",
@@ -155,7 +172,7 @@ class County(CensusGranularity):
 
     def __init__(self):
         super().__init__(
-            name='county',
+            name="county",
             length=5,
             match_pattern=r"^\d{5}$",
             extract_pattern=r"^\d{2}(\d{3})\d*$",
@@ -172,7 +189,7 @@ class Tract(CensusGranularity):
 
     def __init__(self):
         super().__init__(
-            name='tract',
+            name="tract",
             length=11,
             match_pattern=r"^\d{11}$",
             extract_pattern=r"^\d{5}(\d{6})\d*$",
@@ -189,7 +206,7 @@ class BlockGroup(CensusGranularity):
 
     def __init__(self):
         super().__init__(
-            name='block group',
+            name="block group",
             length=12,
             match_pattern=r"^\d{12}$",
             extract_pattern=r"^\d{11}(\d)\d*$",
@@ -206,7 +223,7 @@ class Block(CensusGranularity):
 
     def __init__(self):
         super().__init__(
-            name='block',
+            name="block",
             length=15,
             match_pattern=r"^\d{15}$",
             extract_pattern=r"^\d{11}(\d{4})$",
@@ -234,15 +251,15 @@ CENSUS_GRANULARITY = (STATE, COUNTY, TRACT, BLOCK_GROUP, BLOCK)
 def get_census_granularity(name: CensusGranularityName) -> CensusGranularity:
     """Get a CensusGranularity instance by name."""
     match name:
-        case 'state':
+        case "state":
             return STATE
-        case 'county':
+        case "county":
             return COUNTY
-        case 'tract':
+        case "tract":
             return TRACT
-        case 'block group':
+        case "block group":
             return BLOCK_GROUP
-        case 'block':
+        case "block":
             return BLOCK
 
 
@@ -255,27 +272,30 @@ _USCENSUS_CACHE_PATH = module_cache_path(__name__)
 
 _CACHE_VERSION = 2
 
-ModelT = TypeVar('ModelT', bound=NamedTuple)
+ModelT = TypeVar("ModelT", bound=NamedTuple)
 
 
-def _load_cached(relpath: str, on_miss: Callable[[], ModelT], on_hit: Callable[..., ModelT]) -> ModelT:
+def _load_cached(
+    relpath: str, on_miss: Callable[[], ModelT], on_hit: Callable[..., ModelT]
+) -> ModelT:
     # NOTE: this would be more natural as a decorator,
     # but Pylance seems to have problems tracking the return type properly with that implementation
     path = _USCENSUS_CACHE_PATH.joinpath(relpath)
     try:
         content = load_bundle_from_cache(path, _CACHE_VERSION)
-        with np.load(content['data.npz']) as data_npz:
+        with np.load(content["data.npz"]) as data_npz:
             return on_hit(**data_npz)
     except CacheMiss:
         data = on_miss()
         data_bytes = BytesIO()
         np.savez_compressed(data_bytes, **data._asdict())
-        save_bundle_to_cache(path, _CACHE_VERSION, {'data.npz': data_bytes})
+        save_bundle_to_cache(path, _CACHE_VERSION, {"data.npz": data_bytes})
         return data
 
 
 class StatesInfo(NamedTuple):
     """Information about US states (and state equivalents)."""
+
     geoid: NDArray[np.str_]
     """The GEOID (aka FIPS code) of the state."""
     name: NDArray[np.str_]
@@ -297,11 +317,13 @@ def get_us_states(year: int) -> StatesInfo:
             name=df["NAME"].to_numpy(np.str_),
             code=df["STUSPS"].to_numpy(np.str_),
         )
+
     return _load_cached("us_states_all.tgz", _get_us_states, StatesInfo)
 
 
 class CountiesInfo(NamedTuple):
     """Information about US counties (and county equivalents.)"""
+
     geoid: NDArray[np.str_]
     """The GEOID (aka FIPS code) of the county."""
     name: NDArray[np.str_]
@@ -320,11 +342,13 @@ def get_us_counties(year: int) -> CountiesInfo:
             geoid=df["GEOID"].to_numpy(np.str_),
             name=df["NAME"].to_numpy(np.str_),
         )
+
     return _load_cached(f"us_counties_{year}.tgz", _get_us_counties, CountiesInfo)
 
 
 class TractsInfo(NamedTuple):
     """Information about US census tracts."""
+
     geoid: NDArray[np.str_]
     """The GEOID (aka FIPS code) of the tract."""
 
@@ -340,11 +364,13 @@ def get_us_tracts(year: int) -> TractsInfo:
         return TractsInfo(
             geoid=df["GEOID"].to_numpy(np.str_),
         )
+
     return _load_cached(f"us_tracts_{year}.tgz", _get_us_tracts, TractsInfo)
 
 
 class BlockGroupsInfo(NamedTuple):
     """Information about US census block groups."""
+
     geoid: NDArray[np.str_]
     """The GEOID (aka FIPS code) of the block group."""
 
@@ -360,30 +386,33 @@ def get_us_block_groups(year: int) -> BlockGroupsInfo:
         return BlockGroupsInfo(
             geoid=df["GEOID"].to_numpy(np.str_),
         )
+
     return _load_cached(f"us_block_groups_{year}.tgz", _get_us_cbgs, BlockGroupsInfo)
 
 
 # Census utility functions
 
 
-T = TypeVar('T')
-P = ParamSpec('P')
+T = TypeVar("T")
+P = ParamSpec("P")
 
 
-def validate_fips(granularity: CensusGranularityName, year: int, fips: Sequence[str]) -> Sequence[str]:
+def validate_fips(
+    granularity: CensusGranularityName, year: int, fips: Sequence[str]
+) -> Sequence[str]:
     """
     Validates a list of FIPS codes are valid for the given granularity and year and
     returns them as a sorted list of FIPS codes.
     If any FIPS code is found to be invalid, raises GeographyError.
     """
     match granularity:
-        case 'state':
+        case "state":
             valid_nodes = get_us_states(year).geoid
-        case 'county':
+        case "county":
             valid_nodes = get_us_counties(year).geoid
-        case 'tract':
+        case "tract":
             valid_nodes = get_us_tracts(year).geoid
-        case 'block group':
+        case "block group":
             valid_nodes = get_us_block_groups(year).geoid
         case _:
             raise GeographyError(f"Unsupported granularity: {granularity}")
@@ -453,7 +482,7 @@ class CensusScope(ABC, GeoScope):
     def get_node_ids(self) -> NDArray[np.str_]: ...
 
     @abstractmethod
-    def raise_granularity(self) -> 'CensusScope':
+    def raise_granularity(self) -> "CensusScope":
         """
         Return a scope with granularity one level higher than this.
         This may have the effect of widening the scope; for example,
@@ -463,7 +492,7 @@ class CensusScope(ABC, GeoScope):
         """
 
     @abstractmethod
-    def lower_granularity(self) -> 'CensusScope':
+    def lower_granularity(self) -> "CensusScope":
         """
         Return a scope with granularity one level lower than this.
         Raises GeographyError if the granularity cannot be lowered.
@@ -473,9 +502,10 @@ class CensusScope(ABC, GeoScope):
 @dataclass(frozen=True)
 class StateScopeAll(CensusScope):
     """GeoScope including all US states and state-equivalents."""
+
     # NOTE: for the Census API, we need to handle "all states" as a special case.
     year: int
-    granularity: Literal['state'] = field(init=False, default='state')
+    granularity: Literal["state"] = field(init=False, default="state")
 
     def get_node_ids(self) -> NDArray[np.str_]:
         return get_us_states(self.year).geoid
@@ -483,18 +513,19 @@ class StateScopeAll(CensusScope):
     def raise_granularity(self) -> CensusScope:
         raise GeographyError("No granularity higher than state.")
 
-    def lower_granularity(self) -> 'CountyScope':
+    def lower_granularity(self) -> "CountyScope":
         """Create and return CountyScope object with identical properties."""
-        return CountyScope(self.year, 'state', self.get_node_ids().tolist())
+        return CountyScope(self.year, "state", self.get_node_ids().tolist())
 
 
 @dataclass(frozen=True)
 class StateScope(CensusScope):
     """GeoScope at the State granularity."""
-    includes_granularity: Literal['state']
+
+    includes_granularity: Literal["state"]
     includes: Sequence[str]
     year: int
-    granularity: Literal['state'] = field(init=False, default='state')
+    granularity: Literal["state"] = field(init=False, default="state")
 
     @staticmethod
     def all(year: int = DEFAULT_YEAR) -> StateScopeAll:
@@ -502,22 +533,24 @@ class StateScope(CensusScope):
         return StateScopeAll(year)
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'StateScope':
+    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> "StateScope":
         """
         Create a scope including a set of US states/state-equivalents, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        states_fips = validate_fips('state', year, states_fips)
-        return StateScope(includes_granularity='state', includes=states_fips, year=year)
+        states_fips = validate_fips("state", year, states_fips)
+        return StateScope(includes_granularity="state", includes=states_fips, year=year)
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'StateScope':
+    def in_states_by_code(
+        states_code: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "StateScope":
         """
         Create a scope including a set of US states/state-equivalents, by postal code (two-letter abbreviation).
         Raise GeographyError if any postal code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return StateScope(includes_granularity='state', includes=states_fips, year=year)
+        return StateScope(includes_granularity="state", includes=states_fips, year=year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         # As long as we enforce that fips codes will be checked and sorted on construction,
@@ -527,7 +560,7 @@ class StateScope(CensusScope):
     def raise_granularity(self) -> CensusScope:
         raise GeographyError("No granularity higher than state.")
 
-    def lower_granularity(self) -> 'CountyScope':
+    def lower_granularity(self) -> "CountyScope":
         """Create and return CountyScope object with identical properties."""
         return CountyScope(self.year, self.includes_granularity, self.includes)
 
@@ -535,49 +568,63 @@ class StateScope(CensusScope):
 @dataclass(frozen=True)
 class CountyScope(CensusScope):
     """GeoScope at the County granularity."""
-    includes_granularity: Literal['state', 'county']
+
+    includes_granularity: Literal["state", "county"]
     includes: Sequence[str]
     year: int
-    granularity: Literal['county'] = field(init=False, default='county')
+    granularity: Literal["county"] = field(init=False, default="county")
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
+    def in_states(
+        states_fips: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "CountyScope":
         """
         Create a scope including all counties in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
         """
-        states_fips = validate_fips('state', year, states_fips)
-        return CountyScope(includes_granularity='state', includes=states_fips, year=year)
+        states_fips = validate_fips("state", year, states_fips)
+        return CountyScope(
+            includes_granularity="state", includes=states_fips, year=year
+        )
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
+    def in_states_by_code(
+        states_code: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "CountyScope":
         """
         Create a scope including all counties in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return CountyScope(includes_granularity='state', includes=states_fips, year=year)
+        return CountyScope(
+            includes_granularity="state", includes=states_fips, year=year
+        )
 
     @staticmethod
-    def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'CountyScope':
+    def in_counties(
+        counties_fips: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "CountyScope":
         """
         Create a scope including a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        counties_fips = validate_fips('county', year, counties_fips)
-        return CountyScope(includes_granularity='county', includes=counties_fips, year=year)
+        counties_fips = validate_fips("county", year, counties_fips)
+        return CountyScope(
+            includes_granularity="county", includes=counties_fips, year=year
+        )
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
-            case 'state':
+            case "state":
                 # return all counties in a list of states
                 def is_in_states(geoid: str) -> bool:
                     return STATE.truncate(geoid) in self.includes
+
                 counties = get_us_counties(self.year).geoid
                 return counties[[is_in_states(x) for x in counties]]
 
-            case 'county':
+            case "county":
                 # return all counties in a list of counties
                 return np.array(self.includes, dtype=np.str_)
 
@@ -585,12 +632,12 @@ class CountyScope(CensusScope):
         """Create and return StateScope object with identical properties."""
         raised_granularity = self.includes_granularity
         raised_includes = self.includes
-        if raised_granularity == 'county':
-            raised_granularity = 'state'
+        if raised_granularity == "county":
+            raised_granularity = "state"
             raised_includes = filter_unique(fips[:-3] for fips in raised_includes)
         return StateScope(self.year, raised_granularity, raised_includes)
 
-    def lower_granularity(self) -> 'TractScope':
+    def lower_granularity(self) -> "TractScope":
         """Create and return TractScope object with identical properties."""
         return TractScope(self.year, self.includes_granularity, self.includes)
 
@@ -598,65 +645,74 @@ class CountyScope(CensusScope):
 @dataclass(frozen=True)
 class TractScope(CensusScope):
     """GeoScope at the Tract granularity."""
-    includes_granularity: Literal['state', 'county', 'tract']
+
+    includes_granularity: Literal["state", "county", "tract"]
     includes: Sequence[str]
     year: int
-    granularity: Literal['tract'] = field(init=False, default='tract')
+    granularity: Literal["tract"] = field(init=False, default="tract")
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
+    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> "TractScope":
         """
         Create a scope including all tracts in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
         """
-        states_fips = validate_fips('state', year, states_fips)
-        return TractScope(includes_granularity='state', includes=states_fips, year=year)
+        states_fips = validate_fips("state", year, states_fips)
+        return TractScope(includes_granularity="state", includes=states_fips, year=year)
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
+    def in_states_by_code(
+        states_code: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "TractScope":
         """
         Create a scope including all tracts in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return TractScope(includes_granularity='state', includes=states_fips, year=year)
+        return TractScope(includes_granularity="state", includes=states_fips, year=year)
 
     @staticmethod
-    def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
+    def in_counties(
+        counties_fips: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "TractScope":
         """
         Create a scope including all tracts in a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        counties_fips = validate_fips('county', year, counties_fips)
-        return TractScope(includes_granularity='county', includes=counties_fips, year=year)
+        counties_fips = validate_fips("county", year, counties_fips)
+        return TractScope(
+            includes_granularity="county", includes=counties_fips, year=year
+        )
 
     @staticmethod
-    def in_tracts(tract_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'TractScope':
+    def in_tracts(tract_fips: Sequence[str], year: int = DEFAULT_YEAR) -> "TractScope":
         """
         Create a scope including a set of US tracts, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        tract_fips = validate_fips('tract', year, tract_fips)
-        return TractScope(includes_granularity='tract', includes=tract_fips, year=year)
+        tract_fips = validate_fips("tract", year, tract_fips)
+        return TractScope(includes_granularity="tract", includes=tract_fips, year=year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
-            case 'state':
+            case "state":
                 # return all tracts in a list of states
                 def is_in_states(geoid: str) -> bool:
                     return STATE.truncate(geoid) in self.includes
+
                 tracts = get_us_tracts(self.year).geoid
                 return tracts[[is_in_states(x) for x in tracts]]
 
-            case 'county':
+            case "county":
                 # return all tracts in a list of counties
                 def is_in_counties(geoid: str) -> bool:
                     return COUNTY.truncate(geoid) in self.includes
+
                 tracts = get_us_tracts(self.year).geoid
                 return tracts[[is_in_counties(x) for x in tracts]]
 
-            case 'tract':
+            case "tract":
                 # return all tracts in a list of tracts
                 return np.array(self.includes, dtype=np.str_)
 
@@ -664,12 +720,12 @@ class TractScope(CensusScope):
         """Create and return CountyScope object with identical properties."""
         raised_granularity = self.includes_granularity
         raised_includes = self.includes
-        if raised_granularity == 'tract':
-            raised_granularity = 'county'
+        if raised_granularity == "tract":
+            raised_granularity = "county"
             raised_includes = filter_unique(fips[:-6] for fips in raised_includes)
         return CountyScope(self.year, raised_granularity, raised_includes)
 
-    def lower_granularity(self) -> 'BlockGroupScope':
+    def lower_granularity(self) -> "BlockGroupScope":
         """Create and return BlockGroupScope object with identical properties."""
         return BlockGroupScope(self.year, self.includes_granularity, self.includes)
 
@@ -677,81 +733,105 @@ class TractScope(CensusScope):
 @dataclass(frozen=True)
 class BlockGroupScope(CensusScope):
     """GeoScope at the Block Group granularity."""
-    includes_granularity: Literal['state', 'county', 'tract', 'block group']
+
+    includes_granularity: Literal["state", "county", "tract", "block group"]
     includes: Sequence[str]
     year: int
-    granularity: Literal['block group'] = field(init=False, default='block group')
+    granularity: Literal["block group"] = field(init=False, default="block group")
 
     @staticmethod
-    def in_states(states_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_states(
+        states_fips: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "BlockGroupScope":
         """
         Create a scope including all block groups in a set of US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
         """
-        states_fips = validate_fips('state', year, states_fips)
-        return BlockGroupScope(includes_granularity='state', includes=states_fips, year=year)
+        states_fips = validate_fips("state", year, states_fips)
+        return BlockGroupScope(
+            includes_granularity="state", includes=states_fips, year=year
+        )
 
     @staticmethod
-    def in_states_by_code(states_code: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_states_by_code(
+        states_code: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "BlockGroupScope":
         """
         Create a scope including all block groups in a set of US states/state-equivalents,
         by postal code (two-letter abbreviation).
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
-        return BlockGroupScope(includes_granularity='state', includes=states_fips, year=year)
+        return BlockGroupScope(
+            includes_granularity="state", includes=states_fips, year=year
+        )
 
     @staticmethod
-    def in_counties(counties_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_counties(
+        counties_fips: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "BlockGroupScope":
         """
         Create a scope including all block groups in a set of US counties, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        counties_fips = validate_fips('county', year, counties_fips)
-        return BlockGroupScope(includes_granularity='county', includes=counties_fips, year=year)
+        counties_fips = validate_fips("county", year, counties_fips)
+        return BlockGroupScope(
+            includes_granularity="county", includes=counties_fips, year=year
+        )
 
     @staticmethod
-    def in_tracts(tract_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_tracts(
+        tract_fips: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "BlockGroupScope":
         """
         Create a scope including all block gropus in a set of US tracts, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        tract_fips = validate_fips('tract', year, tract_fips)
-        return BlockGroupScope(includes_granularity='tract', includes=tract_fips, year=year)
+        tract_fips = validate_fips("tract", year, tract_fips)
+        return BlockGroupScope(
+            includes_granularity="tract", includes=tract_fips, year=year
+        )
 
     @staticmethod
-    def in_block_groups(block_group_fips: Sequence[str], year: int = DEFAULT_YEAR) -> 'BlockGroupScope':
+    def in_block_groups(
+        block_group_fips: Sequence[str], year: int = DEFAULT_YEAR
+    ) -> "BlockGroupScope":
         """
         Create a scope including a set of US block groups, by FIPS code.
         Raise GeographyError if any FIPS code is invalid.
         """
-        block_group_fips = validate_fips('block group', year, block_group_fips)
-        return BlockGroupScope(includes_granularity='block group', includes=block_group_fips, year=year)
+        block_group_fips = validate_fips("block group", year, block_group_fips)
+        return BlockGroupScope(
+            includes_granularity="block group", includes=block_group_fips, year=year
+        )
 
     def get_node_ids(self) -> NDArray[np.str_]:
         match self.includes_granularity:
-            case 'state':
+            case "state":
                 # return all block groups in a list of states
                 def is_in_states(geoid: str) -> bool:
                     return STATE.truncate(geoid) in self.includes
+
                 block_groups = get_us_block_groups(self.year).geoid
                 return block_groups[[is_in_states(x) for x in block_groups]]
 
-            case 'county':
+            case "county":
                 # return all block groups in a list of counties
                 def is_in_counties(geoid: str) -> bool:
                     return COUNTY.truncate(geoid) in self.includes
+
                 block_groups = get_us_block_groups(self.year).geoid
                 return block_groups[[is_in_counties(x) for x in block_groups]]
 
-            case 'tract':
+            case "tract":
                 # return all block groups in a list of tracts
                 def is_in_tracts(geoid: str) -> bool:
                     return TRACT.truncate(geoid) in self.includes
+
                 block_groups = get_us_block_groups(self.year).geoid
                 return block_groups[[is_in_tracts(x) for x in block_groups]]
 
-            case 'block group':
+            case "block group":
                 # return all block groups in a list of block groups
                 return np.array(self.includes, dtype=np.str_)
 
@@ -759,8 +839,8 @@ class BlockGroupScope(CensusScope):
         """Create and return TractScope object with identical properties."""
         raised_granularity = self.includes_granularity
         raised_includes = self.includes
-        if raised_granularity == 'block group':
-            raised_granularity = 'tract'
+        if raised_granularity == "block group":
+            raised_granularity = "tract"
             raised_includes = filter_unique(fips[:-1] for fips in raised_includes)
         return TractScope(self.year, raised_granularity, raised_includes)
 

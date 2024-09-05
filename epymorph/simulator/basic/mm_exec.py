@@ -6,12 +6,15 @@ from numpy.typing import NDArray
 from epymorph.data_type import AttributeArray, SimDType
 from epymorph.database import Database, ModuleNamespace
 from epymorph.error import MmSimException
-from epymorph.event import (EventBus, OnMovementClause, OnMovementFinish,
-                            OnMovementStart)
+from epymorph.event import EventBus, OnMovementClause, OnMovementFinish, OnMovementStart
 from epymorph.movement_model import MovementClause
 from epymorph.rume import Rume
-from epymorph.simulation import (NamespacedAttributeResolver, Tick, gpm_strata,
-                                 resolve_tick_delta)
+from epymorph.simulation import (
+    NamespacedAttributeResolver,
+    Tick,
+    gpm_strata,
+    resolve_tick_delta,
+)
 from epymorph.simulator.world import World
 from epymorph.util import row_normalize
 
@@ -22,7 +25,7 @@ def calculate_travelers(
     requested_movers: NDArray[SimDType],
     available_movers: NDArray[SimDType],
     tick: Tick,
-    rng: np.random.Generator
+    rng: np.random.Generator,
 ) -> OnMovementClause:
     """
     Calculate the number of travelers resulting from this movement clause for this tick.
@@ -50,8 +53,7 @@ def calculate_travelers(
         for src in range(N):
             if requested_sum[src] > available_sum[src]:
                 requested_movers[src, :] = rng.multivariate_hypergeometric(
-                    colors=requested_movers[src, :],
-                    nsample=available_sum[src]
+                    colors=requested_movers[src, :], nsample=available_sum[src]
                 )
         requested_sum = requested_movers.sum(axis=1, dtype=SimDType)
 
@@ -65,15 +67,13 @@ def calculate_travelers(
 
         # Select which individuals will be leaving this node.
         mover_cs = rng.multivariate_hypergeometric(
-            available_movers[src, :],
-            requested_sum[src]
+            available_movers[src, :], requested_sum[src]
         ).astype(SimDType)
 
         # Select which location they are each going to.
         # (Each row contains the compartments for a destination.)
         travelers_cs[src, :, :] = rng.multinomial(
-            mover_cs,
-            requested_prb[src, :]
+            mover_cs, requested_prb[src, :]
         ).T.astype(SimDType)
 
     return OnMovementClause(
@@ -130,7 +130,8 @@ class MovementExecutor:
         """Applies movement for this tick, mutating the world state."""
 
         _events.on_movement_start.publish(
-            OnMovementStart(tick.sim_index, tick.day, tick.step))
+            OnMovementStart(tick.sim_index, tick.day, tick.step)
+        )
 
         # Process travel clauses.
         total = 0
@@ -153,7 +154,7 @@ class MovementExecutor:
                 requested_movers,
                 available_movers,
                 tick,
-                self._rng
+                self._rng,
             )
             _events.on_movement_clause.publish(clause_event)
             travelers = clause_event.actual
@@ -182,4 +183,5 @@ class MovementExecutor:
         )
 
         _events.on_movement_finish.publish(
-            OnMovementFinish(tick.sim_index, tick.day, tick.step, total))
+            OnMovementFinish(tick.sim_index, tick.day, tick.step, total)
+        )

@@ -13,15 +13,31 @@ from epymorph.util import pairwise_haversine, row_normalize
 
 class CentroidsClause(MovementClause):
     """The clause of the centroids model."""
+
     requirements = (
-        AttributeDef('population', int, Shapes.N,
-                     comment="The total population at each node."),
-        AttributeDef('centroid', CentroidType, Shapes.N,
-                     comment="The centroids for each node as (longitude, latitude) tuples."),
-        AttributeDef('phi', float, Shapes.S, default_value=40.0,
-                     comment="Influences the distance that movers tend to travel."),
-        AttributeDef('commuter_proportion', float, Shapes.S, default_value=0.1,
-                     comment="Decides what proportion of the total population should be commuting normally.")
+        AttributeDef(
+            "population", int, Shapes.N, comment="The total population at each node."
+        ),
+        AttributeDef(
+            "centroid",
+            CentroidType,
+            Shapes.N,
+            comment="The centroids for each node as (longitude, latitude) tuples.",
+        ),
+        AttributeDef(
+            "phi",
+            float,
+            Shapes.S,
+            default_value=40.0,
+            comment="Influences the distance that movers tend to travel.",
+        ),
+        AttributeDef(
+            "commuter_proportion",
+            float,
+            Shapes.S,
+            default_value=0.1,
+            comment="Decides what proportion of the total population should be commuting normally.",
+        ),
     )
 
     predicate = EveryDay()
@@ -36,19 +52,19 @@ class CentroidsClause(MovementClause):
             1 / e ^ (distance / phi)
         which is then row-normalized.
         """
-        centroid = self.data('centroid')
-        phi = self.data('phi')
-        distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+        centroid = self.data("centroid")
+        phi = self.data("phi")
+        distance = pairwise_haversine(centroid["longitude"], centroid["latitude"])
         return row_normalize(1 / np.exp(distance / phi))
 
     def evaluate(self, tick: Tick) -> NDArray[np.int64]:
-        pop = self.data('population')
-        comm_prop = self.data('commuter_proportion')
+        pop = self.data("population")
+        comm_prop = self.data("commuter_proportion")
         n_commuters = np.floor(pop * comm_prop).astype(SimDType)
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
 
 
-@registry.mm('centroids')
+@registry.mm("centroids")
 class Centroids(MovementModel):
     """
     The centroids MM describes a basic commuter movement where a fixed proportion
@@ -56,5 +72,6 @@ class Centroids(MovementModel):
     (with a location likelihood that decreases with distance), and then returns home for
     the remaining 2/3 of the day.
     """
+
     steps = (1 / 3, 2 / 3)
     clauses = (CentroidsClause(),)

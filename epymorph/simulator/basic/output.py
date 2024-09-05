@@ -1,6 +1,7 @@
 """
 Classes for representing simulation results.
 """
+
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -45,8 +46,8 @@ class Output:
 
     def __post_init__(self):
         T, N, C, E = self.dim.TNCE
-        object.__setattr__(self, 'prevalence', np.zeros((T, N, C), dtype=SimDType))
-        object.__setattr__(self, 'incidence', np.zeros((T, N, E), dtype=SimDType))
+        object.__setattr__(self, "prevalence", np.zeros((T, N, C), dtype=SimDType))
+        object.__setattr__(self, "incidence", np.zeros((T, N, E), dtype=SimDType))
 
     @property
     def incidence_per_day(self) -> NDArray[SimDType]:
@@ -57,9 +58,7 @@ class Output:
         T, N, _, E = self.dim.TNCE
         taus = self.dim.tau_steps
         return np.sum(
-            self.incidence.reshape((T // taus, taus, N, E)),
-            axis=1,
-            dtype=SimDType
+            self.incidence.reshape((T // taus, taus, N, E)), axis=1, dtype=SimDType
         )
 
     @property
@@ -70,4 +69,6 @@ class Output:
         the simulation's tau step lengths across the simulation duration.
         Returns a shape (T,) array, where T is the number of simulation ticks.
         """
-        return np.cumsum(np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64)
+        return np.cumsum(
+            np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64
+        )

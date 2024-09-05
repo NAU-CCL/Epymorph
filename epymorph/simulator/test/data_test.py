@@ -13,16 +13,22 @@ from epymorph.data_type import AttributeArray
 from epymorph.database import Database, NamePattern
 from epymorph.error import AttributeException
 from epymorph.geography.us_census import StateScope
-from epymorph.params import (ParamFunctionNode, ParamFunctionNumpy,
-                             ParamFunctionScalar, ParamFunctionTimeAndNode,
-                             ParamValue, simulation_symbols)
+from epymorph.params import (
+    ParamFunctionNode,
+    ParamFunctionNumpy,
+    ParamFunctionScalar,
+    ParamFunctionTimeAndNode,
+    ParamValue,
+    simulation_symbols,
+)
 from epymorph.rume import Gpm, MultistrataRume, Rume
 from epymorph.simulator.data import evaluate_params
 
 
 class EvaluateParamsTest(unittest.TestCase):
-
-    def assert_db(self, db: Database[AttributeArray], key: str, value: AttributeArray) -> None:
+    def assert_db(
+        self, db: Database[AttributeArray], key: str, value: AttributeArray
+    ) -> None:
         matched = db.query(key)
         if matched is None:
             self.fail(f"Database did not contain the expected key: {key}")
@@ -30,8 +36,7 @@ class EvaluateParamsTest(unittest.TestCase):
             match_pattern, match_value = matched
             msg = f"Database value at key {key} (matched as {match_pattern}) did not match expected."
             if value.dtype == np.float64:
-                npt.assert_array_almost_equal(
-                    match_value, value, err_msg=msg)  # type: ignore
+                npt.assert_array_almost_equal(match_value, value, err_msg=msg)  # type: ignore
             else:
                 npt.assert_array_equal(match_value, value, err_msg=msg)
 
@@ -43,12 +48,10 @@ class EvaluateParamsTest(unittest.TestCase):
             "gpm:aaa::ipm::xi": 0,
             "gpm:bbb::ipm::xi": 1 / 90,
             "ipm::beta_bbb_aaa": 0.2,
-
             # use the same population values for init and mm modules
             # test input as lists and np arrays
             "gpm:aaa::*::population": [100, 200],
             "gpm:bbb::*::population": np.array([300, 400], dtype=np.int64),
-
             # param names can also include leading stars explicitly
             "*::*::centroid": [(1.0, 1.0), (2.0, 2.0)],
         }
@@ -70,18 +73,18 @@ class EvaluateParamsTest(unittest.TestCase):
         return MultistrataRume.build(
             strata=[
                 Gpm(
-                    name='aaa',
-                    ipm=ipm_library['sirs'](),
-                    mm=mm_library['centroids'](),
+                    name="aaa",
+                    ipm=ipm_library["sirs"](),
+                    mm=mm_library["centroids"](),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
                         # leave phi unspecified to test default value resolution
                     },
                 ),
                 Gpm(
-                    name='bbb',
-                    ipm=ipm_library['sirs'](),
-                    mm=mm_library['centroids'](),
+                    name="bbb",
+                    ipm=ipm_library["sirs"](),
+                    mm=mm_library["centroids"](),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
                         "beta": 99.0,  # we'll override this value to test value shadowing
@@ -91,7 +94,7 @@ class EvaluateParamsTest(unittest.TestCase):
             ],
             meta_requirements=meta_requirements,
             meta_edges=meta_edges,
-            scope=StateScope.in_states(['04', '35']),
+            scope=StateScope.in_states(["04", "35"]),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params=rume_params or self._default_params(),
         )
@@ -113,23 +116,33 @@ class EvaluateParamsTest(unittest.TestCase):
         self.assert_db(db, "gpm:bbb::ipm::xi", np.array(1 / 90, dtype=np.float64))
         self.assert_db(db, "meta::ipm::beta_bbb_aaa", np.array(0.2, dtype=np.float64))
 
-        self.assert_db(db, "gpm:aaa::init::population",
-                       np.array([100, 200], dtype=np.int64))
-        self.assert_db(db, "gpm:bbb::init::population",
-                       np.array([300, 400], dtype=np.int64))
+        self.assert_db(
+            db, "gpm:aaa::init::population", np.array([100, 200], dtype=np.int64)
+        )
+        self.assert_db(
+            db, "gpm:bbb::init::population", np.array([300, 400], dtype=np.int64)
+        )
 
-        self.assert_db(db, "gpm:aaa::mm::population",
-                       np.array([100, 200], dtype=np.int64))
-        self.assert_db(db, "gpm:bbb::mm::population",
-                       np.array([300, 400], dtype=np.int64))
+        self.assert_db(
+            db, "gpm:aaa::mm::population", np.array([100, 200], dtype=np.int64)
+        )
+        self.assert_db(
+            db, "gpm:bbb::mm::population", np.array([300, 400], dtype=np.int64)
+        )
 
         self.assert_db(db, "gpm:aaa::mm::phi", np.array(40.0, dtype=np.float64))
         self.assert_db(db, "gpm:bbb::mm::phi", np.array(33.0, dtype=np.float64))
 
-        self.assert_db(db, "gpm:aaa::mm::centroid", np.array(
-            [(1.0, 1.0), (2.0, 2.0)], dtype=np.float64))
-        self.assert_db(db, "gpm:bbb::mm::centroid", np.array(
-            [(1.0, 1.0), (2.0, 2.0)], dtype=np.float64))
+        self.assert_db(
+            db,
+            "gpm:aaa::mm::centroid",
+            np.array([(1.0, 1.0), (2.0, 2.0)], dtype=np.float64),
+        )
+        self.assert_db(
+            db,
+            "gpm:bbb::mm::centroid",
+            np.array([(1.0, 1.0), (2.0, 2.0)], dtype=np.float64),
+        )
 
         # When params are provided as the same literal value,
         # they should evaluate to the same object.
@@ -143,9 +156,13 @@ class EvaluateParamsTest(unittest.TestCase):
         # Test with override values.
         rume = self._create_rume()
 
-        db = evaluate_params(rume, {
-            NamePattern("*", "*", "beta"): 0.5,
-        }, np.random.default_rng(1))
+        db = evaluate_params(
+            rume,
+            {
+                NamePattern("*", "*", "beta"): 0.5,
+            },
+            np.random.default_rng(1),
+        )
 
         # Beta should be overridden from test case 1,
         self.assert_db(db, "gpm:aaa::ipm::beta", np.array(0.5, dtype=np.float64))
@@ -177,25 +194,33 @@ class EvaluateParamsTest(unittest.TestCase):
 
     def test_eval_sympy_expression(self):
         # Test param as sympy expression
-        t, T, n = simulation_symbols('day', 'duration_days', 'node_index')
+        t, T, n = simulation_symbols("day", "duration_days", "node_index")
         beta_expr = 0.04 * sympy.sin(8 * sympy.pi * t / T) + 0.34 + (0.02 * n)
 
         rume = self._create_rume()
 
-        db = evaluate_params(rume, {
-            NamePattern.parse("gpm:aaa::ipm::beta"): beta_expr,
-        }, np.random.default_rng(1))
+        db = evaluate_params(
+            rume,
+            {
+                NamePattern.parse("gpm:aaa::ipm::beta"): beta_expr,
+            },
+            np.random.default_rng(1),
+        )
 
-        expected = np.stack([
-            0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.34,
-            0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.36,
-        ], axis=1, dtype=np.float64)
+        expected = np.stack(
+            [
+                0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.34,
+                0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.36,
+            ],
+            axis=1,
+            dtype=np.float64,
+        )
         self.assert_db(db, "gpm:aaa::ipm::beta", expected)
 
     def test_eval_param_function_1(self):
         # Test param as shaped function
         class Beta(ParamFunctionTimeAndNode):
-            GAMMA = AttributeDef('gamma', float, Shapes.TxN)
+            GAMMA = AttributeDef("gamma", float, Shapes.TxN)
 
             requirements = [GAMMA]
 
@@ -208,26 +233,36 @@ class EvaluateParamsTest(unittest.TestCase):
                 T = self.dim.days
                 gamma = self.data(self.GAMMA)[day, node_index]
                 magnitude = self.r_0 * gamma
-                return 0.1 * magnitude * math.sin(8 * math.pi * day / T)\
-                    + (0.85 * magnitude)\
+                return (
+                    0.1 * magnitude * math.sin(8 * math.pi * day / T)
+                    + (0.85 * magnitude)
                     + (0.05 * magnitude * node_index)
+                )
 
         rume = self._create_rume()
 
-        db = evaluate_params(rume, {
-            NamePattern.parse("gpm:aaa::ipm::beta"): Beta(4.0),
-        }, np.random.default_rng(1))
+        db = evaluate_params(
+            rume,
+            {
+                NamePattern.parse("gpm:aaa::ipm::beta"): Beta(4.0),
+            },
+            np.random.default_rng(1),
+        )
 
-        expected = np.stack([
-            0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.34,
-            0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.36,
-        ], axis=1, dtype=np.float64)
+        expected = np.stack(
+            [
+                0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.34,
+                0.04 * np.sin(8 * np.pi * np.arange(180) / 180) + 0.36,
+            ],
+            axis=1,
+            dtype=np.float64,
+        )
         self.assert_db(db, "gpm:aaa::ipm::beta", expected)
 
     def test_eval_param_function_2(self):
         # Test param as shaped function, with difference between strata
         class Xi(ParamFunctionNode):
-            BETA = AttributeDef('beta', float, Shapes.TxN)
+            BETA = AttributeDef("beta", float, Shapes.TxN)
 
             requirements = [BETA]
 
@@ -237,9 +272,13 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_params(rume, {
-            NamePattern.parse("ipm::xi"): Xi(),
-        }, np.random.default_rng(1))
+        db = evaluate_params(
+            rume,
+            {
+                NamePattern.parse("ipm::xi"): Xi(),
+            },
+            np.random.default_rng(1),
+        )
 
         expected_aaa = np.array([(0.4 / 5), (0.4 / 10)], dtype=np.float64)
         expected_bbb = np.array([(0.3 / 5), (0.3 / 10)], dtype=np.float64)
@@ -247,9 +286,8 @@ class EvaluateParamsTest(unittest.TestCase):
         self.assert_db(db, "gpm:bbb::ipm::xi", expected_bbb)
 
     def test_eval_param_function_chained(self):
-
         class Gamma(ParamFunctionScalar):
-            BETA = AttributeDef('beta', float, Shapes.S)
+            BETA = AttributeDef("beta", float, Shapes.S)
 
             requirements = [BETA]
 
@@ -257,8 +295,8 @@ class EvaluateParamsTest(unittest.TestCase):
                 return float(self.data(self.BETA)) / 4.0
 
         class Xi(ParamFunctionNumpy):
-            ALPHA = AttributeDef('alpha', float, Shapes.S)
-            GAMMA = AttributeDef('gamma', float, Shapes.S)
+            ALPHA = AttributeDef("alpha", float, Shapes.S)
+            GAMMA = AttributeDef("gamma", float, Shapes.S)
 
             requirements = [ALPHA, GAMMA]
 
@@ -269,12 +307,16 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_params(rume, {
-            NamePattern.parse("gpm:aaa::ipm::alpha"): 9,
-            NamePattern.parse("gpm:aaa::ipm::beta"): 0.4,
-            NamePattern.parse("gpm:aaa::ipm::gamma"): Gamma(),
-            NamePattern.parse("gpm:aaa::ipm::xi"): Xi(),
-        }, np.random.default_rng(1))
+        db = evaluate_params(
+            rume,
+            {
+                NamePattern.parse("gpm:aaa::ipm::alpha"): 9,
+                NamePattern.parse("gpm:aaa::ipm::beta"): 0.4,
+                NamePattern.parse("gpm:aaa::ipm::gamma"): Gamma(),
+                NamePattern.parse("gpm:aaa::ipm::xi"): Xi(),
+            },
+            np.random.default_rng(1),
+        )
 
         self.assert_db(db, "gpm:aaa::ipm::alpha", np.array(9))
         self.assert_db(db, "gpm:aaa::ipm::beta", np.array(0.4))
@@ -283,7 +325,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
     def test_eval_param_function_circular(self):
         class Gamma(ParamFunctionNumpy):
-            XI = AttributeDef('xi', float, Shapes.S)
+            XI = AttributeDef("xi", float, Shapes.S)
 
             requirements = [XI]
 
@@ -291,7 +333,7 @@ class EvaluateParamsTest(unittest.TestCase):
                 return np.array(0)
 
         class Xi(ParamFunctionNumpy):
-            GAMMA = AttributeDef('gamma', float, Shapes.S)
+            GAMMA = AttributeDef("gamma", float, Shapes.S)
 
             requirements = [GAMMA]
 
@@ -301,10 +343,14 @@ class EvaluateParamsTest(unittest.TestCase):
         rume = self._create_rume()
 
         with self.assertRaises(ExceptionGroup) as e:
-            evaluate_params(rume, {
-                NamePattern.parse("gpm:aaa::ipm::gamma"): Gamma(),
-                NamePattern.parse("gpm:aaa::ipm::xi"): Xi(),
-            }, np.random.default_rng(1))
+            evaluate_params(
+                rume,
+                {
+                    NamePattern.parse("gpm:aaa::ipm::gamma"): Gamma(),
+                    NamePattern.parse("gpm:aaa::ipm::xi"): Xi(),
+                },
+                np.random.default_rng(1),
+            )
 
         [e0, e1] = e.exception.exceptions
         combined_error_msg = f"{e0} {e1}".lower()

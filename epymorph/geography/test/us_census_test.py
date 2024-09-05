@@ -4,13 +4,18 @@ import unittest
 import numpy as np
 
 from epymorph.error import GeographyError
-from epymorph.geography.us_census import (BLOCK, BLOCK_GROUP,
-                                          CENSUS_GRANULARITY, COUNTY, STATE,
-                                          TRACT, StateScope)
+from epymorph.geography.us_census import (
+    BLOCK,
+    BLOCK_GROUP,
+    CENSUS_GRANULARITY,
+    COUNTY,
+    STATE,
+    TRACT,
+    StateScope,
+)
 
 
 class TestCensusGranularity(unittest.TestCase):
-
     def test_is_nested(self):
         # a triangular array perfectly describes the pattern of truth
         expected = np.tri(5)
@@ -94,10 +99,12 @@ class TestCensusGranularity(unittest.TestCase):
         self.assertEqual(("04",), STATE.decompose("04"))
         self.assertEqual(("04", "003"), COUNTY.decompose("04003"))
         self.assertEqual(("04", "003", "999999"), TRACT.decompose("04003999999"))
-        self.assertEqual(("04", "003", "999999", "8"),
-                         BLOCK_GROUP.decompose("040039999998"))
-        self.assertEqual(("04", "003", "999999", "8", "8777"),
-                         BLOCK.decompose("040039999998777"))
+        self.assertEqual(
+            ("04", "003", "999999", "8"), BLOCK_GROUP.decompose("040039999998")
+        )
+        self.assertEqual(
+            ("04", "003", "999999", "8", "8777"), BLOCK.decompose("040039999998777")
+        )
 
         with self.assertRaises(GeographyError):
             STATE.decompose("04013")
@@ -110,25 +117,32 @@ class TestCensusGranularity(unittest.TestCase):
             "04004": np.array(["04004111111", "04004222222", "04004333333"]),
             "04013": np.array(["04013444444", "04013555555", "04013666666"]),
         }
-        actual = COUNTY.grouped(np.array([
-            "04004111111", "04004222222", "04004333333",
-            "04013444444", "04013555555", "04013666666",
-        ]))
+        actual = COUNTY.grouped(
+            np.array(
+                [
+                    "04004111111",
+                    "04004222222",
+                    "04004333333",
+                    "04013444444",
+                    "04013555555",
+                    "04013666666",
+                ]
+            )
+        )
         self.assertSetEqual(set(expected.keys()), set(actual.keys()))
         np.testing.assert_array_equal(expected["04004"], actual["04004"])
         np.testing.assert_array_equal(expected["04013"], actual["04013"])
 
 
 class StateScopeTest(unittest.TestCase):
-
     def test_state_scope_in_states(self):
-        scope = StateScope.in_states(['04', '35', '08'])
-        self.assertTrue(scope.granularity, 'state')
-        self.assertTrue(scope.includes, ['04', '08', '35'])
-        self.assertTrue(scope.includes_granularity, 'state')
+        scope = StateScope.in_states(["04", "35", "08"])
+        self.assertTrue(scope.granularity, "state")
+        self.assertTrue(scope.includes, ["04", "08", "35"])
+        self.assertTrue(scope.includes_granularity, "state")
 
     def test_state_scope_in_states_by_code(self):
-        scope = StateScope.in_states_by_code(['AZ', 'NM', 'CO'])
-        self.assertTrue(scope.granularity, 'state')
-        self.assertTrue(scope.includes, ['04', '08', '35'])
-        self.assertTrue(scope.includes_granularity, 'state')
+        scope = StateScope.in_states_by_code(["AZ", "NM", "CO"])
+        self.assertTrue(scope.granularity, "state")
+        self.assertTrue(scope.includes, ["04", "08", "35"])
+        self.assertTrue(scope.includes_granularity, "state")

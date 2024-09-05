@@ -10,11 +10,18 @@ from epymorph.simulation import AttributeDef, Tick, TickDelta, TickIndex
 
 class IcecubeClause(MovementClause):
     """The clause of the icecube model."""
+
     requirements = (
-        AttributeDef('population', int, Shapes.N,
-                     comment="The total population at each node."),
-        AttributeDef('commuter_proportion', float, Shapes.S, default_value=0.1,
-                     comment="Decides what proportion of the total population should be commuting normally.")
+        AttributeDef(
+            "population", int, Shapes.N, comment="The total population at each node."
+        ),
+        AttributeDef(
+            "commuter_proportion",
+            float,
+            Shapes.S,
+            default_value=0.1,
+            comment="Decides what proportion of the total population should be commuting normally.",
+        ),
     )
 
     predicate = EveryDay()
@@ -23,8 +30,8 @@ class IcecubeClause(MovementClause):
 
     def evaluate(self, tick: Tick) -> NDArray[np.int64]:
         N = self.dim.nodes
-        pop = self.data('population')
-        comm_prop = self.data('commuter_proportion')
+        pop = self.data("population")
+        comm_prop = self.data("commuter_proportion")
         commuters = np.zeros((N, N), dtype=SimDType)
         for src in range(N):
             if (src + 1) < N:
@@ -32,12 +39,13 @@ class IcecubeClause(MovementClause):
         return commuters
 
 
-@registry.mm('icecube')
+@registry.mm("icecube")
 class Icecube(MovementModel):
     """
     A toy example: ice cube tray movement movement model
     Each state sends a fixed number of commuters to the next
     state in the line (without wraparound).
     """
+
     steps = (1 / 2, 1 / 2)
     clauses = (IcecubeClause(),)
