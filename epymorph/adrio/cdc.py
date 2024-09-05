@@ -1,6 +1,5 @@
 """ADRIOs that access data.cdc.gov website for various health data."""
 from datetime import date, timedelta
-from random import Random
 from typing import NamedTuple
 from urllib.parse import quote, urlencode
 from warnings import warn
@@ -62,7 +61,7 @@ def _fetch_cases(attrib_name: str, scope: CensusScope, time_frame: TimeFrame) ->
     ], dtype=[('date', 'datetime64[D]'), ('data', np.float64)]).T
 
 
-def _fetch_facility_hospitalization(attrib_name: str, scope: CensusScope, time_frame: TimeFrame) -> NDArray[np.float64]:
+def _fetch_facility_hospitalization(attrib_name: str, scope: CensusScope, time_frame: TimeFrame, replace_sentinel: int) -> NDArray[np.float64]:
     """
     Fetches data from HealthData dataset reporting number of people hospitalized for COVID-19 
     and other respiratory illnesses at facility level during manditory reporting period.
@@ -81,15 +80,13 @@ def _fetch_facility_hospitalization(attrib_name: str, scope: CensusScope, time_f
     if scope.granularity == 'state':
         df['fips_code'] = [STATE.extract(x) for x in df['fips_code']]
 
-    # if the sentinel value '-999999' appears in the data, ensure aggregated value is also -999999
+    # replace sentinel values with the integer provided
     df['is_sentinel'] = df[info.data_col] == -999999
-    df.loc[df['is_sentinel'], info.data_col] = Random().randrange(1, 4)
-    # df.replace(-999999, 0, inplace=True)
+    df.replace(-999999, replace_sentinel, inplace=True)
     df = df.groupby(['collection_week', 'fips_code']).agg(
         {info.data_col: 'sum', 'is_sentinel': any})
-    # df.loc[df['is_sentinel'], info.data_col] = -999999
     num_sentinel = df['is_sentinel'].sum()
-    warn(f'{num_sentinel} values < 4 were suppressed in returned data.')
+    warn(f'{num_sentinel} values < 4 were replaced with {replace_sentinel} in returned data.')
 
     df.reset_index(inplace=True)
     df = df.pivot(index='collection_week',
@@ -332,14 +329,20 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
+    replace_sentinel: int
+    """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame):
+    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
+        if replace_sentinel not in range(0, 4):
+            msg = "Sentinel substitute value must be in range 0-3."
+            raise DataResourceException(msg)
+        self.replace_sentinel = replace_sentinel
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_avg', scope, self.time_frame)
+        return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_avg', scope, self.time_frame, self.replace_sentinel)
 
 
 class CovidHospitalizationSumFacility(Adrio[np.float64]):
@@ -347,14 +350,20 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
+    replace_sentinel: int
+    """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame):
+    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
+        if replace_sentinel not in range(0, 4):
+            msg = "Sentinel substitute value must be in range 0-3."
+            raise DataResourceException(msg)
+        self.replace_sentinel = replace_sentinel
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_sum', scope, self.time_frame)
+        return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_sum', scope, self.time_frame, self.replace_sentinel)
 
 
 class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
@@ -362,14 +371,20 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
+    replace_sentinel: int
+    """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame):
+    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
+        if replace_sentinel not in range(0, 4):
+            msg = "Sentinel substitute value must be in range 0-3."
+            raise DataResourceException(msg)
+        self.replace_sentinel = replace_sentinel
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_avg', scope, self.time_frame)
+        return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_avg', scope, self.time_frame, self.replace_sentinel)
 
 
 class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
@@ -377,14 +392,20 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
+    replace_sentinel: int
+    """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame):
+    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
+        if replace_sentinel not in range(0, 4):
+            msg = "Sentinel substitute value must be in range 0-3."
+            raise DataResourceException(msg)
+        self.replace_sentinel = replace_sentinel
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_sum', scope, self.time_frame)
+        return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_sum', scope, self.time_frame, self.replace_sentinel)
 
 
 class CovidHospitalizationAvgState(Adrio[np.float64]):
