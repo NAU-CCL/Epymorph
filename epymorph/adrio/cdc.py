@@ -1,4 +1,5 @@
 """ADRIOs that access data.cdc.gov website for various health data."""
+
 from datetime import date, timedelta
 from typing import NamedTuple
 from urllib.parse import quote, urlencode
@@ -12,9 +13,13 @@ from typing_extensions import override
 from epymorph.adrio.adrio import Adrio
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import (STATE, CensusGranularityName,
-                                          CensusScope, get_us_states,
-                                          state_fips_to_code)
+from epymorph.geography.us_census import (
+    STATE,
+    CensusGranularityName,
+    CensusScope,
+    get_us_states,
+    state_fips_to_code,
+)
 from epymorph.simulation import TimeFrame
 
 
@@ -27,87 +32,106 @@ class QueryInfo(NamedTuple):
     """Whether we are querying a dataset reporting state-level data."""
 
 
-def _fetch_cases(attrib_name: str, scope: CensusScope, time_frame: TimeFrame) -> NDArray[np.float64]:
+def _fetch_cases(
+    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+) -> NDArray[np.float64]:
     """
     Fetches data from HealthData dataset reporting COVID-19 cases per 100k population.
     Available between 2/24/2022 and 5/4/2023 at state and county granularities.
     https://healthdata.gov/dataset/United-States-COVID-19-Community-Levels-by-County/nn5b-j5u9/about_data
     """
-    if time_frame.start_date < date(2022, 2, 24) or time_frame.end_date > date(2023, 5, 4):
+    if time_frame.start_date < date(2022, 2, 24) or time_frame.end_date > date(
+        2023, 5, 4
+    ):
         msg = "COVID cases data is only available between 2/24/2022 and 5/4/2023."
         raise DataResourceException(msg)
 
-    info = QueryInfo("https://data.cdc.gov/resource/3nnm-4jni.csv?",
-                     "date_updated", "county_fips", attrib_name)
+    info = QueryInfo(
+        "https://data.cdc.gov/resource/3nnm-4jni.csv?",
+        "date_updated",
+        "county_fips",
+        attrib_name,
+    )
 
-    df = _api_query(info, scope.get_node_ids(),
-                    time_frame, scope.granularity)
+    df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
-    df.rename(columns={'county_fips': 'fips'}, inplace=True)
+    df.rename(columns={"county_fips": "fips"}, inplace=True)
 
-    if scope.granularity == 'state':
-        df['fips'] = [STATE.extract(x) for x in df['fips']]
+    if scope.granularity == "state":
+        df["fips"] = [STATE.extract(x) for x in df["fips"]]
 
-        df = df.groupby(['date_updated', 'fips']).sum()
+        df = df.groupby(["date_updated", "fips"]).sum()
         df.reset_index(inplace=True)
 
-    df = df.pivot(index='date_updated', columns='fips', values=info.data_col)
+    df = df.pivot(index="date_updated", columns="fips", values=info.data_col)
 
-    dates = df.index.to_numpy(dtype='datetime64[D]')
+    dates = df.index.to_numpy(dtype="datetime64[D]")
 
-    return np.array([
-        list(zip(dates, df[col]))
-        for col in df.columns
-    ], dtype=[('date', 'datetime64[D]'), ('data', np.float64)]).T
+    return np.array(
+        [list(zip(dates, df[col])) for col in df.columns],
+        dtype=[("date", "datetime64[D]"), ("data", np.float64)],
+    ).T
 
 
-def _fetch_facility_hospitalization(attrib_name: str, scope: CensusScope, time_frame: TimeFrame, replace_sentinel: int) -> NDArray[np.float64]:
+def _fetch_facility_hospitalization(
+    attrib_name: str, scope: CensusScope, time_frame: TimeFrame, replace_sentinel: int
+) -> NDArray[np.float64]:
     """
-    Fetches data from HealthData dataset reporting number of people hospitalized for COVID-19 
+    Fetches data from HealthData dataset reporting number of people hospitalized for COVID-19
     and other respiratory illnesses at facility level during manditory reporting period.
     Available between 12/13/2020 and 5/10/2023 at state and county granularities.
     https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data
     """
-    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(2023, 5, 10):
+    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(
+        2023, 5, 10
+    ):
         msg = "Facility level hospitalization data is only available between 12/13/2020 and 5/10/2023."
         raise DataResourceException(msg)
 
-    info = QueryInfo("https://healthdata.gov/resource/anag-cw7u.csv?",
-                     "collection_week", "fips_code", attrib_name)
+    info = QueryInfo(
+        "https://healthdata.gov/resource/anag-cw7u.csv?",
+        "collection_week",
+        "fips_code",
+        attrib_name,
+    )
 
     df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
-    if scope.granularity == 'state':
-        df['fips_code'] = [STATE.extract(x) for x in df['fips_code']]
+    if scope.granularity == "state":
+        df["fips_code"] = [STATE.extract(x) for x in df["fips_code"]]
 
     # replace sentinel values with the integer provided
-    df['is_sentinel'] = df[info.data_col] == -999999
+    df["is_sentinel"] = df[info.data_col] == -999999
     df.replace(-999999, replace_sentinel, inplace=True)
-    df = df.groupby(['collection_week', 'fips_code']).agg(
-        {info.data_col: 'sum', 'is_sentinel': any})
-    num_sentinel = df['is_sentinel'].sum()
-    warn(f'{num_sentinel} values < 4 were replaced with {replace_sentinel} in returned data.')
+    df = df.groupby(["collection_week", "fips_code"]).agg(
+        {info.data_col: "sum", "is_sentinel": any}
+    )
+    num_sentinel = df["is_sentinel"].sum()
+    warn(
+        f"{num_sentinel} values < 4 were replaced with {replace_sentinel} in returned data."
+    )
 
     df.reset_index(inplace=True)
-    df = df.pivot(index='collection_week',
-                  columns='fips_code', values=info.data_col)
+    df = df.pivot(index="collection_week", columns="fips_code", values=info.data_col)
 
-    dates = df.index.to_numpy(dtype='datetime64[D]')
+    dates = df.index.to_numpy(dtype="datetime64[D]")
 
-    return np.array([
-        list(zip(dates, df[col]))
-        for col in df.columns
-    ], dtype=[('date', 'datetime64[D]'), ('data', np.float64)]).T
+    return np.array(
+        [list(zip(dates, df[col])) for col in df.columns],
+        dtype=[("date", "datetime64[D]"), ("data", np.float64)],
+    ).T
 
 
-def _fetch_state_hospitalization(attrib_name: str, scope: CensusScope, time_frame: TimeFrame) -> NDArray[np.float64]:
+def _fetch_state_hospitalization(
+    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+) -> NDArray[np.float64]:
     """
-    Fetches data from CDC dataset reporting number of people hospitalized for COVID-19 
+    Fetches data from CDC dataset reporting number of people hospitalized for COVID-19
     and other respiratory illnesses at state level during manditory and voluntary reporting periods.
     Available from 1/4/2020 to present at state granularity. Data reported voluntarily past 5/1/2024.
     https://data.cdc.gov/Public-Health-Surveillance/Weekly-United-States-Hospitalization-Metrics-by-Ju/aemt-mg7g/about_data
     """
-    if scope.granularity != 'state':
+    if scope.granularity != "state":
         msg = "State level hospitalization data can only be retrieved for state granularity."
         raise DataResourceException(msg)
     if time_frame.start_date < date(2020, 1, 4):
@@ -116,8 +140,13 @@ def _fetch_state_hospitalization(attrib_name: str, scope: CensusScope, time_fram
     if time_frame.end_date > date(2024, 5, 1):
         warn("State level hospitalization data is voluntary past 5/1/2024.")
 
-    info = QueryInfo("https://data.cdc.gov/resource/aemt-mg7g.csv?",
-                     "week_end_date", "jurisdiction", attrib_name, True)
+    info = QueryInfo(
+        "https://data.cdc.gov/resource/aemt-mg7g.csv?",
+        "week_end_date",
+        "jurisdiction",
+        attrib_name,
+        True,
+    )
 
     state_mapping = state_fips_to_code(scope.year)
     fips = scope.get_node_ids()
@@ -125,81 +154,99 @@ def _fetch_state_hospitalization(attrib_name: str, scope: CensusScope, time_fram
 
     df = _api_query(info, state_codes, time_frame, scope.granularity)
 
-    df = df.groupby(['week_end_date', 'jurisdiction']).sum()
+    df = df.groupby(["week_end_date", "jurisdiction"]).sum()
     df.reset_index(inplace=True)
-    df = df.pivot(index='week_end_date',
-                  columns='jurisdiction', values=info.data_col)
+    df = df.pivot(index="week_end_date", columns="jurisdiction", values=info.data_col)
 
-    dates = df.index.to_numpy(dtype='datetime64[D]')
+    dates = df.index.to_numpy(dtype="datetime64[D]")
 
-    return np.array([
-        list(zip(dates, df[col]))
-        for col in df.columns
-    ], dtype=[('date', 'datetime64[D]'), ('data', np.float64)]).T
+    return np.array(
+        [list(zip(dates, df[col])) for col in df.columns],
+        dtype=[("date", "datetime64[D]"), ("data", np.float64)],
+    ).T
 
 
-def _fetch_vaccination(attrib_name: str, scope: CensusScope, time_frame: TimeFrame) -> NDArray[np.float64]:
+def _fetch_vaccination(
+    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting total COVID-19 vaccination numbers.
     Available between 12/13/2020 and 5/10/2024 at state and county granularities.
     https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh/about_data
     """
-    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(2024, 5, 10):
+    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(
+        2024, 5, 10
+    ):
         msg = "Vaccination data is only available between 12/13/2020 and 5/10/2024."
         raise DataResourceException(msg)
 
-    info = QueryInfo("https://data.cdc.gov/resource/8xkx-amqh.csv?",
-                     "date", "fips", attrib_name)
+    info = QueryInfo(
+        "https://data.cdc.gov/resource/8xkx-amqh.csv?", "date", "fips", attrib_name
+    )
 
-    df = _api_query(info, scope.get_node_ids(),
-                    time_frame, scope.granularity)
+    df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
-    df = df.pivot(index='date', columns='fips', values=info.data_col)
+    df = df.pivot(index="date", columns="fips", values=info.data_col)
 
-    dates = df.index.to_numpy(dtype='datetime64[D]')
+    dates = df.index.to_numpy(dtype="datetime64[D]")
 
-    return np.array([
-        list(zip(dates, df[col]))
-        for col in df.columns
-    ], dtype=[('date', 'datetime64[D]'), ('data', np.float64)]).T
+    return np.array(
+        [list(zip(dates, df[col])) for col in df.columns],
+        dtype=[("date", "datetime64[D]"), ("data", np.float64)],
+    ).T
 
 
-def _fetch_deaths_county(attrib_name: str, scope: CensusScope, time_frame: TimeFrame) -> NDArray[np.float64]:
+def _fetch_deaths_county(
+    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting number of deaths from COVID-19.
     Available between 1/4/2020 and 4/5/2024 at state and county granularities.
     https://data.cdc.gov/NCHS/AH-COVID-19-Death-Counts-by-County-and-Week-2020-p/ite7-j2w7/about_data
     """
-    if time_frame.start_date < date(2020, 1, 4) or time_frame.end_date > date(2024, 4, 5):
-        msg = "County level deaths data is only available between 1/4/2020 and 4/5/2024."
+    if time_frame.start_date < date(2020, 1, 4) or time_frame.end_date > date(
+        2024, 4, 5
+    ):
+        msg = (
+            "County level deaths data is only available between 1/4/2020 and 4/5/2024."
+        )
         raise DataResourceException(msg)
 
-    if scope.granularity == 'state':
-        info = QueryInfo("https://data.cdc.gov/resource/ite7-j2w7.csv?",
-                         "week_ending_date", "stfips", attrib_name, True)
+    if scope.granularity == "state":
+        info = QueryInfo(
+            "https://data.cdc.gov/resource/ite7-j2w7.csv?",
+            "week_ending_date",
+            "stfips",
+            attrib_name,
+            True,
+        )
     else:
-        info = QueryInfo("https://data.cdc.gov/resource/ite7-j2w7.csv?",
-                         "week_ending_date", "fips_code", attrib_name)
+        info = QueryInfo(
+            "https://data.cdc.gov/resource/ite7-j2w7.csv?",
+            "week_ending_date",
+            "fips_code",
+            attrib_name,
+        )
 
-    df = _api_query(info, scope.get_node_ids(),
-                    time_frame, scope.granularity)
+    df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
-    if scope.granularity == 'state':
-        df = df.groupby(['week_ending_date', info.fips_col]).sum()
+    if scope.granularity == "state":
+        df = df.groupby(["week_ending_date", info.fips_col]).sum()
         df.reset_index(inplace=True)
 
-    df = df.pivot(index='week_ending_date',
-                  columns=info.fips_col, values=info.data_col)
+    df = df.pivot(index="week_ending_date", columns=info.fips_col, values=info.data_col)
 
-    dates = df.index.to_numpy(dtype='datetime64[D]')
+    dates = df.index.to_numpy(dtype="datetime64[D]")
 
-    return np.array([
-        list(zip(dates, df[col]))
-        for col in df.columns
-    ], dtype=[('date', 'datetime64[D]'), ('data', np.float64)]).T
+    return np.array(
+        [list(zip(dates, df[col])) for col in df.columns],
+        dtype=[("date", "datetime64[D]"), ("data", np.float64)],
+    ).T
 
 
-def _fetch_deaths_state(attrib_name: str, scope: CensusScope, time_frame: TimeFrame) -> NDArray[np.float64]:
+def _fetch_deaths_state(
+    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting number of deaths from COVID-19 and other respiratory illnesses.
     Available from 1/4/2020 to present at state granularity.
@@ -214,48 +261,61 @@ def _fetch_deaths_state(attrib_name: str, scope: CensusScope, time_frame: TimeFr
     state_mapping = dict(zip(states.geoid, states.name))
     state_names = np.array([state_mapping[x] for x in fips])
 
-    info = QueryInfo("https://data.cdc.gov/resource/r8kw-7aab.csv?",
-                     "end_date", "state", attrib_name, True)
+    info = QueryInfo(
+        "https://data.cdc.gov/resource/r8kw-7aab.csv?",
+        "end_date",
+        "state",
+        attrib_name,
+        True,
+    )
 
     df = _api_query(info, state_names, time_frame, scope.granularity)
 
-    df = df.groupby(['end_date', 'state']).sum()
+    df = df.groupby(["end_date", "state"]).sum()
     df.reset_index(inplace=True)
-    df = df.pivot(index='end_date', columns='state', values=info.data_col)
+    df = df.pivot(index="end_date", columns="state", values=info.data_col)
 
-    dates = df.index.to_numpy(dtype='datetime64[D]')
+    dates = df.index.to_numpy(dtype="datetime64[D]")
 
-    return np.array([
-        list(zip(dates, df[col]))
-        for col in df.columns
-    ], dtype=[('date', 'datetime64[D]'), ('data', np.float64)]).T
+    return np.array(
+        [list(zip(dates, df[col])) for col in df.columns],
+        dtype=[("date", "datetime64[D]"), ("data", np.float64)],
+    ).T
 
 
-def _api_query(info: QueryInfo, fips: NDArray, time_frame: TimeFrame, granularity: CensusGranularityName) -> DataFrame:
+def _api_query(
+    info: QueryInfo,
+    fips: NDArray,
+    time_frame: TimeFrame,
+    granularity: CensusGranularityName,
+) -> DataFrame:
     """
     Composes URLs to query API and sends query requests.
     Limits each query to 10000 rows, combining several query results if this number is exceeded.
     Returns pandas Dataframe containing requested data sorted by date and location fips.
     """
     # query county level data with state fips codes
-    if granularity == 'state' and not info.state_level:
+    if granularity == "state" and not info.state_level:
         location_clauses = [
-            f"starts_with({info.fips_col}, '{state}')"
-            for state in fips
+            f"starts_with({info.fips_col}, '{state}')" for state in fips
         ]
     # query county or state level data with full fips codes for the respective granularity
     else:
         formatted_fips = ",".join(f"'{node}'" for node in fips)
-        location_clauses = [
-            f"{info.fips_col} in ({formatted_fips})"
-        ]
+        location_clauses = [f"{info.fips_col} in ({formatted_fips})"]
 
-    date_clause = f"{info.date_col} " \
-        + f"between '{time_frame.start_date}T00:00:00' " \
+    date_clause = (
+        f"{info.date_col} "
+        + f"between '{time_frame.start_date}T00:00:00' "
         + f"and '{time_frame.end_date + timedelta(days=1)}T00:00:00'"
+    )
 
-    df = concat([_query_location(info, loc_clause, date_clause)
-                for loc_clause in location_clauses])
+    df = concat(
+        [
+            _query_location(info, loc_clause, date_clause)
+            for loc_clause in location_clauses
+        ]
+    )
 
     df = df.sort_values(by=[info.date_col, info.fips_col])
     return df
@@ -273,11 +333,12 @@ def _query_location(info: QueryInfo, loc_clause: str, date_clause: str) -> DataF
             quote_via=quote,
             safe=",()'$:",
             query={
-                '$select': f'{info.date_col},{info.fips_col},{info.data_col}',
-                '$where': f"{loc_clause} AND {date_clause}",
-                '$limit': 10000,
-                '$offset': total_returned
-            })
+                "$select": f"{info.date_col},{info.fips_col},{info.data_col}",
+                "$where": f"{loc_clause} AND {date_clause}",
+                "$limit": 10000,
+                "$offset": total_returned,
+            },
+        )
 
         df = concat([df, read_csv(url, dtype={info.fips_col: str})])
 
@@ -289,7 +350,7 @@ def _query_location(info: QueryInfo, loc_clause: str, date_clause: str) -> DataF
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
-        msg = 'Census scope is required for CDC attributes.'
+        msg = "Census scope is required for CDC attributes."
         raise DataResourceException(msg)
     return scope
 
@@ -306,7 +367,7 @@ class CovidCasesPer100k(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_cases('covid_cases_per_100k', scope, self.time_frame)
+        return _fetch_cases("covid_cases_per_100k", scope, self.time_frame)
 
 
 class CovidHospitalizationsPer100k(Adrio[np.float64]):
@@ -321,7 +382,9 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_cases('covid_hospital_admissions_per_100k', scope, self.time_frame)
+        return _fetch_cases(
+            "covid_hospital_admissions_per_100k", scope, self.time_frame
+        )
 
 
 class CovidHospitalizationAvgFacility(Adrio[np.float64]):
@@ -334,7 +397,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
 
     def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
-        if replace_sentinel not in range(0, 4):
+        if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
@@ -342,7 +405,12 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_avg', scope, self.time_frame, self.replace_sentinel)
+        return _fetch_facility_hospitalization(
+            "total_adult_patients_hospitalized_confirmed_covid_7_day_avg",
+            scope,
+            self.time_frame,
+            self.replace_sentinel,
+        )
 
 
 class CovidHospitalizationSumFacility(Adrio[np.float64]):
@@ -355,7 +423,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
 
     def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
-        if replace_sentinel not in range(0, 4):
+        if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
@@ -363,7 +431,12 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_adult_patients_hospitalized_confirmed_covid_7_day_sum', scope, self.time_frame, self.replace_sentinel)
+        return _fetch_facility_hospitalization(
+            "total_adult_patients_hospitalized_confirmed_covid_7_day_sum",
+            scope,
+            self.time_frame,
+            self.replace_sentinel,
+        )
 
 
 class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
@@ -376,7 +449,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
 
     def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
-        if replace_sentinel not in range(0, 4):
+        if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
@@ -384,7 +457,12 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_avg', scope, self.time_frame, self.replace_sentinel)
+        return _fetch_facility_hospitalization(
+            "total_patients_hospitalized_confirmed_influenza_7_day_avg",
+            scope,
+            self.time_frame,
+            self.replace_sentinel,
+        )
 
 
 class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
@@ -397,7 +475,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
 
     def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
         self.time_frame = time_frame
-        if replace_sentinel not in range(0, 4):
+        if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
@@ -405,7 +483,12 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization('total_patients_hospitalized_confirmed_influenza_7_day_sum', scope, self.time_frame, self.replace_sentinel)
+        return _fetch_facility_hospitalization(
+            "total_patients_hospitalized_confirmed_influenza_7_day_sum",
+            scope,
+            self.time_frame,
+            self.replace_sentinel,
+        )
 
 
 class CovidHospitalizationAvgState(Adrio[np.float64]):
@@ -420,7 +503,9 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization('avg_admissions_all_covid_confirmed', scope, self.time_frame)
+        return _fetch_state_hospitalization(
+            "avg_admissions_all_covid_confirmed", scope, self.time_frame
+        )
 
 
 class CovidHospitalizationSumState(Adrio[np.float64]):
@@ -435,7 +520,9 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization('total_admissions_all_covid_confirmed', scope, self.time_frame)
+        return _fetch_state_hospitalization(
+            "total_admissions_all_covid_confirmed", scope, self.time_frame
+        )
 
 
 class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
@@ -450,7 +537,9 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization('avg_admissions_all_influenza_confirmed', scope, self.time_frame)
+        return _fetch_state_hospitalization(
+            "avg_admissions_all_influenza_confirmed", scope, self.time_frame
+        )
 
 
 class InfluenzaHospitalizationSumState(Adrio[np.float64]):
@@ -465,7 +554,9 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization('total_admissions_all_influenza_confirmed', scope, self.time_frame)
+        return _fetch_state_hospitalization(
+            "total_admissions_all_influenza_confirmed", scope, self.time_frame
+        )
 
 
 class FullCovidVaccinations(Adrio[np.float64]):
@@ -480,7 +571,7 @@ class FullCovidVaccinations(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_vaccination('series_complete_yes', scope, self.time_frame)
+        return _fetch_vaccination("series_complete_yes", scope, self.time_frame)
 
 
 class OneDoseCovidVaccinations(Adrio[np.float64]):
@@ -495,7 +586,7 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_vaccination('administered_dose1_recip', scope, self.time_frame)
+        return _fetch_vaccination("administered_dose1_recip", scope, self.time_frame)
 
 
 class CovidBoosterDoses(Adrio[np.float64]):
@@ -510,7 +601,7 @@ class CovidBoosterDoses(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_vaccination('booster_doses', scope, self.time_frame)
+        return _fetch_vaccination("booster_doses", scope, self.time_frame)
 
 
 class CovidDeathsCounty(Adrio[np.float64]):
@@ -525,7 +616,7 @@ class CovidDeathsCounty(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_deaths_county('covid_19_deaths', scope, self.time_frame)
+        return _fetch_deaths_county("covid_19_deaths", scope, self.time_frame)
 
 
 class CovidDeathsState(Adrio[np.float64]):
@@ -540,7 +631,7 @@ class CovidDeathsState(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_deaths_state('covid_19_deaths', scope, self.time_frame)
+        return _fetch_deaths_state("covid_19_deaths", scope, self.time_frame)
 
 
 class InfluenzaDeathsState(Adrio[np.float64]):
@@ -555,4 +646,4 @@ class InfluenzaDeathsState(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_deaths_state('influenza_deaths', scope, self.time_frame)
+        return _fetch_deaths_state("influenza_deaths", scope, self.time_frame)
