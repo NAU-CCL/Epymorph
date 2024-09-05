@@ -29,8 +29,8 @@ def calculate_travelers(
 ) -> OnMovementClause:
     """
     Calculate the number of travelers resulting from this movement clause for this tick.
-    This evaluates the requested number movers, modulates that based on the available movers,
-    then selects exactly which individuals (by compartment) should move.
+    This evaluates the requested number movers, modulates that based on the available
+    movers, then selects exactly which individuals (by compartment) should move.
     Returns an (N,N,C) array; from-source-to-destination-by-compartment.
     """
     # Extract number of nodes and cohorts from the provided array.
@@ -143,8 +143,12 @@ class MovementExecutor:
                 requested_movers = clause.evaluate(tick)
             except Exception as e:
                 # NOTE: catching exceptions here is necessary to get nice error messages
-                # for some value error cause by incorrect parameter and/or clause definition
-                msg = f"Error from applying clause '{clause.__class__.__name__}': see exception trace"
+                # for some value error cause by incorrect parameter and/or clause
+                # definition
+                msg = (
+                    f"Error from applying clause '{clause.__class__.__name__}': "
+                    "see exception trace"
+                )
                 raise MmSimException(msg) from e
 
             available_movers = self._world.get_local_array()

@@ -30,7 +30,7 @@ class SimDimensions(NamedTuple):
         compartments: int,
         events: int,
     ):
-        """Convenience constructor which reduces the overhead of initializing duplicative fields."""
+        """Convenience constructor for SimDimensions."""
         tau_steps = len(tau_step_lengths)
         ticks = tau_steps * days
         return cls(

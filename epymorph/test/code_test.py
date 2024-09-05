@@ -1,4 +1,5 @@
 # pylint: disable=missing-docstring
+# ruff: noqa: S105
 import ast
 import os
 import unittest
@@ -30,21 +31,21 @@ class TestHasFunctionStructure(unittest.TestCase):
             
             def my_function_two():
                 return 84
-        """)
+        """)  # noqa: W293
         )
 
     def test_valid_function_03(self):
         self.assertTrue(
             has_function_structure("""
             from something import that_thing
-            
+
             xyz = 999
-                                               
+            
             def this_nifty_function (a: str, b: int, /, some_other_thing):
                 return 42
-                                               
+            
             abc = 111
-        """)
+        """)  # noqa: W293
         )
 
     def test_valid_function_04(self):
@@ -179,7 +180,8 @@ class TestCompileFunction(unittest.TestCase):
         )
         self.assertTrue(bad_func_1(), "42")
 
-        # Or if we accidentally include 'os' in the namespace, it can also access the secret.
+        # Or if we accidentally include 'os' in the namespace,
+        # it can also access the secret.
         bad_func_2 = compile_function(
             parse_function(evil_function_string, unsafe=True), globals()
         )
@@ -206,7 +208,7 @@ class TestCompileFunction(unittest.TestCase):
                 secret = loc['secret']
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """
+        """  # noqa: E501
 
         # Even if I'm crafty by renaming 'exec' before I call it.
         evil_function_string_2 = """
@@ -218,7 +220,7 @@ class TestCompileFunction(unittest.TestCase):
                 secret = loc['secret']
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """
+        """  # noqa: E501
 
         # Even if I use eval to run exec.
         evil_function_string_3 = """
@@ -229,7 +231,7 @@ class TestCompileFunction(unittest.TestCase):
                 secret = loc['secret']
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """
+        """  # noqa: E501
 
         test = self._compile_function
 
@@ -260,7 +262,7 @@ class TestCompileFunction(unittest.TestCase):
                 secret = madule_get_it_its_like_module_but_mad.getenv('TEST_SECRET_9812398712')
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """
+        """  # noqa: E501
 
         test = self._compile_function
 
@@ -276,7 +278,9 @@ class TestCompileFunction(unittest.TestCase):
         os.environ["TEST_SECRET_9812398712"] = "42"
         self.assertEqual(os.getenv("TEST_SECRET_9812398712"), "42")
 
-        # In America, first you get the __builtins__, then you get the __import__, then you get os.
+        # In America, first you get the __builtins__,
+        # then you get the __import__,
+        # then you get os.
         evil_function_string_1 = """
             def steal_your_secrets():
                 badule = __builtins__['__import__']('os')
@@ -328,14 +332,15 @@ class TestCompileFunction(unittest.TestCase):
                 secret = f'''{eval("__builtins__['__import__']('os').getenv('TEST_SECRET_9812398712')")}'''
                 # I might exfiltrate the secret over HTTP...
                 return secret if secret is not None else '?'
-        """
+        """  # noqa: E501
 
         test = self._compile_function
 
         # If the function is run as-is, it can import os and get the secret.
         self.assertTrue(test(evil_function_string_1, unsafe=True), "42")
 
-        # But malicious code inside the fstring is still detected, so it will fail to compile.
+        # But malicious code inside the fstring is still detected,
+        # so it will fail to compile.
         with self.assertRaises(CodeSecurityException):
             test(evil_function_string_1, unsafe=False)
 

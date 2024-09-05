@@ -38,7 +38,10 @@ def _evaluation_context(
     override_params: Mapping[NamePattern, ParamValue],
     rng: np.random.Generator,
 ) -> tuple[Database[AttributeArray], _EvalFunction]:
-    """Constructs a function for evaluating parameters while accumulating results to the returned Database."""
+    """
+    Constructs a function for evaluating parameters while accumulating results
+    to the returned Database.
+    """
     format_name = rume.name_display_formatter()
 
     # vals_db stores the raw values as provided by the user.
@@ -70,19 +73,24 @@ def _evaluation_context(
         *,
         cache: dict[NamePattern, AttributeArray] = {},
         # WARNING: I am deliberately (ab)using a dict value as a default parameter here,
-        # which will be the same instance for every function call. This is not typical python.
-        # However in this case it has the nice effect of limiting `cache`'s scope so it can
-        # only be accessed in this function. And, since it's a locally-scoped function, is acceptable.
+        # which will be the same instance for every function call.
+        # This is not typical python.
+        # However in this case it has the nice effect of limiting `cache`'s scope
+        # so it can only be accessed in this function.
+        # And, since it's a locally-scoped function, is acceptable.
     ) -> AttributeArray:
         """
-        Literal values (scalars, arrays) can be safely re-used in every namespace to which they apply.
-        For such values, it's advantageous to keep a single copy in memory. This function sees to that.
+        Literal values (scalars, arrays) can be safely re-used in every namespace
+        to which they apply.
+        For such values, it's advantageous to keep a single copy in memory.
+        This function sees to that.
         When a value can be cached, use this function to evaluate it.
         """
-        # NOTE: the critical distinction for which values can be cached and which cannot lies in
-        # whether or not they are sensitive to the namespace in which they're evaluated.
-        # Our Function types can be sensitive to their namespace, and so evaluation results must be isolated
-        # to the most-specific scope -- e.g., "gpm:1::ipm::alpha" -- even if they were provided for a more-general
+        # NOTE: the critical distinction for which values can be cached and which cannot
+        # lies in whether or not they are sensitive to the namespace in which they're
+        # evaluated. Our Function types can be sensitive to their namespace, and so
+        # evaluation results must be isolated to the most-specific scope --
+        # e.g., "gpm:1::ipm::alpha" -- even if they were provided for a more-general
         # scope -- e.g., "*::*::alpha".
         if (value := cache.get(name)) is not None:
             return value
@@ -96,8 +104,8 @@ def _evaluation_context(
         # Evaluate a parameter and store its value to `attr_db`
 
         # `chain` tracks the path of nested attribute resolutions involved.
-        # If we are currently trying to resolve an attribute that already occurred earlier in the chain,
-        # we've found a circular dependency!
+        # If we are currently trying to resolve an attribute that already occurred
+        # earlier in the chain, we've found a circular dependency!
         if name in chain:
             msg = f"Circular dependency in evaluation of parameter {name}"
             raise AttributeException(msg)
@@ -133,8 +141,8 @@ def _evaluation_context(
 
         # Otherwise, evaluate and store the parameter based on its type.
         if isinstance(raw_value, ParamFunction | Adrio):
-            # ParamFunction: first evaluate all dependencies of this function (recursively),
-            # then evaluate the function itself.
+            # ParamFunction: first evaluate all dependencies of this
+            # function (recursively), then evaluate the function itself.
             namespace = name.to_namespace()
             for dependency in raw_value.requirements:
                 dep_name = namespace.to_absolute(dependency.name)
@@ -190,8 +198,8 @@ def evaluate_params(
 ) -> Database[AttributeArray]:
     """
     Evaluates the attributes for a RUME, combining all of its included parameter values
-    with any given override parameters. Returns a Database which is fully resolved and normalized
-    for the needs of the RUME.
+    with any given override parameters. Returns a Database which is fully resolved and
+    normalized for the needs of the RUME.
     """
     # Collect all attribute errors to raise as a group.
     errors = list[AttributeException]()
@@ -223,9 +231,10 @@ def evaluate_param(
     rng: np.random.Generator | None = None,
 ) -> AttributeArray:
     """
-    A utility to evaluate a single named parameter in the context of a RUME, perhaps for debug or display purposes.
-    `param` can be an absolute name or a string which will be parsed as such, using `AbsoluteName.parse_with_defaults()`
-    to allow for partial names.
+    A utility to evaluate a single named parameter in the context of a RUME,
+    perhaps for debug or display purposes.
+    `param` can be an absolute name or a string which will be parsed as such,
+    using `AbsoluteName.parse_with_defaults()` to allow for partial names.
     """
     if not isinstance(param, AbsoluteName):
         param = AbsoluteName.parse_with_defaults(
@@ -243,7 +252,8 @@ def validate_requirements(
     data: Database[AttributeArray],
 ) -> None:
     """
-    Validate all attributes requirements in a RUME; raises an ExceptionGroup containing all errors.
+    Validate all attributes requirements in a RUME;
+    raises an ExceptionGroup containing all errors.
     """
 
     def validate() -> Generator[AttributeException, None, None]:
@@ -262,7 +272,10 @@ def validate_requirements(
                         ),
                     )
                 except NumpyTypeError as e:
-                    msg = f"Attribute '{attr_match.pattern}' is not properly specified. {e}"
+                    msg = (
+                        f"Attribute '{attr_match.pattern}' is "
+                        f"not properly specified. {e}"
+                    )
                     yield AttributeException(msg)
 
     # Collect all attribute errors to raise as a group.

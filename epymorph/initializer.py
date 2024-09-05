@@ -39,7 +39,8 @@ class Initializer(SimulationFunction[SimArray], ABC):
     ) -> SimArray:
         result = super().evaluate_in_context(data, dim, scope, rng)
 
-        # Result validation: it must be an NxC array of integers where no value is less than zero.
+        # Result validation: it must be an NxC array of integers
+        # where no value is less than zero.
         try:
             check_ndarray(
                 result,
@@ -51,7 +52,10 @@ class Initializer(SimulationFunction[SimArray], ABC):
             raise InitException(msg) from e
 
         if np.min(result) < 0:
-            msg = f"Initializer '{self.__class__.__name__}' returned values less than zero"
+            msg = (
+                f"Initializer '{self.__class__.__name__}' returned "
+                "values less than zero"
+            )
             raise InitException(msg)
 
         return result
@@ -135,8 +139,8 @@ class Proportional(Initializer):
     """
     Set all compartments as a proportion of their population according to the geo.
     The parameter array provided to this initializer will be normalized, then multiplied
-    element-wise by the geo population. So you're free to express the proportions in any way,
-    (as long as no row is zero). Parameters:
+    element-wise by the geo population. So you're free to express the proportions
+    in any way, (as long as no row is zero). Parameters:
     - `ratios` a (C,) or (N,C) numpy array describing the ratios for each compartment
     """
 
@@ -184,8 +188,10 @@ class SeededInfection(Initializer, ABC):
     for infection, are placed in another compartment (default: the second). The user
     can identify which two compartments to use, but it can only be two compartments.
     Parameters:
-    - `initial_compartment` which compartment (by index) is "not infected", where most individuals start out
-    - `infection_compartment` which compartment (by index) will be seeded as the initial infection
+    - `initial_compartment` which compartment (by index) is "not infected", where most
+        individuals start out
+    - `infection_compartment` which compartment (by index) will be seeded as the
+        initial infection
     """
 
     DEFAULT_INITIAL = 0
@@ -205,28 +211,32 @@ class SeededInfection(Initializer, ABC):
         self.infection_compartment = infection_compartment
 
     def validate_compartments(self):
-        """Child classes should call this during `initialize` to check that the given compartment indices are valid."""
+        """
+        Child classes should call this during `initialize` to check that the given
+        compartment indices are valid.
+        """
         C = self.dim.compartments
         if not 0 <= self.initial_compartment < C:
             msg = (
-                "Initializer argument `initial_compartment` must be an index of the IPM compartments "
-                f"(0 to {C-1}, inclusive)."
+                "Initializer argument `initial_compartment` must be an index "
+                f"of the IPM compartments (0 to {C-1}, inclusive)."
             )
             raise InitException(msg)
         if not 0 <= self.infection_compartment < C:
             msg = (
-                "Initializer argument `infection_compartment` must be an index of the IPM compartments "
-                f"(0 to {C-1}, inclusive)."
+                "Initializer argument `infection_compartment` must be an index "
+                f"of the IPM compartments (0 to {C-1}, inclusive)."
             )
             raise InitException(msg)
 
 
 class IndexedLocations(SeededInfection):
     """
-    Infect a fixed number of people distributed (proportional to their population) across a
-    selection of nodes. A multivariate hypergeometric draw using the available populations is
-    used to distribute infections. Parameters:
-    - `selection` a one-dimensional array of indices; all values must be in range (-N,+N)
+    Infect a fixed number of people distributed (proportional to their population)
+    across a selection of nodes. A multivariate hypergeometric draw using the available
+    populations is used to distribute infections. Parameters:
+    - `selection` a one-dimensional array of indices;
+        all values must be in range (-N,+N)
     - `seed_size` the number of individuals to infect in total
     """
 
@@ -235,7 +245,7 @@ class IndexedLocations(SeededInfection):
     selection: NDArray[np.intp]
     """Which locations to infect."""
     seed_size: int
-    """How many individuals to infect, randomly distributed between all selected locations."""
+    """How many individuals to infect, randomly distributed to selected locations."""
 
     def __init__(
         self,
@@ -263,7 +273,10 @@ class IndexedLocations(SeededInfection):
         sel = self.selection
 
         if not np.all((-N < sel) & (sel < N)):
-            msg = f"Initializer argument 'selection' invalid: some indices are out of range ({-N}, {N})."
+            msg = (
+                "Initializer argument 'selection' invalid: "
+                f"some indices are out of range ({-N}, {N})."
+            )
             raise InitException(msg)
 
         self.validate_compartments()
@@ -272,7 +285,10 @@ class IndexedLocations(SeededInfection):
         selected = pop[sel]
         available = selected.sum()
         if available < self.seed_size:
-            msg = f"Attempted to infect {self.seed_size} individuals but only had {available} available."
+            msg = (
+                f"Attempted to infect {self.seed_size} individuals "
+                f"but only had {available} available."
+            )
             raise InitException(msg)
 
         # Randomly select individuals from each of the selected locations.
@@ -319,14 +335,18 @@ class SingleLocation(IndexedLocations):
     def evaluate(self) -> SimArray:
         N = self.dim.nodes
         if not -N < self.selection[0] < N:
-            msg = f"Initializer argument 'location' must be a valid index to an array of {N} populations."
+            msg = (
+                "Initializer argument 'location' must be a valid index "
+                f"to an array of {N} populations."
+            )
             raise InitException(msg)
         return super().evaluate()
 
 
 class LabeledLocations(SeededInfection):
     """
-    Infect a fixed number of people distributed across a selection of locations (by label). Parameters:
+    Infect a fixed number of people distributed to a selection of locations (by label).
+    Parameters:
     - `labels` the labels of the locations to select for infection
     - `seed_size` the number of individuals to infect in total
     """
@@ -336,7 +356,7 @@ class LabeledLocations(SeededInfection):
     labels: NDArray[np.str_]
     """Which locations to infect."""
     seed_size: int
-    """How many individuals to infect, randomly distributed between all selected locations."""
+    """How many individuals to infect, randomly distributed to selected locations."""
 
     def __init__(
         self,
@@ -353,7 +373,10 @@ class LabeledLocations(SeededInfection):
         geo_labels = self.data(_LABEL_ATTR)
 
         if not np.all(np.isin(self.labels, geo_labels)):
-            msg = "Initializer argument 'labels' invalid: some labels are not in the geo model."
+            msg = (
+                "Initializer argument 'labels' invalid: "
+                "some labels are not in the geography."
+            )
             raise InitException(msg)
 
         (selection,) = np.isin(geo_labels, self.labels).nonzero()
@@ -378,7 +401,7 @@ class RandomLocations(SeededInfection):
     num_locations: int
     """The number of locations to choose (randomly)."""
     seed_size: int
-    """How many individuals to infect, randomly distributed between all selected locations."""
+    """How many individuals to infect, randomly distributed to selected locations."""
 
     def __init__(
         self,
@@ -395,7 +418,10 @@ class RandomLocations(SeededInfection):
         N = self.dim.nodes
 
         if not 0 < self.num_locations <= N:
-            msg = f"Initializer argument 'num_locations' must be a value from 1 up to the number of locations ({N})."
+            msg = (
+                "Initializer argument 'num_locations' must be "
+                f"a value from 1 up to the number of locations ({N})."
+            )
             raise InitException(msg)
 
         indices = np.arange(N, dtype=np.intp)
@@ -418,11 +444,16 @@ class TopLocations(SeededInfection):
     # attributes is set in constructor
 
     top_attribute: AttributeDef[type[int]] | AttributeDef[type[float]]
-    """The attribute to by which to judge the 'top' locations. Must be an N-shaped attribute."""
+    """
+    The attribute to by which to judge the 'top' locations.
+    Must be an N-shaped attribute.
+    """
     num_locations: int
     """The number of locations to choose (randomly)."""
     seed_size: int
-    """How many individuals to infect, randomly distributed between all selected locations."""
+    """
+    How many individuals to infect, randomly distributed between all selected locations.
+    """
 
     def __init__(
         self,
@@ -447,15 +478,19 @@ class TopLocations(SeededInfection):
         N = self.dim.nodes
 
         if not 0 < self.num_locations <= N:
-            msg = f"Initializer argument 'num_locations' must be a value from 1 up to the number of locations ({N})."
+            msg = (
+                "Initializer argument 'num_locations' must be "
+                f"a value from 1 up to the number of locations ({N})."
+            )
             raise InitException(msg)
 
-        # `argpartition` chops an array in two halves (yielding indices of the original array):
+        # `argpartition` chops an array in two halves
+        # (yielding indices of the original array):
         # all indices whose values are smaller than the kth element,
         # followed by the index of the kth element,
         # followed by all indices whose values are larger.
-        # So by using -k we create a partition of the largest k elements at the end of the array,
-        # then slice using [-k:] to get just those indices.
+        # So by using -k we create a partition of the largest k elements
+        # at the end of the array, then slice using [-k:] to get just those indices.
         # This should be O(k log k) and saves us from copying+sorting (or some-such)
         arr = self.data(self.top_attribute)
         selection = np.argpartition(arr, -self.num_locations)[-self.num_locations :]
@@ -477,11 +512,16 @@ class BottomLocations(SeededInfection):
     # attributes is set in constructor
 
     bottom_attribute: AttributeDef[type[int]] | AttributeDef[type[float]]
-    """The attribute to by which to judge the 'bottom' locations. Must be an N-shaped attribute."""
+    """
+    The attribute to by which to judge the 'bottom' locations.
+    Must be an N-shaped attribute.
+    """
     num_locations: int
     """The number of locations to choose (randomly)."""
     seed_size: int
-    """How many individuals to infect, randomly distributed between all selected locations."""
+    """
+    How many individuals to infect, randomly distributed between all selected locations.
+    """
 
     def __init__(
         self,
@@ -508,15 +548,19 @@ class BottomLocations(SeededInfection):
         N = self.dim.nodes
 
         if not 0 < self.num_locations <= N:
-            msg = f"Initializer argument 'num_locations' must be a value from 1 up to the number of locations ({N})."
+            msg = (
+                "Initializer argument 'num_locations' must be "
+                f"a value from 1 up to the number of locations ({N})."
+            )
             raise InitException(msg)
 
-        # `argpartition` chops an array in two halves (yielding indices of the original array):
+        # `argpartition` chops an array in two halves
+        # (yielding indices of the original array):
         # all indices whose values are smaller than the kth element,
         # followed by the index of the kth element,
         # followed by all indices whose values are larger.
-        # So by using k we create a partition of the smallest k elements at the start of the array,
-        # then slice using [:k] to get just those indices.
+        # So by using k we create a partition of the smallest k elements
+        # at the start of the array, then slice using [:k] to get just those indices.
         # This should be O(k log k) and saves us from copying+sorting (or some-such)
         arr = self.data(self.bottom_attribute)
         selection = np.argpartition(arr, self.num_locations)[: self.num_locations]

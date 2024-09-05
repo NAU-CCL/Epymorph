@@ -168,7 +168,9 @@ class SimulateTest(unittest.TestCase):
         self.assertTrue(np.all(out2.incidence[:, 0, 2] == 0))
 
     def test_less_than_zero_err(self):
-        """Test exception handling for a negative rate value due to a negative parameter"""
+        """
+        Test exception handling for a negative rate value due to a negative parameter
+        """
         rume = SingleStrataRume.build(
             ipm=ipm_library["pei"](),
             mm=mm_library["pei"](),

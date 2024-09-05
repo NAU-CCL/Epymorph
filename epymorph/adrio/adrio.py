@@ -1,4 +1,7 @@
-"""Implements the base class for all ADRIOs, as well as some general-purpose ADRIO implementations."""
+"""
+Implements the base class for all ADRIOs, as well as some general-purpose
+ADRIO implementations.
+"""
 
 import functools
 from typing import TypeVar
@@ -16,9 +19,9 @@ T_co = TypeVar("T_co", bound=np.generic, covariant=True)
 
 class Adrio(SimulationFunction[NDArray[T_co]]):
     """
-    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended to
-    load data from external sources for epymorph simulations. This may be from web APIs,
-    local files or database, or anything imaginable.
+    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
+    to load data from external sources for epymorph simulations. This may be from
+    web APIs, local files or database, or anything imaginable.
     """
 
 
@@ -47,7 +50,7 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
 
 
 class NodeId(Adrio[np.str_]):
-    """An ADRIO which simply gives access to the node IDs as they exist in the geo scope."""
+    """An ADRIO that provides the node IDs as they exist in the geo scope."""
 
     @override
     def evaluate(self) -> NDArray:
@@ -55,7 +58,7 @@ class NodeId(Adrio[np.str_]):
 
 
 class Scale(Adrio[np.float64]):
-    """Scales the result of another ADRIO by multiplying its values by the configured factor."""
+    """Scales the result of another ADRIO by multiplying values by the given factor."""
 
     _parent: Adrio[np.int64 | np.float64]
     _factor: float
@@ -70,7 +73,11 @@ class Scale(Adrio[np.float64]):
 
 
 class PopulationPerKm2(Adrio[np.float64]):
-    """Calculates population density by combining the values from `population` and `land_area_km2`."""
+    """
+    Calculates population density by combining the values from attributes named
+    `population` and `land_area_km2`. You must provide those attributes
+    separately.
+    """
 
     POPULATION = AttributeDef("population", int, Shapes.N)
     LAND_AREA_KM2 = AttributeDef("land_area_km2", float, Shapes.N)

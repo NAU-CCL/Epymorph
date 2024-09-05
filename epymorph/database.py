@@ -2,14 +2,15 @@
 A Database in epymorph is a way to organize values with our namespace system
 of three hierarchical components, as in: "strata::module::attribute_id".
 This gives us a lot of flexibility when specifying data requirements and values
-which fulfill those requirements. For example, you can provide a value for "*::*::population"
-to indicate that every strata and every module should use the same value if they need a "population"
-attribute. Or you can provide "*::init::population" to indicate that only initializers should use this
-value, and, presumably, another value is more appropriate for other modules like movement.
+which fulfill those requirements. For example, you can provide a value for
+"*::*::population" to indicate that every strata and every module should use the same
+value if they need a "population" attribute. Or you can provide "*::init::population"
+to indicate that only initializers should use this value, and, presumably, another value
+is more appropriate for other modules like movement.
 
-Hierarchical Database instances are also included which provide the ability to "layer" data
-for a simulation -- if the outermost database has a matching value, that value is used, otherwise
-the search for a match proceeds to the inner layers (recursively).
+Hierarchical Database instances are also included which provide the ability to "layer"
+data for a simulation -- if the outermost database has a matching value, that value is
+used, otherwise the search for a match proceeds to the inner layers (recursively).
 """
 
 from dataclasses import dataclass
@@ -108,7 +109,10 @@ class AbsoluteName:
         return f"{self.strata}::{self.module}::{self.id}"
 
     def in_strata(self, strata: str) -> "AbsoluteName":
-        """Creates a new AbsoluteName that is a copy of this name but with the given strata."""
+        """
+        Creates a new AbsoluteName that is a copy of this name
+        but with the given strata.
+        """
         return AbsoluteName(strata, self.module, self.id)
 
     def to_namespace(self) -> ModuleNamespace:
@@ -162,8 +166,8 @@ class AttributeName:
 @dataclass(frozen=True)
 class NamePattern:
     """
-    A name with a strata, module, and attribute ID that allows wildcards (*) so it can act
-    as a pattern to match against AbsoluteNames.
+    A name with a strata, module, and attribute ID that allows wildcards (*) so it can
+    act as a pattern to match against AbsoluteNames.
     """
 
     strata: str
@@ -176,9 +180,9 @@ class NamePattern:
     @classmethod
     def parse(cls, name: str) -> Self:
         """
-        Parse a pattern from a ::-delimited string. As a shorthand, you can omit preceding wildcard
-        segments and they will be automatically filled in, e.g., "a" will become "*::*::a" and
-        "a::b" will become "*::a::b".
+        Parse a pattern from a ::-delimited string. As a shorthand, you can omit
+        preceding wildcard segments and they will be automatically filled in,
+        e.g., "a" will become "*::*::a" and "a::b" will become "*::a::b".
         """
         parts = name.split("::")
         match len(parts):
@@ -194,8 +198,8 @@ class NamePattern:
     def match(self, name: "AbsoluteName | NamePattern") -> bool:
         """
         Test this pattern to see if it matches the given AbsoluteName or NamePattern.
-        The ability to match against NamePatterns is useful to see if two patterns conflict
-        with each other and would create ambiguity.
+        The ability to match against NamePatterns is useful to see if two patterns
+        conflict with each other and would create ambiguity.
         """
         match name:
             case AbsoluteName(s, m, i):
@@ -239,8 +243,9 @@ class ModuleNamePattern:
     @classmethod
     def parse(cls, name: str) -> Self:
         """
-        Parse a pattern from a ::-delimited string. As a shorthand, you can omit a preceding wildcard
-        segment and it will be automatically filled in, e.g., "a" will become "*::a".
+        Parse a pattern from a ::-delimited string. As a shorthand, you can omit
+        a preceding wildcard segment and it will be automatically filled in,
+        e.g.,"a" will become "*::a".
         """
         if len(name) == 0:
             raise ValueError("Empty string is not a valid name.")
@@ -300,7 +305,8 @@ class Database(Generic[T]):
         ]
 
         if len(conflicts) > 0:
-            msg = f"Keys in data source are ambiguous; conflicts:\n{', '.join(map(str, conflicts))}"
+            conflicts = ", ".join(map(str, conflicts))
+            msg = f"Keys in data source are ambiguous; conflicts:\n{conflicts}"
             raise ValueError(msg)
 
     @overload

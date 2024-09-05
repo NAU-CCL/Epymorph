@@ -45,8 +45,9 @@ CENSUS_HIERARCHY = ("state", "county", "tract", "block group", "block")
 
 class CensusGranularity(ABC):
     """
-    Each CensusGranularity instance defines a set of utility functions for working with GEOIDs of that granularity,
-    as well as inspecting and manipulating the granularity hierarchy itself.
+    Each CensusGranularity instance defines a set of utility functions for working with
+    GEOIDs of that granularity, as well as inspecting and manipulating the granularity
+    hierarchy itself.
     """
 
     _name: CensusGranularityName
@@ -83,7 +84,10 @@ class CensusGranularity(ABC):
         return self._length
 
     def is_nested(self, outer: CensusGranularityName) -> bool:
-        """Test whether this granularity is nested inside (or equal to) the given granularity."""
+        """
+        Test whether this granularity is nested inside (or equal to)
+        the given granularity.
+        """
         return CENSUS_HIERARCHY.index(outer) <= CENSUS_HIERARCHY.index(self.name)
 
     def matches(self, geoid: str) -> bool:
@@ -92,8 +96,9 @@ class CensusGranularity(ABC):
 
     def extract(self, geoid: str) -> str:
         """
-        Extracts this level of granularity's GEOID segment, if the given GEOID is of this granularity or smaller.
-        Raises a GeographyError if the GEOID is unsuitable or poorly formatted.
+        Extracts this level of granularity's GEOID segment, if the given GEOID is of
+        this granularity or smaller. Raises a GeographyError if the GEOID is unsuitable
+        or poorly formatted.
         """
         if (m := self._extract_pattern.match(geoid)) is not None:
             return m[1]
@@ -104,7 +109,8 @@ class CensusGranularity(ABC):
     def truncate(self, geoid: str) -> str:
         """
         Truncates the given GEOID to this level of granularity.
-        If the given GEOID is for a granularity larger than this level, the GEOID will be returned unchanged.
+        If the given GEOID is for a granularity larger than this level,
+        the GEOID will be returned unchanged.
         """
         return geoid[: self.length]
 
@@ -136,7 +142,8 @@ class CensusGranularity(ABC):
     def decompose(self, geoid: str) -> tuple[str, ...]:
         """
         Decompose a GEOID into a tuple containing all of its granularity component IDs.
-        The GEOID must match this granularity exactly, or else GeographyError will be raised.
+        The GEOID must match this granularity exactly,
+        or else GeographyError will be raised.
         """
 
     def grouped(self, sorted_geoids: NDArray[np.str_]) -> dict[str, NDArray[np.str_]]:
@@ -279,7 +286,8 @@ def _load_cached(
     relpath: str, on_miss: Callable[[], ModelT], on_hit: Callable[..., ModelT]
 ) -> ModelT:
     # NOTE: this would be more natural as a decorator,
-    # but Pylance seems to have problems tracking the return type properly with that implementation
+    # but Pylance seems to have problems tracking the return type properly
+    # with that implementation
     path = _USCENSUS_CACHE_PATH.joinpath(relpath)
     try:
         content = load_bundle_from_cache(path, _CACHE_VERSION)
@@ -310,12 +318,11 @@ def get_us_states(year: int) -> StatesInfo:
         raise GeographyError(f"Unsupported year: {year}")
 
     def _get_us_states() -> StatesInfo:
-        df = us_tiger.get_states_info(year)
-        df.sort_values("GEOID", inplace=True)
+        states_df = us_tiger.get_states_info(year).sort_values("GEOID")
         return StatesInfo(
-            geoid=df["GEOID"].to_numpy(np.str_),
-            name=df["NAME"].to_numpy(np.str_),
-            code=df["STUSPS"].to_numpy(np.str_),
+            geoid=states_df["GEOID"].to_numpy(np.str_),
+            name=states_df["NAME"].to_numpy(np.str_),
+            code=states_df["STUSPS"].to_numpy(np.str_),
         )
 
     return _load_cached("us_states_all.tgz", _get_us_states, StatesInfo)
@@ -336,11 +343,10 @@ def get_us_counties(year: int) -> CountiesInfo:
         raise GeographyError(f"Unsupported year: {year}")
 
     def _get_us_counties() -> CountiesInfo:
-        df = us_tiger.get_counties_info(year)
-        df.sort_values("GEOID", inplace=True)
+        counties_df = us_tiger.get_counties_info(year).sort_values("GEOID")
         return CountiesInfo(
-            geoid=df["GEOID"].to_numpy(np.str_),
-            name=df["NAME"].to_numpy(np.str_),
+            geoid=counties_df["GEOID"].to_numpy(np.str_),
+            name=counties_df["NAME"].to_numpy(np.str_),
         )
 
     return _load_cached(f"us_counties_{year}.tgz", _get_us_counties, CountiesInfo)
@@ -359,10 +365,9 @@ def get_us_tracts(year: int) -> TractsInfo:
         raise GeographyError(f"Unsupported year: {year}")
 
     def _get_us_tracts() -> TractsInfo:
-        df = us_tiger.get_tracts_info(year)
-        df.sort_values("GEOID", inplace=True)
+        tracts_df = us_tiger.get_tracts_info(year).sort_values("GEOID")
         return TractsInfo(
-            geoid=df["GEOID"].to_numpy(np.str_),
+            geoid=tracts_df["GEOID"].to_numpy(np.str_),
         )
 
     return _load_cached(f"us_tracts_{year}.tgz", _get_us_tracts, TractsInfo)
@@ -381,10 +386,9 @@ def get_us_block_groups(year: int) -> BlockGroupsInfo:
         raise GeographyError(f"Unsupported year: {year}")
 
     def _get_us_cbgs() -> BlockGroupsInfo:
-        df = us_tiger.get_block_groups_info(year)
-        df.sort_values("GEOID", inplace=True)
+        cbgs_df = us_tiger.get_block_groups_info(year).sort_values("GEOID")
         return BlockGroupsInfo(
-            geoid=df["GEOID"].to_numpy(np.str_),
+            geoid=cbgs_df["GEOID"].to_numpy(np.str_),
         )
 
     return _load_cached(f"us_block_groups_{year}.tgz", _get_us_cbgs, BlockGroupsInfo)
@@ -418,15 +422,18 @@ def validate_fips(
             raise GeographyError(f"Unsupported granularity: {granularity}")
 
     if not all((curr := x) in valid_nodes for x in fips):
-        msg = f"Not all given {granularity} fips codes are valid for {year} (for example: {curr})."
+        msg = (
+            f"Not all given {granularity} fips codes are valid for {year} "
+            f"(for example: {curr})."
+        )
         raise GeographyError(msg)
     return tuple(sorted(fips))
 
 
 # We use the set of 56 two-letter abbreviations and FIPS codes returned by TIGRIS.
 # This set should be constant since 1970 when the FIPS standard was introduced.
-# It doesn't cover *every* such code, but it's sufficient for Census usage, which doesn't provide
-# data for state-or-state-equivalents outside of this set.
+# It doesn't cover *every* such code, but it's sufficient for Census usage, which
+# doesn't provide data for state-or-state-equivalents outside of this set.
 # https://www.census.gov/library/reference/code-lists/ansi.html#states
 
 
@@ -472,7 +479,8 @@ class CensusScope(ABC, GeoScope):
     The Census delineation year.
     With every decennial census, the Census Department can (and does) define
     new delineations, especially at the smaller granularities. Hence, you must
-    know the delineation year in order to absolutely identify any particular granularity.
+    know the delineation year in order to absolutely identify any
+    particular granularity.
     """
 
     granularity: CensusGranularityName
@@ -546,14 +554,15 @@ class StateScope(CensusScope):
         states_code: Sequence[str], year: int = DEFAULT_YEAR
     ) -> "StateScope":
         """
-        Create a scope including a set of US states/state-equivalents, by postal code (two-letter abbreviation).
+        Create a scope including a set of US states/state-equivalents,
+        by postal code (two-letter abbreviation).
         Raise GeographyError if any postal code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)
         return StateScope(includes_granularity="state", includes=states_fips, year=year)
 
     def get_node_ids(self) -> NDArray[np.str_]:
-        # As long as we enforce that fips codes will be checked and sorted on construction,
+        # As long as we enforce that fips codes will be checked and sorted on init,
         # we can use the value of 'includes'.
         return np.array(self.includes, dtype=np.str_)
 
@@ -744,7 +753,8 @@ class BlockGroupScope(CensusScope):
         states_fips: Sequence[str], year: int = DEFAULT_YEAR
     ) -> "BlockGroupScope":
         """
-        Create a scope including all block groups in a set of US states/state-equivalents.
+        Create a scope including all block groups in a set of
+        US states/state-equivalents.
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_fips("state", year, states_fips)
@@ -757,8 +767,8 @@ class BlockGroupScope(CensusScope):
         states_code: Sequence[str], year: int = DEFAULT_YEAR
     ) -> "BlockGroupScope":
         """
-        Create a scope including all block groups in a set of US states/state-equivalents,
-        by postal code (two-letter abbreviation).
+        Create a scope including all block groups in a set of
+        US states/state-equivalents, by postal code (two-letter abbreviation).
         Raise GeographyError if any FIPS code is invalid.
         """
         states_fips = validate_state_codes_as_fips(year, states_code)

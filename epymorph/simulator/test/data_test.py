@@ -34,7 +34,10 @@ class EvaluateParamsTest(unittest.TestCase):
             self.fail(f"Database did not contain the expected key: {key}")
         else:
             match_pattern, match_value = matched
-            msg = f"Database value at key {key} (matched as {match_pattern}) did not match expected."
+            msg = (
+                f"Database value at key {key} (matched as {match_pattern}) "
+                "did not match expected."
+            )
             if value.dtype == np.float64:
                 npt.assert_array_almost_equal(match_value, value, err_msg=msg)  # type: ignore
             else:
@@ -87,7 +90,7 @@ class EvaluateParamsTest(unittest.TestCase):
                     mm=mm_library["centroids"](),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
-                        "beta": 99.0,  # we'll override this value to test value shadowing
+                        "beta": 99.0,  # we'll override this value to test shadowing
                         "phi": 33.0,  # test GPM value resolution
                     },
                 ),

@@ -40,7 +40,10 @@ def identity(x: T) -> T:
 
 
 def constant(x: T) -> Callable[..., T]:
-    """A function which returns a constant value, regardless of what arguments its called with."""
+    """
+    A function which returns a constant value,
+    regardless of what arguments its called with.
+    """
     return lambda *_: x
 
 
@@ -58,7 +61,10 @@ def call_all(*fs: Callable[[], Any]) -> None:
 
 
 def index_where(it: Iterable[T], predicate: Callable[[T], bool]) -> int:
-    """Find the first index of `it` where `predicate` evaluates to True. Return -1 if no such value exists."""
+    """
+    Find the first index of `it` where `predicate` evaluates to True.
+    Return -1 if no such value exists.
+    """
     for i, x in enumerate(it):
         if predicate(x):
             return i
@@ -66,7 +72,10 @@ def index_where(it: Iterable[T], predicate: Callable[[T], bool]) -> int:
 
 
 def index_of(it: Iterable[T], item: T) -> int:
-    """Find the first index of `it` where `item` evaluates as equal. Return -1 if no such value exists."""
+    """
+    Find the first index of `it` where `item` evaluates as equal.
+    Return -1 if no such value exists.
+    """
     for i, x in enumerate(it):
         if x == item:
             return i
@@ -76,7 +85,8 @@ def index_of(it: Iterable[T], item: T) -> int:
 def iterator_length(it: Iterable[Any]) -> int:
     """
     Count the number of items in the given iterator.
-    Warning: this consumes the iterator! It also never terminates if the iterator is infinite.
+    Warning: this consumes the iterator!
+    It also never terminates if the iterator is infinite.
     """
     length = 0
     for _ in it:
@@ -108,14 +118,20 @@ def are_instances(xs: tuple[Any], of_type: type[T]) -> TypeGuard[tuple[T]]: ...
 def are_instances(
     xs: list[Any] | tuple[Any], of_type: type[T]
 ) -> TypeGuard[list[T] | tuple[T]]:
-    """TypeGuards a collection to check that all items are instances of the given type (`of_type`)."""
+    """
+    TypeGuards a collection to check that all items are
+    instances of the given type (`of_type`).
+    """
     # NOTE: TypeVars can't be generic so we can't do TypeGuard[C[T]] :(
     # Thus this only supports the types of collections we specify explicitly.
     return all(isinstance(x, of_type) for x in xs)
 
 
 def filter_unique(xs: Iterable[T]) -> list[T]:
-    """Convert an iterable to a list, keeping only the unique values and maintaining the order as first-seen."""
+    """
+    Convert an iterable to a list, keeping only the unique values and
+    maintaining the order as first-seen.
+    """
     xset = set[T]()
     ys = list[T]()
     for x in xs:
@@ -130,7 +146,8 @@ def filter_with_mask(
 ) -> tuple[list[B], list[bool]]:
     """
     Filters the given iterable for items which match `predicate`, and also
-    returns a boolean mask the same length as the iterable with the results of `predicate` for each item.
+    returns a boolean mask the same length as the iterable with the results of
+    `predicate` for each item.
     """
     matched = list[B]()
     mask = list[bool]()
@@ -143,7 +160,9 @@ def filter_with_mask(
 
 
 def as_list(x: T | list[T]) -> list[T]:
-    """If `x` is a list, return it unchanged. If it's a single value, wrap it in a list."""
+    """
+    If `x` is a list, return it unchanged. If it's a single value, wrap it in a list.
+    """
     return x if isinstance(x, list) else [x]
 
 
@@ -163,11 +182,11 @@ def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
 
 class MemoDict(dict[K, V]):
     """
-    A dict implementation which will call a factory function when the user attempts to access
-    a key which is currently not in the dict.
+    A dict implementation which will call a factory function when the user attempts to
+    access a key which is currently not in the dict.
 
-    This varies slightly from `defaultdict`, which uses a factory function without the ability
-    to pass the requested key.
+    This varies slightly from `defaultdict`, which uses a factory function without the
+    ability to pass the requested key.
     """
 
     _factory: Callable[[K], V]
@@ -219,8 +238,9 @@ def row_normalize(
     arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DTypeLike = None
 ) -> NDArray[N]:
     """
-    Assuming `arr` is a 2D array, normalize values across each row by dividing by the row sum.
-    If you've already calculated row sums, you can pass those in, otherwise they will be computed.
+    Assuming `arr` is a 2D array, normalize values across each row by dividing
+    by the row sum. If you've already calculated row sums, you can pass those in,
+    otherwise they will be computed.
     """
     if row_sums is None:
         row_sums = arr.sum(axis=1, dtype=dtype)
@@ -232,7 +252,9 @@ def row_normalize(
 
 
 def prefix(length: int) -> Callable[[NDArray[np.str_]], NDArray[np.str_]]:
-    """A vectorized operation to return the prefix of each value in an NDArray of strings."""
+    """
+    A vectorized operation to return the prefix of each value in an NDArray of strings.
+    """
     return np.vectorize(lambda x: x[0:length], otypes=[np.str_])
 
 
@@ -467,7 +489,7 @@ def check_ndarray(
     shape: Matcher[NDArray] = MatchAny(),
 ) -> None:
     """
-    Checks that a value is a numpy array that matches the given dtype and shape Matchers.
+    Checks that a value is a numpy array matching the given dtype and shape Matchers.
     Raises a NumpyTypeError if a check doesn't pass.
     """
     if value is None:
@@ -477,7 +499,10 @@ def check_ndarray(
         raise NumpyTypeError("Not a numpy array.")
 
     if not dtype(value.dtype):
-        msg = f"Not a numpy dtype match; got {dtype_name(value.dtype)}, required {dtype.expected()}"
+        msg = (
+            "Not a numpy dtype match; "
+            f"got {dtype_name(value.dtype)}, required {dtype.expected()}"
+        )
         raise NumpyTypeError(msg)
 
     if not shape(value):
@@ -553,8 +578,8 @@ class Subscriber:
 @contextmanager
 def subscriptions() -> Generator[Subscriber, None, None]:
     """
-    Manage a subscription context, where all subscriptions added through the returned Subscriber
-    will be automatically unsubscribed when the context closes.
+    Manage a subscription context, where all subscriptions added through the returned
+    Subscriber will be automatically unsubscribed when the context closes.
     """
     sub = Subscriber()
     yield sub

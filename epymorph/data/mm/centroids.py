@@ -36,7 +36,7 @@ class CentroidsClause(MovementClause):
             float,
             Shapes.S,
             default_value=0.1,
-            comment="Decides what proportion of the total population should be commuting normally.",
+            comment="The proportion of the total population which commutes.",
         ),
     )
 
@@ -47,8 +47,8 @@ class CentroidsClause(MovementClause):
     @cached_property
     def dispersal_kernel(self) -> NDArray[np.float64]:
         """
-        The NxN matrix or dispersal kernel describing the tendency for movers to move to a particular location.
-        In this model, the kernel is:
+        The NxN matrix or dispersal kernel describing the tendency for movers to move
+        to a particular location. In this model, the kernel is:
             1 / e ^ (distance / phi)
         which is then row-normalized.
         """

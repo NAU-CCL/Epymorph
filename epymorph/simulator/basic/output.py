@@ -15,8 +15,8 @@ from epymorph.data_type import SimDType
 @dataclass(frozen=True)
 class Output:
     """
-    The output of a simulation run, including prevalence for all populations and all IPM compartments
-    and incidence for all populations and all IPM events.
+    The output of a simulation run, including prevalence for all populations and all
+    IPM compartments and incidence for all populations and all IPM events.
     """
 
     dim: SimDimensions
@@ -27,7 +27,8 @@ class Output:
     initial: NDArray[SimDType]
     """
     Initial prevalence data by population and compartment.
-    Array of shape (N, C) where N is the number of populations, and C is the number of compartments
+    Array of shape (N, C) where N is the number of populations,
+    and C is the number of compartments
     """
 
     prevalence: NDArray[SimDType] = field(init=False)

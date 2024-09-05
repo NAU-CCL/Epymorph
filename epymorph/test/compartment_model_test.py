@@ -112,7 +112,7 @@ class CompartmentModelTest(unittest.TestCase):
         self.assertEqual(model.num_events, 6)
 
     def test_create_03(self):
-        # Test for error: Attempt to reference an undeclared compartment in a transition.
+        # Test for error: Reference an undeclared compartment in a transition.
         with self.assertRaises(TypeError) as e:
 
             class MyIpm(CompartmentModel):
@@ -139,7 +139,7 @@ class CompartmentModelTest(unittest.TestCase):
         self.assertIn("missing compartments: bad_compartment", str(e.exception).lower())
 
     def test_create_04(self):
-        # Test for error: Attempt to reference an undeclared requirement in a transition.
+        # Test for error: Reference an undeclared requirement in a transition.
         with self.assertRaises(TypeError) as e:
 
             class MyIpm(CompartmentModel):

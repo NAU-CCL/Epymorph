@@ -135,7 +135,10 @@ class DataShape(unittest.TestCase):
 
     def adapt_test_framework(self, shape, cases):
         for i, (input_value, broadcast, expected) in enumerate(cases):
-            error = f"Failure in test case {i}: ({shape}, {input_value}, {broadcast}, {expected})"
+            error = (
+                f"Failure in test case {i}: "
+                f"({shape}, {input_value}, {broadcast}, {expected})"
+            )
             actual = shape.adapt(_dim, input_value, broadcast)
             if expected is None:
                 self.assertIsNone(actual, error)

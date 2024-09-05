@@ -1,10 +1,10 @@
 """Epymorph unit testing utilities."""
 
-from typing import Any, Sequence
+from typing import Sequence
 from unittest import TestCase
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import ArrayLike
 
 
 def _ndarray_signature(arr):

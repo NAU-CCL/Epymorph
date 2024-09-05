@@ -70,8 +70,8 @@ def map_data_by_county(
     year: us_tiger.TigerYear = 2020,
 ) -> None:
     """
-    Draw a county-level choropleth map using the given `data`. This must be a numpy array whose
-    ordering is the same as the nodes in the geo scope.
+    Draw a county-level choropleth map using the given `data`. This must be a
+    numpy array whose ordering is the same as the nodes in the geo scope.
     """
     state_fips = tuple(STATE.truncate_list(scope.get_node_ids()))
     gdf_counties = us_tiger.get_counties_geo(year)
@@ -103,8 +103,8 @@ def map_data_by_state(
     year: us_tiger.TigerYear = 2020,
 ) -> None:
     """
-    Draw a state-level choropleth map using the given `data`. This must be a numpy array whose
-    ordering is the same as the nodes in the geo scope.
+    Draw a state-level choropleth map using the given `data`. This must be a
+    numpy array whose ordering is the same as the nodes in the geo scope.
     """
     state_fips = tuple(STATE.truncate_list(scope.get_node_ids()))
     gdf_states = us_tiger.get_states_geo(year)
@@ -127,7 +127,8 @@ def _map_data_by_geo(
 ) -> None:
     """
     Draw a choropleth map for the geo information given.
-    This is an internal function to abstract commonalities -- see `map_data_by_county()` and `map_data_by_state()`.
+    This is an internal function to abstract commonalities,
+    see `map_data_by_county()` and `map_data_by_state()`.
     """
     df_merged = pd_merge(
         on="GEOID",

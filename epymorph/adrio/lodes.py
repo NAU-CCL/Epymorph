@@ -70,7 +70,10 @@ def _fetch_lodes(
 
     # no federal jobs in given years
     if year in range(2002, 2010) and (job_type == "JT04" or job_type == "JT05"):
-        msg = "Invalid year for job type, no federal jobs can be found between 2002 to 2009"
+        msg = (
+            "Invalid year for job type, no federal jobs can be found "
+            "between 2002 to 2009"
+        )
         raise DataResourceException(msg)
 
     # LODES year and state exceptions
@@ -78,36 +81,44 @@ def _fetch_lodes(
     invalid_conditions = [
         (
             year in range(2002, 2010) and (job_type == "JT04" or job_type == "JT05"),
-            "Invalid year for job type, no federal jobs can be found between 2002 to 2009",
+            "Invalid year for job type, no federal jobs can be found "
+            "between 2002 to 2009",
         ),
         (
             ("05" in states) and (year == 2002 or year in range(2019, 2022)),
-            "Invalid year for state, no commuters can be found for Arkansas in 2002 or between 2019-2021",
+            "Invalid year for state, no commuters can be found "
+            "for Arkansas in 2002 or between 2019-2021",
         ),
         (
             ("04" in states) and (year == 2002 or year == 2003),
-            "Invalid year for state, no commuters can be found for Arizona in 2002 or 2003",
+            "Invalid year for state, no commuters can be found "
+            "for Arizona in 2002 or 2003",
         ),
         (
             ("11" in states) and (year in range(2002, 2010)),
-            "Invalid year for state, no commuters can be found for DC in 2002 or between 2002-2009",
+            "Invalid year for state, no commuters can be found "
+            "for DC in 2002 or between 2002-2009",
         ),
         (
             ("25" in states) and (year in range(2002, 2011)),
-            "Invalid year for state, no commuters can be found for Massachusetts between 2002-2010",
+            "Invalid year for state, no commuters can be found "
+            "for Massachusetts between 2002-2010",
         ),
         (
             ("28" in states)
             and (year in range(2002, 2004) or year in range(2019, 2022)),
-            "Invalid year for state, no commuters can be found for Mississippi in 2002, 2003, or between 2019-2021",
+            "Invalid year for state, no commuters can be found "
+            "for Mississippi in 2002, 2003, or between 2019-2021",
         ),
         (
             ("33" in states) and year == 2002,
-            "Invalid year for state, no commuters can be found for New Hampshire in 2002",
+            "Invalid year for state, no commuters can be found "
+            "for New Hampshire in 2002",
         ),
         (
             ("02" in states) and year in range(2017, 2022),
-            "Invalid year for state, no commuters can be found for Alaska in between 2017-2021",
+            "Invalid year for state, no commuters can be found "
+            "for Alaska in between 2017-2021",
         ),
     ]
     for condition, message in invalid_conditions:
@@ -126,7 +137,8 @@ def _fetch_lodes(
         url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
         url_list.append(url_main)
 
-        # if there are more than one state in the input, get the aux files (out of state residence)
+        # if there are more than one state in the input,
+        # get the aux files (out of state residence)
         if file_type == "aux":
             url_aux = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
             url_list.append(url_aux)
@@ -205,7 +217,8 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
 
 class Commuters(Adrio[np.int64]):
     """
-    Creates an NxN matrix of integers representing the number of workers moving from a home GEOID to a work GEOID.
+    Creates an NxN matrix of integers representing the number of workers moving
+    from a home GEOID to a work GEOID.
     """
 
     year: int
@@ -222,8 +235,7 @@ class Commuters(Adrio[np.int64]):
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, "S000", job_var, self.year)
-        return df
+        return _fetch_lodes(scope, "S000", job_var, self.year)
 
 
 class CommutersByAge(Adrio[np.int64]):
@@ -258,8 +270,7 @@ class CommutersByAge(Adrio[np.int64]):
         scope = _validate_scope(scope)
         age_var = self.age_variables[self.age_range]
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, age_var, job_var, self.year)
-        return df
+        return _fetch_lodes(scope, age_var, job_var, self.year)
 
 
 class CommutersByEarnings(Adrio[np.int64]):
@@ -296,8 +307,7 @@ class CommutersByEarnings(Adrio[np.int64]):
         scope = _validate_scope(scope)
         earning_var = self.earnings_variables[self.earning_range]
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, earning_var, job_var, self.year)
-        return df
+        return _fetch_lodes(scope, earning_var, job_var, self.year)
 
 
 class CommutersByIndustry(Adrio[np.int64]):
@@ -332,5 +342,4 @@ class CommutersByIndustry(Adrio[np.int64]):
         scope = _validate_scope(scope)
         industry_var = self.industry_variables[self.industry]
         job_var = job_variables[self.job_type]
-        df = _fetch_lodes(scope, industry_var, job_var, self.year)
-        return df
+        return _fetch_lodes(scope, industry_var, job_var, self.year)

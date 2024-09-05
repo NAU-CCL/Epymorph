@@ -1,5 +1,5 @@
 from io import BytesIO
-from os import path
+from pathlib import Path
 from shutil import which
 from tempfile import NamedTemporaryFile
 
@@ -52,19 +52,19 @@ def check_draw_requirements() -> bool:
 
     # print errors if needed for latex check
     if latex_check is None:
-        print("ERROR: No LaTeX converter found for IPM visualization.")
         print(
-            "We recommend MiKTeX, found at https://miktex.org/download, or TexLive, found at https://tug.org/texlive/."
-        )
-        print(
-            "These distributions are recommended by SymPy, a package we use for mathematical expressions."
+            "ERROR: No LaTeX converter found for IPM visualization.\n"
+            "We recommend MiKTeX, found at https://miktex.org/download, or TexLive, "
+            "found at https://tug.org/texlive/.\n"
+            "These distributions are recommended by SymPy, a package we use "
+            "for mathematical expressions."
         )
 
     # print errors if needed for graphviz check
     if graphviz_check is None:
         print(
             "ERROR: Graphviz not found for IPM visualization. Installation guides "
-            + "can be found at https://graphviz.org/download/"
+            "can be found at https://graphviz.org/download/"
         )
 
     return latex_check is not None and graphviz_check is not None
@@ -110,7 +110,7 @@ def edge_to_graphviz(edge_set: EdgeTracker) -> Digraph:
 
         return (
             f'<<TABLE border="0"><TR><TD><IMG SRC="{png_filepath}"/>'
-            + "</TD></TR></TABLE>>"
+            "</TD></TR></TABLE>>"
         )
 
     # init a graph viz directed graph for visualization
@@ -227,10 +227,11 @@ def save_model(ipm_graph: Digraph, filepath: str) -> bool:
     # ensure filepath not empty
     if filepath:
         # get the directory and filename
-        directory, filename = path.split(filepath)
+        fp = Path(filepath)
+        directory, filename = fp.parent, fp.name
 
         # ensure directory exists
-        if path.exists(directory):
+        if directory.exists():
             # render and save png
             ipm_graph.render(filename=filename, directory=directory, cleanup=True)
 

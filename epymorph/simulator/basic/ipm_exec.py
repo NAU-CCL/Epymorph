@@ -116,13 +116,22 @@ class IpmExecutor:
     _trxs: list[CompiledTransition]
     """compiled transitions"""
     _apply_matrix: NDArray[SimDType]
-    """a matrix defining how each event impacts each compartment (subtracting or adding individuals)"""
+    """
+    a matrix defining how each event impacts each compartment
+    (subtracting or adding individuals)
+    """
     _events_leaving_compartment: list[list[int]]
-    """mapping from compartment index to the list of event indices which source from that compartment"""
+    """
+    mapping from compartment index to the list of event indices
+    which source from that compartment
+    """
     _source_compartment_for_event: list[int]
     """mapping from event index to the compartment index it sources from"""
     _attribute_values_txn: Generator[Iterable[AttributeValue], None, None]
-    """a generator for the list of arguments (from attributes) needed to evaluate transition functions"""
+    """
+    a generator for the list of arguments (from attributes) needed to evaluate
+    transition functions
+    """
 
     def __init__(
         self,
@@ -161,8 +170,8 @@ class IpmExecutor:
     def apply(self, tick: Tick) -> Result:
         """
         Applies the IPM for this tick, mutating the world state.
-        Returns the location-specific events that happened this tick (an (N,E) array) and the new
-        prevalence resulting from these events (an (N,C) array).
+        Returns the location-specific events that happened this tick (an (N,E) array)
+        and the new prevalence resulting from these events (an (N,C) array).
         """
         _, N, C, E = self._rume.dim.TNCE
         tick_events = np.zeros((N, E), dtype=SimDType)
@@ -184,7 +193,10 @@ class IpmExecutor:
         return Result(tick_events, tick_prevalence)
 
     def _events(self, tick: Tick, node: int, effective_pop: SimArray) -> SimArray:
-        """Calculate how many events will happen this tick, correcting for the possibility of overruns."""
+        """
+        Calculate how many events will happen this tick, correcting
+        for the possibility of overruns.
+        """
 
         rate_args = [*effective_pop, *next(self._attribute_values_txn)]
 
@@ -251,7 +263,8 @@ class IpmExecutor:
                     occur[eidxs] = [drawn0, available - drawn0]
             else:
                 # Compartment has more than two outwards edges:
-                # use multivariate hypergeometric to select which events "actually" happened.
+                # use multivariate hypergeometric to select which events
+                # "actually" happened.
                 desired = occur[eidxs]
                 if np.sum(desired) > available:
                     occur[eidxs] = self._rng.multivariate_hypergeometric(
@@ -307,7 +320,7 @@ class IpmExecutor:
                 (
                     "corresponding fork transition and probabilities",
                     {
-                        f"{from_compartment}->({to_compartments})": corr_transition.rate,
+                        f"{from_compartment}->({to_compartments})": corr_transition.rate,  # noqa: E501
                         "Probabilities": ", ".join(
                             [str(expr) for expr in corr_transition.probs]
                         ),
@@ -333,7 +346,7 @@ class IpmExecutor:
                 (
                     "corresponding transition",
                     {
-                        f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate
+                        f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate  # noqa: E501
                     },
                 )
             )
@@ -354,7 +367,10 @@ class IpmExecutor:
     def _distribute(
         self, cohorts: NDArray[SimDType], events: NDArray[SimDType]
     ) -> NDArray[SimDType]:
-        """Distribute all events across a location's cohorts and return the compartment deltas for each."""
+        """
+        Distribute all events across a location's cohorts and return
+        the compartment deltas for each.
+        """
         x = cohorts.shape[0]
         e = self._rume.dim.events
         occurrences = np.zeros((x, e), dtype=SimDType)
@@ -372,5 +388,6 @@ class IpmExecutor:
                 occurrences[:, eidx] = selected
                 cohorts[:, cidx] -= selected
 
-        # Now that events are assigned to pops, convert to compartment deltas using apply matrix.
+        # Now that events are assigned to pops,
+        # convert to compartment deltas using apply matrix.
         return np.matmul(occurrences, self._apply_matrix, dtype=SimDType)

@@ -44,7 +44,8 @@ class World(ABC):
     @abstractmethod
     def apply_travel(self, travelers: NDArray[SimDType], return_tick: int) -> None:
         """
-        Given an (N,N,C) array determining who should travel -- from-source-to-destination-by-compartment --
+        Given an (N,N,C) array determining who should travel
+        -- from-source-to-destination-by-compartment --
         modify the world state as a result of that movement.
         """
 
@@ -63,7 +64,8 @@ class World(ABC):
         self, tick: Tick, *, return_stats: bool
     ) -> NDArray[SimDType] | None:
         """
-        Modify the world state as a result of returning all movers that are ready to be returned home.
-        If `return_stats` is True, returns an NxNxC array containing the individuals moved during the return.
-        Otherwise returns None.
+        Modify the world state as a result of returning all movers that are ready
+        to be returned home.
+        If `return_stats` is True, returns an NxNxC array containing the individuals
+        moved during the return. Otherwise returns None.
         """

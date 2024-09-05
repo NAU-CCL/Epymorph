@@ -81,24 +81,25 @@ class CacheMiss(FileError):
 
 class CacheWarning(Warning):
     """
-    Warning issued when we are unable to interact with the file cache but in a situation where
-    program execution can continue, even if less optimally. For example: if we successfully load data
-    from an external source but are unable to cache it for later, this is a warning because we assume
-    the data is valid and that it could always be loaded again from the same source at a later time.
-    The warning is issued to give the user the opportunity to fix it for next time.
+    Warning issued when we are unable to interact with the file cache but in a situation
+    where program execution can continue, even if less optimally. For example: if we
+    successfully load data from an external source but are unable to cache it for later,
+    this is a warning because we assume the data is valid and that it could always
+    be loaded again from the same source at a later time. The warning is issued to give
+    the user the opportunity to fix it for next time.
     """
 
 
 def save_file(to_path: str | PathLike[str], file: BytesIO) -> None:
     """
-    Save a single file. `to_path` can be absolute or relative; relative paths will be resolved
-    against the current working directory. Folders in the path which do not exist will be created
-    automatically.
+    Save a single file. `to_path` can be absolute or relative; relative paths will be
+    resolved against the current working directory. Folders in the path which
+    do not exist will be created automatically.
     """
     try:
         file_path = Path(to_path).resolve()
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(file_path, mode="wb") as f:
+        with file_path.open(mode="wb") as f:
             f.write(file.getbuffer())
     except Exception as e:
         msg = f"Unable to write file at path: {to_path}"
@@ -107,8 +108,8 @@ def save_file(to_path: str | PathLike[str], file: BytesIO) -> None:
 
 def load_file(from_path: str | PathLike[str]) -> BytesIO:
     """
-    Load a single file. An Exception is raised if the file cannot be loaded for any reason.
-    On success, returns the bytes of the file.
+    Load a single file. An Exception is raised if the file cannot be loaded
+    for any reason. On success, returns the bytes of the file.
     """
     try:
         file_path = Path(from_path).resolve()
@@ -117,7 +118,7 @@ def load_file(from_path: str | PathLike[str]) -> BytesIO:
 
         # Read the file into memory
         file_buffer = BytesIO()
-        with open(file_path, "rb") as f:
+        with file_path.open(mode="rb") as f:
             file_buffer.write(f.read())
         file_buffer.seek(0)
         return file_buffer
@@ -185,9 +186,9 @@ def load_bundle(
 ) -> dict[str, BytesIO]:
     """
     Load a bundle of files in our tar format, optionally enforcing a minimum version.
-    An Exception is raised if the file cannot be loaded for any reason, or if its version
-    is incorrect. On success, returns a dictionary of the contained files, mapping the file
-    name to the bytes of the file.
+    An Exception is raised if the file cannot be loaded for any reason, or
+    if its version is incorrect. On success, returns a dictionary
+    of the contained files, mapping the file name to the bytes of the file.
     """
     try:
         tar_path = Path(from_path).resolve()
@@ -196,7 +197,7 @@ def load_bundle(
 
         # Read the tar file into memory
         tar_buffer = BytesIO()
-        with open(tar_path, "rb") as f:
+        with tar_path.open(mode="rb") as f:
             tar_buffer.write(f.read())
         tar_buffer.seek(0)
 
@@ -276,7 +277,10 @@ def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
     Save a single file to the cache (overwriting the existing file, if any).
     This is a low-level building block.
     """
-    save_file(_resolve_cache_path(to_path), file)
+    try:
+        save_file(_resolve_cache_path(to_path), file)
+    except ValueError as e:
+        raise FileWriteError() from e
 
 
 def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
@@ -306,7 +310,7 @@ def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
         # And attempt to save the file to the cache for next time.
         try:
             save_file_to_cache(cache_path, file)
-        except Exception as e:
+        except FileWriteError as e:
             # Failure to save to the cache is not worth stopping the program:
             # raise a warning.
             warn(
@@ -324,7 +328,13 @@ def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
     """
 
     def fetch_url():
-        with urlopen(url) as f:
+        # ruff S310 requires us to check the URL protocol
+        # so that only http/s requests are allowed.
+        # Then we have to disable S310 on that line, because it can't see it's fixed.
+        # Do not remove this check.
+        if not url.startswith(("http:", "https:")):
+            raise ValueError("Data source URLs must use the http or https protocol.")
+        with urlopen(url) as f:  # noqa: S310
             return BytesIO(f.read())
 
     return load_or_fetch(cache_path, fetch_url)

@@ -46,7 +46,7 @@ class EdgeDef:
 def edge(
     compartment_from: Symbol, compartment_to: Symbol, rate: Expr | int | float
 ) -> EdgeDef:
-    """Define a transition edge going from one compartment to another at the given rate."""
+    """Define a transition edge from one compartment to another at the given rate."""
     if isinstance(rate, int):
         _rate = Integer(rate)
     elif isinstance(rate, float):
@@ -67,27 +67,33 @@ class ForkDef:
 
 def fork(*edges: EdgeDef) -> ForkDef:
     """
-    Define a forked transition: a set of edges that come from the same compartment but go to different compartments.
-    It is assumed the edges will share a "base rate" -- a common sub-expression among all edge rates --
+    Define a forked transition: a set of edges that come from the same compartment
+    but go to different compartments. It is assumed the edges will share a
+    "base rate"-- a common sub-expression among all edge rates --
     and that each edge in the fork is given a proportion on that base rate.
 
     For example, consider two edges given rates:
     1. `delta * EXPOSED * rho`
     2. `delta * EXPOSED * (1 - rho)`
 
-    `delta * EXPOSED` is the base rate and `rho` describes the proportional split for each edge.
+    `delta * EXPOSED` is the base rate and `rho` describes the proportional split for
+    each edge.
     """
 
     # First verify that the edges all come from the same state.
     if len(set(e.compartment_from for e in edges)) > 1:
-        msg = f"In a Fork, all edges must share the same `state_from`.\n  Problem in: {str(edges)}"
+        msg = (
+            "In a Fork, all edges must share the same `state_from`.\n"
+            f"  Problem in: {str(edges)}"
+        )
         raise IpmValidationException(msg)
-    # it is assumed the fork's edges are defined with complementary rate expressions, e.g.,
+    # it is assumed the fork's edges are defined with complementary rate expressions
     edge_rates = [e.rate for e in edges]
     # the "base rate" -- how many individuals transition on any of these edges --
     # is the sum of all the edge rates (this defines the lambda for the poisson draw)
     rate = simplify_sum(edge_rates)
-    # the probability of following a particular edge is then the edge's rate divided by the base rate
+    # the probability of following a particular edge is then the edge's rate divided by
+    # the base rate
     # (this defines the probability split in the eventual multinomial draw)
     probs = [simplify(r / rate) for r in edge_rates]  # type: ignore
     return ForkDef(rate, list(edges), probs)
@@ -101,7 +107,8 @@ def _as_events(trxs: Iterable[TransitionDef]) -> Iterator[EdgeDef]:
     """
     Iterator for all unique events defined in the transition model.
     Each edge corresponds to a single event, even the edges that are part of a fork.
-    The events are returned in a stable order (definition order) so that they can be indexed that way.
+    The events are returned in a stable order (definition order) so that they can be
+    indexed that way.
     """
     for t in trxs:
         match t:
@@ -131,7 +138,9 @@ def _remap_fork(f: ForkDef, symbol_mapping: dict[Symbol, Symbol]) -> ForkDef:
 def _remap_transition(
     t: TransitionDef, symbol_mapping: dict[Symbol, Symbol]
 ) -> TransitionDef:
-    """Replaces all symbols used in the transition using substitution from `symbol_mapping`."""
+    """
+    Replaces symbols used in the transition using substitution from `symbol_mapping`.
+    """
     match t:
         case EdgeDef():
             return _remap_edge(t, symbol_mapping)
@@ -195,9 +204,10 @@ class ModelSymbols:
         compartments: Sequence[tuple[str, str]],
         requirements: Sequence[tuple[str, str]],
     ):
-        # NOTE: the arguments here are tuples of name and symbolic name; this is redundant for
-        # single-strata models, but allows multistrata models to keep fine-grained control over
-        # symbol substitution while allowing the user to refer to the names they already know.
+        # NOTE: the arguments here are tuples of name and symbolic name;
+        # this is redundant for single-strata models, but allows multistrata models
+        # to keep fine-grained control over symbol substitution while allowing
+        # the user to refer to the names they already know.
         cs = [(n, to_symbol(s)) for n, s in compartments]
         rs = [(n, to_symbol(s)) for n, s in requirements]
         self.all_compartments = [s for _, s in cs]
@@ -269,13 +279,16 @@ class BaseCompartmentModel(ABC):
 
     @cached_property
     def event_src_dst(self) -> Sequence[tuple[str, str]]:
-        """All events represented as a tuple of the source compartment and destination compartment."""
+        """
+        All events represented as a tuple of the source
+        compartment and destination compartment.
+        """
         return [(str(e.compartment_from), str(e.compartment_to)) for e in self.events]
 
     def _compile_pattern(self, pattern: str) -> re.Pattern:
         """Turn a pattern string (which is custom syntax) into a regular expression."""
-        # We're not interpreting pattern as a regex directly, so escape any special characters.
-        # Then replace '*' with the necessary regex.
+        # We're not interpreting pattern as a regex directly, so escape any
+        # special characters. Then replace '*' with the necessary regex.
         escaped_pattern = re.escape(pattern).replace(r"\*", "[^_]+")
         # Compile with anchors so it matches the entire string.
         return re.compile(f"^{escaped_pattern}$")
@@ -303,7 +316,10 @@ class BaseCompartmentModel(ABC):
         )
 
     def event_by_name(self, name: str) -> int:
-        """Get a single event index by name. For example: "S->I". Only exact matches are allowed."""
+        """
+        Get a single event index by name. For example: "S->I".
+        Only exact matches are allowed.
+        """
         try:
             if "->" in name:
                 src, dst = name.split("->")
@@ -375,7 +391,8 @@ class CompartmentModelClass(ABCMeta):
             )
         if len(cmps) == 0:
             raise TypeError(
-                f"Invalid compartments in {name}: please specify at least one compartment."
+                f"Invalid compartments in {name}: "
+                "please specify at least one compartment."
             )
         if not are_instances(cmps, CompartmentDef):
             raise TypeError(
@@ -394,7 +411,8 @@ class CompartmentModelClass(ABCMeta):
 
         trxs = instance.transitions
 
-        # transitions cannot have the source and destination both be exogenous; this would be madness.
+        # transitions cannot have the source and destination both be exogenous;
+        # this would be madness.
         if any(
             edge.compartment_from in exogenous_states
             and edge.compartment_to in exogenous_states
@@ -402,7 +420,8 @@ class CompartmentModelClass(ABCMeta):
         ):
             raise TypeError(
                 f"Invalid transitions in {name}: "
-                "transitions cannot use exogenous states (BIRTH/DEATH) as both source and destination."
+                "transitions cannot use exogenous states (BIRTH/DEATH) "
+                "as both source and destination."
             )
 
         # Extract the set of compartments used by transitions.

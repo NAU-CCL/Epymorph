@@ -29,7 +29,8 @@ def parse_function(code_string: str, unsafe: bool = False) -> ast.FunctionDef:
     Parse a function from a code string, returning the function's AST.
     The resulting AST will have security mitigations applied, unless `unsafe` is True.
     The string must contain a single top-level Python function definition,
-    or else ValueError is raised. Raises SyntaxError if the function is not valid Python.
+    or else ValueError is raised.
+    Raises SyntaxError if the function is not valid Python.
     """
     tree = ast.parse(textwrap.dedent(code_string), "<string>", mode="exec")
     functions = [
@@ -80,7 +81,10 @@ class SecureTransformer(ast.NodeTransformer):
         return None
 
     def visit_Name(self, node: ast.Name) -> Any:
-        """No referencing sensitive names like eval or exec, or anything starting with an underscore."""
+        """
+        No referencing sensitive names like eval or exec, or anything starting
+        with an underscore.
+        """
         if node.id.startswith("_"):
             raise CodeSecurityException(f"Illegal reference to `{node.id}`.")
         if node.id in _FORBIDDEN_NAMES:
@@ -88,7 +92,10 @@ class SecureTransformer(ast.NodeTransformer):
         return super().generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> Any:
-        """Disallow accessing potentially sensitive attributes (any with a leading underscore)."""
+        """
+        Disallow accessing potentially sensitive attributes
+        (any with a leading underscore).
+        """
         if node.attr.startswith("_"):
             msg = f"Illegal reference to attribute `{node.attr}`."
             raise CodeSecurityException(msg)
@@ -110,7 +117,8 @@ def compile_function(
     Returns the function.
     Args:
         function_definition: The function definition to compile.
-        global_vars: A dictionary of global variables to make available to the compiled function.
+        global_vars: A dictionary of global variables to make available to the compiled
+        function.
 
     Returns:
         A callable object representing the compiled function.
@@ -122,7 +130,7 @@ def compile_function(
     if global_namespace is None:
         global_namespace = base_namespace()
     local_namespace = dict[str, Any]()
-    exec(code, global_namespace, local_namespace)  # pylint: disable=exec-used
+    exec(code, global_namespace, local_namespace)  # noqa: S102
     # Now our function is defined in the local namespace, retrieve it.
     function = local_namespace[function_def.name]
     if not isinstance(function, Callable):

@@ -13,11 +13,12 @@ from epymorph.simulator.world import World
 
 class Cohort:
     """
-    Represents a group of individuals, divided into IPM compartments as appropriate for the simulation.
-    These individuals share the same "home location" and a time at which they should return there.
+    Represents a group of individuals, divided into IPM compartments as appropriate for
+    the simulation. These individuals share the same "home location" and a time at which
+    they should return there.
 
-    These are somewhat abstract concepts, however; a completely nomadic group doesn't really have a home location,
-    merely the next location in a chain of movements.
+    These are somewhat abstract concepts, however; a completely nomadic group doesn't
+    really have a home location, merely the next location in a chain of movements.
     """
 
     SORT_KEY = attrgetter("return_tick", "return_location")
@@ -59,7 +60,11 @@ class Cohort:
         )
 
     def __repr__(self) -> str:
-        return f"Cohort({str(self.compartments)}, rloc={self.return_location}, rtic={self.return_tick})"
+        return (
+            f"Cohort({str(self.compartments)}, "
+            f"rloc={self.return_location}, "
+            f"rtic={self.return_tick})"
+        )
 
 
 class ListWorld(World):
@@ -95,8 +100,8 @@ class ListWorld(World):
 
     def normalize(self) -> None:
         """
-        Sorts all cohorts within each location and combines mergeable cohorts (in place).
-        The world should be normalized after any modification.
+        Sorts all cohorts within each location and combines mergeable cohorts
+        (in place). The world should be normalized after any modification.
         """
         for cohorts in self.locations:
             cohorts.sort(key=Cohort.SORT_KEY)
@@ -167,7 +172,7 @@ class ListWorld(World):
             size = (self.nodes, self.nodes, self.compartments)
             movers = np.zeros(size, dtype=SimDType)
 
-        next_locations = [[locals] for locals in self.get_local_cohorts()]
+        next_locations = [[c] for c in self.get_local_cohorts()]
         for i, location in enumerate(self.locations):
             for cohort in location:
                 if cohort.return_tick == ListWorld.HOME_TICK:

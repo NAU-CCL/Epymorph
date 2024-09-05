@@ -32,8 +32,8 @@ def lambdify(params: list[Any], expr: sy.Expr) -> SympyLambda:
     Create a lambda function from the given expression,
     taking the given parameters and returning a single result.
     """
-    # Note: calling lambdify with `[params]` means we will call it with a list of arguments later
-    # (rather than having to spread the list)
+    # Note: calling lambdify with `[params]` means we will call it with a list of
+    # arguments later (rather than having to spread the list)
     # i.e., f([1,2,3]) rather than f(*[1,2,3])
     # This is better because we have to construct the arguments at run-time as lists.
     return cast(SympyLambda, sy.lambdify([params], expr))

@@ -66,19 +66,26 @@ class OnMovementClause(NamedTuple):
     """The clause processed."""
     requested: NDArray[SimDType]
     """
-    The number of individuals this clause 'wants' to move, that is, the values returned by its clause funcction.
-    (An NxN array.)
+    The number of individuals this clause 'wants' to move, that is,
+    the values returned by its clause function. (An NxN array.)
     """
     actual: NDArray[SimDType]
-    """The actual number of individuals moved, by source, destination, and compartment. (An NxNxC array.)"""
+    """
+    The actual number of individuals moved, by source, destination, and compartment.
+    (An NxNxC array.)
+    """
     total: int
     """The number of individuals moved by this clause."""
     is_throttled: bool
-    """Did the clause request to move more people than were available (at any location)?"""
+    """
+    Did the clause request to move more people than were available (at any location)?
+    """
 
 
 class OnMovementFinish(NamedTuple):
-    """The payload for the event when movement processing finishes for one simulation tick."""
+    """
+    The payload for the event when movement processing finishes for one simulation tick.
+    """
 
     tick: int
     """Which simulation tick."""
@@ -135,13 +142,17 @@ class EventBus(metaclass=Singleton):
 
     # Movement Events
     on_movement_start: Event[OnMovementStart]
-    """Event fires at the start of the movement processing phase for every simulation tick."""
+    """
+    Event fires at the start of the movement processing phase for every simulation tick.
+    """
 
     on_movement_clause: Event[OnMovementClause]
     """Event fires after processing each active movement clause."""
 
     on_movement_finish: Event[OnMovementFinish]
-    """Event fires at the end of the movement processing phase for every simulation tick."""
+    """
+    Event fires at the end of the movement processing phase for every simulation tick.
+    """
 
     # ADRIO Events
     on_adrio_start: Event[AdrioStart]

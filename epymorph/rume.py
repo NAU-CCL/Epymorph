@@ -1,8 +1,8 @@
 """
-A RUME (Runnable Modeling Experiment) is a package containing the critical components of an epymorph experiment.
-Particular simulation tasks may require more information, but will certainly not require less.
-A GPM (Geo-Population Model) is a subset of this configuration, and it is possible to combine multiple GPMs
-into one multi-strata RUME.
+A RUME (Runnable Modeling Experiment) is a package containing the critical components
+of an epymorph experiment. Particular simulation tasks may require more information,
+but will certainly not require less. A GPM (Geo-Population Model) is a subset of this
+configuration, and it is possible to combine multiple GPMs into one multi-strata RUME.
 """
 
 import dataclasses
@@ -51,9 +51,9 @@ from epymorph.util import are_unique, map_values
 
 class Gpm:
     """
-    A GPM (short for Geo-Population Model) combines an IPM, MM, and initialization scheme.
-    Most often, a GPM is used to specify the modules to be used for one of the several population strata
-    that make up a RUME.
+    A GPM (short for Geo-Population Model) combines an IPM, MM, and
+    initialization scheme. Most often, a GPM is used to specify the modules
+    to be used for one of the several population strata that make up a RUME.
     """
 
     name: str
@@ -100,14 +100,16 @@ def combine_tau_steps(
 ) -> _CombineTauStepsResult:
     """
     When combining movement models with different tau steps, it is necessary to create a
-    new tau step scheme which can accomodate them all. This function performs that calculation,
-    returning both the new tau steps (a list of tau lengths) and the mapping by strata from
-    old tau step indices to new tau step indices, so that movement models can be adjusted as necessary.
-    For example, if MM A has tau steps [1/3, 2/3] and MM B has tau steps [1/2, 1/2] -- the resulting
+    new tau step scheme which can accomodate them all. This function performs that
+    calculation, returning both the new tau steps (a list of tau lengths) and the
+    mapping by strata from old tau step indices to new tau step indices, so that
+    movement models can be adjusted as necessary. For example, if MM A has
+    tau steps [1/3, 2/3] and MM B has tau steps [1/2, 1/2] -- the resulting
     combined tau steps are [1/3, 1/6, 1/2].
     """
 
-    # Convert the tau lengths into the starting point and stopping point for each tau step.
+    # Convert the tau lengths into the starting point and stopping point for each
+    # tau step.
     # Starts and stops are expressed as fractions of one day.
     def tau_starts(taus: Sequence[float]) -> Sequence[float]:
         return [0.0, *accumulate(taus)][:-1]
@@ -185,8 +187,8 @@ def remap_taus(
 class Rume(ABC):
     """
     A RUME (or Runnable Modeling Experiment) contains the configuration of an
-    epymorph-style simulation. It brings together one or more IPMs, MMs, initialization routines,
-    and a geo-temporal scope. Model parameters can also be specified on a RUME.
+    epymorph-style simulation. It brings together one or more IPMs, MMs, initialization
+    routines, and a geo-temporal scope. Model parameters can also be specified.
     The RUME will eventually be used to construct a Simulation, which is an
     algorithm that uses a RUME to produce some results -- in the most basic case,
     running a disease simulation and providing time-series results of the disease model.
@@ -243,7 +245,8 @@ class Rume(ABC):
     def compartment_mask(self) -> Mapping[str, NDArray[np.bool_]]:
         """
         Masks that describe which compartments belong in the given strata.
-        For example: if the model has three strata ('a', 'b', and 'c') with three compartments each,
+        For example: if the model has three strata ('a', 'b', and 'c') with
+        three compartments each,
         `strata_compartment_mask('b')` returns `[0 0 0 1 1 1 0 0 0]`
         (where 0 stands for False and 1 stands for True).
         """
@@ -270,12 +273,16 @@ class Rume(ABC):
 
     @cached_property
     def compartment_mobility(self) -> Mapping[str, NDArray[np.bool_]]:
-        """Masks that describe which compartments should be considered subject to movement in a particular strata."""
+        """
+        Masks that describe which compartments should be considered
+        subject to movement in a particular strata.
+        """
         # The mobility mask for all strata.
         all_mobility = np.array(
             ["immobile" not in c.tags for c in self.ipm.compartments], dtype=np.bool_
         )
-        # Mobility for a single strata is all_mobility boolean-and whether the compartment is in that strata.
+        # Mobility for a single strata is
+        # all_mobility boolean-and whether the compartment is in that strata.
         return {
             strata.name: all_mobility & self.compartment_mask[strata.name]
             for strata in self.strata
@@ -308,7 +315,10 @@ class Rume(ABC):
         return "\n".join(lines)
 
     def generate_params_dict(self) -> str:
-        """Generate a skeleton dictionary you can use to provide parameter values to the room."""
+        """
+        Generate a skeleton dictionary you can use to provide parameter values
+        to the RUME.
+        """
         format_name = self.name_display_formatter()
         lines = ["{"]
         for name, attr in self.requirements.items():
@@ -321,13 +331,18 @@ class Rume(ABC):
 
     @staticmethod
     def symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
-        """Convenient function to retrieve the symbols used to represent simulation quantities."""
+        """
+        Convenient function to retrieve the symbols used to represent
+        simulation quantities.
+        """
         return simulation_symbols(*symbols)
 
     def with_time_frame(self, time_frame: TimeFrame) -> Self:
         """Create a RUME with a new time frame."""
-        # TODO: do we need to go through all of the params and subset any that are time-based?
-        # How would that work? Or maybe reconciling to time frame happens at param evaluation time...
+        # TODO: do we need to go through all of the params and subset any
+        # that are time-based?
+        # How would that work? Or maybe reconciling to time frame happens
+        # at param evaluation time...
         return dataclasses.replace(self, time_frame=time_frame)
 
 
@@ -416,8 +431,8 @@ class MultistrataRumeBuilder(ABC):
         """
         When implementing a MultistrataRumeBuilder, override this method
         to build the meta-transition-edges -- the edges which represent
-        cross-strata interactions. You are given a reference to this model's symbols library
-        so you can build expressions for the transition rates.
+        cross-strata interactions. You are given a reference to this model's symbols
+        library so you can build expressions for the transition rates.
         """
 
     @final

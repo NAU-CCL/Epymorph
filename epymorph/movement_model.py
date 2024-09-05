@@ -43,9 +43,11 @@ _day_of_week_pattern = r"\b(M|T|W|Th|F|Sa|Su)\b"
 
 def parse_days_of_week(dow: str) -> tuple[DayOfWeek, ...]:
     """
-    Parses the string as a list of days of the week using our standard abbreviations: M,T,W,Th,F,Sa,Su.
-    This parser is pretty permissive, simply ignoring invalid parts of the input while keeping the valid parts.
-    Any separator is allowed between the day of the week themselves. Returns an empty tuple if there are no matches.
+    Parses the string as a list of days of the week using our standard abbreviations:
+    M,T,W,Th,F,Sa,Su.
+    This parser is pretty permissive, simply ignoring invalid parts of the input while
+    keeping the valid parts. Any separator is allowed between the day of the week
+    themselves. Returns an empty tuple if there are no matches.
     """
     ds = re.findall(_day_of_week_pattern, dow)
     return tuple(set(ds))
@@ -109,7 +111,8 @@ class MovementClauseClass(SimulationFunctionClass):
         predicate = dct.get("predicate")
         if predicate is None or not isinstance(predicate, MovementPredicate):
             raise TypeError(
-                f"Invalid predicate in {name}: please specify a MovementPredicate instance."
+                f"Invalid predicate in {name}: "
+                "please specify a MovementPredicate instance."
             )
         # Check leaves.
         leaves = dct.get("leaves")
@@ -146,7 +149,8 @@ class MovementClause(
     """
     A movement clause is basically a function which calculates _how many_ individuals
     should move between all of the geo nodes, and then epymorph decides by random draw
-    _which_ individuals move (as identified by their disease status, or IPM compartment).
+    _which_ individuals move
+    (as identified by their disease status, or IPM compartment).
     It also has various settings which determine when the clause is active
     (for example, only move people Monday-Friday at the start of the day)
     and when the individuals that were moved by the clause should return home
@@ -174,7 +178,7 @@ class MovementClause(
     def evaluate(self, tick: Tick) -> NDArray[SimDType]:
         """
         Implement this method to provide logic for the clause.
-        Your implementation is free to use `data`, `dim`, and `rng` in this function body.
+        Your implementation is free to use `data`, `dim`, and `rng`.
         You can also use `defer` to utilize another MovementClause instance.
         """
 
@@ -255,12 +259,14 @@ class MovementModelClass(ABCMeta):
             num_steps = len(steps)
             if c.leaves.step >= num_steps:
                 raise TypeError(
-                    f"Invalid clauses in {name}: {c.__class__.__name__} uses a leave step ({c.leaves.step}) "
+                    f"Invalid clauses in {name}: {c.__class__.__name__} "
+                    f"uses a leave step ({c.leaves.step}) "
                     f"which is not a valid index. (steps: {steps})"
                 )
             if c.returns.step >= num_steps:
                 raise TypeError(
-                    f"Invalid clauses in {name}: {c.__class__.__name__} uses a return step ({c.returns.step}) "
+                    f"Invalid clauses in {name}: {c.__class__.__name__} "
+                    f"uses a return step ({c.returns.step}) "
                     f"which is not a valid index. (steps: {steps})"
                 )
         dct["clauses"] = tuple(clauses)
@@ -270,9 +276,10 @@ class MovementModelClass(ABCMeta):
 
 class MovementModel(ABC, metaclass=MovementModelClass):
     """
-    A MovementModel (MM) describes a pattern of geospatial movement for individuals in the model.
-    The MM chops the day up into one or more parts (tau steps), and then describes movement clauses
-    which trigger for certain parts of the day.
+    A MovementModel (MM) describes a pattern of geospatial movement for
+    individuals in the model.
+    The MM chops the day up into one or more parts (tau steps),
+    and then describes movement clauses which trigger for certain parts of the day.
     """
 
     steps: Sequence[float]

@@ -64,32 +64,34 @@ def _parse_abbrev(
     Replaces values in label column containing state abreviations (i.e. AZ) with state
     fips codes and filters out any not in the specified geographic scope.
     """
-    if isinstance(scope, StateScope):
-        state_mapping = state_code_to_fips(scope.year)
-        df[key_col] = [state_mapping.get(x) for x in df[key_col]]
-        if df[key_col].isnull().any():
-            raise DataResourceException("Invalid state code in key column.")
-        df = df[df[key_col].isin(scope.get_node_ids())]
-
-        if key_col2 is not None:
-            df[key_col2] = [state_mapping.get(x) for x in df[key_col2]]
-            if df[key_col2].isnull().any():
-                raise DataResourceException("Invalid state code in second key column.")
-            df = df[df[key_col2].isin(scope.get_node_ids())]
-
-        return df
-
-    else:
+    if not isinstance(scope, StateScope):
         msg = "State scope is required to use state abbreviation key format."
         raise DataResourceException(msg)
+
+    state_mapping = state_code_to_fips(scope.year)
+
+    result_df = df.copy()
+    result_df[key_col] = [state_mapping.get(x) for x in result_df[key_col]]
+    if result_df[key_col].isna().any():
+        raise DataResourceException("Invalid state code in key column.")
+    result_df = result_df[result_df[key_col].isin(scope.get_node_ids())]
+
+    if key_col2 is not None:
+        result_df[key_col2] = [state_mapping.get(x) for x in result_df[key_col2]]
+        if result_df[key_col2].isna().any():
+            raise DataResourceException("Invalid state code in second key column.")
+        result_df = result_df[result_df[key_col2].isin(scope.get_node_ids())]
+
+    return result_df
 
 
 def _parse_county_state(
     scope: GeoScope, df: DataFrame, key_col: int, key_col2: int | None = None
 ) -> DataFrame:
     """
-    Replaces values in label column containing county and state names (i.e. Maricopa, Arizona)
-    with state county fips codes and filters out any not in the specified geographic scope.
+    Replaces values in label column containing county and state names
+    (i.e. Maricopa, Arizona) with state county fips codes and filters out
+    any not in the specified geographic scope.
     """
     if not isinstance(scope, CountyScope):
         msg = "County scope is required to use county, state key format."
@@ -119,14 +121,24 @@ def _parse_county_state(
     )
 
     # merge with csv dataframe and set key column to geoid
-    df = df.merge(counties_info_df, how="left", left_on=key_col, right_on="name")
-    df[key_col] = df["geoid"]
+    result_df = df.copy().merge(
+        counties_info_df,
+        how="left",
+        left_on=key_col,
+        right_on="name",
+    )
+    result_df[key_col] = result_df["geoid"]
 
     if key_col2 is not None:
-        df = df.merge(counties_info_df, how="left", left_on=key_col2, right_on="name")
-        df[key_col2] = df["geoid_y"]
+        result_df = result_df.merge(
+            counties_info_df,
+            how="left",
+            left_on=key_col2,
+            right_on="name",
+        )
+        result_df[key_col2] = result_df["geoid_y"]
 
-    return df
+    return result_df
 
 
 def _parse_geoid(
@@ -144,17 +156,24 @@ def _parse_geoid(
     if not all(granularity.matches(x) for x in df[key_col]):
         raise DataResourceException("Invalid geoid in key column.")
 
-    df = df[df[key_col].isin(scope.get_node_ids())]
+    result_df = df.copy()
+    result_df = result_df[result_df[key_col].isin(scope.get_node_ids())]
     if key_col2 is not None:
-        df = df[df[key_col2].isin(scope.get_node_ids())]
+        result_df = result_df[result_df[key_col2].isin(scope.get_node_ids())]
 
-    return df
+    return result_df
 
 
 def _validate_result(scope: GeoScope, data: Series) -> None:
-    """Ensures that the key column for an attribute contains at least one entry for every node in the scope."""
+    """
+    Ensures that the key column for an attribute contains at least one entry
+    for every node in the scope.
+    """
     if set(data) != set(scope.get_node_ids()):
-        msg = "Key column missing keys for geographies in scope or contains unrecognized keys."
+        msg = (
+            "Key column missing keys for geographies in scope "
+            "or contains unrecognized keys."
+        )
         raise DataResourceException(msg)
 
 
@@ -200,18 +219,30 @@ class CSV(Adrio[Any]):
         # workaround for bad pandas type definitions
         skiprows: int = self.skiprows  # type: ignore
         if path.exists():
-            df = read_csv(
-                path, skiprows=skiprows, header=None, dtype={self.key_col: str}
+            csv_df = read_csv(
+                path,
+                skiprows=skiprows,
+                header=None,
+                dtype={self.key_col: str},
             )
-            df = _parse_label(self.key_type, self.scope, df, self.key_col)
+            parsed_df = _parse_label(
+                self.key_type,
+                self.scope,
+                csv_df,
+                self.key_col,
+            )
 
-            if df[self.data_col].isnull().any():
-                msg = "Data for required geographies missing from CSV file or could not be found."
+            if parsed_df[self.data_col].isna().any():
+                msg = (
+                    "Data for required geographies missing from CSV file "
+                    "or could not be found."
+                )
                 raise DataResourceException(msg)
 
-            df.rename(columns={self.key_col: "key"}, inplace=True)
-            df.sort_values(by="key", inplace=True)
-            return df[self.data_col].to_numpy(dtype=self.data_type)
+            sorted_df = parsed_df.rename(columns={self.key_col: "key"}).sort_values(
+                by="key"
+            )
+            return sorted_df[self.data_col].to_numpy(dtype=self.data_type)
 
         else:
             msg = f"File {self.file_path} not found"
@@ -267,34 +298,48 @@ class CSVTimeSeries(Adrio[Any]):
         path = Path(self.file_path)
         skiprows: int = self.skiprows  # type: ignore
         if path.exists():
-            df = read_csv(
-                path, skiprows=skiprows, header=None, dtype={self.key_col: str}
+            csv_df = read_csv(
+                path,
+                skiprows=skiprows,
+                header=None,
+                dtype={self.key_col: str},
             )
-            df = _parse_label(self.key_type, self.scope, df, self.key_col)
+            parsed_df = _parse_label(
+                self.key_type,
+                self.scope,
+                csv_df,
+                self.key_col,
+            )
 
-            if df[self.data_col].isnull().any():
-                msg = "Data for required geographies missing from CSV file or could not be found."
+            if parsed_df[self.data_col].isna().any():
+                msg = (
+                    "Data for required geographies missing from CSV file "
+                    "or could not be found."
+                )
                 raise DataResourceException(msg)
 
-            df[self.time_col] = df[self.time_col].apply(date.fromisoformat)
+            parsed_df[self.time_col] = parsed_df[self.time_col].apply(
+                date.fromisoformat
+            )
 
-            if any(df[self.time_col] < self.time_frame.start_date) or any(
-                df[self.time_col] > self.time_frame.end_date
-            ):
+            is_before = parsed_df[self.time_col] < self.time_frame.start_date
+            is_after = parsed_df[self.time_col] > self.time_frame.end_date
+            if any(is_before | is_after):
                 msg = "Found time column value(s) outside of provided date range."
                 raise DataResourceException(msg)
 
-            df.rename(
-                columns={
-                    self.key_col: "key",
-                    self.data_col: "data",
-                    self.time_col: "time",
-                },
-                inplace=True,
+            sorted_df = (
+                parsed_df.rename(
+                    columns={
+                        self.key_col: "key",
+                        self.data_col: "data",
+                        self.time_col: "time",
+                    },
+                )
+                .sort_values(by=["time", "key"])
+                .pivot_table(index="time", columns="key", values="data")
             )
-            df.sort_values(by=["time", "key"], inplace=True)
-            df = df.pivot(index="time", columns="key", values="data")
-            return df.to_numpy(dtype=self.data_type)
+            return sorted_df.to_numpy(dtype=self.data_type)
 
         else:
             msg = f"File {self.file_path} not found"
@@ -307,11 +352,11 @@ class CSVMatrix(Adrio[Any]):
     file_path: PathLike
     """The path to the CSV file containing data."""
     from_key_col: int
-    """Numerical index of the column containing information to identify source geographies."""
+    """Index of the column identifying source geographies."""
     to_key_col: int
-    """Numerical index of the column containing information to identify destination geographies."""
+    """Index of the column identifying destination geographies."""
     data_col: int
-    """Numerical index of the column containing the data of interest."""
+    """Index of the column containing the data of interest."""
     data_type: DTypeLike
     """The data type of values in the data column."""
     key_type: KeySpecifier
@@ -344,29 +389,32 @@ class CSVMatrix(Adrio[Any]):
             raise GeoValidationException(msg)
 
         path = Path(self.file_path)
-        skiprows: int = self.skiprows  # type: ignore
-        if path.exists():
-            df = read_csv(
-                path,
-                skiprows=skiprows,
-                header=None,
-                dtype={self.from_key_col: str, self.to_key_col: str},
-            )
-            df = _parse_label(
-                self.key_type, self.scope, df, self.from_key_col, self.to_key_col
-            )
-
-            df = df.pivot(
-                index=self.from_key_col, columns=self.to_key_col, values=self.data_col
-            )
-
-            df.sort_index(axis=0, inplace=True)
-            df.sort_index(axis=1, inplace=True)
-
-            df.fillna(0, inplace=True)
-
-            return df.to_numpy(dtype=self.data_type)
-
-        else:
+        if not path.exists():
             msg = f"File {self.file_path} not found"
             raise DataResourceException(msg)
+
+        skiprows: int = self.skiprows  # type: ignore
+        csv_df = read_csv(
+            path,
+            skiprows=skiprows,
+            header=None,
+            dtype={self.from_key_col: str, self.to_key_col: str},
+        )
+        parsed_df = _parse_label(
+            self.key_type,
+            self.scope,
+            csv_df,
+            self.from_key_col,
+            self.to_key_col,
+        )
+        return (
+            parsed_df.pivot_table(
+                index=parsed_df.columns[self.from_key_col],
+                columns=parsed_df.columns[self.to_key_col],
+                values=parsed_df.columns[self.data_col],
+            )
+            .sort_index(axis=0)
+            .sort_index(axis=1)
+            .fillna(0)
+            .to_numpy(dtype=self.data_type)
+        )

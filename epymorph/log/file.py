@@ -65,7 +65,8 @@ def file_log(
 
     def on_adrio_finish(e: AdrioFinish) -> None:
         adrio_log.info(
-            f"ADRIO {e.adrio_name} fetched `{e.attribute}` in ({e.duration:.3f} seconds)"
+            f"ADRIO {e.adrio_name} fetched `{e.attribute}` "
+            f"in ({e.duration:.3f} seconds)"
         )
 
     def on_movement_start(e: OnMovementStart) -> None:
@@ -102,8 +103,8 @@ def file_log(
         # And now our event handlers will be unsubscribed.
 
     # Close out the log file.
-    # This isn't necessary if we're running on the CLI, but if we're in a Jupyter context,
-    # running the sim multiple times would keep appending to the file.
+    # This isn't necessary if we're running on the CLI, but if we're in a
+    # Jupyter context, running the sim multiple times would keep appending to the file.
     # For most use-cases, just having one sim run in the log file is preferable.
     epy_log.removeHandler(log_handler)
     epy_log.setLevel(NOTSET)

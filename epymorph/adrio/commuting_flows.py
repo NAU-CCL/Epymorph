@@ -32,7 +32,10 @@ class Commuters(Adrio[np.int64]):
 
         # check for invalid granularity
         if isinstance(scope, TractScope | BlockGroupScope):
-            msg = "Commuting data cannot be retrieved for tract or block group granularities"
+            msg = (
+                "Commuting data cannot be retrieved for tract "
+                "or block group granularities"
+            )
             raise DataResourceException(msg)
 
         # check for valid year
@@ -51,7 +54,8 @@ class Commuters(Adrio[np.int64]):
                 raise DataResourceException(msg)
 
             print(
-                f"Commuting data cannot be retrieved for {passed_year}, fetching {year} data instead."
+                f"Commuting data cannot be retrieved for {passed_year}, "
+                "fetching {year} data instead."
             )
 
         if year != 2010:
@@ -103,7 +107,10 @@ class Commuters(Adrio[np.int64]):
                 "09015",
             ]
         ):
-            msg = "Commuting flows data cannot be retrieved for connecticut counties for years 2020 or 2021."
+            msg = (
+                "Commuting flows data cannot be retrieved for Connecticut counties "
+                "for years 2020 or 2021."
+            )
             raise DataResourceException(msg)
 
         try:
@@ -113,7 +120,7 @@ class Commuters(Adrio[np.int64]):
             raise DataResourceException("Unable to fetch commuting flows data.") from e
 
         # download communter data spreadsheet as a pandas dataframe
-        df = read_excel(
+        data_df = read_excel(
             commuter_file,
             header=header_num,
             names=all_fields,
@@ -127,31 +134,43 @@ class Commuters(Adrio[np.int64]):
 
         match scope.granularity:
             case "state":
-                df.rename(
+                data_df = data_df.rename(
                     columns={
                         "res_state_code": "res_geoid",
                         "wrk_state_code": "wrk_geoid",
-                    },
-                    inplace=True,
+                    }
                 )
 
             case "county":
-                df["res_geoid"] = df["res_state_code"] + df["res_county_code"]
-                df["wrk_geoid"] = df["wrk_state_code"] + df["wrk_county_code"]
+                data_df["res_geoid"] = (
+                    data_df["res_state_code"] + data_df["res_county_code"]
+                )
+                data_df["wrk_geoid"] = (
+                    data_df["wrk_state_code"] + data_df["wrk_county_code"]
+                )
 
             case _:
                 raise DataResourceException("Unsupported query.")
 
-        df = df[df["res_geoid"].isin(node_ids)]
-        df = df[df["wrk_geoid"].isin(["0" + x for x in node_ids])]
+        # Filter out GEOIDs that aren't in our scope.
+        res_selection = data_df["res_geoid"].isin(node_ids)
+        wrk_selection = data_df["wrk_geoid"].isin(["0" + x for x in node_ids])
+        data_df = data_df[res_selection & wrk_selection]
 
         if isinstance(scope, StateScope | StateScopeAll):
-            # group and aggregate data
-            data_group = df.groupby(["res_geoid", "wrk_geoid"])
-            df = data_group.agg({"workers": "sum"})
-            df.reset_index(inplace=True)
+            # Data is county level; group and aggregate to get state level
+            data_df = (
+                data_df.groupby(["res_geoid", "wrk_geoid"])
+                .agg({"workers": "sum"})
+                .reset_index()
+            )
 
-        df = df.pivot(index="res_geoid", columns="wrk_geoid", values="workers")
-        df.fillna(0, inplace=True)
-
-        return df.to_numpy(dtype=np.int64)
+        return (
+            data_df.pivot_table(
+                index="res_geoid",
+                columns="wrk_geoid",
+                values="workers",
+            )
+            .fillna(0)
+            .to_numpy(dtype=np.int64)
+        )

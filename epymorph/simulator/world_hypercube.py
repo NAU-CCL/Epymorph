@@ -40,10 +40,12 @@ class HypercubeWorld(World):
     """
 
     # Developer note:
-    # The goal here is to avoid memory allocations (e.g., as in ListWorld's creation of Cohort objects
-    # and management of lists). Testing in a previous implementation suggested this could
-    # be more efficient for simulations with many nodes. However, in refactoring this implementation
-    # turned out many times slower than ListWorld and it's not worth the effort of debugging at the moment.
+    # The goal here is to avoid memory allocations
+    # (e.g., as in ListWorld's creation of Cohort objects and management of lists).
+    # Testing in a previous implementation suggested this could be more efficient
+    # for simulations with many nodes. However, in refactoring this implementation
+    # turned out many times slower than ListWorld and it's not worth the effort of
+    # debugging at the moment.
     # This may be of interest in future, however, so we'll leave the code here.
 
     dim: SimDimensions
@@ -62,7 +64,9 @@ class HypercubeWorld(World):
     """The start of the ledger's active chunk: based on what timestep we're on."""
 
     time_frontier: int
-    """The end of the ledger's active chunk: what's the furthest-out group of travelers?"""
+    """
+    The end of the ledger's active chunk: what's the furthest-out group of travelers?
+    """
 
     _ident: NDArray[SimDType]
     """
@@ -126,7 +130,7 @@ class HypercubeWorld(World):
     def apply_return(
         self, tick: Tick, *, return_stats: bool
     ) -> NDArray[SimDType] | None:
-        # we have to transpose the movers "stats" result since they're being stored here as
+        # have to transpose the movers "stats" result since they're being stored here as
         # (home, visiting) and our result needs to be
         # (moving from "visiting", moving to "home")
         movers = self.ledger[self.time_offset + 1, :, :, :].transpose((1, 0, 2)).copy()

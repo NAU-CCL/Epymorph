@@ -51,12 +51,18 @@ class TestListWorld(EpymorphTestCase):
         self, world_a: list[list[Cohort]], world_b: list[list[Cohort]]
     ) -> None:
         if len(world_a) != len(world_b):
-            msg = f"Worlds contained a different number of locations: {len(world_a)} vs. {len(world_b)}"
+            msg = (
+                "Worlds contained a different number of locations: "
+                f"{len(world_a)} vs. {len(world_b)}"
+            )
             self.fail(msg)
 
         for i, (loc_a, loc_b) in enumerate(zip(world_a, world_b)):
             if len(loc_a) != len(loc_b):
-                msg = f"Location {i} contained a different number of cohorts: {len(loc_a)} vs. {len(loc_b)}"
+                msg = (
+                    f"Location {i} contained a different number of cohorts: "
+                    f"{len(loc_a)} vs. {len(loc_b)}"
+                )
                 self.fail(msg)
 
             for j, (coh_a, coh_b) in enumerate(zip(loc_a, loc_b)):

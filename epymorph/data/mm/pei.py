@@ -25,8 +25,11 @@ class Commuters(MovementClause):
             float,
             Shapes.S,
             default_value=0.9,
-            comment="A factor which modulates the number of commuters by conducting a binomial draw "
-            "with this probability and the expected commuters from the commuters matrix.",
+            comment=(
+                "A factor which modulates the number of commuters "
+                "by conducting a binomial draw with this probability "
+                "and the expected commuters from the commuters matrix."
+            ),
         ),
     )
 
@@ -65,9 +68,12 @@ class Dispersers(MovementClause):
             float,
             Shapes.S,
             default_value=0.1,
-            comment="A factor which allows for randomized movement by conducting a poisson draw "
-            "with this factor times the average number of commuters between two nodes "
-            "from the commuters matrix.",
+            comment=(
+                "A factor which allows for randomized movement "
+                "by conducting a poisson draw with this factor "
+                "times the average number of commuters between two nodes "
+                "from the commuters matrix."
+            ),
         ),
     )
 

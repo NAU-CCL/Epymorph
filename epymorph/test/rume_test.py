@@ -265,7 +265,8 @@ class RumeTest(EpymorphTestCase):
             [False, False, False, True, True, True],
         )
 
-        # NOTE: these tests will break if someone alters the MM or Init definition; even just the comments
+        # NOTE: these tests will break if someone alters the MM or Init definition;
+        # even just the comments
         self.assertDictEqual(
             rume.requirements,
             {
@@ -327,7 +328,8 @@ class RumeTest(EpymorphTestCase):
         self.assertListAlmostEqual(rume.dim.tau_step_lengths, [1 / 3, 2 / 3])
         self.assertEqual(rume.dim.nodes, 2)
 
-        # NOTE: these tests will break if someone alters the MM or Init definition; even just the comments
+        # NOTE: these tests will break if someone alters the MM or Init definition;
+        # even just the comments
         self.assertDictEqual(
             rume.requirements,
             {
@@ -347,7 +349,9 @@ class RumeTest(EpymorphTestCase):
                     "centroid",
                     (("longitude", float), ("latitude", float)),
                     Shapes.N,
-                    comment="The centroids for each node as (longitude, latitude) tuples.",
+                    comment=(
+                        "The centroids for each node as (longitude, latitude) tuples."
+                    ),
                 ),
                 AbsoluteName("gpm:aaa", "mm", "phi"): AttributeDef(
                     "phi",
@@ -361,7 +365,7 @@ class RumeTest(EpymorphTestCase):
                     float,
                     Shapes.S,
                     default_value=0.1,
-                    comment="Decides what proportion of the total population should be commuting normally.",
+                    comment="The proportion of the total population that commutes.",
                 ),
                 AbsoluteName("gpm:aaa", "init", "population"): AttributeDef(
                     "population",

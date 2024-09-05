@@ -88,16 +88,19 @@ select = [
   "E", # (basic pycodestyle lints)
   "A", # (don't shadow builtins)
   "I", # (sort imports)
-  # "T10", # (no debugger directives laying around)
-  # "ISC", # (clean string concat usage)
-  # "PIE", # (general improvements)
-  # "NPY", # (numpy linting)
-  # "PERF", # (performance traps)
-  # "PTH", # (prefer pathlib)
+  "T10", # (no debugger directives laying around)
+  "ISC", # (clean string concat usage)
+  "PIE", # (general improvements)
+  "PERF", # (performance traps)
+  "PTH", # (prefer pathlib)
+  "NPY", # (numpy linting)
+  "PD", # (pandas linting)
+  "W", # (no extra whitespace)
+  "S", # (security rules)
+  "BLE", # (catching Exception is too general)
 
   # NOTE: rules I'd like to enable some day are below, commented out
   # "ERA", # (no commented code)
-  # "W", # (no extra whitespace)
   # "C4", # (clean comprehensions usage)
   # "T20", (no extra print statements laying around)
   # "UP", (use modern python)
@@ -106,25 +109,23 @@ select = [
   # "D", (enforced documentation)
   # "DOC", (enforced documentation; complementary with D)
   # "ANN", (enforced type annotations)
-  # "S", (security rules)
   # "N", (naming conventions)
-  # "BLE", (catching Exception is too general)
   # "RET", (clean return handling)
   # "SIM", (code simplifications)
   # "SLF", (prevent private member access)
   # "ARG", (unused args)
   # "COM", (comma consistency; maybe: is there a way to stop this from demanding trailing commas in function calls?)
   # "TD", (rigorous formatting of TODO comments)
-  # "PD", (pandas linting)
   # "RUF", (general linting)
   # "TRY", (error handling; might need to be selective with this one)
 ]
 
 ignore = [
-  "E741", # (ambiguous names false positives for common compartment name "I")
+  "E741", # (ambiguous names: false positives for common compartment name "I")
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
-# Allow star imports in tests and notebooks
+# Allow star imports in tests and notebooks.
+# I001 (import sort) appears to be broken in notebooks.
 "**/*_test.py" = ["F403", "F405"]
-"*.ipynb" = ["F403", "F405"]
+"*.ipynb" = ["F403", "F405", "I001"]

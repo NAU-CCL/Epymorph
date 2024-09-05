@@ -43,8 +43,8 @@ def default_rng(
     seed: int | SeedSequence | None = None,
 ) -> Callable[[], np.random.Generator]:
     """
-    Convenience constructor to create a factory function for a simulation's random number generator,
-    optionally with a given seed.
+    Convenience constructor to create a factory function for a simulation's
+    random number generator, optionally with a given seed.
     """
     return lambda: np.random.default_rng(seed)
 
@@ -60,7 +60,9 @@ class TimeFrame:
 
     @classmethod
     def of(cls, start_date_iso8601: str, duration_days: int) -> Self:
-        """Alternate constructor for TimeFrame, parsing start date from an ISO-8601 string."""
+        """
+        Alternate constructor for TimeFrame, parsing start date from an ISO-8601 string.
+        """
         return cls(date.fromisoformat(start_date_iso8601), duration_days)
 
     @classmethod
@@ -74,7 +76,8 @@ class TimeFrame:
     @classmethod
     def range(cls, start_date: date | str, end_date: date | str) -> Self:
         """
-        Alternate constructor for TimeFrame, comprising the (endpoint inclusive) date range.
+        Alternate constructor for TimeFrame, comprising the
+        (endpoint inclusive) date range.
         If a date is passed as a string, it will be parsed using ISO-8601 format.
         """
         if isinstance(start_date, str):
@@ -101,8 +104,10 @@ class TimeFrame:
 
 class Tick(NamedTuple):
     """
-    A Tick bundles related time-step information. For instance, each time step corresponds to a calendar day,
-    a numeric day (i.e., relative to the start of the simulation), which tau step this corresponds to, and so on.
+    A Tick bundles related time-step information.
+    For instance, each time step corresponds to a calendar day,
+    a numeric day (i.e., relative to the start of the simulation),
+    which tau step this corresponds to, and so on.
     """
 
     sim_index: int
@@ -172,10 +177,13 @@ def simulation_clock(dim: SimDimensions) -> Iterable[Tick]:
 AttributeT = TypeVar("AttributeT", bound=AttributeType)
 """The data type of an attribute; maps to the numpy type of the attribute array."""
 
-# NOTE: I had AttributeT as covariant originally but that seems to cause pyright some headache
-# interpreting typed method overloads (which is practically the whole point of making AttributeKey generic).
-# So for now this must be invariant, but I think that's okay. Rather than being able to say things like:
-# `AttributeKey[type[int] | type[float]]` you have to say `AttributeKey[type[int]] | AttributeKey[type[float]]`.
+# NOTE: I had AttributeT as covariant originally but that seems to cause pyright
+# some headache interpreting typed method overloads (which is practically the
+# whole point of making AttributeKey generic).
+# So for now this must be invariant, but I think that's okay.
+# Rather than being able to say things like:
+# `AttributeKey[type[int] | type[float]]`
+# you have to say `AttributeKey[type[int]] | AttributeKey[type[float]]`.
 
 
 @dataclass(frozen=True)
@@ -194,7 +202,7 @@ class AttributeKey(Generic[AttributeT]):
         except Exception as e:
             msg = (
                 f"AttributeDef's type is not correctly specified: {self.type}\n"
-                + "See documentation for appropriate type designations."
+                "See documentation for appropriate type designations."
             )
             raise ValueError(msg) from e
         object.__setattr__(self, "attribute_name", AttributeName(self.name))
@@ -206,8 +214,8 @@ class AttributeKey(Generic[AttributeT]):
     @overload
     def dtype(self: "AttributeKey[type[str]]") -> np.dtype[np.str_]: ...
 
-    # providing overloads for structured types is basically impossible without mapped types,
-    # so callers are on their own for that.
+    # providing overloads for structured types is basically impossible
+    # without mapped types, so callers are on their own for that.
 
     @property
     def dtype(self) -> np.dtype:
@@ -217,7 +225,10 @@ class AttributeKey(Generic[AttributeT]):
 
 @dataclass(frozen=True)
 class AttributeDef(AttributeKey[AttributeT]):
-    """Definition of a simulation attribute; the identity plus optional default value and comment."""
+    """
+    Definition of a simulation attribute;
+    the identity plus optional default value and comment.
+    """
 
     name: str
     type: AttributeT
@@ -233,7 +244,7 @@ class AttributeDef(AttributeKey[AttributeT]):
         except Exception as e:
             msg = (
                 f"AttributeDef's type is not correctly specified: {self.type}\n"
-                + "See documentation for appropriate type designations."
+                "See documentation for appropriate type designations."
             )
             raise ValueError(msg) from e
         if self.default_value is not None and not dtype_check(
@@ -254,15 +265,20 @@ class _BaseAttributeResolver:
         self._dim = dim
 
     def _resolve(self, attr: tuple[AbsoluteName, AttributeKey]) -> NDArray:
-        """Resolve an attribute value by AbsoluteName and convert it to the type and shape in the given AttributeKey."""
+        """
+        Resolve an attribute value by AbsoluteName and convert it to the
+        type and shape in the given AttributeKey.
+        """
         name, attr_key = attr
         matched = self._data.query(name)
         if matched is None:
             msg = f"Missing attribute '{name}'"
             raise AttributeException(msg)
 
-        # Assume that we've already validated the attributes, so we don't have to do that every time.
-        # In standard simulation workflows, we should therefore not see misses or incompatibilities.
+        # Assume that we've already validated the attributes, so we don't have
+        # to do that every time.
+        # In standard simulation workflows, we should therefore not see misses
+        # or incompatibilities.
         # But they are possible in use-cases outside these workflows.
 
         try:
@@ -273,14 +289,14 @@ class _BaseAttributeResolver:
             value = attr_key.shape.adapt(self._dim, value, allow_broadcast=True)
         except Exception as e:
             msg = (
-                f"Attribute '{name}' (given as '{matched.pattern}') is not properly specified. "
-                "Not a compatible type."
+                f"Attribute '{name}' (given as '{matched.pattern}') is "
+                "not properly specified. Not a compatible type."
             )
             raise AttributeException(msg) from e
         if value is None:
             msg = (
-                f"Attribute '{name}' (given as '{matched.pattern}') is not properly specified. "
-                "Not a compatible shape."
+                f"Attribute '{name}' (given as '{matched.pattern}') is "
+                "not properly specified. Not a compatible shape."
             )
             raise AttributeException(msg)
         return value
@@ -311,7 +327,9 @@ class AttributeResolver(_BaseAttributeResolver):
     def resolve(self, attr: tuple[AbsoluteName, AttributeKey[Any]]) -> NDArray[Any]: ...
 
     def resolve(self, attr: tuple[AbsoluteName, AttributeKey]) -> NDArray:
-        """Retrieve the value of a specific attribute, typed and shaped appropriately."""
+        """
+        Retrieve the value of a specific attribute, typed and shaped appropriately.
+        """
         return super()._resolve(attr)
 
     def resolve_txn_series(
@@ -319,9 +337,11 @@ class AttributeResolver(_BaseAttributeResolver):
         attributes: Sequence[tuple[AbsoluteName, AttributeKey]],
     ) -> Generator[Iterable[AttributeValue], None, None]:
         """
-        Generates the series of values for the given attributes. Each item produced by the generator
-        is a sequence of values, one for each attribute (in the given order). The sequence of items is generated
-        in simulation order -- day=0, tau step=0, node=0; then day=0, tau_step=0; node=1; and so on.
+        Generates the series of values for the given attributes.
+        Each item produced by the generator is a sequence of values,
+        one for each attribute (in the given order).
+        The sequence of items is generated in simulation order --
+        day=0, tau step=0, node=0; then day=0, tau_step=0; node=1; and so on.
         """
         days = self._dim.days
         taus = self._dim.tau_steps
@@ -367,8 +387,11 @@ class NamespacedAttributeResolver(_BaseAttributeResolver):
     def resolve(self, attr: AttributeKey[Any]) -> NDArray[Any]: ...
 
     def resolve(self, attr: AttributeKey) -> NDArray:
-        """Retrieve the value of a specific attribute, typed and shaped appropriately."""
-        # Assume that we've already validated the attributes, so we don't have to do that every time.
+        """
+        Retrieve the value of a specific attribute, typed and shaped appropriately.
+        """
+        # Assume that we've already validated the attributes, so we don't have to
+        # do that every time.
         # In practice we should not see misses or type/shape incompatibilities.
         name = self._namespace.to_absolute(attr.name)
         return super()._resolve((name, attr))
@@ -532,15 +555,18 @@ class SimulationFunctionClass(ABCMeta):
         if (reqs := dct.get("requirements")) is not None:
             if not isinstance(reqs, (list, tuple)):
                 raise TypeError(
-                    f"Invalid requirements in {name}: please specify as a list or tuple."
+                    f"Invalid requirements in {name}: "
+                    "please specify as a list or tuple."
                 )
             if not are_instances(reqs, AttributeDef):
                 raise TypeError(
-                    f"Invalid requirements in {name}: must be instances of AttributeDef."
+                    f"Invalid requirements in {name}: "
+                    "must be instances of AttributeDef."
                 )
             if not are_unique(r.name for r in reqs):
                 raise TypeError(
-                    f"Invalid requirements in {name}: requirement names must be unique."
+                    f"Invalid requirements in {name}: "
+                    "requirement names must be unique."
                 )
             # Make requirements list immutable
             dct["requirements"] = tuple(reqs)
@@ -548,27 +574,32 @@ class SimulationFunctionClass(ABCMeta):
         # Check serializable
         if not is_picklable(name, mcs):
             raise TypeError(
-                f"Invalid simulation function {name}: classes must be serializable (using jsonpickle)."
+                f"Invalid simulation function {name}: "
+                "classes must be serializable (using jsonpickle)."
             )
 
-        # NOTE: is_picklable() is misleading here; it does not guarantee that instances of a class are picklable,
-        # nor (if you called it against an instance) that all of the instance's attributes are picklable.
-        # jsonpickle simply ignores unpicklable fields, decoding objects into attribute swiss cheese.
-        # It will be more effective to check that all of the attributes of an object are picklable before we try to
-        # serialize it... Thus I don't think we can guarantee picklability at class definition time.
+        # NOTE: is_picklable() is misleading here; it does not guarantee that instances
+        # of a class are picklable, nor (if you called it against an instance) that all
+        # of the instance's attributes are picklable. jsonpickle simply ignores
+        # unpicklable fields, decoding objects into attribute swiss cheese.
+        # It will be more effective to check that all of the attributes of an object
+        # are picklable before we try to serialize it...
+        # Thus I don't think we can guarantee picklability at class definition time.
         # Something like:
         #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]
-        # Why worry? Lambda functions are probably the most likely problem; they're not picklable by default.
-        # But a simple workaround is to use a def function and, if needed, partial function application.
+        # Why worry? Lambda functions are probably the most likely problem;
+        # they're not picklable by default.
+        # But a simple workaround is to use a def function and,
+        # if needed, partial function application.
 
         return super().__new__(mcs, name, bases, dct)
 
 
 class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
     """
-    A function which runs in the context of a simulation to produce a value (as a numpy array).
-    This base class exists to share functionality without limiting the function signature
-    of evaluate().
+    A function which runs in the context of a simulation to produce a value
+    (as a numpy array). This base class exists to share functionality without
+    limiting the function signature of evaluate().
     """
 
     requirements: Sequence[AttributeDef] = ()
@@ -604,7 +635,8 @@ class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionCla
             req = attribute
         if req is None or req not in self.requirements:
             raise ValueError(
-                f"Simulation function {self.__class__.__name__} accessed an attribute ({name}) "
+                f"Simulation function {self.__class__.__name__} "
+                f"accessed an attribute ({name}) "
                 "which you did not declare as a requirement."
             )
         return self._ctx.data(req)
@@ -627,8 +659,10 @@ class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionCla
 
 class SimulationFunction(BaseSimulationFunction[T_co]):
     """
-    A function which runs in the context of a simulation to produce a value (as a numpy array).
-    Implement a SimulationFunction by extending this class and overriding the `evaluate()` method.
+    A function which runs in the context of a simulation to produce a value
+    (as a numpy array).
+    Implement a SimulationFunction by extending this class and overriding the
+    `evaluate()` method.
     """
 
     def evaluate_in_context(
@@ -648,7 +682,7 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
     def evaluate(self) -> T_co:
         """
         Implement this method to provide logic for the function.
-        Your implementation is free to use `data`, `dim`, and `rng` in this function body.
+        Your implementation is free to use `data`, `dim`, and `rng`.
         You can also use `defer` to utilize another SimulationFunction instance.
         """
 
@@ -660,8 +694,9 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
 
 class SimulationTickFunction(BaseSimulationFunction[T_co]):
     """
-    A function which runs in the context of a simulation to produce a sim-time-specific value (as a numpy array).
-    Implement a SimulationTickFunction by extending this class and overriding the `evaluate()` method.
+    A function which runs in the context of a simulation to produce a sim-time-specific
+    value (as a numpy array). Implement a SimulationTickFunction by extending this class
+    and overriding the `evaluate()` method.
     """
 
     def evaluate_in_context(
@@ -682,7 +717,7 @@ class SimulationTickFunction(BaseSimulationFunction[T_co]):
     def evaluate(self, tick: Tick) -> T_co:
         """
         Implement this method to provide logic for the function.
-        Your implementation is free to use `data`, `dim`, and `rng` in this function body.
+        Your implementation is free to use `data`, `dim`, and `rng`.
         You can also use `defer` to utilize another SimulationTickFunction instance.
         """
 

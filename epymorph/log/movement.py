@@ -42,7 +42,9 @@ class MovementData(Protocol):
 
     @abstractmethod
     def requested_all(self) -> NDArray[SimDType]:
-        """The time series of requested movement for all clauses. Array shape: (T,N,N)"""
+        """
+        The time series of requested movement for all clauses. Array shape: (T,N,N)
+        """
 
     @abstractmethod
     def actual_all(self) -> NDArray[SimDType]:
@@ -78,9 +80,14 @@ class _MovementDataBuilder(MovementData):
         self.actual = []
 
     def _get_dim(self) -> SimDimensions:
-        """Checks that the class is in a valid state and, if so, returns SimDimensions."""
+        """
+        Checks that the class is in a valid state and, if so, returns SimDimensions.
+        """
         if not self.ready or self.dim is None:
-            msg = "Invalid state: MovementData cannot be accessed until the simulation is complete."
+            msg = (
+                "Invalid state: MovementData cannot be accessed until the simulation "
+                "is complete."
+            )
             raise RuntimeError(msg)
         return self.dim
 

@@ -85,8 +85,8 @@ def _discover_classes(
     Search for the specified type of model, implemented by the specified Python class.
     """
     # There's nothing stopping you from calling this method with incompatible types,
-    # you'll just probably come up empty in that scenario. But this is an internal method,
-    # so no need to be over-careful.
+    # you'll just probably come up empty in that scenario.
+    # But this is an internal method, so no need to be over-careful.
 
     in_path = model.path
     modules = [

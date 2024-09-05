@@ -1,10 +1,10 @@
 """
 Functions for fetching TIGER files for common US Census geographic delineations.
-This is designed to return information for the entire United States, including territories,
-and handles quirks and differences between the supported census years.
+This is designed to return information for the entire United States,
+including territories, and handles quirks and differences between the supported
+census years.
 """
 
-from io import BytesIO
 from pathlib import Path
 from typing import Literal, Sequence, TypeGuard
 
@@ -15,70 +15,59 @@ from pandas import concat as pd_concat
 
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.error import GeographyError
+from epymorph.geography.us_census import STATE
 
-# A fair question is why did we implement our own TIGER files loader instead of using pygris?
-# The short answer is for efficiently and to correct inconsistencies that matter for our use-case.
-# For one, pygris always loads geography but we only want the geography sometimes. By loading it ourselves,
-# we can tell Geopandas to skip it, which is a lot faster.
-# Second, asking pygris for counties in 2020 returns all territories, while 2010 and 2000 do not.
+# A fair question is why did we implement our own TIGER files loader instead of using
+# pygris? The short answer is for efficiently and to correct inconsistencies that matter
+# for our use-case. For one, pygris always loads geography but we only want the
+# geography sometimes. By loading it ourselves, we can tell Geopandas to skip it,
+# which is a lot faster. Second, asking pygris for counties in 2020 returns all
+# territories, while 2010 and 2000 do not.
 # This *is* consistent with the TIGER files themselves, but not ideal for us.
 # (You can compare the following two files to see for yourself:)
 # https://www2.census.gov/geo/tiger/TIGER2020/COUNTY/tl_2020_us_county.zip
 # https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_us_county10.zip
-# Lastly, pygris has a bug which is patched but not available in a release version at this time:
+# Lastly, pygris has a bug which is patched but not available in a release version
+# at this time:
 # https://github.com/walkerke/pygris/commit/9ad16208b5b1e67909ff2dfdea26333ddd4a2e17
 
 # NOTE on which states/territories are included in our results --
-# We have chosen to filter results to include only the 50 states, District of Columbia, and Puerto Rico.
-# This is not the entire set of data provided by TIGER files, but does align with the
-# data that ACS5 provides. Since that is our primary data source at the moment, we felt
-# that this was an acceptable simplification. Either we make the two sets match
-# (as we've done here, by removing 4 territories) OR we have a special "all states for the ACS5" scope.
-# We chose this solution as the less-bad option, but this may be revised in future.
-# Below there are some commented-code remnants which demonstrate what it takes to support the additional
-# territories, in case we ever want to reverse this choice.
+# We have chosen to filter results to include only the 50 states, District of Columbia,
+# and Puerto Rico. This is not the entire set of data provided by TIGER files, but does
+# align with the data that ACS5 provides. Since that is our primary data source at the
+# moment, we felt that this was an acceptable simplification. Either we make the two
+# sets match (as we've done here, by removing 4 territories) OR we have a special
+# "all states for the ACS5" scope. We chose this solution as the less-bad option,
+# but this may be revised in future. Below there are some commented-code remnants which
+# demonstrate what it takes to support the additional territories, in case we ever want
+# to reverse this choice.
 
 # NOTE: TIGER files express areas in meters-squared.
 
+# fmt: off
 TigerYear = Literal[
-    2000,
-    2009,
-    2010,
-    2011,
-    2012,
-    2013,
-    2014,
-    2015,
-    2016,
-    2017,
-    2018,
-    2019,
-    2020,
-    2021,
-    2022,
-    2023,
+    2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, # noqa
 ]
 """A supported TIGER file year."""
 
 TIGER_YEARS: Sequence[TigerYear] = (
-    2000,
-    2009,
-    2010,
-    2011,
-    2012,
-    2013,
-    2014,
-    2015,
-    2016,
-    2017,
-    2018,
-    2019,
-    2020,
-    2021,
-    2022,
-    2023,
+    2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, #noqa
 )
 """All supported TIGER file years."""
+
+_SUPPORTED_STATES = [
+    "01", "02", "04", "05", "06", "08", "09", "10", "11", "12",
+    "13", "15", "16", "17", "18", "19", "20", "21", "22", "23",
+    "24", "25", "26", "27", "28", "29", "30", "31", "32", "33",
+    "34", "35", "36", "37", "38", "39", "40", "41", "42", "44",
+    "45", "46", "47", "48", "49", "50", "51", "53", "54", "55",
+    "56", "72", # '60', '66', '69', '78'
+]
+"""
+The FIPS IDs of states which are included in our set of supported states.
+Not needed if we didn't have to filter out 4 territories.
+"""
+# fmt: on
 
 _TIGER_URL = "https://www2.census.gov/geo/tiger"
 
@@ -91,74 +80,37 @@ The IDs of TIGER files that are included in our set of supported states.
 In some TIGER years, data for the 4 territories were given in separate files.
 """
 
-_SUPPORTED_STATES = [
-    "01",
-    "02",
-    "04",
-    "05",
-    "06",
-    "08",
-    "09",
-    "10",
-    "11",
-    "12",
-    "13",
-    "15",
-    "16",
-    "17",
-    "18",
-    "19",
-    "20",
-    "21",
-    "22",
-    "23",
-    "24",
-    "25",
-    "26",
-    "27",
-    "28",
-    "29",
-    "30",
-    "31",
-    "32",
-    "33",
-    "34",
-    "35",
-    "36",
-    "37",
-    "38",
-    "39",
-    "40",
-    "41",
-    "42",
-    "44",
-    "45",
-    "46",
-    "47",
-    "48",
-    "49",
-    "50",
-    "51",
-    "53",
-    "54",
-    "55",
-    "56",
-    "72",
-]
-#  '60', '66', '69', '78']
-"""
-The FIPS IDs of states which are included in our set of supported states.
-Not needed if we didn't have to filter out 4 territories.
-"""
 
-
-def _load_urls(urls: list[str]) -> list[BytesIO]:
+def _load_urls(
+    cols: list[str],
+    urls: list[str],
+    result_cols: list[str],
+    ignore_geometry: bool,
+) -> DataFrame:
     """
-    Attempt to load the list of URLs from disk cache, or failing that, from the network.
-    If the files are not cached, they will be saved to our TIGER cache path.
+    Load TIGER files either from disk cache or the network.
+    The result is processed and returned as one large DataFrame.
     """
     try:
-        return [load_or_fetch_url(u, _TIGER_CACHE_PATH / Path(u).name) for u in urls]
+        # Fetch the contents of each file and read them as a DataFrame.
+        dfs = [
+            gp_read_file(
+                load_or_fetch_url(u, _TIGER_CACHE_PATH / Path(u).name),
+                engine="fiona",
+                ignore_geometry=ignore_geometry,
+                include_fields=cols,
+            )
+            for u in urls
+        ]
+        # Concat the DataFrames, fix column names, and data quality checks.
+        combined_df = (
+            pd_concat(dfs, ignore_index=True)
+            .rename(columns=dict(zip(cols, result_cols)))
+            .drop_duplicates()
+        )
+        # Drop records that aren't in our supported set of states.
+        selection = combined_df["GEOID"].apply(STATE.truncate).isin(_SUPPORTED_STATES)
+        return combined_df[selection]
     except Exception as e:
         msg = "Unable to retrieve TIGER files for US Census geography."
         raise GeographyError(msg) from e
@@ -166,37 +118,13 @@ def _load_urls(urls: list[str]) -> list[BytesIO]:
 
 def _get_geo(cols: list[str], urls: list[str], result_cols: list[str]) -> GeoDataFrame:
     """Universal logic for loading a data set with its geography."""
-    files = _load_urls(urls)
-    gdf = GeoDataFrame(
-        pd_concat(
-            [
-                gp_read_file(
-                    f, engine="fiona", ignore_geometry=False, include_fields=cols
-                )
-                for f in files
-            ],
-            ignore_index=True,
-        )
-    )
-    gdf.rename(columns=dict(zip(cols, result_cols)), inplace=True)
-    return GeoDataFrame(
-        gdf[gdf["GEOID"].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)]
-    )
+    combined_df = _load_urls(cols, urls, result_cols, ignore_geometry=False)
+    return GeoDataFrame(combined_df)
 
 
 def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataFrame:
     """Universal logic for loading a data set without its geography."""
-    files = _load_urls(urls)
-    df = pd_concat(
-        [
-            gp_read_file(f, engine="fiona", ignore_geometry=True, include_fields=cols)
-            for f in files
-        ],
-        ignore_index=True,
-    )
-    df.rename(columns=dict(zip(cols, result_cols)), inplace=True)
-    df.drop_duplicates(inplace=True)
-    return df[df["GEOID"].apply(lambda x: x[0:2]).isin(_SUPPORTED_STATES)]
+    return _load_urls(cols, urls, result_cols, ignore_geometry=True)
 
 
 def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
@@ -262,7 +190,9 @@ def get_states_geo(year: TigerYear) -> GeoDataFrame:
 
 
 def get_states_info(year: TigerYear) -> DataFrame:
-    """Get all US states and territories for the given census year, without geography."""
+    """
+    Get all US states and territories for the given census year, without geography.
+    """
     return _get_info(*_get_states_config(year))
 
 
@@ -305,12 +235,18 @@ def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[st
 
 
 def get_counties_geo(year: TigerYear) -> GeoDataFrame:
-    """Get all US counties and county-equivalents for the given census year, with geography."""
+    """
+    Get all US counties and county-equivalents for the given census year,
+    with geography.
+    """
     return _get_geo(*_get_counties_config(year))
 
 
 def get_counties_info(year: TigerYear) -> DataFrame:
-    """Get all US counties and county-equivalents for the given census year, without geography."""
+    """
+    Get all US counties and county-equivalents for the given census year,
+    without geography.
+    """
     return _get_info(*_get_counties_config(year))
 
 
@@ -347,7 +283,7 @@ def _get_tracts_config(
 
             cols = ["CTIDFP00", "ALAND00", "INTPTLAT00", "INTPTLON00"]
             urls = [
-                f"{_TIGER_URL}/TIGER2009/{state_folder(xx, name)}/tl_2009_{xx}_tract00.zip"
+                f"{_TIGER_URL}/TIGER2009/{state_folder(xx, name)}/tl_2009_{xx}_tract00.zip"  # noqa: E501
                 for xx, name in zip(states["GEOID"], states["NAME"])
             ]
         case 2000:

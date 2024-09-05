@@ -58,8 +58,8 @@ def _get_geo(scope: CensusScope) -> GeoDataFrame:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
-    df = DataFrame({"GEOID": scope.get_node_ids()})
-    return GeoDataFrame(df.merge(gdf, on="GEOID", how="left", sort=True))
+    geoid_df = DataFrame({"GEOID": scope.get_node_ids()})
+    return GeoDataFrame(geoid_df.merge(gdf, on="GEOID", how="left", sort=True))
 
 
 def _get_info(scope: CensusScope) -> DataFrame:
@@ -81,8 +81,8 @@ def _get_info(scope: CensusScope) -> DataFrame:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
-    df = DataFrame({"GEOID": scope.get_node_ids()})
-    return df.merge(gdf, on="GEOID", how="left", sort=True)
+    geoid_df = DataFrame({"GEOID": scope.get_node_ids()})
+    return geoid_df.merge(gdf, on="GEOID", how="left", sort=True)
 
 
 class GeometricCentroid(Adrio[StructDType]):
@@ -108,11 +108,12 @@ class InternalPoint(Adrio[StructDType]):
     @override
     def evaluate(self):
         scope = _validate_scope(self.scope)
-        df = _get_info(scope)
-        return np.array(
-            [x for x in zip(to_numeric(df["INTPTLON"]), to_numeric(df["INTPTLAT"]))],
-            dtype=CentroidDType,
+        info_df = _get_info(scope)
+        centroids = zip(
+            to_numeric(info_df["INTPTLON"]),
+            to_numeric(info_df["INTPTLAT"]),
         )
+        return np.array(list(centroids), dtype=CentroidDType)
 
 
 class Name(Adrio[np.str_]):
@@ -129,7 +130,10 @@ class Name(Adrio[np.str_]):
 
 
 class PostalCode(Adrio[np.str_]):
-    """For states only, the postal code abbreviation for the state ("AZ" for Arizona, and so on)."""
+    """
+    For states only, the postal code abbreviation for the state
+    ("AZ" for Arizona, and so on).
+    """
 
     @override
     def evaluate(self):

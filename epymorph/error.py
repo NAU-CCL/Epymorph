@@ -4,14 +4,14 @@ A common exception framework for epymorph.
 
 from contextlib import contextmanager
 from textwrap import dedent
-from typing import Self
 
 
 class GeographyError(Exception):
     """Exception working with geographic system representations."""
 
     # NOTE: this is *not* for general errors related to the epymorph GEO module,
-    # but instead for things like utility functions for working with US Census delineations.
+    # but instead for things like utility functions for working with
+    # US Census delineations.
 
 
 class UnknownModel(Exception):
@@ -144,13 +144,18 @@ class IpmSimNaNException(IpmSimExceptionWithFields):
     """Exception for handling NaN (not a number) rate values"""
 
     def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
-        msg = """
-              NaN (not a number) rate detected. This is often the result of a divide by zero error.
-              When constructing the IPM, ensure that no edge transitions can result in division by zero
-              This commonly occurs when defining an S->I edge that is (some rate / sum of the compartments)
-              To fix this, change the edge to define the S->I edge as (some rate / Max(1/sum of the the compartments))
-              See examples of this in the provided example ipm definitions in the data/ipms folder.
-              """
+        msg = (
+            "NaN (not a number) rate detected. This is often the result of a "
+            "divide by zero error.\n"
+            "When constructing the IPM, ensure that no edge transitions can "
+            "result in division by zero\n"
+            "This commonly occurs when defining an S->I edge that is "
+            "(some rate / sum of the compartments)\n"
+            "To fix this, change the edge to define the S->I edge as "
+            "(some rate / Max(1/sum of the the compartments))\n"
+            "See examples of this in the provided example ipm definitions "
+            "in the data/ipms folder."
+        )
         msg = dedent(msg)
         super().__init__(msg, display_fields)
 
@@ -159,11 +164,12 @@ class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
     """Exception for handling less than 0 rate values"""
 
     def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
-        msg = """
-              Less than zero rate detected. When providing or defining ipm parameters, ensure that
-              they will not result in a negative rate. Note: this can often happen unintentionally
-              if a function is given as a parameter.
-              """
+        msg = (
+            "Less than zero rate detected. When providing or defining ipm parameters, "
+            "ensure that they will not result in a negative rate.\n"
+            "Note: this can often happen unintentionally if a function is given "
+            "as a parameter."
+        )
         msg = dedent(msg)
         super().__init__(msg, display_fields)
 
@@ -173,7 +179,7 @@ class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
 
     def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
         msg = """
-              Invalid probabilities for fork definition detected. Probabilities for a 
+              Invalid probabilities for fork definition detected. Probabilities for a
               given tick should always be nonnegative and sum to 1
               """
         msg = dedent(msg)
@@ -185,7 +191,10 @@ class MmSimException(SimulationException):
 
 
 class SimStateException(SimulationException):
-    """Exception when the simulation is not in a valid state to perform the requested operation."""
+    """
+    Exception when the simulation is not in a valid state to perform
+    the requested operation.
+    """
 
 
 @contextmanager

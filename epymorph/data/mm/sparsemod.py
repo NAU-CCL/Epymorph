@@ -48,8 +48,8 @@ class SparsemodClause(MovementClause):
     @cached_property
     def dispersal_kernel(self) -> NDArray[np.float64]:
         """
-        The NxN matrix or dispersal kernel describing the tendency for movers to move to a particular location.
-        In this model, the kernel is:
+        The NxN matrix or dispersal kernel describing the tendency for movers
+        to move to a particular location. In this model, the kernel is:
             1 / e ^ (distance / phi)
         which is then row-normalized.
         """

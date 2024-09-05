@@ -36,13 +36,13 @@ AttributeArray = NDArray[AttributeDType]
 
 def dtype_as_np(dtype: AttributeType) -> np.dtype:
     """Return a python-style dtype as its numpy-equivalent."""
-    if dtype == int:
+    if dtype is int:
         return np.dtype(np.int64)
-    if dtype == float:
+    if dtype is float:
         return np.dtype(np.float64)
-    if dtype == str:
+    if dtype is str:
         return np.dtype(np.str_)
-    if dtype == date:
+    if dtype is date:
         return np.dtype(np.datetime64)
     if isinstance(dtype, tuple):
         fields = list(dtype)
@@ -62,13 +62,13 @@ def dtype_as_np(dtype: AttributeType) -> np.dtype:
 
 def dtype_str(dtype: AttributeType) -> str:
     """Return a human-readable description of the given dtype."""
-    if dtype == int:
+    if dtype is int:
         return "int"
-    if dtype == float:
+    if dtype is float:
         return "float"
-    if dtype == str:
+    if dtype is str:
         return "str"
-    if dtype == date:
+    if dtype is date:
         return "date"
     if isinstance(dtype, tuple):
         fields = list(dtype)
@@ -107,7 +107,9 @@ def dtype_check(dtype: AttributeType, value: Any) -> bool:
 CentroidType: AttributeType = (("longitude", float), ("latitude", float))
 """Structured epymorph type declaration for long/lat coordinates."""
 CentroidDType: DTypeLike = dtype_as_np(CentroidType)
-"""The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates)."""
+"""
+The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates).
+"""
 
 # SimDType being centrally-located means we can change it reliably.
 SimDType = np.int64

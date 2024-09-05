@@ -112,7 +112,7 @@ def is_acs5_year(year: int) -> TypeGuard[Acs5Year]:
 
 
 def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
-    """Formats scope geography information into dictionaries usable in census queries."""
+    """Creates census API queries that cover the given scope."""
     match scope:
         case StateScopeAll():
             return [{"for": "state:*"}]
@@ -200,7 +200,10 @@ def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
             return [
                 {
                     "for": "block group:*",
-                    "in": f"state:{state} county:{county} tract:{','.join(tracts_by_county[state + county])}",
+                    "in": (
+                        f"state:{state} county:{county} "
+                        f"tract:{','.join(tracts_by_county[state + county])}"
+                    ),
                 }
                 for state, county in [
                     COUNTY.decompose(c) for c in tracts_by_county.keys()
@@ -217,7 +220,7 @@ def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
 
             return [
                 {
-                    "for": f"block group:{'.'.join(block_groups_by_tract[state + county + tract])}",
+                    "for": f"block group:{'.'.join(block_groups_by_tract[state + county + tract])}",  # noqa: E501
                     "in": f"state:{state} county:{county} tract:{tract}",
                 }
                 for state, county, tract in [
@@ -234,14 +237,17 @@ def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
     queries = _make_acs5_queries(scope)
 
     # fetch all queries and combine results
-    df = pd.concat(
+    acs_df = pd.concat(
         pd.DataFrame.from_records(
             census.acs5.get(variables, geo=query, year=scope.year)
         )
         for query in queries
     )
-    if df.empty:
-        msg = "ACS5 query returned empty. Ensure all geographies included in your scope are supported and try again."
+    if acs_df.empty:
+        msg = (
+            "ACS5 query returned empty. "
+            "Ensure all geographies included in your scope are supported and try again."
+        )
         raise DataResourceException(msg)
 
     # concatenate geoid components to create 'geoid' column
@@ -251,13 +257,12 @@ def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
         "tract": ["state", "county", "tract"],
         "block group": ["state", "county", "tract", "block group"],
     }[scope.granularity]
-    df["geoid"] = df[columns].apply("".join, axis=1)
+    acs_df["geoid"] = acs_df[columns].apply("".join, axis=1)
 
     # check and sort results for 1:1 match with scope
     try:
-        return pd.DataFrame({"geoid": scope.get_node_ids()}).merge(
-            df, on="geoid", how="left", validate="1:1"
-        )
+        geoid_df = pd.DataFrame({"geoid": scope.get_node_ids()})
+        return geoid_df.merge(acs_df, on="geoid", how="left", validate="1:1")
     except pd.errors.MergeError:
         msg = "Fetched data was not an exact match for the scope's geographies."
         raise DataResourceException(msg) from None
@@ -266,22 +271,23 @@ def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
 @adrio_cache
 class Population(Adrio[np.int64]):
     """
-    Retrieves an N-shaped array of integers representing the total population of each geographic node.
-    Data is retrieved from Census table variable B01001_001 using ACS5 5-year estimates.
+    Retrieves an N-shaped array of integers representing the total population of each
+    geographic node. Data is retrieved from Census table variable B01001_001 using ACS5
+    5-year estimates.
     """
 
     @override
     def evaluate(self) -> NDArray[np.int64]:
         scope = _validate_scope(self.scope)
-        df = _fetch_acs5(["B01001_001E"], scope)
-        return df["B01001_001E"].to_numpy(dtype=np.int64)
+        acs_df = _fetch_acs5(["B01001_001E"], scope)
+        return acs_df["B01001_001E"].to_numpy(dtype=np.int64)
 
 
 @adrio_cache
 class PopulationByAgeTable(Adrio[np.int64]):
     """
-    Creates a table of population data for each geographic node split into various age categories.
-    Data is retrieved from Census table B01001 using ACS5 5-year estimates.
+    Creates a table of population data for each geographic node split into various age
+    categories. Data is retrieved from Census table B01001 using ACS5 5-year estimates.
     """
 
     @override
@@ -291,8 +297,8 @@ class PopulationByAgeTable(Adrio[np.int64]):
         # seems to be about twice as fast as asking for group(B01001)
         age_vars = [var for var, _ in _get_group_vars(scope.year, "B01001")]
         age_vars.sort()
-        df = _fetch_acs5(age_vars, scope)
-        return df[age_vars].to_numpy(dtype=np.int64)
+        acs_df = _fetch_acs5(age_vars, scope)
+        return acs_df[age_vars].to_numpy(dtype=np.int64)
 
 
 _exact_pattern = re.compile(r"^(\d+) years$")
@@ -305,7 +311,8 @@ class AgeRange(NamedTuple):
     """
     Models an age range for use with ACS age-categorized data.
     Unlike Python integer ranges, the `end` of the this range is inclusive.
-    `end` can also be None which models the "and over" part of ranges like "85 years and over".
+    `end` can also be None which models the "and over" part of ranges
+    like "85 years and over".
     """
 
     start: int
@@ -323,7 +330,10 @@ class AgeRange(NamedTuple):
 
     @staticmethod
     def parse(label: str) -> "AgeRange | None":
-        """Parse the age range of an ACS field label; e.g.: `Estimate!!Total:!!Male:!!22 to 24 years`"""
+        """
+        Parse the age range of an ACS field label;
+        e.g.: `Estimate!!Total:!!Male:!!22 to 24 years`
+        """
         parts = label.split("!!")
         if len(parts) != 4:
             return None
@@ -349,8 +359,8 @@ class AgeRange(NamedTuple):
 class PopulationByAge(Adrio[np.int64]):
     """
     Retrieves an N-shaped array of integers representing the total population
-    within a specified age range for each geographic node.
-    Data is retrieved from a population by age table constructed from Census table B01001.
+    within a specified age range for each geographic node. Data is retrieved from
+    a population by age table constructed from Census table B01001.
     """
 
     POP_BY_AGE_TABLE = AttributeDef("population_by_age_table", int, Shapes.NxA)
@@ -400,16 +410,17 @@ class AverageHouseholdSize(Adrio[np.float64]):
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        df = _fetch_acs5(["B25010_001E"], scope)
-        return df["B25010_001E"].to_numpy(dtype=np.float64)
+        acs_df = _fetch_acs5(["B25010_001E"], scope)
+        return acs_df["B25010_001E"].to_numpy(dtype=np.float64)
 
 
 @adrio_cache
 class DissimilarityIndex(Adrio[np.float64]):
     """
-    Calculates an N-shaped array of floats representing the amount of racial segregation between a specified
-    racial majority and minority groups on a scale of 0 (complete integration) to 1 (complete segregation).
-    Data is calculated using population data from Census table B02001 using ACS5 5-year estimates.
+    Calculates an N-shaped array of floats representing the amount of racial segregation
+    between a specified racial majority and minority groups on a scale of
+    0 (complete integration) to 1 (complete segregation). Data is calculated using
+    population data from Census table B02001 using ACS5 5-year estimates.
     """
 
     RaceCategory = Literal[
@@ -436,98 +447,111 @@ class DissimilarityIndex(Adrio[np.float64]):
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        if isinstance(scope, BlockGroupScope):
+        high_scope = _validate_scope(self.scope)
+        if isinstance(high_scope, BlockGroupScope):
             msg = "Dissimilarity index cannot be retreived for block group scope."
             raise DataResourceException(msg)
+        low_scope = high_scope.lower_granularity()
 
         majority_var = self.race_variables[self.majority_pop]
         minority_var = self.race_variables[self.minority_pop]
 
-        df = _fetch_acs5([majority_var, minority_var], scope)
-        df2 = _fetch_acs5([majority_var, minority_var], scope.lower_granularity())
-        df2["geoid"] = df2["geoid"].apply(
-            get_census_granularity(scope.granularity).truncate
+        # Fetch the data for the upper scope.
+        high_df = _fetch_acs5([majority_var, minority_var], high_scope).rename(
+            columns={majority_var: "high_majority", minority_var: "high_minority"}
         )
-
-        df.rename(
-            columns={majority_var: "high_majority", minority_var: "high_minority"},
-            inplace=True,
+        # Fetch the data for the lower scope.
+        low_df = _fetch_acs5([majority_var, minority_var], low_scope).rename(
+            columns={majority_var: "low_majority", minority_var: "low_minority"}
         )
-        df2.rename(
-            columns={majority_var: "low_majority", minority_var: "low_minority"},
-            inplace=True,
+        # Create a merge key by truncating the lower scope's GEOID.
+        gran = get_census_granularity(high_scope.granularity)
+        low_df["geoid"] = low_df["geoid"].apply(gran.truncate)
+
+        # Merge and compute score.
+        result_df = high_df.merge(low_df, on="geoid")
+        result_df["score"] = abs(
+            result_df["low_minority"] / result_df["high_minority"]
+            - result_df["low_majority"] / result_df["high_majority"]
         )
-
-        df3 = df.merge(df2, on="geoid")
-
-        df3["score"] = abs(
-            df3["low_minority"] / df3["high_minority"]
-            - df3["low_majority"] / df3["high_majority"]
-        )
-        df3 = df3.groupby("geoid").sum()
-        df3["score"] *= 0.5
-        df3["score"] = df3["score"].replace(0.0, 0.5)
-        df3 = df3.reset_index()
-
-        return df3["score"].to_numpy(dtype=np.float64)
+        result_df = result_df.groupby("geoid").sum()
+        result_df["score"] *= 0.5
+        result_df["score"] = result_df["score"].replace(0.0, 0.5)
+        result_df = result_df.reset_index()
+        return result_df["score"].to_numpy(dtype=np.float64)
 
 
 @adrio_cache
 class GiniIndex(Adrio[np.float64]):
     """
-    Retrieves an N-shaped array of floats representing the amount of income inequality on a scale of
-    0 (perfect equality) to 1 (perfect inequality) for each geographic node.
-    Data is retrieved from Census table variable B19083_001 using ACS 5-year estimates.
+    Retrieves an N-shaped array of floats representing the amount of income inequality
+    on a scale of 0 (perfect equality) to 1 (perfect inequality) for each
+    geographic node. Data is retrieved from Census table variable B19083_001 using
+    ACS 5-year estimates.
     """
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        df = _fetch_acs5(["B19083_001E"], scope)
-        df["B19083_001E"] = (
-            df["B19083_001E"].astype(np.float64).fillna(0.5).replace(-666666666, 0.5)
-        )
 
-        # set cbg data to that of the parent tract if geo granularity = cbg
+        # if granularity is block groups, use the data of the parent tract
         if isinstance(scope, BlockGroupScope):
             print(
-                "Gini Index cannot be retrieved for block group level, fetching tract level data instead."
+                "Gini Index cannot be retrieved for block group level, "
+                "fetching tract level data instead."
             )
-            df2 = _fetch_acs5(["B19083_001E"], scope.raise_granularity())
-            df["merge_geoid"] = df["geoid"].apply(lambda x: x[:-1])
-            df = df.drop(columns="B19083_001E")
-
-            df = df.merge(
-                df2, left_on="merge_geoid", right_on="geoid", suffixes=(None, "_y")
+            tracts = scope.raise_granularity()
+            tract_df = _fetch_acs5(["B19083_001E"], tracts)
+            as_tract = np.vectorize(TRACT.truncate)
+            cbg_df = pd.DataFrame(
+                {
+                    "geoid": scope.get_node_ids(),
+                    "tract_geoid": as_tract(scope.get_node_ids()),
+                }
             )
+            result_df = cbg_df.merge(
+                tract_df,
+                left_on="tract_geoid",
+                right_on="geoid",
+                suffixes=(None, "_y"),
+            )
+        else:
+            result_df = _fetch_acs5(["B19083_001E"], scope)
 
-        return df["B19083_001E"].to_numpy(dtype=np.float64)
+        return (
+            result_df["B19083_001E"]
+            .astype(np.float64)
+            .fillna(0.5)
+            .replace(-666666666, 0.5)
+            .to_numpy(dtype=np.float64)
+        )
 
 
 @adrio_cache
 class MedianAge(Adrio[np.float64]):
     """
-    Retrieves an N-shaped array of floats representing the median age in each geographic node.
-    Data is retrieved from Census table variable B01002_001 using ACS 5-year estimates.
+    Retrieves an N-shaped array of floats representing the median age in
+    each geographic node. Data is retrieved from Census table variable
+    B01002_001 using ACS 5-year estimates.
     """
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        df = _fetch_acs5(["B01002_001E"], scope)
-        return df["B01002_001E"].to_numpy(dtype=np.float64)
+        acs_df = _fetch_acs5(["B01002_001E"], scope)
+        return acs_df["B01002_001E"].to_numpy(dtype=np.float64)
 
 
 @adrio_cache
 class MedianIncome(Adrio[np.float64]):
     """
-    Retrieves an N-shaped array of floats representing the median yearly income in each geographic node.
-    Data is retrieved from Census table variable B19013_001 using ACS 5-year estimates.
+    Retrieves an N-shaped array of floats representing the median yearly income in
+    each geographic node. Data is retrieved from Census table variable B19013_001
+    using ACS 5-year estimates.
     """
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        df = _fetch_acs5(["B19013_001E"], scope)
-        return df["B19013_001E"].to_numpy(dtype=np.float64)
+        acs_df = _fetch_acs5(["B19013_001E"], scope)
+        return acs_df["B19013_001E"].to_numpy(dtype=np.float64)
