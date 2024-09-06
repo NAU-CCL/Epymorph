@@ -53,22 +53,24 @@ def _fetch_cases(
         attrib_name,
     )
 
-    df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
-    df.rename(columns={"county_fips": "fips"}, inplace=True)
+    cdc_cdc_df = cdc_cdc_df.rename(columns={"county_fips": "fips"})
 
     if scope.granularity == "state":
-        df["fips"] = [STATE.extract(x) for x in df["fips"]]
+        cdc_cdc_df["fips"] = [STATE.extract(x) for x in cdc_cdc_df["fips"]]
 
-        df = df.groupby(["date_updated", "fips"]).sum()
-        df.reset_index(inplace=True)
+        cdc_cdc_df = cdc_cdc_df.groupby(["date_updated", "fips"]).sum()
+        cdc_cdc_df = cdc_cdc_df.reset_index()
 
-    df = df.pivot(index="date_updated", columns="fips", values=info.data_col)
+    cdc_cdc_df = cdc_cdc_df.pivot_table(
+        index="date_updated", columns="fips", values=info.data_col
+    )
 
-    dates = df.index.to_numpy(dtype="datetime64[D]")
+    dates = cdc_cdc_df.index.to_numpy(dtype="datetime64[D]")
 
     return np.array(
-        [list(zip(dates, df[col])) for col in df.columns],
+        [list(zip(dates, cdc_cdc_df[col])) for col in cdc_cdc_df.columns],
         dtype=[("date", "datetime64[D]"), ("data", np.float64)],
     ).T
 
@@ -77,15 +79,19 @@ def _fetch_facility_hospitalization(
     attrib_name: str, scope: CensusScope, time_frame: TimeFrame, replace_sentinel: int
 ) -> NDArray[np.float64]:
     """
-    Fetches data from HealthData dataset reporting number of people hospitalized for COVID-19
-    and other respiratory illnesses at facility level during manditory reporting period.
+    Fetches data from HealthData dataset reporting number of people hospitalized for
+    COVID-19 and other respiratory illnesses at facility level during manditory
+    reporting period.
     Available between 12/13/2020 and 5/10/2023 at state and county granularities.
     https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data
     """
     if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(
         2023, 5, 10
     ):
-        msg = "Facility level hospitalization data is only available between 12/13/2020 and 5/10/2023."
+        msg = (
+            "Facility level hospitalization data is only available between 12/13/2020 "
+            "and 5/10/2023."
+        )
         raise DataResourceException(msg)
 
     info = QueryInfo(
@@ -95,29 +101,32 @@ def _fetch_facility_hospitalization(
         attrib_name,
     )
 
-    df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
     if scope.granularity == "state":
-        df["fips_code"] = [STATE.extract(x) for x in df["fips_code"]]
+        cdc_df["fips_code"] = [STATE.extract(x) for x in cdc_df["fips_code"]]
 
     # replace sentinel values with the integer provided
-    df["is_sentinel"] = df[info.data_col] == -999999
-    df.replace(-999999, replace_sentinel, inplace=True)
-    df = df.groupby(["collection_week", "fips_code"]).agg(
+    cdc_df["is_sentinel"] = cdc_df[info.data_col] == -999999
+    num_sentinel = cdc_df["is_sentinel"].sum()
+    cdc_df = cdc_df.replace(-999999, replace_sentinel)
+    cdc_df = cdc_df.groupby(["collection_week", "fips_code"]).agg(
         {info.data_col: "sum", "is_sentinel": any}
     )
-    num_sentinel = df["is_sentinel"].sum()
     warn(
-        f"{num_sentinel} values < 4 were replaced with {replace_sentinel} in returned data."
+        f"{num_sentinel} values < 4 were replaced with {replace_sentinel} "
+        "in returned data."
     )
 
-    df.reset_index(inplace=True)
-    df = df.pivot(index="collection_week", columns="fips_code", values=info.data_col)
+    cdc_df = cdc_df.reset_index()
+    cdc_df = cdc_df.pivot_table(
+        index="collection_week", columns="fips_code", values=info.data_col
+    )
 
-    dates = df.index.to_numpy(dtype="datetime64[D]")
+    dates = cdc_df.index.to_numpy(dtype="datetime64[D]")
 
     return np.array(
-        [list(zip(dates, df[col])) for col in df.columns],
+        [list(zip(dates, cdc_df[col])) for col in cdc_df.columns],
         dtype=[("date", "datetime64[D]"), ("data", np.float64)],
     ).T
 
@@ -127,12 +136,17 @@ def _fetch_state_hospitalization(
 ) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting number of people hospitalized for COVID-19
-    and other respiratory illnesses at state level during manditory and voluntary reporting periods.
-    Available from 1/4/2020 to present at state granularity. Data reported voluntarily past 5/1/2024.
+    and other respiratory illnesses at state level during manditory and voluntary
+    reporting periods.
+    Available from 1/4/2020 to present at state granularity.
+    Data reported voluntarily past 5/1/2024.
     https://data.cdc.gov/Public-Health-Surveillance/Weekly-United-States-Hospitalization-Metrics-by-Ju/aemt-mg7g/about_data
     """
     if scope.granularity != "state":
-        msg = "State level hospitalization data can only be retrieved for state granularity."
+        msg = (
+            "State level hospitalization data can only be retrieved for state "
+            "granularity."
+        )
         raise DataResourceException(msg)
     if time_frame.start_date < date(2020, 1, 4):
         msg = "State level hospitalization data is only available starting 1/4/2020."
@@ -152,16 +166,18 @@ def _fetch_state_hospitalization(
     fips = scope.get_node_ids()
     state_codes = np.array([state_mapping[x] for x in fips])
 
-    df = _api_query(info, state_codes, time_frame, scope.granularity)
+    cdc_df = _api_query(info, state_codes, time_frame, scope.granularity)
 
-    df = df.groupby(["week_end_date", "jurisdiction"]).sum()
-    df.reset_index(inplace=True)
-    df = df.pivot(index="week_end_date", columns="jurisdiction", values=info.data_col)
+    cdc_df = cdc_df.groupby(["week_end_date", "jurisdiction"]).sum()
+    cdc_df = cdc_df.reset_index()
+    cdc_df = cdc_df.pivot_table(
+        index="week_end_date", columns="jurisdiction", values=info.data_col
+    )
 
-    dates = df.index.to_numpy(dtype="datetime64[D]")
+    dates = cdc_df.index.to_numpy(dtype="datetime64[D]")
 
     return np.array(
-        [list(zip(dates, df[col])) for col in df.columns],
+        [list(zip(dates, cdc_df[col])) for col in cdc_df.columns],
         dtype=[("date", "datetime64[D]"), ("data", np.float64)],
     ).T
 
@@ -184,14 +200,14 @@ def _fetch_vaccination(
         "https://data.cdc.gov/resource/8xkx-amqh.csv?", "date", "fips", attrib_name
     )
 
-    df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
-    df = df.pivot(index="date", columns="fips", values=info.data_col)
+    cdc_df = cdc_df.pivot_table(index="date", columns="fips", values=info.data_col)
 
-    dates = df.index.to_numpy(dtype="datetime64[D]")
+    dates = cdc_df.index.to_numpy(dtype="datetime64[D]")
 
     return np.array(
-        [list(zip(dates, df[col])) for col in df.columns],
+        [list(zip(dates, cdc_df[col])) for col in cdc_df.columns],
         dtype=[("date", "datetime64[D]"), ("data", np.float64)],
     ).T
 
@@ -228,18 +244,20 @@ def _fetch_deaths_county(
             attrib_name,
         )
 
-    df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
     if scope.granularity == "state":
-        df = df.groupby(["week_ending_date", info.fips_col]).sum()
-        df.reset_index(inplace=True)
+        cdc_df = cdc_df.groupby(["week_ending_date", info.fips_col]).sum()
+        cdc_df = cdc_df.reset_index()
 
-    df = df.pivot(index="week_ending_date", columns=info.fips_col, values=info.data_col)
+    cdc_df = cdc_df.pivot_table(
+        index="week_ending_date", columns=info.fips_col, values=info.data_col
+    )
 
-    dates = df.index.to_numpy(dtype="datetime64[D]")
+    dates = cdc_df.index.to_numpy(dtype="datetime64[D]")
 
     return np.array(
-        [list(zip(dates, df[col])) for col in df.columns],
+        [list(zip(dates, cdc_df[col])) for col in cdc_df.columns],
         dtype=[("date", "datetime64[D]"), ("data", np.float64)],
     ).T
 
@@ -248,7 +266,8 @@ def _fetch_deaths_state(
     attrib_name: str, scope: CensusScope, time_frame: TimeFrame
 ) -> NDArray[np.float64]:
     """
-    Fetches data from CDC dataset reporting number of deaths from COVID-19 and other respiratory illnesses.
+    Fetches data from CDC dataset reporting number of deaths from COVID-19 and other
+    respiratory illnesses.
     Available from 1/4/2020 to present at state granularity.
     https://data.cdc.gov/NCHS/Provisional-COVID-19-Death-Counts-by-Week-Ending-D/r8kw-7aab/about_data
     """
@@ -269,16 +288,16 @@ def _fetch_deaths_state(
         True,
     )
 
-    df = _api_query(info, state_names, time_frame, scope.granularity)
+    cdc_df = _api_query(info, state_names, time_frame, scope.granularity)
 
-    df = df.groupby(["end_date", "state"]).sum()
-    df.reset_index(inplace=True)
-    df = df.pivot(index="end_date", columns="state", values=info.data_col)
+    cdc_df = cdc_df.groupby(["end_date", "state"]).sum()
+    cdc_df = cdc_df.reset_index()
+    cdc_df = cdc_df.pivot_table(index="end_date", columns="state", values=info.data_col)
 
-    dates = df.index.to_numpy(dtype="datetime64[D]")
+    dates = cdc_df.index.to_numpy(dtype="datetime64[D]")
 
     return np.array(
-        [list(zip(dates, df[col])) for col in df.columns],
+        [list(zip(dates, cdc_df[col])) for col in cdc_df.columns],
         dtype=[("date", "datetime64[D]"), ("data", np.float64)],
     ).T
 
@@ -291,7 +310,8 @@ def _api_query(
 ) -> DataFrame:
     """
     Composes URLs to query API and sends query requests.
-    Limits each query to 10000 rows, combining several query results if this number is exceeded.
+    Limits each query to 10000 rows, combining several query results if this number
+    is exceeded.
     Returns pandas Dataframe containing requested data sorted by date and location fips.
     """
     # query county level data with state fips codes
@@ -299,35 +319,36 @@ def _api_query(
         location_clauses = [
             f"starts_with({info.fips_col}, '{state}')" for state in fips
         ]
-    # query county or state level data with full fips codes for the respective granularity
+    # query county or state level data with full fips codes for respective granularity
     else:
         formatted_fips = ",".join(f"'{node}'" for node in fips)
         location_clauses = [f"{info.fips_col} in ({formatted_fips})"]
 
     date_clause = (
         f"{info.date_col} "
-        + f"between '{time_frame.start_date}T00:00:00' "
-        + f"and '{time_frame.end_date + timedelta(days=1)}T00:00:00'"
+        f"between '{time_frame.start_date}T00:00:00' "
+        f"and '{time_frame.end_date + timedelta(days=1)}T00:00:00'"
     )
 
-    df = concat(
+    cdc_df = concat(
         [
             _query_location(info, loc_clause, date_clause)
             for loc_clause in location_clauses
         ]
     )
 
-    df = df.sort_values(by=[info.date_col, info.fips_col])
-    return df
+    cdc_df = cdc_df.sort_values(by=[info.date_col, info.fips_col])
+    return cdc_df
 
 
 def _query_location(info: QueryInfo, loc_clause: str, date_clause: str) -> DataFrame:
     """
-    Helper function for _api_query() that builds and sends queries for individual locations.
+    Helper function for _api_query() that builds and sends queries for
+    individual locations.
     """
     current_return = 10000
     total_returned = 0
-    df = DataFrame()
+    cdc_df = DataFrame()
     while current_return == 10000:
         url = info.url_base + urlencode(
             quote_via=quote,
@@ -340,12 +361,12 @@ def _query_location(info: QueryInfo, loc_clause: str, date_clause: str) -> DataF
             },
         )
 
-        df = concat([df, read_csv(url, dtype={info.fips_col: str})])
+        cdc_df = concat([cdc_df, read_csv(url, dtype={info.fips_col: str})])
 
-        current_return = len(df.index) - total_returned
+        current_return = len(cdc_df.index) - total_returned
         total_returned += current_return
 
-    return df
+    return cdc_df
 
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
@@ -575,7 +596,10 @@ class FullCovidVaccinations(Adrio[np.float64]):
 
 
 class OneDoseCovidVaccinations(Adrio[np.float64]):
-    """Cumulative total number of individuals with at least one dose of COVID-19 vaccination."""
+    """
+    Cumulative total number of individuals with at least one dose of
+    COVID-19 vaccination.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
