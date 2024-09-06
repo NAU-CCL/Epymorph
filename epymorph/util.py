@@ -582,8 +582,10 @@ def subscriptions() -> Generator[Subscriber, None, None]:
     Subscriber will be automatically unsubscribed when the context closes.
     """
     sub = Subscriber()
-    yield sub
-    sub.unsubscribe()
+    try:
+        yield sub
+    finally:
+        sub.unsubscribe()
 
 
 # singletons
