@@ -53,24 +53,24 @@ def _fetch_cases(
         attrib_name,
     )
 
-    cdc_cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
 
-    cdc_cdc_df = cdc_cdc_df.rename(columns={"county_fips": "fips"})
+    cdc_df = cdc_df.rename(columns={"county_fips": "fips"})
 
     if scope.granularity == "state":
-        cdc_cdc_df["fips"] = [STATE.extract(x) for x in cdc_cdc_df["fips"]]
+        cdc_df["fips"] = [STATE.extract(x) for x in cdc_df["fips"]]
 
-        cdc_cdc_df = cdc_cdc_df.groupby(["date_updated", "fips"]).sum()
-        cdc_cdc_df = cdc_cdc_df.reset_index()
+        cdc_df = cdc_df.groupby(["date_updated", "fips"]).sum()
+        cdc_df = cdc_df.reset_index()
 
-    cdc_cdc_df = cdc_cdc_df.pivot_table(
+    cdc_df = cdc_df.pivot_table(
         index="date_updated", columns="fips", values=info.data_col
     )
 
-    dates = cdc_cdc_df.index.to_numpy(dtype="datetime64[D]")
+    dates = cdc_df.index.to_numpy(dtype="datetime64[D]")
 
     return np.array(
-        [list(zip(dates, cdc_cdc_df[col])) for col in cdc_cdc_df.columns],
+        [list(zip(dates, cdc_df[col])) for col in cdc_df.columns],
         dtype=[("date", "datetime64[D]"), ("data", np.float64)],
     ).T
 
@@ -113,10 +113,11 @@ def _fetch_facility_hospitalization(
     cdc_df = cdc_df.groupby(["collection_week", "fips_code"]).agg(
         {info.data_col: "sum", "is_sentinel": any}
     )
-    warn(
-        f"{num_sentinel} values < 4 were replaced with {replace_sentinel} "
-        "in returned data."
-    )
+    if num_sentinel > 0:
+        warn(
+            f"{num_sentinel} values < 4 were replaced with {replace_sentinel} "
+            "in returned data."
+        )
 
     cdc_df = cdc_df.reset_index()
     cdc_df = cdc_df.pivot_table(
