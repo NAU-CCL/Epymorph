@@ -14,7 +14,6 @@ from epymorph.geography.us_census import (
     BlockGroupScope,
     CensusScope,
     StateScope,
-    StateScopeAll,
     TractScope,
 )
 from epymorph.geography.us_tiger import CacheEstimate
@@ -59,7 +58,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
         raise DataResourceException(msg)
 
     year = scope.year
-    node_ids = scope.get_node_ids()
+    node_ids = scope.node_ids
     # a discrepancy exists in data for Connecticut counties in 2020 and 2021
     # raise an exception if this data is requested for these years.
     if year in [2020, 2021] and any(
@@ -163,7 +162,7 @@ class Commuters(Adrio[np.int64]):
 
             header_num = 4
 
-        node_ids = scope.get_node_ids()
+        node_ids = scope.node_ids
 
         try:
             cache_path = _COMMFLOWS_CACHE_PATH / f"{year}.xlsx"
@@ -213,7 +212,7 @@ class Commuters(Adrio[np.int64]):
         wrk_selection = data_df["wrk_geoid"].isin(["0" + x for x in node_ids])
         data_df = data_df[res_selection & wrk_selection]
 
-        if isinstance(scope, StateScope | StateScopeAll):
+        if isinstance(scope, StateScope):
             # Data is county level; group and aggregate to get state level
             data_df = (
                 data_df.groupby(["res_geoid", "wrk_geoid"])

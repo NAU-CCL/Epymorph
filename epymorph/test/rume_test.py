@@ -3,7 +3,7 @@ import numpy as np
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 
-from epymorph import AttributeDef, Shapes, TimeFrame, init, mm_library
+from epymorph import AttributeDef, Shapes, init, mm_library
 from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.database import AbsoluteName
 from epymorph.geography.us_census import StateScope
@@ -18,6 +18,7 @@ from epymorph.rume import (
 )
 from epymorph.simulation import Tick, TickDelta, TickIndex
 from epymorph.test import EpymorphTestCase
+from epymorph.time import TimeFrame
 
 
 class Sir(CompartmentModel):
@@ -189,7 +190,7 @@ class RumeTest(EpymorphTestCase):
             ipm=sir,
             mm=centroids,
             init=init.NoInfection(),
-            scope=StateScope.in_states(["04", "35"]),
+            scope=StateScope.in_states(["04", "35"], year=2020),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params={},
         )
@@ -236,7 +237,7 @@ class RumeTest(EpymorphTestCase):
             ],
             meta_requirements=[],
             meta_edges=lambda _: [],
-            scope=StateScope.in_states(["04", "35"]),
+            scope=StateScope.in_states(["04", "35"], year=2020),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params={},
         )
@@ -316,7 +317,7 @@ class RumeTest(EpymorphTestCase):
             ],
             meta_requirements=[],
             meta_edges=lambda _: [],
-            scope=StateScope.in_states(["04", "35"]),
+            scope=StateScope.in_states(["04", "35"], year=2020),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params={},
         )

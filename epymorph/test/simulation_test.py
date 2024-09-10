@@ -13,9 +13,9 @@ from epymorph.simulation import (
     SimDimensions,
     SimulationFunction,
     Tick,
-    TimeFrame,
     simulation_clock,
 )
+from epymorph.time import TimeFrame
 
 
 class TestTimeFrame(unittest.TestCase):

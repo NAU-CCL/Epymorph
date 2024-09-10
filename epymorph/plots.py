@@ -8,12 +8,15 @@ from geopandas import GeoDataFrame
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import merge as pd_merge
+from typing_extensions import deprecated
 
 from epymorph.geography import us_tiger
-from epymorph.geography.us_census import STATE, CensusScope, CountyScope, StateScope
+from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
+from epymorph.geography.us_geography import STATE
 from epymorph.simulator.basic.output import Output
 
 
+@deprecated("Use `out.plot.line`", category=None)
 def plot_event(out: Output, event_idx: int) -> None:
     """Plot the event with the given index for all locations."""
     fig, ax = plt.subplots()
@@ -22,7 +25,7 @@ def plot_event(out: Output, event_idx: int) -> None:
     ax.set_ylabel("occurrences")
 
     x_axis = np.arange(out.dim.days)
-    y_axis = out.incidence_per_day[:, :, event_idx]
+    y_axis = out.events_per_day[:, :, event_idx]
     ax.plot(x_axis, y_axis, label=out.geo_labels)
 
     if out.dim.nodes <= 12:
@@ -32,6 +35,7 @@ def plot_event(out: Output, event_idx: int) -> None:
     plt.show()
 
 
+@deprecated("Use `out.plot.line`", category=None)
 def plot_pop(out: Output, pop_idx: int, log_scale: bool = False) -> None:
     """Plot all compartments for the population at the given index."""
     fig, ax = plt.subplots()
@@ -44,7 +48,7 @@ def plot_pop(out: Output, pop_idx: int, log_scale: bool = False) -> None:
         ax.set_yscale("log")
 
     x_axis = out.ticks_in_days
-    y_axis = out.prevalence[:, pop_idx, :]
+    y_axis = out.compartments[:, pop_idx, :]
     ax.plot(x_axis, y_axis, label=out.compartment_labels)
 
     if out.dim.compartments <= 12:
@@ -58,6 +62,7 @@ def _subset_states(gdf: GeoDataFrame, state_fips: tuple[str, ...]) -> GeoDataFra
     return cast(GeoDataFrame, gdf[gdf["GEOID"].str.startswith(state_fips)])
 
 
+@deprecated("Use `out.map.choropleth`", category=None)
 def map_data_by_county(
     scope: CountyScope,
     data: NDArray,
@@ -73,7 +78,7 @@ def map_data_by_county(
     Draw a county-level choropleth map using the given `data`. This must be a
     numpy array whose ordering is the same as the nodes in the geo scope.
     """
-    state_fips = tuple(STATE.truncate_list(scope.get_node_ids()))
+    state_fips = tuple(STATE.truncate_unique(scope.node_ids))
     gdf_counties = us_tiger.get_counties_geo(year, None)
     gdf_counties = _subset_states(gdf_counties, state_fips)
     gdf_borders = gdf_counties
@@ -92,6 +97,7 @@ def map_data_by_county(
     )
 
 
+@deprecated("Use `out.map.choropleth`", category=None)
 def map_data_by_state(
     scope: StateScope,
     data: NDArray,
@@ -106,7 +112,7 @@ def map_data_by_state(
     Draw a state-level choropleth map using the given `data`. This must be a
     numpy array whose ordering is the same as the nodes in the geo scope.
     """
-    state_fips = tuple(STATE.truncate_list(scope.get_node_ids()))
+    state_fips = tuple(STATE.truncate_unique(scope.node_ids))
     gdf_states = us_tiger.get_states_geo(year)
     gdf_states = _subset_states(gdf_states, state_fips)
     return _map_data_by_geo(
@@ -133,7 +139,7 @@ def _map_data_by_geo(
     df_merged = pd_merge(
         on="GEOID",
         left=gdf_nodes,
-        right=DataFrame({"GEOID": scope.get_node_ids(), "data": data}),
+        right=DataFrame({"GEOID": scope.node_ids, "data": data}),
     )
 
     fig, ax = plt.subplots(figsize=(8, 6))

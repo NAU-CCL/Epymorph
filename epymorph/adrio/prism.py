@@ -17,9 +17,11 @@ from epymorph.data_type import CentroidType
 from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import STATE, CensusScope
+from epymorph.geography.us_census import CensusScope
+from epymorph.geography.us_geography import STATE
 from epymorph.geography.us_tiger import CacheEstimate
-from epymorph.simulation import AttributeDef, TimeFrame
+from epymorph.simulation import AttributeDef
+from epymorph.time import TimeFrame
 
 _PRISM_CACHE_PATH = module_cache_path(__name__)
 
@@ -137,7 +139,7 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
 
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
-    state_fips = [STATE.truncate(x) for x in scope.get_node_ids()]
+    state_fips = list(STATE.truncate_unique(scope.node_ids))
     excluded_fips = ["72", "02", "15"]
 
     # require census scope for raster values

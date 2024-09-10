@@ -3,55 +3,73 @@ Classes for representing simulation results.
 """
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Sequence
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
+from typing_extensions import deprecated, override
 
+from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
+from epymorph.geography.scope import GeoScope
+from epymorph.time import TimeFrame
+from epymorph.tools.out_map import MapRendererMixin
+from epymorph.tools.out_plot import PlotRendererMixin
+from epymorph.tools.out_table import TableRendererMixin
 
 
 @dataclass(frozen=True)
-class Output:
+class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     """
-    The output of a simulation run, including prevalence for all populations and all
-    IPM compartments and incidence for all populations and all IPM events.
+    The output of a simulation run, including compartment data for all populations and
+    all IPM compartments and event data for all populations and all IPM events.
     """
 
     dim: SimDimensions
+    scope: GeoScope
     geo_labels: Sequence[str]
-    compartment_labels: Sequence[str]
-    event_labels: Sequence[str]
+    time_frame: TimeFrame
+    ipm: BaseCompartmentModel
 
     initial: NDArray[SimDType]
     """
-    Initial prevalence data by population and compartment.
+    Initial compartments by population and compartment.
     Array of shape (N, C) where N is the number of populations,
     and C is the number of compartments
     """
 
-    prevalence: NDArray[SimDType] = field(init=False)
+    compartments: NDArray[SimDType] = field(init=False)
     """
-    Prevalence data by timestep, population, and compartment.
+    Compartment data by timestep, population, and compartment.
     Array of shape (T,N,C) where T is the number of ticks in the simulation,
     N is the number of populations, and C is the number of compartments.
     """
 
-    incidence: NDArray[SimDType] = field(init=False)
+    events: NDArray[SimDType] = field(init=False)
     """
-    Incidence data by timestep, population, and event.
+    Event data by timestep, population, and event.
     Array of shape (T,N,E) where T is the number of ticks in the simulation,
     N is the number of populations, and E is the number of events.
     """
 
     def __post_init__(self):
         T, N, C, E = self.dim.TNCE
-        object.__setattr__(self, "prevalence", np.zeros((T, N, C), dtype=SimDType))
-        object.__setattr__(self, "incidence", np.zeros((T, N, E), dtype=SimDType))
+        object.__setattr__(self, "compartments", np.zeros((T, N, C), dtype=SimDType))
+        object.__setattr__(self, "events", np.zeros((T, N, E), dtype=SimDType))
+
+    @cached_property
+    def compartment_labels(self) -> Sequence[str]:
+        return [c.name.full for c in self.ipm.compartments]
+
+    @cached_property
+    def event_labels(self) -> Sequence[str]:
+        return [e.name.full for e in self.ipm.events]
 
     @property
-    def incidence_per_day(self) -> NDArray[SimDType]:
+    def events_per_day(self) -> NDArray[SimDType]:
         """
         Returns this output's `incidence` from a per-tick value to a per-day value.
         Returns a shape (D,N,E) array, where D is the number of simulation days.
@@ -59,7 +77,7 @@ class Output:
         T, N, _, E = self.dim.TNCE
         taus = self.dim.tau_steps
         return np.sum(
-            self.incidence.reshape((T // taus, taus, N, E)), axis=1, dtype=SimDType
+            self.events.reshape((T // taus, taus, N, E)), axis=1, dtype=SimDType
         )
 
     @property
@@ -73,3 +91,60 @@ class Output:
         return np.cumsum(
             np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64
         )
+
+    @property
+    @override
+    def dataframe(self) -> pd.DataFrame:
+        T, N, C, E = self.dim.TNCE
+        taus = self.dim.tau_steps
+
+        # NOTE: reshape ordering is critical, because the index column creation
+        # must assume ordering happens in a specific way.
+        # C ordering causes the later index (node) to change fastest and the
+        # earlier index (time) to change slowest. (The quantity index is left as-is.)
+        # Thus "tick" goes 0,0,0,...,1,1,1,... (similar situation with "date")
+        # and "node" goes 1,2,3,...,1,2,3,...
+        data_np = np.concatenate(
+            (self.compartments, self.events),
+            axis=2,
+        ).reshape(
+            (-1, C + E),
+            order="C",
+        )
+
+        # Here I'm concatting two DFs sideways so that the index columns come first.
+        # Could use insert, but this is nicer.
+        return pd.concat(
+            (
+                # A dataframe for the various indices
+                pd.DataFrame(
+                    {
+                        "tick": np.arange(T).repeat(N),
+                        "date": self.time_frame.to_numpy().repeat(N * taus),
+                        "node": np.tile(self.scope.node_ids, T),
+                    }
+                ),
+                # A dataframe for the data columns
+                pd.DataFrame(
+                    data=data_np,
+                    columns=[*self.compartment_labels, *self.event_labels],
+                ),
+            ),
+            axis=1,  # stick them together side-by-side
+        )
+
+    @property
+    @deprecated("Use `compartments`", category=None)
+    def prevalence(self) -> NDArray[SimDType]:
+        """Deprecated alias for compartments."""
+        return self.compartments
+
+    @property
+    @deprecated("Use `events`", category=None)
+    def incidence(self) -> NDArray[SimDType]:
+        return self.events
+
+    @property
+    @deprecated("Use `events_per_day`", category=None)
+    def incidence_per_day(self) -> NDArray[SimDType]:
+        return self.events_per_day

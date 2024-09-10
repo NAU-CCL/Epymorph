@@ -203,7 +203,7 @@ def evaluate_params(
     rume_reqs: list[tuple[AbsoluteName, ParamValue | None]] = [
         *((name, attr.default_value) for name, attr in rume.requirements.items()),
         # Artificially require the special geo labels attribute.
-        (GEO_LABELS, rume.scope.get_node_ids()),
+        (GEO_LABELS, rume.scope.labels),
     ]
 
     for name, default_value in rume_reqs:

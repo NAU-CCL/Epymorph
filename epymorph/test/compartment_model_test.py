@@ -9,9 +9,10 @@ from epymorph.compartment_model import (
     BIRTH,
     DEATH,
     CombinedCompartmentModel,
-    CompartmentDef,
     CompartmentModel,
+    CompartmentName,
     EdgeDef,
+    EdgeName,
     MultistrataModelSymbols,
     TransitionDef,
     compartment,
@@ -21,6 +22,7 @@ from epymorph.data_shape import Shapes
 from epymorph.database import AbsoluteName
 from epymorph.simulation import AttributeDef
 from epymorph.sympy_shim import to_symbol
+from epymorph.util import are_instances
 
 
 class CompartmentModelTest(unittest.TestCase):
@@ -53,9 +55,9 @@ class CompartmentModelTest(unittest.TestCase):
         self.assertEqual(
             list(model.compartments),
             [
-                CompartmentDef("S", ["test_tag"]),
-                CompartmentDef("I", []),
-                CompartmentDef("R", []),
+                compartment("S", ["test_tag"]),
+                compartment("I", []),
+                compartment("R", []),
             ],
         )
         self.assertEqual(
@@ -266,7 +268,7 @@ class CompartmentModelTest(unittest.TestCase):
 
         # Check compartment mapping
         self.assertEqual(
-            [c.name for c in model.compartments],
+            [c.name.full for c in model.compartments],
             ["S_aaa", "I_aaa", "R_aaa", "S_bbb", "I_bbb", "R_bbb"],
         )
 
@@ -335,17 +337,47 @@ class CompartmentModelTest(unittest.TestCase):
             model.symbols.all_requirements
         )
 
+        s_to_i = EdgeName(
+            CompartmentName("S", None, None),
+            CompartmentName("I", None, None),
+        )
+        i_to_r = EdgeName(
+            CompartmentName("I", None, None),
+            CompartmentName("R", None, None),
+        )
+
         self.assertEqual(
             model.transitions,
             [
-                edge(S_aaa, I_aaa, rate=beta_aaa * S_aaa * I_aaa),
-                edge(I_aaa, R_aaa, rate=gamma_aaa * I_aaa),
-                edge(S_bbb, I_bbb, rate=beta_bbb * S_bbb * I_bbb),
-                edge(I_bbb, R_bbb, rate=gamma_bbb * I_bbb),
-                edge(
+                EdgeDef(
+                    s_to_i.with_strata("aaa"),
+                    beta_aaa * S_aaa * I_aaa,
+                    S_aaa,
+                    I_aaa,
+                ),
+                EdgeDef(
+                    i_to_r.with_strata("aaa"),
+                    gamma_aaa * I_aaa,
+                    I_aaa,
+                    R_aaa,
+                ),
+                EdgeDef(
+                    s_to_i.with_strata("bbb"),
+                    beta_bbb * S_bbb * I_bbb,
                     S_bbb,
                     I_bbb,
+                ),
+                EdgeDef(
+                    i_to_r.with_strata("bbb"),
+                    gamma_bbb * I_bbb,
+                    I_bbb,
+                    R_bbb,
+                ),
+                EdgeDef(
+                    s_to_i.with_strata("bbb"),
                     beta_bbb_aaa * S_bbb * I_aaa / Max(1, S_aaa + I_aaa + R_aaa),
+                    S_bbb,
+                    I_bbb,
                 ),
             ],
         )
@@ -399,31 +431,37 @@ class CompartmentModelTest(unittest.TestCase):
         multi_ipm = CombinedCompartmentModel(strata, meta_requirements, meta_edges)
 
         self.assertEquals(
-            [x.name for x in multi_ipm.compartments],
+            [x.name.full for x in multi_ipm.compartments],
             ["S_one", "I_one", "R_one", "S_two", "I_two", "R_two"],
         )
+
+        n = CompartmentName
+        self.assertTrue(are_instances([*multi_ipm.transitions], EdgeDef))
         self.assertEquals(
             [
-                f"{x.compartment_from}->{x.compartment_to}"
+                (x.name.compartment_from, x.name.compartment_to)
                 for x in multi_ipm.transitions
                 if isinstance(x, EdgeDef)
             ],
             [
-                "S_one->I_one",
-                "I_one->R_one",
-                "R_one->S_one",
-                "birth_exogenous->S_one",
-                "S_one->death_exogenous",
-                "I_one->death_exogenous",
-                "R_one->death_exogenous",
-                "S_two->I_two",
-                "I_two->R_two",
-                "R_two->S_two",
-                "birth_exogenous->S_two",
-                "S_two->death_exogenous",
-                "I_two->death_exogenous",
-                "R_two->death_exogenous",
-                "S_one->I_one",  # meta edge
-                "S_two->I_two",  # meta edge
+                # base model for one
+                (n("S", None, "one"), n("I", None, "one")),
+                (n("I", None, "one"), n("R", None, "one")),
+                (n("R", None, "one"), n("S", None, "one")),
+                (n("birth", "exogenous", None), n("S", None, "one")),
+                (n("S", None, "one"), n("death", "exogenous", None)),
+                (n("I", None, "one"), n("death", "exogenous", None)),
+                (n("R", None, "one"), n("death", "exogenous", None)),
+                # base model for two
+                (n("S", None, "two"), n("I", None, "two")),
+                (n("I", None, "two"), n("R", None, "two")),
+                (n("R", None, "two"), n("S", None, "two")),
+                (n("birth", "exogenous", None), n("S", None, "two")),
+                (n("S", None, "two"), n("death", "exogenous", None)),
+                (n("I", None, "two"), n("death", "exogenous", None)),
+                (n("R", None, "two"), n("death", "exogenous", None)),
+                # meta edges
+                (n("S", None, "one"), n("I", None, "one")),
+                (n("S", None, "two"), n("I", None, "two")),
             ],
         )

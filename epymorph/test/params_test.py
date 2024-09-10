@@ -11,7 +11,8 @@ from numpy.typing import NDArray
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import AttributeArray, AttributeValue
 from epymorph.database import Database, ModuleNamespace
-from epymorph.geography.scope import CustomScope, GeoScope
+from epymorph.geography.custom import CustomScope
+from epymorph.geography.scope import GeoScope
 from epymorph.params import (
     ParamExpressionTimeAndNode,
     ParamFunctionNode,

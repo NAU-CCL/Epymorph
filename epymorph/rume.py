@@ -14,11 +14,13 @@ from functools import cached_property
 from itertools import accumulate, pairwise, starmap
 from typing import (
     Callable,
+    Generic,
     Mapping,
     NamedTuple,
     OrderedDict,
     Self,
     Sequence,
+    TypeVar,
     final,
 )
 
@@ -50,9 +52,9 @@ from epymorph.simulation import (
     AttributeDef,
     TickDelta,
     TickIndex,
-    TimeFrame,
     gpm_strata,
 )
+from epymorph.time import TimeFrame
 from epymorph.util import are_unique, list_not_none, map_values
 
 #######
@@ -91,7 +93,7 @@ class Gpm:
 GEO_LABELS = AbsoluteName(META_STRATA, "geo", "label")
 """
 If this attribute is provided to a RUME, it will be used as labels for the geo node.
-Otherwise we'll use the node IDs from the geo scope.
+Otherwise we'll use the labels from the geo scope.
 """
 
 
@@ -189,8 +191,12 @@ def remap_taus(
     )
 
 
+GeoScopeT = TypeVar("GeoScopeT", bound=GeoScope)
+GeoScopeT_co = TypeVar("GeoScopeT_co", covariant=True, bound=GeoScope)
+
+
 @dataclass(frozen=True)
-class Rume(ABC):
+class Rume(ABC, Generic[GeoScopeT_co]):
     """
     A RUME (or Runnable Modeling Experiment) contains the configuration of an
     epymorph-style simulation. It brings together one or more IPMs, MMs, initialization
@@ -203,7 +209,7 @@ class Rume(ABC):
     strata: Sequence[Gpm]
     ipm: BaseCompartmentModel
     mms: OrderedDict[str, MovementModel]
-    scope: GeoScope
+    scope: GeoScopeT_co
     time_frame: TimeFrame
     params: Mapping[NamePattern, ParamValue]
     dim: SimDimensions = field(init=False)
@@ -224,7 +230,7 @@ class Rume(ABC):
             tau_step_lengths=tau_step_lengths,
             start_date=self.time_frame.start_date,
             days=self.time_frame.duration_days,
-            nodes=len(self.scope.get_node_ids()),
+            nodes=len(self.scope.node_ids),
             compartments=self.ipm.num_compartments,
             events=self.ipm.num_events,
         )
@@ -380,23 +386,22 @@ class Rume(ABC):
 
 
 @dataclass(frozen=True)
-class SingleStrataRume(Rume):
+class SingleStrataRume(Rume[GeoScopeT_co]):
     """A RUME with a single strata."""
 
     ipm: CompartmentModel
 
-    @classmethod
+    @staticmethod
     def build(
-        cls,
         ipm: CompartmentModel,
         mm: MovementModel,
         init: Initializer,
-        scope: GeoScope,
+        scope: GeoScopeT,
         time_frame: TimeFrame,
         params: Mapping[str, ParamValue],
-    ) -> Self:
+    ) -> "SingleStrataRume[GeoScopeT]":
         """Create a RUME with only a single strata."""
-        return cls(
+        return SingleStrataRume(
             strata=[Gpm(DEFAULT_STRATA, ipm, mm, init)],
             ipm=ipm,
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
@@ -411,23 +416,22 @@ class SingleStrataRume(Rume):
 
 
 @dataclass(frozen=True)
-class MultistrataRume(Rume):
+class MultistrataRume(Rume[GeoScopeT_co]):
     """A RUME with a multiple strata."""
 
     ipm: CombinedCompartmentModel
 
-    @classmethod
+    @staticmethod
     def build(
-        cls,
         strata: Sequence[Gpm],
         meta_requirements: Sequence[AttributeDef],
         meta_edges: MetaEdgeBuilder,
-        scope: GeoScope,
+        scope: GeoScopeT,
         time_frame: TimeFrame,
         params: Mapping[str, ParamValue],
-    ) -> Self:
+    ) -> "MultistrataRume[GeoScopeT]":
         """Create a multistrata RUME by combining one GPM per strata."""
-        return cls(
+        return MultistrataRume(
             strata=strata,
             # Combine IPMs
             ipm=CombinedCompartmentModel(
@@ -471,12 +475,12 @@ class MultistrataRumeBuilder(ABC):
     @final
     def build(
         self,
-        scope: GeoScope,
+        scope: GeoScopeT,
         time_frame: TimeFrame,
         params: Mapping[str, ParamValue],
-    ) -> MultistrataRume:
+    ) -> MultistrataRume[GeoScopeT]:
         """Build the RUME."""
-        return MultistrataRume.build(
+        return MultistrataRume[GeoScopeT].build(
             self.strata,
             self.meta_requirements,
             self.meta_edges,

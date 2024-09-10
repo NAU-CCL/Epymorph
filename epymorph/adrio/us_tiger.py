@@ -13,7 +13,8 @@ from epymorph.data_type import CentroidDType, StructDType
 from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import STATE, CensusScope
+from epymorph.geography.us_census import CensusScope
+from epymorph.geography.us_geography import STATE
 from epymorph.geography.us_tiger import (
     TigerYear,
     check_cache_block_groups,
@@ -57,20 +58,20 @@ def _get_geo(scope: CensusScope, progress: ProgressCallback) -> GeoDataFrame:
         case "tract":
             gdf = get_tracts_geo(
                 year,
-                list({STATE.extract(x) for x in scope.get_node_ids()}),
+                list({STATE.extract(x) for x in scope.node_ids}),
                 progress,
             )
         case "block group":
             gdf = get_block_groups_geo(
                 year,
-                list({STATE.extract(x) for x in scope.get_node_ids()}),
+                list({STATE.extract(x) for x in scope.node_ids}),
                 progress,
             )
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
-    geoid_df = DataFrame({"GEOID": scope.get_node_ids()})
+    geoid_df = DataFrame({"GEOID": scope.node_ids})
     return GeoDataFrame(geoid_df.merge(gdf, on="GEOID", how="left", sort=True))
 
 
@@ -84,20 +85,20 @@ def _get_info(scope: CensusScope, progress: ProgressCallback) -> DataFrame:
         case "tract":
             gdf = get_tracts_info(
                 year,
-                list({STATE.extract(x) for x in scope.get_node_ids()}),
+                list({STATE.extract(x) for x in scope.node_ids}),
                 progress,
             )
         case "block group":
             gdf = get_block_groups_info(
                 year,
-                list({STATE.extract(x) for x in scope.get_node_ids()}),
+                list({STATE.extract(x) for x in scope.node_ids}),
                 progress,
             )
         case x:
             raise DataResourceException(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
-    geoid_df = DataFrame({"GEOID": scope.get_node_ids()})
+    geoid_df = DataFrame({"GEOID": scope.node_ids})
     return geoid_df.merge(gdf, on="GEOID", how="left", sort=True)
 
 
@@ -116,13 +117,11 @@ class _UsTigerAdrio(Adrio[T_co], ABC):
             case "county":
                 est = check_cache_counties(year)
             case "tract":
-                est = check_cache_tracts(
-                    year, list({STATE.extract(x) for x in scope.get_node_ids()})
-                )
+                states = list(STATE.truncate_unique(scope.node_ids))
+                est = check_cache_tracts(year, states)
             case "block group":
-                est = check_cache_block_groups(
-                    year, list({STATE.extract(x) for x in scope.get_node_ids()})
-                )
+                states = list(STATE.truncate_unique(scope.node_ids))
+                est = check_cache_block_groups(year, states)
             case x:
                 raise DataResourceException(
                     f"{x} is not a supported granularity for us_tiger attributes."
@@ -183,7 +182,7 @@ class Name(_UsTigerAdrio[np.str_]):
             return info_df["NAME"].to_numpy(dtype=np.str_)
         else:
             # There aren't good names for Tracts or CBGs, just use GEOID
-            return scope.get_node_ids()
+            return scope.node_ids
 
 
 @adrio_cache

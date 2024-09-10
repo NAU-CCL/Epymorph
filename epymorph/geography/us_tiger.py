@@ -5,19 +5,33 @@ including territories, and handles quirks and differences between the supported
 census years.
 """
 
+import re
+from abc import ABC
+from dataclasses import asdict, dataclass
+from functools import cached_property
+from io import BytesIO
 from pathlib import Path
-from typing import Literal, NamedTuple, Sequence, TypeGuard
+from typing import Callable, Literal, Mapping, NamedTuple, Sequence, TypeGuard, TypeVar
 
+import numpy as np
 from geopandas import GeoDataFrame
 from geopandas import read_file as gp_read_file
 from pandas import DataFrame
 from pandas import concat as pd_concat
+from typing_extensions import override
 
 from epymorph.adrio.adrio import ProgressCallback
-from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
+from epymorph.cache import (
+    CacheMiss,
+    check_file_in_cache,
+    load_bundle_from_cache,
+    load_or_fetch_url,
+    module_cache_path,
+    save_bundle_to_cache,
+)
 from epymorph.error import GeographyError
-from epymorph.geography.us_census import STATE
-from epymorph.util import zip_list
+from epymorph.geography.us_geography import STATE, CensusGranularityName
+from epymorph.util import cache_transparent, normalize_list, normalize_str, zip_list
 
 # A fair question is why did we implement our own TIGER files loader instead of using
 # pygris? The short answer is for efficiently and to correct inconsistencies that matter
@@ -81,6 +95,11 @@ _SUPPORTED_STATE_FILES = ["us"]
 The IDs of TIGER files that are included in our set of supported states.
 In some TIGER years, data for the 4 territories were given in separate files.
 """
+
+
+def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
+    """A type-guard function to ensure a year is a supported TIGER year."""
+    return year in TIGER_YEARS
 
 
 def _url_to_cache_path(url: str) -> Path:
@@ -150,11 +169,6 @@ def _get_info(
     return _load_urls(config, ignore_geometry=True, progress=progress)
 
 
-def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
-    """A type-guard function to ensure a year is a supported TIGER year."""
-    return year in TIGER_YEARS
-
-
 class CacheEstimate(NamedTuple):
     """Estimates related to data needed to fulfill TIGER requests."""
 
@@ -164,6 +178,63 @@ class CacheEstimate(NamedTuple):
     missing_cache_size: int
     """An estimate of the size of the files that are not currently cached that we
     would need to fulfill a request. Zero if we have all of the files already."""
+
+
+@dataclass(frozen=True)
+class GranularitySummary(ABC):
+    geoid: list[str]
+
+    def interpret(self, identifiers: Sequence[str]) -> list[str]:
+        """Permissively interprets the given set of identifiers as describing nodes,
+        and converts them to a sorted list of GEOIDs."""
+        # The base case is that the identifiers are literal GEOIDs.
+        return self._to_geoid(identifiers, self.geoid, "FIPS code")
+
+    def _to_geoid(
+        self,
+        identifiers: Sequence[str],
+        source: list[str],
+        description: str,
+    ) -> list[str]:
+        results = list[str]()
+        for x in identifiers:
+            try:
+                i = source.index(normalize_str(x))
+                results.append(self.geoid[i])
+            except ValueError:
+                err = f"{x} is not a valid {description}."
+                raise GeographyError(err) from None
+        results.sort()
+        return results
+
+
+_SummaryT = TypeVar("_SummaryT", bound=GranularitySummary)
+
+
+def _load_summary_from_cache(
+    relpath: str,
+    on_miss: Callable[[], _SummaryT],  # load ModelT from another source
+    on_hit: Callable[..., _SummaryT],  # load ModelT from cache (constructor)
+) -> _SummaryT:
+    # NOTE: this would be more natural as a decorator,
+    # but Pylance seems to have problems tracking the return type properly
+    # with that implementation
+    CACHE_VERSION = 1
+    path = _TIGER_CACHE_PATH.joinpath(relpath)
+    try:
+        content = load_bundle_from_cache(path, CACHE_VERSION)
+        with np.load(content["data.npz"]) as data_npz:
+            return on_hit(**{k: v.tolist() for k, v in data_npz.items()})
+    except CacheMiss:
+        data = on_miss()
+        data_bytes = BytesIO()
+        # NOTE: Python doesn't include a type for dataclass instances;
+        # you can import DataclassInstance from _typeshed, but that seems
+        # to break test discovery. Oh well; just ignore this one.
+        model_dict = asdict(data)  # type: ignore
+        np.savez_compressed(data_bytes, **model_dict)
+        save_bundle_to_cache(path, CACHE_VERSION, {"data.npz": data_bytes})
+        return data
 
 
 ##########
@@ -253,6 +324,61 @@ def check_cache_states(year: TigerYear) -> CacheEstimate:
     )
 
 
+@dataclass(frozen=True)
+class StatesSummary(GranularitySummary):
+    """Information about US states (and state equivalents)."""
+
+    geoid: list[str]
+    """The GEOID (aka FIPS code) of the state."""
+    name: list[str]
+    """The typical name for the state."""
+    code: list[str]
+    """The US postal code for the state."""
+
+    @cached_property
+    def state_code_to_fips(self) -> Mapping[str, str]:
+        """Mapping from state postal code to FIPS code."""
+        return dict(zip(self.code, self.geoid, strict=True))
+
+    @cached_property
+    def state_fips_to_code(self) -> Mapping[str, str]:
+        """Mapping from state FIPS code to postal code."""
+        return dict(zip(self.geoid, self.code, strict=True))
+
+    @override
+    def interpret(self, identifiers: Sequence[str]) -> list[str]:
+        """Permissively interprets the given set of identifiers as describing nodes,
+        and converts them to a sorted list of GEOIDs.
+
+        Identifiers can be given in any of the acceptable forms, but all of the
+        identifiers must use the same form. Forms are: GEOID/FIPS code, full name, or
+        postal code. Raises GeographyError if invalid or identifiers are given."""
+        first_val = identifiers[0]
+        if re.fullmatch(r"\d{2}", first_val) is not None:
+            return super().interpret(identifiers)
+        elif re.fullmatch(r"[A-Z]{2}", first_val, flags=re.IGNORECASE) is not None:
+            return self._to_geoid(identifiers, normalize_list(self.code), "postal code")
+        else:
+            return self._to_geoid(identifiers, normalize_list(self.name), "state name")
+
+
+@cache_transparent
+def get_states(year: int) -> StatesSummary:
+    """Loads US States information (assumed to be invariant for all supported years)."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
+    def _get_us_states() -> StatesSummary:
+        states_df = get_states_info(year).sort_values("GEOID")
+        return StatesSummary(
+            geoid=states_df["GEOID"].to_list(),
+            name=states_df["NAME"].to_list(),
+            code=states_df["STUSPS"].to_list(),
+        )
+
+    return _load_summary_from_cache("us_states_all.tgz", _get_us_states, StatesSummary)
+
+
 ############
 # COUNTIES #
 ############
@@ -294,7 +420,7 @@ def _get_counties_config(year: TigerYear) -> _DataConfig:
 
 def get_counties_geo(
     year: TigerYear,
-    progress: ProgressCallback | None,
+    progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
     """
     Get all US counties and county-equivalents for the given census year,
@@ -305,7 +431,7 @@ def get_counties_geo(
 
 def get_counties_info(
     year: TigerYear,
-    progress: ProgressCallback | None,
+    progress: ProgressCallback | None = None,
 ) -> DataFrame:
     """
     Get all US counties and county-equivalents for the given census year,
@@ -325,6 +451,69 @@ def check_cache_counties(year: TigerYear) -> CacheEstimate:
     return CacheEstimate(
         total_cache_size=total_files * est_file_size,
         missing_cache_size=missing_files * est_file_size,
+    )
+
+
+@dataclass(frozen=True)
+class CountiesSummary(GranularitySummary):
+    """Information about US counties (and county equivalents.)"""
+
+    geoid: list[str]
+    """The GEOID (aka FIPS code) of the county."""
+    name: list[str]
+    """The typical name of the county (does not include state)."""
+    name_with_state: list[str]
+    """The name of the county and state, e.g., `Coconino, AZ`"""
+
+    @cached_property
+    def county_fips_to_name(self) -> Mapping[str, str]:
+        """Mapping from county FIPS code to name with state."""
+        return dict(zip(self.geoid, self.name_with_state, strict=True))
+
+    @override
+    def interpret(self, identifiers: Sequence[str]) -> list[str]:
+        """Permissively interprets the given set of identifiers as describing nodes,
+        and converts them to a sorted list of GEOIDs.
+
+        Identifiers can be given in any of the acceptable forms, but all of the
+        identifiers must use the same form. Forms are: GEOID/FIPS code, or
+        the name of the county and its state postal code separated by a comma,
+        e.g., `Coconino, AZ`. Raises GeographyError if invalid or identifiers are
+        given."""
+        first_val = identifiers[0]
+        if re.fullmatch(r"\d{5}", first_val) is not None:
+            return super().interpret(identifiers)
+        else:
+            return self._to_geoid(
+                identifiers,
+                normalize_list(self.name_with_state),
+                "county name",
+            )
+
+
+@cache_transparent
+def get_counties(year: int) -> CountiesSummary:
+    """Loads US Counties information for the given year."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
+    def _get_us_counties() -> CountiesSummary:
+        counties_df = get_counties_info(year, None).sort_values("GEOID")
+        code_map = get_states(year).state_fips_to_code
+        counties_df["POSTAL_CODE"] = (
+            counties_df["GEOID"].str.slice(0, 2).apply(lambda x: code_map[x])
+        )
+        counties_df["NAME_WITH_STATE"] = (
+            counties_df["NAME"] + ", " + counties_df["POSTAL_CODE"]
+        )
+        return CountiesSummary(
+            geoid=counties_df["GEOID"].to_list(),
+            name=counties_df["NAME"].to_list(),
+            name_with_state=counties_df["NAME_WITH_STATE"].to_list(),
+        )
+
+    return _load_summary_from_cache(
+        f"us_counties_{year}.tgz", _get_us_counties, CountiesSummary
     )
 
 
@@ -412,6 +601,31 @@ def check_cache_tracts(
     )
 
 
+@dataclass(frozen=True)
+class TractsSummary(GranularitySummary):
+    """Information about US census tracts."""
+
+    geoid: list[str]
+    """The GEOID (aka FIPS code) of the tract."""
+
+
+@cache_transparent
+def get_tracts(year: int) -> TractsSummary:
+    """Loads US Census Tracts information for the given year."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
+    def _get_us_tracts() -> TractsSummary:
+        tracts_df = get_tracts_info(year).sort_values("GEOID")
+        return TractsSummary(
+            geoid=tracts_df["GEOID"].to_list(),
+        )
+
+    return _load_summary_from_cache(
+        f"us_tracts_{year}.tgz", _get_us_tracts, TractsSummary
+    )
+
+
 ################
 # BLOCK GROUPS #
 ################
@@ -494,3 +708,49 @@ def check_cache_block_groups(
         total_cache_size=total_files * est_file_size,
         missing_cache_size=missing_files * est_file_size,
     )
+
+
+@dataclass(frozen=True)
+class BlockGroupsSummary(GranularitySummary):
+    """Information about US census block groups."""
+
+    geoid: list[str]
+    """The GEOID (aka FIPS code) of the block group."""
+
+
+@cache_transparent
+def get_block_groups(year: int) -> BlockGroupsSummary:
+    """Loads US Census Block Group information for the given year."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
+
+    def _get_us_cbgs() -> BlockGroupsSummary:
+        cbgs_df = get_block_groups_info(year).sort_values("GEOID")
+        return BlockGroupsSummary(
+            geoid=cbgs_df["GEOID"].to_list(),
+        )
+
+    return _load_summary_from_cache(
+        f"us_block_groups_{year}.tgz",
+        _get_us_cbgs,
+        BlockGroupsSummary,
+    )
+
+
+################
+# GENERAL UTIL #
+################
+
+
+def get_summary_of(granularity: CensusGranularityName, year: int) -> GranularitySummary:
+    match granularity:
+        case "state":
+            return get_states(year)
+        case "county":
+            return get_counties(year)
+        case "tract":
+            return get_tracts(year)
+        case "block group":
+            return get_block_groups(year)
+        case _:
+            raise GeographyError(f"Unsupported granularity: {granularity}")

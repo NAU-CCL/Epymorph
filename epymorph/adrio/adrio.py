@@ -124,7 +124,7 @@ class NodeId(Adrio[np.str_]):
 
     @override
     def evaluate_adrio(self) -> NDArray:
-        return self.scope.get_node_ids()
+        return self.scope.node_ids
 
 
 class Scale(Adrio[np.float64]):

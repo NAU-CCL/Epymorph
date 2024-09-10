@@ -14,13 +14,11 @@ from epymorph.adrio.adrio import Adrio, ProgressCallback
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (
-    STATE,
-    CensusGranularityName,
     CensusScope,
-    get_us_states,
-    state_fips_to_code,
 )
-from epymorph.simulation import TimeFrame
+from epymorph.geography.us_geography import STATE, CensusGranularityName
+from epymorph.geography.us_tiger import get_states
+from epymorph.time import TimeFrame
 
 
 class QueryInfo(NamedTuple):
@@ -56,9 +54,7 @@ def _fetch_cases(
         attrib_name,
     )
 
-    cdc_df = _api_query(
-        info, scope.get_node_ids(), time_frame, scope.granularity, progress
-    )
+    cdc_df = _api_query(info, scope.node_ids, time_frame, scope.granularity, progress)
 
     cdc_df = cdc_df.rename(columns={"county_fips": "fips"})
 
@@ -110,9 +106,7 @@ def _fetch_facility_hospitalization(
         attrib_name,
     )
 
-    cdc_df = _api_query(
-        info, scope.get_node_ids(), time_frame, scope.granularity, progress
-    )
+    cdc_df = _api_query(info, scope.node_ids, time_frame, scope.granularity, progress)
 
     if scope.granularity == "state":
         cdc_df["fips_code"] = [STATE.extract(x) for x in cdc_df["fips_code"]]
@@ -177,8 +171,8 @@ def _fetch_state_hospitalization(
         True,
     )
 
-    state_mapping = state_fips_to_code(scope.year)
-    fips = scope.get_node_ids()
+    state_mapping = get_states(scope.year).state_fips_to_code
+    fips = scope.node_ids
     state_codes = np.array([state_mapping[x] for x in fips])
 
     cdc_df = _api_query(info, state_codes, time_frame, scope.granularity, progress)
@@ -218,9 +212,7 @@ def _fetch_vaccination(
         "https://data.cdc.gov/resource/8xkx-amqh.csv?", "date", "fips", attrib_name
     )
 
-    cdc_df = _api_query(
-        info, scope.get_node_ids(), time_frame, scope.granularity, progress
-    )
+    cdc_df = _api_query(info, scope.node_ids, time_frame, scope.granularity, progress)
 
     cdc_df = cdc_df.pivot_table(index="date", columns="fips", values=info.data_col)
 
@@ -267,9 +259,7 @@ def _fetch_deaths_county(
             attrib_name,
         )
 
-    cdc_df = _api_query(
-        info, scope.get_node_ids(), time_frame, scope.granularity, progress
-    )
+    cdc_df = _api_query(info, scope.node_ids, time_frame, scope.granularity, progress)
 
     if scope.granularity == "state":
         cdc_df = cdc_df.groupby(["week_ending_date", info.fips_col]).sum()
@@ -303,8 +293,8 @@ def _fetch_deaths_state(
         msg = "State level deaths data is only available starting 1/4/2020."
         raise DataResourceException(msg)
 
-    fips = scope.get_node_ids()
-    states = get_us_states(scope.year)
+    fips = scope.node_ids
+    states = get_states(scope.year)
     state_mapping = dict(zip(states.geoid, states.name))
     state_names = np.array([state_mapping[x] for x in fips])
 

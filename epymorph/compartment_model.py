@@ -9,20 +9,41 @@ import re
 from abc import ABC, ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Callable, Iterable, Iterator, OrderedDict, Sequence, Type
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    Literal,
+    NamedTuple,
+    OrderedDict,
+    Self,
+    Sequence,
+    Type,
+    TypeVar,
+)
 
-from sympy import Expr, Float, Integer, Symbol
+import numpy as np
+from numpy.typing import NDArray
+from sympy import Add, Expr, Float, Integer, Symbol
+from typing_extensions import override
 
 from epymorph.database import AbsoluteName
 from epymorph.error import IpmValidationException
 from epymorph.simulation import DEFAULT_STRATA, META_STRATA, AttributeDef, gpm_strata
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
-from epymorph.util import acceptable_name, are_instances, are_unique, iterator_length
+from epymorph.util import (
+    acceptable_name,
+    are_instances,
+    are_unique,
+    as_list,
+    filter_unique,
+    iterator_length,
+)
 
-############################################################
-# Model Transitions
-############################################################
-
+######################
+# Model Compartments #
+######################
 
 BIRTH = Symbol("birth_exogenous")
 """An IPM psuedo-compartment representing exogenous input of individuals."""
@@ -35,16 +56,126 @@ exogenous_states = (BIRTH, DEATH)
 
 
 @dataclass(frozen=True)
+class CompartmentName:
+    base: str
+    subscript: str | None
+    strata: str | None
+    full: str = field(init=False, hash=False, compare=False)
+
+    def __post_init__(self):
+        full = "_".join(
+            x for x in (self.base, self.subscript, self.strata) if x is not None
+        )
+        if acceptable_name.match(full) is None:
+            raise ValueError(f"Invalid compartment name: {full}")
+        object.__setattr__(self, "full", full)
+
+    def with_subscript(self, subscript: str | None) -> Self:
+        if self.subscript == "exogenous":
+            return self
+        return dataclasses.replace(self, subscript=subscript)
+
+    def with_strata(self, strata: str | None) -> Self:
+        if self.subscript == "exogenous":
+            return self
+        return dataclasses.replace(self, strata=strata)
+
+    def __str__(self) -> str:
+        return self.full
+
+    @classmethod
+    def parse(cls, name: str) -> Self:
+        if (i := name.find("_")) != -1:
+            return cls(name[0:i], name[i + 1 :], None)
+        return cls(name, None, None)
+
+
+@dataclass(frozen=True)
+class CompartmentDef:
+    """Defines an IPM compartment."""
+
+    name: CompartmentName
+    tags: list[str]
+    description: str | None = field(default=None)
+
+    def with_strata(self, strata: str) -> Self:
+        return dataclasses.replace(self, name=self.name.with_strata(strata))
+
+
+def compartment(
+    name: str,
+    tags: list[str] | None = None,
+    description: str | None = None,
+) -> CompartmentDef:
+    """Define an IPM compartment."""
+    return CompartmentDef(CompartmentName.parse(name), tags or [], description)
+
+
+def quick_compartments(symbol_names: str) -> list[CompartmentDef]:
+    """
+    Define a number of IPM compartments from a space-delimited string.
+    This is just short-hand syntax for the `compartment()` function.
+    """
+    return [compartment(name) for name in symbol_names.split()]
+
+
+#####################
+# Model Transitions #
+#####################
+
+
+@dataclass(frozen=True)
+class EdgeName:
+    compartment_from: CompartmentName
+    compartment_to: CompartmentName
+    full: str = field(init=False, hash=False, compare=False)
+
+    def __post_init__(self):
+        full = f"{self.compartment_from} → {self.compartment_to}"
+        object.__setattr__(self, "full", full)
+        if (
+            self.compartment_from.subscript != "exogenous"
+            and self.compartment_to.subscript != "exogenous"
+            and self.compartment_from.strata != self.compartment_to.strata
+        ):
+            raise ValueError(f"Edges must be within a single strata ({full})")
+
+    def with_subscript(self, subscript: str | None) -> Self:
+        return dataclasses.replace(
+            self,
+            compartment_from=self.compartment_from.with_subscript(subscript),
+            compartment_to=self.compartment_to.with_subscript(subscript),
+        )
+
+    def with_strata(self, strata: str | None) -> Self:
+        return dataclasses.replace(
+            self,
+            compartment_from=self.compartment_from.with_strata(strata),
+            compartment_to=self.compartment_to.with_strata(strata),
+        )
+
+    def __str__(self) -> str:
+        return self.full
+
+
+@dataclass(frozen=True)
 class EdgeDef:
     """Defines a single edge transitions in a compartment model."""
 
+    name: EdgeName
     rate: Expr
     compartment_from: Symbol
     compartment_to: Symbol
 
+    @property
+    def tuple(self) -> tuple[str, str]:
+        return str(self.compartment_from), str(self.compartment_to)
+
 
 def edge(
-    compartment_from: Symbol, compartment_to: Symbol, rate: Expr | int | float
+    compartment_from: Symbol,
+    compartment_to: Symbol,
+    rate: Expr | int | float,
 ) -> EdgeDef:
     """Define a transition edge from one compartment to another at the given rate."""
     if isinstance(rate, int):
@@ -53,7 +184,11 @@ def edge(
         _rate = Float(rate)
     else:
         _rate = rate
-    return EdgeDef(_rate, compartment_from, compartment_to)
+    name = EdgeName(
+        CompartmentName.parse(str(compartment_from)),
+        CompartmentName.parse(str(compartment_to)),
+    )
+    return EdgeDef(name, _rate, compartment_from, compartment_to)
 
 
 @dataclass(frozen=True)
@@ -119,73 +254,49 @@ def _as_events(trxs: Iterable[TransitionDef]) -> Iterator[EdgeDef]:
                     yield e
 
 
-def _remap_edge(e: EdgeDef, symbol_mapping: dict[Symbol, Symbol]) -> EdgeDef:
-    f = symbol_mapping[x] if (x := e.compartment_from) not in exogenous_states else x
-    t = symbol_mapping[x] if (x := e.compartment_to) not in exogenous_states else x
+def _remap_edge(
+    e: EdgeDef,
+    strata: str,
+    symbol_mapping: dict[Symbol, Symbol],
+) -> EdgeDef:
     return EdgeDef(
+        name=e.name.with_strata(strata),
         rate=substitute(e.rate, symbol_mapping),
-        compartment_from=f,
-        compartment_to=t,
+        compartment_from=symbol_mapping[e.compartment_from],
+        compartment_to=symbol_mapping[e.compartment_to],
     )
 
 
-def _remap_fork(f: ForkDef, symbol_mapping: dict[Symbol, Symbol]) -> ForkDef:
+def _remap_fork(
+    f: ForkDef,
+    strata: str,
+    symbol_mapping: dict[Symbol, Symbol],
+) -> ForkDef:
     return ForkDef(
         rate=substitute(f.rate, symbol_mapping),
-        edges=[_remap_edge(e, symbol_mapping) for e in f.edges],
+        edges=[_remap_edge(e, strata, symbol_mapping) for e in f.edges],
         probs=[substitute(p, symbol_mapping) for p in f.probs],
     )
 
 
 def _remap_transition(
-    t: TransitionDef, symbol_mapping: dict[Symbol, Symbol]
+    t: TransitionDef,
+    strata: str,
+    symbol_mapping: dict[Symbol, Symbol],
 ) -> TransitionDef:
     """
     Replaces symbols used in the transition using substitution from `symbol_mapping`.
     """
     match t:
         case EdgeDef():
-            return _remap_edge(t, symbol_mapping)
+            return _remap_edge(t, strata, symbol_mapping)
         case ForkDef():
-            return _remap_fork(t, symbol_mapping)
+            return _remap_fork(t, strata, symbol_mapping)
 
 
-############################################################
-# Model Compartments
-############################################################
-
-
-@dataclass(frozen=True)
-class CompartmentDef:
-    """Defines an IPM compartment."""
-
-    name: str
-    tags: list[str]
-    description: str | None = field(default=None)
-
-    def __post_init__(self):
-        if acceptable_name.match(self.name) is None:
-            raise ValueError(f"Invalid compartment name: {self.name}")
-
-
-def compartment(
-    name: str, tags: list[str] | None = None, description: str | None = None
-) -> CompartmentDef:
-    """Define an IPM compartment."""
-    return CompartmentDef(name, tags or [], description)
-
-
-def quick_compartments(symbol_names: str) -> list[CompartmentDef]:
-    """
-    Define a number of IPM compartments from a space-delimited string.
-    This is just short-hand syntax for the `compartment()` function.
-    """
-    return [compartment(name) for name in symbol_names.split()]
-
-
-############################################################
-# Compartment Models
-############################################################
+######################
+# Compartment Models #
+######################
 
 
 class ModelSymbols:
@@ -254,6 +365,11 @@ class BaseCompartmentModel(ABC):
     def transitions(self) -> Sequence[TransitionDef]:
         """The transitions in the model."""
 
+    @property
+    def quantities(self) -> Iterator[CompartmentDef | EdgeDef]:
+        yield from self.compartments
+        yield from self.events
+
     @cached_property
     @abstractmethod
     def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
@@ -274,99 +390,24 @@ class BaseCompartmentModel(ABC):
         """The number of distinct events (transitions) in this model."""
         return iterator_length(self.events)
 
-    @cached_property
-    def event_names(self) -> Sequence[str]:
-        """The names of all events in the order they were declared."""
-        return [f"{e.compartment_from} → {e.compartment_to}" for e in self.events]
+    @property
+    @abstractmethod
+    def strata(self) -> Sequence[str]:
+        """The names of the strata involved in this compartment model."""
 
-    @cached_property
-    def event_src_dst(self) -> Sequence[tuple[str, str]]:
-        """
-        All events represented as a tuple of the source
-        compartment and destination compartment.
-        """
-        return [(str(e.compartment_from), str(e.compartment_to)) for e in self.events]
+    @property
+    @abstractmethod
+    def is_multistrata(self) -> bool:
+        """True if this compartment model is multistrata (False for single-strata)."""
 
-    def _compile_pattern(self, pattern: str) -> re.Pattern:
-        """Turn a pattern string (which is custom syntax) into a regular expression."""
-        # We're not interpreting pattern as a regex directly, so escape any
-        # special characters. Then replace '*' with the necessary regex.
-        escaped_pattern = re.escape(pattern).replace(r"\*", "[^_]+")
-        # Compile with anchors so it matches the entire string.
-        return re.compile(f"^{escaped_pattern}$")
-
-    def events_by_src(self, pattern: str) -> tuple[int, ...]:
-        """
-        Get the indices of IPM events by the source compartment.
-        The `pattern` argument supports using asterisk as a wildcard character,
-        matching anything besides underscores.
-        """
-        regex = self._compile_pattern(pattern)
-        return tuple(
-            (i for i, (src, _) in enumerate(self.event_src_dst) if regex.match(src))
-        )
-
-    def events_by_dst(self, pattern: str) -> tuple[int, ...]:
-        """
-        Get the indices of IPM events by the destination compartment.
-        The `pattern` argument supports using asterisk as a wildcard character,
-        matching anything besides underscores.
-        """
-        regex = self._compile_pattern(pattern)
-        return tuple(
-            (i for i, (_, dst) in enumerate(self.event_src_dst) if regex.match(dst))
-        )
-
-    def event_by_name(self, name: str) -> int:
-        """
-        Get a single event index by name. For example: "S->I".
-        Only exact matches are allowed.
-        """
-        try:
-            if "->" in name:
-                src, dst = name.split("->")
-            elif "-" in name:
-                src, dst = name.split("-")
-            elif ">" in name:
-                src, dst = name.split(">")
-            else:
-                raise ValueError(f"Invalid event name syntax: {name}")
-        except ValueError:
-            raise ValueError(f"Invalid event name syntax: {name}") from None
-
-        try:
-            return next(
-                i
-                for i, (s, d) in enumerate(self.event_src_dst)
-                if s == src and d == dst
-            )
-        except StopIteration:
-            msg = f"No matching event found for name: {name}"
-            raise ValueError(msg) from None
-
-    def compartments_by(self, pattern: str) -> tuple[int, ...]:
-        """
-        Get the indices of IPM compartments.
-        The `pattern` argument supports using asterisk as a wildcard character,
-        matching anything besides underscores.
-        """
-        regex = self._compile_pattern(pattern)
-        return tuple(
-            (i for i, c in enumerate(self.compartments) if regex.match(c.name))
-        )
-
-    def compartment_by_name(self, name: str) -> int:
-        """Get a single compartment index by name. Only exact matches are allowed."""
-        try:
-            return next(i for i, c in enumerate(self.compartments) if c.name == name)
-        except StopIteration:
-            msg = f"No matching compartment found for name: {name}"
-            raise ValueError(msg) from None
+    @property
+    def select(self) -> "QuantitySelector":
+        return QuantitySelector(self)
 
 
-############################################################
-# Single-strata Compartment Models
-############################################################
+####################################
+# Single-strata Compartment Models #
+####################################
 
 
 class CompartmentModelClass(ABCMeta):
@@ -478,7 +519,7 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
     def symbols(self) -> ModelSymbols:
         """The symbols which represent parts of this model."""
         return ModelSymbols(
-            [(c.name, c.name) for c in self.compartments],
+            [(c.name.full, c.name.full) for c in self.compartments],
             [(r.name, r.name) for r in self.requirements],
         )
 
@@ -506,10 +547,20 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
         build expressions for the transition rates.
         """
 
+    @property
+    @override
+    def strata(self) -> Sequence[str]:
+        return ["all"]
 
-############################################################
-# Multi-strata Compartment Models
-############################################################
+    @property
+    @override
+    def is_multistrata(self) -> bool:
+        return False
+
+
+###################################
+# Multi-strata Compartment Models #
+###################################
 
 
 class MultistrataModelSymbols(ModelSymbols):
@@ -540,7 +591,7 @@ class MultistrataModelSymbols(ModelSymbols):
         # where the symbolic name is disambiguated by appending
         # the strata it belongs to.
         cs = [
-            (c.name, strata_name, f"{c.name}_{strata_name}")
+            (c.name.full, strata_name, f"{c.name}_{strata_name}")
             for strata_name, ipm in strata
             for c in ipm.compartments
         ]
@@ -621,7 +672,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
         self._meta_edges = meta_edges
 
         self.compartments = [
-            dataclasses.replace(comp, name=f"{comp.name}_{strata_name}")
+            comp.with_strata(strata_name)
             for strata_name, ipm in strata
             for comp in ipm.compartments
         ]
@@ -645,24 +696,51 @@ class CombinedCompartmentModel(BaseCompartmentModel):
         # Figure out the per-strata mapping from old symbol to new symbol
         # by matching everything up in-order.
         strata_mapping = list[dict[Symbol, Symbol]]()
+        # And a mapping from new (stratified) symbols back to their original form
+        # and which strata they belong to.
+        reverse_mapping = dict[Symbol, tuple[str | None, Symbol]]()
         all_cs = iter(symbols.all_compartments)
         all_rs = iter(symbols.all_requirements)
-        for _, ipm in self._strata:
-            mapping = {}
+        for strata_name, ipm in self._strata:
+            mapping = {x: x for x in exogenous_states}
             old = ipm.symbols
             for old_symbol in old.all_compartments:
-                mapping[old_symbol] = next(all_cs)
+                new_symbol = next(all_cs)
+                mapping[old_symbol] = new_symbol
+                reverse_mapping[new_symbol] = (strata_name, old_symbol)
             for old_symbol in old.all_requirements:
-                mapping[old_symbol] = next(all_rs)
+                new_symbol = next(all_rs)
+                mapping[old_symbol] = new_symbol
+                reverse_mapping[new_symbol] = (strata_name, old_symbol)
             strata_mapping.append(mapping)
+        # (exogenous states just map to themselves, no strata)
+        reverse_mapping |= {x: (None, x) for x in exogenous_states}
+
+        # The meta_edges function produces edges with invalid names:
+        # users `edge()` which just parses the symbol string, but this causes
+        # the strata to be mistaken as a subscript. This function fixes things.
+        def fix_edge_names(x: TransitionDef) -> TransitionDef:
+            match x:
+                case ForkDef():
+                    edges = [fix_edge_names(e) for e in x.edges]
+                    return dataclasses.replace(x, edges=edges)
+                case EdgeDef():
+                    s_from, c_from = reverse_mapping[x.compartment_from]
+                    s_to, c_to = reverse_mapping[x.compartment_to]
+                    strata = next(s for s in (s_from, s_to) if s is not None)
+                    name = EdgeName(
+                        CompartmentName.parse(str(c_from)),
+                        CompartmentName.parse(str(c_to)),
+                    ).with_strata(strata)
+                    return dataclasses.replace(x, name=name)
 
         return [
             *(
-                _remap_transition(trx, mapping)
-                for (_, ipm), mapping in zip(self._strata, strata_mapping)
+                _remap_transition(trx, strata, mapping)
+                for (strata, ipm), mapping in zip(self._strata, strata_mapping)
                 for trx in ipm.transitions
             ),
-            *self._meta_edges(symbols),
+            *(fix_edge_names(x) for x in self._meta_edges(symbols)),
         ]
 
     @cached_property
@@ -680,3 +758,412 @@ class CombinedCompartmentModel(BaseCompartmentModel):
                 ),
             ]
         )
+
+    @property
+    @override
+    def strata(self) -> Sequence[str]:
+        return [name for name, _ in self._strata]
+
+    @property
+    @override
+    def is_multistrata(self) -> bool:
+        return True
+
+
+#####################################################
+# Compartment Model quantity select/group/aggregate #
+#####################################################
+
+Quantity = CompartmentDef | EdgeDef
+
+
+class QuantityGroupResult(NamedTuple):
+    """The result of a quantity grouping operation."""
+
+    groups: tuple[Quantity, ...]
+    """The quantities (or psuedo-quantities) representing each group."""
+    indices: tuple[tuple[int, ...], ...]
+    """The IPM quantity indices included in each group."""
+
+
+_N = TypeVar("_N", bound=CompartmentName | EdgeName)
+
+
+class QuantityGrouping(NamedTuple):
+    strata: bool
+    """True to combine quantities across strata."""
+    subscript: bool
+    """The to combine quantities across subscript."""
+
+    def _strip(self, name: _N) -> _N:
+        if self.strata:
+            name = name.with_strata(None)
+        if self.subscript:
+            name = name.with_subscript(None)
+        return name
+
+    def map(self, quantities: Sequence[Quantity]) -> QuantityGroupResult:
+        # first simplify the names to account for `strata` and `subscript`
+        names = [self._strip(q.name) for q in quantities]
+        # the groups are now the unique names in the list (maintain ordering)
+        group_names = filter_unique(names)
+        # figure out which original quantities belong in each group (by index)
+        group_indices = tuple(
+            tuple(j for j, qty in enumerate(names) if group == qty)
+            for group in group_names
+        )
+
+        # we can create an artificial CompartmentDef or EdgeDef for each group
+        # if we assume compartments and events will never mix (which they shouldn't)
+        def _combine(
+            group_name: CompartmentName | EdgeName,
+            indices: tuple[int, ...],
+        ) -> Quantity:
+            qs = [q for i, q in enumerate(quantities) if i in indices]
+            if isinstance(group_name, CompartmentName) and are_instances(
+                qs, CompartmentDef
+            ):
+                return CompartmentDef(group_name, [], None)
+            elif isinstance(group_name, EdgeName) and are_instances(qs, EdgeDef):
+                return EdgeDef(
+                    name=group_name,
+                    rate=Add(*[q.rate for q in qs]),
+                    compartment_from=to_symbol(group_name.compartment_from.full),
+                    compartment_to=to_symbol(group_name.compartment_to.full),
+                )
+            # If we got here, it probably means compartments and groups wound
+            # up in the same group somehow. This should not be possible,
+            # so something went terribly wrong.
+            raise ValueError("Unable to compute quantity groups.")
+
+        groups = tuple(_combine(n, i) for n, i in zip(group_names, group_indices))
+        return QuantityGroupResult(groups, group_indices)
+
+
+QuantityAggMethod = Literal["sum"]
+
+
+@dataclass(frozen=True)
+class QuantityStrategy:
+    """A strategy for dealing with the quantity axis, e.g., in processing results.
+    Quantities here are an IPM's compartments and events.
+
+    Strategies can include selection of a subset, grouping, and aggregation."""
+
+    ipm: BaseCompartmentModel
+    """The original IPM quantity information."""
+    selection: NDArray[np.bool_]
+    """A boolean mask for selection of a subset of quantities."""
+    grouping: QuantityGrouping | None
+    """A method for grouping IPM quantities."""
+    aggregation: QuantityAggMethod | None
+    """A method for aggregating the quantity groups."""
+
+    @property
+    def selected(self) -> Sequence[Quantity]:
+        """The quantities from the IPM which are selected, prior to any grouping."""
+        return [q for sel, q in zip(self.selection, self.ipm.quantities) if sel]
+
+    @property
+    @abstractmethod
+    def quantities(self) -> Sequence[Quantity]:
+        """The quantities in the result. If the strategy performs grouping these
+        may be pseudo-quantities made by combining the quantities in the group."""
+
+    @property
+    @abstractmethod
+    def labels(self) -> Sequence[str]:
+        """Labels for the quantities in the result, after any grouping."""
+
+    def disambiguate(self) -> OrderedDict[str, str]:
+        """Creates a name mapping to disambiguate IPM quantities that have
+        the same name. This happens commonly in multistrata IPMs with
+        meta edges where multiple other strata influence a transmission rate
+        in a single strata. The returned mapping includes only the selected IPM
+        compartments and events, but definition order is maintained.
+        Keys are the unique name and values are the original names
+        (because the original names might contain duplicates);
+        so you will have to map into unique names by position, but can map
+        back using this mapping directly."""
+        selected = [
+            (i, q) for i, q in enumerate(self.ipm.quantities) if self.selection[i]
+        ]
+        qs_original = [q.name.full for i, q in selected]
+        qs_renamed = [f"{q.name}_{i}" for i, q in selected]
+        return OrderedDict(zip(qs_renamed, qs_original))
+
+    def disambiguate_groups(self) -> OrderedDict[str, str]:
+        """Like method `disambiguate()` but for working with quantities
+        after any grouping has been performed. If grouping is None,
+        this is equivalent to `disambiguate()`."""
+        if self.grouping is None:
+            return self.disambiguate()
+        groups, _ = self.grouping.map(self.selected)
+        selected = [(i, q) for i, q in enumerate(groups)]
+        qs_original = [q.name.full for i, q in selected]
+        qs_renamed = [f"{q.name}_{i}" for i, q in selected]
+        return OrderedDict(zip(qs_renamed, qs_original))
+
+
+@dataclass(frozen=True)
+class QuantitySelection(QuantityStrategy):
+    """Describe a sub-selection of IPM quantities, which are its
+    events and compartments (no grouping or aggregation)."""
+
+    ipm: BaseCompartmentModel
+    """The original IPM quantities information."""
+    selection: NDArray[np.bool_]
+    """A boolean mask for selection of a subset of IPM quantities."""
+    grouping: None = field(init=False, default=None)
+    """A method for grouping IPM quantities."""
+    aggregation: None = field(init=False, default=None)
+    """A method for aggregating the quantity groups."""
+
+    @property
+    @override
+    def quantities(self) -> Sequence[CompartmentDef | EdgeDef]:
+        return self.selected
+
+    @property
+    @override
+    def labels(self) -> Sequence[str]:
+        return [q.name.full for q in self.selected]
+
+    def group(
+        self,
+        *,
+        strata: bool = False,
+        subscript: bool = False,
+    ) -> "QuantityGroup":
+        """Groups quantities according to the given options.
+
+        By default, any quantities that directly match each other will be combined.
+        This generally only happens with events, where there may be multiple edges
+        between the same compartments like `S->I`, perhaps due to meta edges in a
+        multistrata model.
+
+        With `strata=True`, quantities that would match if you removed the strata name
+        will be combined. e.g., `S_young` and `S_old`;
+        or `S_young->I_young` and `S_old->I_old`.
+
+        With `subscript=True`, quantities that would match if you removed subscript
+        names will be combined. e.g., `I_asymptomatic_young` and `I_symptomatic_young`
+        belong to the same strata (young) but have different subscripts so they will
+        be combined.
+
+        And if both options are True, we consider matches after removing both strata
+        and subscript names -- effectively matching on the base compartment and
+        event names.
+        """
+        return QuantityGroup(
+            self.ipm,
+            self.selection,
+            QuantityGrouping(strata, subscript),
+        )
+
+
+@dataclass(frozen=True)
+class QuantityGroup(QuantityStrategy):
+    """Describes a group operation on IPM quantities,
+    with an optional sub-selection."""
+
+    ipm: BaseCompartmentModel
+    """The original IPM quantity information."""
+    selection: NDArray[np.bool_]
+    """A boolean mask for selection of a subset of quantities."""
+    grouping: QuantityGrouping
+    """A method for grouping IPM quantities."""
+    aggregation: None = field(init=False, default=None)
+    """A method for aggregating the quantity groups."""
+
+    @property
+    @override
+    def quantities(self) -> Sequence[CompartmentDef | EdgeDef]:
+        groups, _ = self.grouping.map(self.selected)
+        return groups
+
+    @property
+    @override
+    def labels(self) -> Sequence[str]:
+        groups, _ = self.grouping.map(self.selected)
+        return [g.name.full for g in groups]
+
+    def sum(self) -> "QuantityAggregation":
+        """Combine grouped quantities by adding their values."""
+        return QuantityAggregation(self.ipm, self.selection, self.grouping, "sum")
+
+
+@dataclass(frozen=True)
+class QuantityAggregation(QuantityStrategy):
+    """Describes a group-and-aggregate operation on IPM quantities,
+    with an optional sub-selection."""
+
+    ipm: BaseCompartmentModel
+    """The original IPM quantity information."""
+    selection: NDArray[np.bool_]
+    """A boolean mask for selection of a subset of quantities."""
+    grouping: QuantityGrouping
+    """A method for grouping IPM quantities."""
+    aggregation: QuantityAggMethod
+    """A method for aggregating the quantity groups."""
+
+    @property
+    @override
+    def quantities(self) -> Sequence[CompartmentDef | EdgeDef]:
+        groups, _ = self.grouping.map(self.selected)
+        return groups
+
+    @property
+    @override
+    def labels(self) -> Sequence[str]:
+        groups, _ = self.grouping.map(self.selected)
+        return [g.name.full for g in groups]
+
+    # NOTE: we don't support agg without a group in this axis
+    # It's not really useful to squash everything together typically.
+
+
+class QuantitySelector:
+    """A utility class for selecting a subset of IPM quantities."""
+
+    _ipm: BaseCompartmentModel
+    """The original IPM quantity information."""
+
+    def __init__(self, ipm: BaseCompartmentModel):
+        self._ipm = ipm
+
+    def _mask(
+        self,
+        compartments: bool | list[bool] = False,
+        events: bool | list[bool] = False,
+    ) -> NDArray[np.bool_]:
+        C = self._ipm.num_compartments
+        E = self._ipm.num_events
+        m = np.zeros(shape=C + E, dtype=np.bool_)
+        if compartments is not False:
+            m[:C] = compartments
+        if events is not False:
+            m[C:] = events
+        return m
+
+    def all(self) -> "QuantitySelection":
+        """Select all compartments and events."""
+        m = self._mask()
+        m[:] = True
+        return QuantitySelection(self._ipm, m)
+
+    def indices(self, *indices: int) -> "QuantitySelection":
+        """Select quantities by index (determined by IPM definition order:
+        all IPM compartments, all IPM events, and then meta edge events if any)."""
+        m = self._mask()
+        m[indices] = True
+        return QuantitySelection(self._ipm, m)
+
+    def _compile_pattern(self, pattern: str) -> re.Pattern:
+        """Turn a pattern string (which is custom syntax) into a regular expression."""
+        # We're not interpreting pattern as a regex directly, so escape any
+        # special characters. Then replace '*' with the necessary regex.
+        return re.compile(re.escape(pattern).replace(r"\*", ".*?"))
+
+    def _compile_event_pattern(self, pattern: str) -> tuple[re.Pattern, re.Pattern]:
+        """Interpret a pattern string as two patterns matching against the
+        source and destination compartments."""
+        try:
+            # Users can use any of these options for the separator.
+            if "->" in pattern:
+                src, dst = pattern.split("->")
+            elif "-" in pattern:
+                src, dst = pattern.split("-")
+            elif ">" in pattern:
+                src, dst = pattern.split(">")
+            else:
+                err = f"Invalid event pattern syntax: {pattern}"
+                raise ValueError(err)
+            return (
+                self._compile_pattern(src),
+                self._compile_pattern(dst),
+            )
+        except ValueError:
+            err = f"Invalid event pattern syntax: {pattern}"
+            raise ValueError(err) from None
+
+    def by(
+        self,
+        *,
+        compartments: str | Iterable[str] = (),
+        events: str | Iterable[str] = (),
+    ) -> "QuantitySelection":
+        """Select compartments and events by providing pattern strings for each.
+
+        Providing an empty sequence implies selecting none of that type.
+        Multiple patterns are combined as though by boolean-or.
+        """
+        cs = as_list(compartments)
+        es = as_list(events)
+        c_mask = self._mask() if len(cs) == 0 else self.compartments(*cs).selection
+        e_mask = self._mask() if len(es) == 0 else self.events(*es).selection
+        return QuantitySelection(self._ipm, c_mask | e_mask)
+
+    def compartments(self, *patterns: str) -> "QuantitySelection":
+        """Select compartments with zero or more pattern strings.
+
+        Specify no patterns to select all compartments.
+        Pattern strings match against compartment names.
+        Multiple patterns are combined as though by boolean-or.
+        Pattern strings can use asterisk as a wildcard character
+        to match any (non-empty) part of a name besides underscores.
+        For example, "I_*" would match events "I_abc" and "I_def".
+        """
+        if len(patterns) == 0:
+            # select all compartments
+            mask = self._mask(compartments=True)
+        else:
+            mask = self._mask()
+            for p in patterns:
+                regex = self._compile_pattern(p)
+                curr = self._mask(
+                    compartments=[
+                        regex.fullmatch(c.name.full) is not None
+                        for c in self._ipm.compartments
+                    ]
+                )
+                if not np.any(curr):
+                    err = f"Pattern '{p}' did not match any compartments."
+                    raise ValueError(err)
+                mask |= curr
+        return QuantitySelection(self._ipm, mask)
+
+    def events(self, *patterns: str) -> "QuantitySelection":
+        """Select events with zero or more pattern strings.
+
+        Specify no patterns to select all events.
+        Pattern strings match against event names which combine the source and
+        destination compartment names with a separator. e.g., the event
+        where individuals transition from "S" to "I" is called "S->I".
+        You must provide both a source and destination pattern, but you can
+        use "-", ">", or "->" as the separator.
+        Multiple patterns are combined as though by boolean-or.
+        Pattern strings can use asterisk as a wildcard character
+        to match any (non-empty) part of a name besides underscores.
+        For example, "S->*" would match events "S->A" and "S->B".
+        "S->I_*" would match "S->I_abc" and "S->I_def".
+        """
+        if len(patterns) == 0:
+            # select all events
+            mask = self._mask(events=True)
+        else:
+            mask = self._mask()
+            for p in patterns:
+                src_regex, dst_regex = self._compile_event_pattern(p)
+                curr = self._mask(
+                    events=[
+                        src_regex.fullmatch(src) is not None
+                        and dst_regex.fullmatch(dst) is not None
+                        for src, dst in (e.tuple for e in self._ipm.events)
+                    ]
+                )
+                if not np.any(curr):
+                    err = f"Pattern '{p}' did not match any events."
+                    raise ValueError(err)
+                mask |= curr
+        return QuantitySelection(self._ipm, mask)

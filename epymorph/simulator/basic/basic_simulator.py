@@ -1,9 +1,8 @@
 """Implements one epymorph simulation algorithm: the basic simulator."""
 
-from typing import Callable, Mapping, cast
+from typing import Callable, Mapping
 
 import numpy as np
-from numpy.typing import NDArray
 
 from epymorph.database import NamePattern
 from epymorph.error import (
@@ -17,9 +16,10 @@ from epymorph.error import (
     error_gate,
 )
 from epymorph.event import EventBus, OnStart, OnTick
+from epymorph.geography.scope import GeoScope
 from epymorph.params import ParamValue
 from epymorph.rume import GEO_LABELS, Rume
-from epymorph.simulation import TimeFrame, simulation_clock
+from epymorph.simulation import simulation_clock
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
@@ -29,6 +29,7 @@ from epymorph.simulator.data import (
     validate_requirements,
 )
 from epymorph.simulator.world_list import ListWorld
+from epymorph.time import TimeFrame
 
 _events = EventBus()
 
@@ -39,11 +40,11 @@ class BasicSimulator:
     The most basic simulator!
     """
 
-    rume: Rume
+    rume: Rume[GeoScope]
     ipm_exec: IpmExecutor
     mm_exec: MovementExecutor
 
-    def __init__(self, rume: Rume):
+    def __init__(self, rume: Rume[GeoScope]):
         self.rume = rume
 
     def run(
@@ -88,17 +89,19 @@ class BasicSimulator:
         with error_gate("initializing the simulation", InitException):
             initial_values = initialize_rume(rume, rng, db)
 
+            # Should always match because `evaluate_params` includes a default.
             matched = db.query(GEO_LABELS)
             if matched is None:
-                geo_labels = rume.scope.get_node_ids()
+                geo_labels = rume.scope.labels.tolist()
             else:
-                geo_labels = cast(NDArray[np.str_], matched.value)
+                geo_labels = matched.value.tolist()
 
             out = Output(
                 dim=dim,
-                geo_labels=geo_labels.tolist(),
-                compartment_labels=[c.name for c in rume.ipm.compartments],
-                event_labels=rume.ipm.event_names,
+                scope=rume.scope,
+                geo_labels=geo_labels,
+                ipm=rume.ipm,
+                time_frame=rume.time_frame,
                 initial=initial_values,
             )
 
@@ -120,9 +123,9 @@ class BasicSimulator:
 
             # Then do IPM
             with error_gate("executing the IPM", IpmSimException, AttributeException):
-                tick_events, tick_prevalence = ipm_exec.apply(tick)
-                out.incidence[tick.sim_index] = tick_events
-                out.prevalence[tick.sim_index] = tick_prevalence
+                tick_events, tick_compartments = ipm_exec.apply(tick)
+                out.events[tick.sim_index] = tick_events
+                out.compartments[tick.sim_index] = tick_compartments
 
             t = tick.sim_index
             _events.on_tick.publish(OnTick(t, (t + 1) / dim.ticks))
