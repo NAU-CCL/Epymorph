@@ -16,8 +16,6 @@ from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType
 from epymorph.error import DataResourceException
-from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import CensusScope
 from epymorph.simulation import AttributeDef, TimeFrame
 
 _PRISM_CACHE_PATH = module_cache_path(__name__)
@@ -32,25 +30,18 @@ def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[str]:
     first_day = date_range.start_date
     last_day = date_range.end_date
 
-    # PRISM only accounts for after 1981 up to the previous day to "yesterday"
-    if first_day.year < 1981 or last_day > latest_date:
-        msg = (
-            "Given date range is out of range, please enter dates between "
-            "January 1st 1981 and {latest_date}"
-        )
-        raise DataResourceException(msg)
-
     # create the list of days in date_range
     date_list = [
         first_day + timedelta(days=x) for x in range((last_day - first_day).days + 1)
     ]
-    url_list = []
-    files = []
-    bil_files = []
 
     # the stability of PRISM data is defined by date, specified around the 6 month mark
     six_months_ago = datetype.today() + relativedelta(months=-6)
     last_completed_month = six_months_ago.replace(day=1) - timedelta(days=1)
+
+    url_list = []
+    files = []
+    bil_files = []
 
     for single_date in date_list:
         # if it is within the current month
@@ -129,12 +120,22 @@ def _make_centroid_strategy_adrio(
     return climate_vals
 
 
-def _validate_scope(scope: GeoScope) -> CensusScope:
-    if not isinstance(scope, CensusScope):
-        msg = "Census scope is required for PRISM attributes."
+def _validate_dates(date_range: TimeFrame) -> TimeFrame:
+    latest_date = datetype.today() - timedelta(days=1)
+    # PRISM only accounts for dates from 1981 up to yesterday's date
+    if date_range.start_date.year < 1981 or latest_date < date_range.end_date:
+        msg = (
+            "Given date range is out of PRISM scope, please enter dates between "
+            f"January 1st 1981 and {latest_date}"
+        )
         raise DataResourceException(msg)
-
-    return scope
+    if date_range.start_date > date_range.end_date:
+        msg = (
+            "The given end date is before the given start date. "
+            "Please either swap the dates or enter new ones."
+        )
+        raise DataResourceException(msg)
+    return date_range
 
 
 class Precipitation(Adrio[np.float64]):
@@ -148,12 +149,10 @@ class Precipitation(Adrio[np.float64]):
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
 
     def __init__(self, date_range: TimeFrame):
-        self.date_range = date_range
+        self.date_range = _validate_dates(date_range)
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio("ppt", self.date_range, centroids)
         return raster_vals
@@ -170,12 +169,10 @@ class DewPoint(Adrio[np.float64]):
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
 
     def __init__(self, date_range: TimeFrame):
-        self.date_range = date_range
+        self.date_range = _validate_dates(date_range)
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             "tdmean", self.date_range, centroids
@@ -205,12 +202,10 @@ class Temperature(Adrio[np.float64]):
 
     def __init__(self, date_range: TimeFrame, temp_var: TemperatureType):
         self.temp_var = temp_var
-        self.date_range = date_range
+        self.date_range = _validate_dates(date_range)
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
         temp_var = self.temp_variables[self.temp_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
@@ -237,13 +232,11 @@ class VaporPressureDeficit(Adrio[np.float64]):
     vpd_var: VPDType
 
     def __init__(self, date_range: TimeFrame, vpd_var: VPDType):
-        self.date_range = date_range
         self.vpd_var = vpd_var
+        self.date_range = _validate_dates(date_range)
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
-        scope = self.scope
-        scope = _validate_scope(scope)
         vpd_var = self.vpd_variables[self.vpd_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(vpd_var, self.date_range, centroids)
