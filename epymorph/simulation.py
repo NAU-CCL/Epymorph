@@ -54,24 +54,25 @@ def default_rng(
 ########
 
 
+def _iso8601(value: date | str) -> date:
+    """Adapt ISO8601 strings to dates."""
+    if isinstance(value, str):
+        return date.fromisoformat(value)
+    return value
+
+
 @dataclass(frozen=True)
 class TimeFrame:
     """The time frame of a simulation."""
 
     @classmethod
-    def of(cls, start_date_iso8601: str, duration_days: int) -> Self:
+    def of(cls, start_date: date | str, duration_days: int) -> Self:
         """
-        Alternate constructor for TimeFrame, parsing start date from an ISO-8601 string.
+        Alternate constructor for TimeFrame.
+        If a date is passed as a string, it will be parsed using ISO-8601 format.
         """
-        return cls(date.fromisoformat(start_date_iso8601), duration_days)
-
-    @classmethod
-    def year(cls, year: int) -> Self:
-        """Alternate constructor for TimeFrame, comprising one full calendar year."""
-        start = date(year, 1, 1)
-        end = date(year + 1, 1, 1)
-        duration = (end - start).days
-        return cls(start, duration)
+        start_date = _iso8601(start_date)
+        return cls(start_date, duration_days)
 
     @classmethod
     def range(cls, start_date: date | str, end_date: date | str) -> Self:
@@ -80,26 +81,54 @@ class TimeFrame:
         (endpoint inclusive) date range.
         If a date is passed as a string, it will be parsed using ISO-8601 format.
         """
-        if isinstance(start_date, str):
-            start_date = date.fromisoformat(start_date)
-        if isinstance(end_date, str):
-            end_date = date.fromisoformat(end_date)
-        duration = (end_date - start_date).days
+        start_date = _iso8601(start_date)
+        end_date = _iso8601(end_date)
+        duration = (end_date - start_date).days + 1
         return cls(start_date, duration)
+
+    @classmethod
+    def rangex(cls, start_date: date | str, end_date_exclusive: date | str) -> Self:
+        """
+        Alternate constructor for TimeFrame, comprising the
+        (endpoint exclusive) date range.
+        If a date is passed as a string, it will be parsed using ISO-8601 format.
+        """
+        start_date = _iso8601(start_date)
+        end_date_exclusive = _iso8601(end_date_exclusive)
+        duration = (end_date_exclusive - start_date).days
+        return cls(start_date, duration)
+
+    @classmethod
+    def year(cls, year: int) -> Self:
+        """Alternate constructor for TimeFrame, comprising one full calendar year."""
+        return cls.rangex(date(year, 1, 1), date(year + 1, 1, 1))
 
     start_date: date
     """The first date in the simulation."""
     duration_days: int
     """The number of days for which to run the simulation."""
 
+    def __post_init__(self):
+        if self.duration_days < 1:
+            err = (
+                "TimeFrame's end date cannot be before its start date. "
+                "(Its duration in days must be at least 1.)"
+            )
+            raise ValueError(err)
+
     @cached_property
     def end_date(self) -> date:
         """The last date included in the simulation."""
-        return self.start_date + timedelta(days=self.duration_days)
+        return self.start_date + timedelta(days=self.duration_days - 1)
 
     def is_subset(self, other: "TimeFrame") -> bool:
         """Is the given TimeFrame a subset of this one?"""
         return self.start_date <= other.start_date and self.end_date >= other.end_date
+
+    def __str__(self) -> str:
+        if self.duration_days == 1:
+            return f"{self.start_date} (1 day)"
+        return f"{self.start_date}/{self.end_date} ({self.duration_days}D)"
 
 
 class Tick(NamedTuple):

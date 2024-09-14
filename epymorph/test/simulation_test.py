@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring,unused-variable
 import unittest
 from datetime import date
 from functools import cached_property
@@ -14,8 +13,75 @@ from epymorph.simulation import (
     SimDimensions,
     SimulationFunction,
     Tick,
+    TimeFrame,
     simulation_clock,
 )
+
+
+class TestTimeFrame(unittest.TestCase):
+    def test_init_1(self):
+        tf = TimeFrame(date(2020, 1, 1), 30)
+        self.assertEqual(tf.start_date, date(2020, 1, 1))
+        self.assertEqual(tf.duration_days, 30)
+        self.assertEqual(tf.end_date, date(2020, 1, 30))
+
+    def test_init_2(self):
+        tf = TimeFrame.of("2020-01-01", 30)
+        self.assertEqual(tf.start_date, date(2020, 1, 1))
+        self.assertEqual(tf.duration_days, 30)
+        self.assertEqual(tf.end_date, date(2020, 1, 30))
+
+    def test_init_3(self):
+        tf = TimeFrame.range("2020-01-01", "2020-01-30")
+        self.assertEqual(tf.start_date, date(2020, 1, 1))
+        self.assertEqual(tf.duration_days, 30)
+        self.assertEqual(tf.end_date, date(2020, 1, 30))
+
+    def test_init_4(self):
+        tf = TimeFrame.rangex("2020-01-01", "2020-01-30")
+        self.assertEqual(tf.start_date, date(2020, 1, 1))
+        self.assertEqual(tf.duration_days, 29)
+        self.assertEqual(tf.end_date, date(2020, 1, 29))
+
+    def test_init_5(self):
+        tf = TimeFrame.year(2020)
+        self.assertEqual(tf.start_date, date(2020, 1, 1))
+        self.assertEqual(tf.duration_days, 366)
+        self.assertEqual(tf.end_date, date(2020, 12, 31))
+
+    def test_init_6(self):
+        # ERROR: negative duration
+        with self.assertRaises(ValueError):
+            TimeFrame(date(2020, 1, 1), -7)
+
+    def test_init_7(self):
+        # ERROR: negative duration
+        with self.assertRaises(ValueError):
+            TimeFrame.range(date(2020, 1, 1), date(1999, 1, 1))
+
+    def test_subset_1(self):
+        a = TimeFrame.rangex("2020-01-01", "2020-02-01")
+        b = TimeFrame.rangex("2020-01-01", "2020-02-01")
+        c = TimeFrame.rangex("2020-01-01", "2020-01-21")
+        d = TimeFrame.rangex("2020-01-14", "2020-02-01")
+        e = TimeFrame.rangex("2020-01-14", "2020-01-21")
+        self.assertTrue(a.is_subset(b))
+        self.assertTrue(a.is_subset(c))
+        self.assertTrue(a.is_subset(d))
+        self.assertTrue(a.is_subset(e))
+
+    def test_subset_2(self):
+        a = TimeFrame.rangex("2020-01-01", "2020-02-01")
+        b = TimeFrame.rangex("2019-12-31", "2020-02-01")
+        c = TimeFrame.rangex("2020-01-01", "2020-09-21")
+        d = TimeFrame.rangex("2019-12-31", "2020-09-21")
+        e = TimeFrame.rangex("2019-01-01", "2019-02-01")
+        f = TimeFrame.rangex("2021-01-01", "2021-02-01")
+        self.assertFalse(a.is_subset(b))
+        self.assertFalse(a.is_subset(c))
+        self.assertFalse(a.is_subset(d))
+        self.assertFalse(a.is_subset(e))
+        self.assertFalse(a.is_subset(f))
 
 
 class TestClock(unittest.TestCase):
