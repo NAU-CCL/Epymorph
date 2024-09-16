@@ -1,12 +1,11 @@
-import os
-import zipfile
 from datetime import date as datetype
 from datetime import timedelta
+from io import BytesIO
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
-import rasterio
+import rasterio.io as rio
 from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 from typing_extensions import override
@@ -21,7 +20,7 @@ from epymorph.simulation import AttributeDef, TimeFrame
 _PRISM_CACHE_PATH = module_cache_path(__name__)
 
 
-def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[str]:
+def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[BytesIO]:
     """
     Fetches the raster values at the url with the given attribute and date range.
     """
@@ -41,7 +40,7 @@ def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[str]:
 
     url_list = []
     files = []
-    bil_files = []
+    bil_file_names = []
 
     for single_date in date_list:
         # if it is within the current month
@@ -66,6 +65,10 @@ def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[str]:
         url = f"https://ftp.prism.oregonstate.edu/daily/{attribute}/{year}/PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.zip"
         url_list.append(url)
 
+        bil_file_names.append(
+            f"PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.bil"
+        )
+
         # try to retrieve from cache
         try:
             files = [
@@ -75,22 +78,10 @@ def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[str]:
         except Exception as e:
             raise DataResourceException("Unable to fetch PRISM data.") from e
 
-    # extract the bil (raster data) file from the url zip
-    for raster_file, url in zip(files, url_list):
-        extract_dir = _PRISM_CACHE_PATH / Path(url).name.replace(".zip", "")
-        with zipfile.ZipFile(raster_file, "r") as zip_ref:
-            zip_ref.extractall(extract_dir)
+    for file, bil_names in zip(files, bil_file_names):
+        file.name = bil_names
 
-        # fetch the .bil file within the directory
-        bil_file_path = None
-        for root, dirs, files in os.walk(extract_dir):
-            for file in files:
-                if file.endswith(".bil"):
-                    bil_file_path = Path(root) / file
-                    bil_files.append(bil_file_path)
-                    break
-
-    return bil_files
+    return files
 
 
 def _make_centroid_strategy_adrio(
@@ -104,20 +95,13 @@ def _make_centroid_strategy_adrio(
 
     # read in each file
     for raster_file in raster_files:
-        raster_path = Path(raster_file)
-        with rasterio.open(raster_path) as src:
-            # retrieve the coordinates from centroids
-            coords = [
-                (x, y) for x, y in zip(centroids["longitude"], centroids["latitude"])
-            ]
-            values = [round(x[0], 3) for x in src.sample(coords)]
+        with rio.ZipMemoryFile(raster_file) as zip_contents:
+            with zip_contents.open(raster_file.name) as dataset:
+                values = [x[0] for x in dataset.sample(centroids)]
 
         results.append(values)
 
-    # create numpy array
-    climate_vals = np.array(results)
-
-    return climate_vals
+    return np.array(results, dtype=np.float64)
 
 
 def _validate_dates(date_range: TimeFrame) -> TimeFrame:
@@ -129,12 +113,7 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
             f"January 1st 1981 and {latest_date}"
         )
         raise DataResourceException(msg)
-    if date_range.start_date > date_range.end_date:
-        msg = (
-            "The given end date is before the given start date. "
-            "Please either swap the dates or enter new ones."
-        )
-        raise DataResourceException(msg)
+
     return date_range
 
 
