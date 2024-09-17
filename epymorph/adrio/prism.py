@@ -69,14 +69,14 @@ def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[BytesIO]:
             f"PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.bil"
         )
 
-        # try to retrieve from cache
-        try:
-            files = [
-                load_or_fetch_url(u, _PRISM_CACHE_PATH / Path(u).name) for u in url_list
-            ]
+    # try to retrieve from cache
+    try:
+        files = [
+            load_or_fetch_url(u, _PRISM_CACHE_PATH / Path(u).name) for u in url_list
+        ]
 
-        except Exception as e:
-            raise DataResourceException("Unable to fetch PRISM data.") from e
+    except Exception as e:
+        raise DataResourceException("Unable to fetch PRISM data.") from e
 
     for file, bil_names in zip(files, bil_file_names):
         file.name = bil_names
