@@ -119,7 +119,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
         raise DataResourceException(msg)
 
     # scope cannot be in Puerto Rico, Alaska, or Hawaii
-    if (state in excluded_fips for state in state_fips):
+    if any(state in excluded_fips for state in state_fips):
         msg = (
             "Alaska, Hawaii, and Puerto Rico cannot be evaluated for PRISM "
             "attributes. Please enter a geoid within the 48 contiguous states."
