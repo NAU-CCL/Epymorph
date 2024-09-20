@@ -49,7 +49,7 @@ def _fetch_raster(
             stability = "early"
 
         # if it is before the last finished month
-        elif single_date >= last_completed_month:
+        elif single_date > last_completed_month:
             stability = "provisional"
 
         # if it is older than 6 completed months
