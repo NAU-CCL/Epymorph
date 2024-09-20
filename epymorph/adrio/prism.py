@@ -15,6 +15,8 @@ from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType
 from epymorph.error import DataResourceException
+from epymorph.geography.scope import GeoScope
+from epymorph.geography.us_census import STATE, CensusScope
 from epymorph.simulation import AttributeDef, TimeFrame
 
 _PRISM_CACHE_PATH = module_cache_path(__name__)
@@ -107,6 +109,25 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
     return date_range
 
 
+def _validate_scope(scope: GeoScope) -> CensusScope:
+    state_fips = [STATE.truncate(x) for x in scope.get_node_ids()]
+    excluded_fips = ["72", "02", "15"]
+
+    # require census scope for raster values
+    if not isinstance(scope, CensusScope):
+        msg = "Census scope is required for PRISM attributes."
+        raise DataResourceException(msg)
+
+    # scope cannot be in Puerto Rico, Alaska, or Hawaii
+    if (state in excluded_fips for state in state_fips):
+        msg = (
+            "Alaska, Hawaii, and Puerto Rico cannot be evaluated for PRISM "
+            "attributes. Please enter a geoid within the 48 contiguous states."
+        )
+        raise DataResourceException(msg)
+    return scope
+
+
 class Precipitation(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the amount of precipitation in an area,
@@ -122,6 +143,8 @@ class Precipitation(Adrio[np.float64]):
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio("ppt", self.date_range, centroids)
         return raster_vals
@@ -142,6 +165,8 @@ class DewPoint(Adrio[np.float64]):
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             "tdmean", self.date_range, centroids
@@ -175,6 +200,8 @@ class Temperature(Adrio[np.float64]):
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
         temp_var = self.temp_variables[self.temp_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
@@ -206,6 +233,8 @@ class VaporPressureDeficit(Adrio[np.float64]):
 
     @override
     def evaluate(self) -> NDArray[np.float64]:
+        scope = self.scope
+        scope = _validate_scope(scope)
         vpd_var = self.vpd_variables[self.vpd_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(vpd_var, self.date_range, centroids)
