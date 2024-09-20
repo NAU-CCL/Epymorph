@@ -2,7 +2,7 @@ from datetime import date as datetype
 from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Generator, Literal
 
 import numpy as np
 import rasterio.io as rio
@@ -20,10 +20,13 @@ from epymorph.simulation import AttributeDef, TimeFrame
 _PRISM_CACHE_PATH = module_cache_path(__name__)
 
 
-def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[BytesIO]:
+def _fetch_raster(
+    attribute: str, date_range: TimeFrame
+) -> Generator[BytesIO, None, None]:
     """
     Fetches the raster values at the url with the given attribute and date range.
     """
+
     # set some date variables with the date_range
     latest_date = datetype.today() - timedelta(days=1)
     first_day = date_range.start_date
@@ -38,12 +41,7 @@ def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[BytesIO]:
     six_months_ago = datetype.today() + relativedelta(months=-6)
     last_completed_month = six_months_ago.replace(day=1) - timedelta(days=1)
 
-    url_list = []
-    files = []
-    bil_file_names = []
-
     for single_date in date_list:
-        # if it is within the current month
         if (
             single_date.year == latest_date.year
             and single_date.month == latest_date.month
@@ -58,30 +56,22 @@ def _fetch_raster(attribute: str, date_range: TimeFrame) -> list[BytesIO]:
         else:
             stability = "stable"
 
-        # format the date for the urls
+        # format the date for the url
         formatted_date = single_date.strftime("%Y%m%d")
         year = single_date.year
 
         url = f"https://ftp.prism.oregonstate.edu/daily/{attribute}/{year}/PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.zip"
-        url_list.append(url)
 
-        bil_file_names.append(
-            f"PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.bil"
-        )
+        # load/fetch the url for the file
+        try:
+            file = load_or_fetch_url(url, _PRISM_CACHE_PATH / Path(url).name)
 
-    # try to retrieve from cache
-    try:
-        files = [
-            load_or_fetch_url(u, _PRISM_CACHE_PATH / Path(u).name) for u in url_list
-        ]
+        except Exception as e:
+            raise DataResourceException("Unable to fetch PRISM data.") from e
 
-    except Exception as e:
-        raise DataResourceException("Unable to fetch PRISM data.") from e
+        file.name = f"PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.bil"
 
-    for file, bil_names in zip(files, bil_file_names):
-        file.name = bil_names
-
-    return files
+        yield file
 
 
 def _make_centroid_strategy_adrio(
@@ -110,7 +100,7 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
     if date_range.start_date.year < 1981 or latest_date < date_range.end_date:
         msg = (
             "Given date range is out of PRISM scope, please enter dates between "
-            f"January 1st 1981 and {latest_date}"
+            f"1981-01-01 and {latest_date}"
         )
         raise DataResourceException(msg)
 
