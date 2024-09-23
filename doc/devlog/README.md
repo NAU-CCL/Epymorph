@@ -63,8 +63,10 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-07-12-v0.4.ipynb | Tyler | | Comparing v0.4 to v0.5 via example. (See next also.) |
 | 2024-07-12-v0.5.ipynb | Tyler | | Comparing v0.4 to v0.5 via example. (See previous also.) |
 | 2024-07-12-v0.6.ipynb | Tyler | | Comparing v0.5 to v0.6 via example. (See previous also.) |
+| 2024-07-16.ipynb | Meaghan | | Testing the space and runtime for downloading and interpreting PRISM data |
 | 2024-07-18.ipynb | Tyler | | A simple demo of ADRIOs "version 2". |
 | 2024-08-13.ipynb | Tyler | | Demo @adrio_cache. |
+| 2024-08-26-prism-adrio-demo.ipynb | Meaghan | | Demo and usage manual for PRISM ADRIO. |
 | 2024-08-28.ipynb | Trevor | | Demo of numpy ADRIOs. |
 | 2024-08-30.ipynb | Tyler | | Testing non-returner movement support. |
 

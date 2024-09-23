@@ -6,6 +6,15 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "affine"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/98/d2f0bb06385069e799fc7d2870d9e078cfa0fa396dc8a2b81227d0da08b9/affine-2.4.0.tar.gz", hash = "sha256:a24d818d6a836c131976d22f8c27b8d3ca32d0af64c1d8d29deb7bafa4da1eea", size = 17132 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/f7/85273299ab57117850cc0a936c64151171fac4da49bc6fba0dad984a7c5f/affine-2.4.0-py3-none-any.whl", hash = "sha256:8a3df80e2b2378aef598a83c1392efd47967afec4242021a0b06b4c7cbc61a92", size = 15662 },
+]
+
+[[package]]
 name = "appnope"
 version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -305,6 +314,7 @@ dependencies = [
     { name = "pandas", extra = ["excel"] },
     { name = "platformdirs" },
     { name = "psutil" },
+    { name = "rasterio" },
     { name = "sympy" },
     { name = "typing-extensions" },
 ]
@@ -328,6 +338,7 @@ requires-dist = [
     { name = "pandas", extras = ["excel"], specifier = "~=2.2.2" },
     { name = "platformdirs", specifier = "~=4.2.2" },
     { name = "psutil", specifier = "~=5.9.8" },
+    { name = "rasterio", specifier = "~=1.3.11" },
     { name = "sympy", specifier = "~=1.12.1" },
     { name = "typing-extensions", specifier = "~=4.12.2" },
 ]
@@ -1074,6 +1085,37 @@ wheels = [
 ]
 
 [[package]]
+name = "rasterio"
+version = "1.3.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "affine" },
+    { name = "attrs" },
+    { name = "certifi" },
+    { name = "click" },
+    { name = "click-plugins" },
+    { name = "cligj" },
+    { name = "numpy" },
+    { name = "setuptools" },
+    { name = "snuggs" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/60/80f075e05e2ade12def9d65dc9f66b98519e52e5ac9ce1ba0aba1fbe73b5/rasterio-1.3.11.tar.gz", hash = "sha256:47aa70b4718ebc80d825bb7db3127577d74e31c53048ce215145c0baf530ece9", size = 413094 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/df/12b1c17403f0b3d5c5f50c45abe02654da193ec8dd1c8c19259f32a348dd/rasterio-1.3.11-cp311-cp311-macosx_10_15_x86_64.whl", hash = "sha256:e075be4d173d943b87fb1d40064b1a88e88666d20c2847654ceb2076fc1c0597", size = 21021826 },
+    { url = "https://files.pythonhosted.org/packages/61/4d/5e3f94a6c002743706f87e810680e00e3a7febe3ec125e51acfe1dc75d41/rasterio-1.3.11-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:04464e06a881c7447d91d92922a5f731131fa7d070f1b77b5a3fafc423bdd135", size = 18455710 },
+    { url = "https://files.pythonhosted.org/packages/a5/ff/96a0de6f44b1bfa8f06a49d6543fedfee98d427edb422831e89a79e419e8/rasterio-1.3.11-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:171af16371988f2f12d29568c5cd963efaad9b27d5fea7596b58462a37e042b6", size = 21728515 },
+    { url = "https://files.pythonhosted.org/packages/a0/28/ed59f8b361122c91273f2545c50636441927b257e02fbd32f7953987017a/rasterio-1.3.11-cp311-cp311-win_amd64.whl", hash = "sha256:3fc055651d40ca8d0e02b80472d9081d7e6efa59a0a171fd20d243fcdd67a41c", size = 24780011 },
+    { url = "https://files.pythonhosted.org/packages/72/02/81ad42f7408cf88062ad8fd273de5b52d94ff07453c2e7f76080c2f9d462/rasterio-1.3.11-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:6b62b576fa94bf31c0faabcd796d9f32ed23ea5620878bda2ba8258163b006cd", size = 20984325 },
+    { url = "https://files.pythonhosted.org/packages/94/64/6a34c3ba5b1d412d85f399fe761a2c9d2baeb57f8eee6932caf3b6ce1597/rasterio-1.3.11-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:476be03290bb937b63b14bb4394b1300c828d79cb4acc540fdc5cbdae8af8cf6", size = 18432225 },
+    { url = "https://files.pythonhosted.org/packages/bd/6b/872012d5f275d1b065878d3ac076c7015248b2d5be6fb63894e9b08efcd2/rasterio-1.3.11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:958d7cb4b81ed9bab8167eced60c3b0f4263c9d12dc7cfd395531ed5579baf07", size = 21762272 },
+    { url = "https://files.pythonhosted.org/packages/30/cc/0192175dd6b213cd38f062ab7b071b31c2764a9f291770311a0b6d50ff0b/rasterio-1.3.11-cp312-cp312-win_amd64.whl", hash = "sha256:5c811f77e20c439195f93367390ec054790b337b51f1ff689691a558976e80c6", size = 24756530 },
+    { url = "https://files.pythonhosted.org/packages/dc/ed/2abc91b144a83fd45e5fa596ce0541676e5e2c27280fe6dfbf11e624536c/rasterio-1.3.11-cp313-cp313-macosx_10_15_x86_64.whl", hash = "sha256:18d296abd40d220f062c4459968b77f157aa503a5d1b676d510475fbe9ba1331", size = 20987264 },
+    { url = "https://files.pythonhosted.org/packages/b2/94/84a5763bbdb8bfdccf046cbde5b20432fb671d0cf72880b03d4d81fed8ca/rasterio-1.3.11-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:0e9ae169dcc497d7bc6e059810ffa74c69c5d1173f62e7b3b1aaf1ce5a9a0a58", size = 18427417 },
+    { url = "https://files.pythonhosted.org/packages/20/52/5ee82a9b101d120dd0552ce2dd9b1fc01eff2073c9b3f193f9d6bbd36306/rasterio-1.3.11-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2cd38249e07582c05b333d7b3c2c257852a1a36c347a189ba5d847b2cd130d88", size = 21752036 },
+    { url = "https://files.pythonhosted.org/packages/7d/ee/6ecb9661024931c90b329c1fbf5f1aa6951657241eb883927b8d9f71ed44/rasterio-1.3.11-cp313-cp313-win_amd64.whl", hash = "sha256:962315780045dbd37a88d58516d2d73c5d4de7534102677b1c5e4c9b7ff4c5f9", size = 24750886 },
+]
+
+[[package]]
 name = "requests"
 version = "2.32.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1158,6 +1200,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/71/39/171f1c67cd00715f190ba0b100d606d440a28c93c7714febeca8b79af85e/six-1.16.0.tar.gz", hash = "sha256:1e61c37477a1626458e36f7b1d82aa5c9b094fa4802892072e49de9c60c4c926", size = 34041 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/5a/e7c31adbe875f2abbb91bd84cf2dc52d792b5a01506781dbcf25c91daf11/six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254", size = 11053 },
+]
+
+[[package]]
+name = "snuggs"
+version = "1.4.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/93/19/0d11ab370735dde61076a0e41644e5593821776e69e3b0344626cfa0e56a/snuggs-1.4.7.tar.gz", hash = "sha256:501cf113fe3892e14e2fee76da5cd0606b7e149c411c271898e6259ebde2617b", size = 8196 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/0e/d27d6e806d6c0d1a2cfdc5d1f088e42339a0a54a09c3343f7f81ec8947ea/snuggs-1.4.7-py3-none-any.whl", hash = "sha256:988dde5d4db88e9d71c99457404773dabcc7a1c45971bfbe81900999942d9f07", size = 5370 },
 ]
 
 [[package]]
