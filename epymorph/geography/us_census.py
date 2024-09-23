@@ -24,6 +24,7 @@ from typing import (
 
 import numpy as np
 from numpy.typing import NDArray
+from pandas import DataFrame
 
 import epymorph.geography.us_tiger as us_tiger
 from epymorph.cache import (
@@ -311,6 +312,15 @@ class StatesInfo(NamedTuple):
     code: NDArray[np.str_]
     """The US postal code for the state."""
 
+    def as_dataframe(self) -> DataFrame:
+        return DataFrame(
+            {
+                "geoid": self.geoid,
+                "name": self.name,
+                "code": self.code,
+            }
+        )
+
 
 def get_us_states(year: int) -> StatesInfo:
     """Loads US States information (assumed to be invariant for all supported years)."""
@@ -336,6 +346,14 @@ class CountiesInfo(NamedTuple):
     name: NDArray[np.str_]
     """The typical name of the county (does not include state)."""
 
+    def as_dataframe(self) -> DataFrame:
+        return DataFrame(
+            {
+                "geoid": self.geoid,
+                "name": self.name,
+            }
+        )
+
 
 def get_us_counties(year: int) -> CountiesInfo:
     """Loads US Counties information for the given year."""
@@ -358,6 +376,13 @@ class TractsInfo(NamedTuple):
     geoid: NDArray[np.str_]
     """The GEOID (aka FIPS code) of the tract."""
 
+    def as_dataframe(self) -> DataFrame:
+        return DataFrame(
+            {
+                "geoid": self.geoid,
+            }
+        )
+
 
 def get_us_tracts(year: int) -> TractsInfo:
     """Loads US Census Tracts information for the given year."""
@@ -378,6 +403,13 @@ class BlockGroupsInfo(NamedTuple):
 
     geoid: NDArray[np.str_]
     """The GEOID (aka FIPS code) of the block group."""
+
+    def as_dataframe(self) -> DataFrame:
+        return DataFrame(
+            {
+                "geoid": self.geoid,
+            }
+        )
 
 
 def get_us_block_groups(year: int) -> BlockGroupsInfo:

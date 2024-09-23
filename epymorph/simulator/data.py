@@ -266,7 +266,7 @@ def validate_requirements(
                 try:
                     check_ndarray(
                         attr_match.value,
-                        dtype=match.dtype_cast(attr.dtype),
+                        dtype=match.dtype_cast(attr.dtype()),
                         shape=DataShapeMatcher(
                             attr.shape, rume.dim, allow_broadcast=True
                         ),

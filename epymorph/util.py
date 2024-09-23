@@ -94,7 +94,7 @@ def iterator_length(it: Iterable[Any]) -> int:
     return length
 
 
-def list_not_none(it: Iterable[T]) -> list[T]:
+def list_not_none(it: Iterable[T | None]) -> list[T]:
     """Convert an iterable to a list, skipping any entries that are None."""
     return [x for x in it if x is not None]
 

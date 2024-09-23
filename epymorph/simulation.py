@@ -245,8 +245,9 @@ class AttributeKey(Generic[AttributeT]):
 
     # providing overloads for structured types is basically impossible
     # without mapped types, so callers are on their own for that.
+    # Normally I'd make dtype a property, but pylance seems to have a hard time
+    # with overloads on properties.
 
-    @property
     def dtype(self) -> np.dtype:
         """Return the dtype of this attribute in a numpy-equivalent type."""
         return dtype_as_np(self.type)
@@ -313,7 +314,10 @@ class _BaseAttributeResolver:
         try:
             value = matched.value
             value = value.astype(
-                attr_key.dtype, casting="safe", subok=False, copy=False
+                attr_key.dtype(),
+                casting="safe",
+                subok=False,
+                copy=False,
             )
             value = attr_key.shape.adapt(self._dim, value, allow_broadcast=True)
         except Exception as e:
@@ -445,21 +449,15 @@ class NamespacedAttributeResolver(_BaseAttributeResolver):
 ########################
 
 
-T_co = TypeVar("T_co", covariant=True)
-"""The result type of a SimulationFunction."""
-
-_DeferredT = TypeVar("_DeferredT")
-"""The result type of a SimulationFunction during deference."""
-
-
 class _Context(ABC):
     """
     The evaluation context of a SimulationFunction. We want SimulationFunction
     instances to be able to access properties of the simulation by using
     various methods on `self`. But we also want to instantiate SimulationFunctions
     before the simulation context exists! Hence this object starts out "empty"
-    and will be swapped for a "real" context when the function is evaluated in
-    a simulation context object.
+    and will be swapped for a "full" context when the function is evaluated in
+    a simulation context object. Partial contexts exist to allow easy one-off
+    evaluation of SimulationFunctions without a full RUME.
     """
 
     @abstractmethod
@@ -481,14 +479,6 @@ class _Context(ABC):
     def rng(self) -> np.random.Generator:
         """The simulation's random number generator."""
 
-    @abstractmethod
-    def export(
-        self,
-    ) -> tuple[
-        NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator
-    ]:
-        """Tuples the contents of this context so it can be re-used (see: defer())."""
-
 
 class _EmptyContext(_Context):
     def data(self, attribute: AttributeDef) -> NDArray:
@@ -506,18 +496,59 @@ class _EmptyContext(_Context):
     def rng(self) -> np.random.Generator:
         raise TypeError("Invalid access of function context.")
 
-    def export(
-        self,
-    ) -> tuple[
-        NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator
-    ]:
-        raise TypeError("Invalid access of function context.")
-
 
 _EMPTY_CONTEXT = _EmptyContext()
 
 
-class _RealContext(_Context):
+class _PartialContext(_Context):
+    _cached_data: Callable[[AttributeDef], AttributeArray] | None
+    _data: NamespacedAttributeResolver | None
+    _dim: SimDimensions | None
+    _scope: GeoScope | None
+    _rng: np.random.Generator | None
+
+    def __init__(
+        self,
+        data: NamespacedAttributeResolver | None,
+        dim: SimDimensions | None,
+        scope: GeoScope | None,
+        rng: np.random.Generator | None,
+    ):
+        self._cached_data = None if data is None else cache(data.resolve)
+        self._data = data
+        self._dim = dim
+        self._scope = scope
+        self._rng = rng
+
+    def data(self, attribute: AttributeDef) -> NDArray:
+        # attribute resolutions are cached because implementations may be
+        # calling this function within a hot loop
+        # (and we can't just throw @cache on this method because it interferes
+        # with abstract method overriding)
+        if self._cached_data is None:
+            raise TypeError("Missing function context: data")
+        return self._cached_data(attribute)
+
+    @property
+    def dim(self) -> SimDimensions:
+        if self._dim is None:
+            raise TypeError("Missing function context: dim")
+        return self._dim
+
+    @property
+    def scope(self) -> GeoScope:
+        if self._scope is None:
+            raise TypeError("Missing function context: scope")
+        return self._scope
+
+    @property
+    def rng(self) -> np.random.Generator:
+        if self._rng is None:
+            raise TypeError("Missing function context: rng")
+        return self._rng
+
+
+class _FullContext(_Context):
     _cached_data: Callable[[AttributeDef], AttributeArray]
     _data: NamespacedAttributeResolver
     _dim: SimDimensions
@@ -555,13 +586,6 @@ class _RealContext(_Context):
     @property
     def rng(self) -> np.random.Generator:
         return self._rng
-
-    def export(
-        self,
-    ) -> tuple[
-        NamespacedAttributeResolver, SimDimensions, GeoScope, np.random.Generator
-    ]:
-        return (self._data, self._dim, self._scope, self._rng)
 
 
 _TypeT = TypeVar("_TypeT")
@@ -624,6 +648,15 @@ class SimulationFunctionClass(ABCMeta):
         return super().__new__(mcs, name, bases, dct)
 
 
+T_co = TypeVar("T_co", covariant=True)
+"""The result type of a SimulationFunction."""
+
+_DeferResultT = TypeVar("_DeferResultT")
+"""The result type of a SimulationFunction during deference."""
+_DeferFunctionT = TypeVar("_DeferFunctionT", bound="BaseSimulationFunction")
+"""The type of a SimulationFunction during deference."""
+
+
 class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
     """
     A function which runs in the context of a simulation to produce a value
@@ -638,21 +671,52 @@ class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionCla
 
     def with_context(
         self,
-        data: NamespacedAttributeResolver,
-        dim: SimDimensions,
-        scope: GeoScope,
-        rng: np.random.Generator,
+        data: NamespacedAttributeResolver | None = None,
+        dim: SimDimensions | None = None,
+        scope: GeoScope | None = None,
+        rng: np.random.Generator | None = None,
     ) -> Self:
         """
         Constructs a clone of this instance which has access to the given context.
         epymorph calls this function; you generally don't need to.
         """
+        # TODO(Tyler): it should probably be an error if someone tries to set a context
+        # on a simfunc that isn't currently Empty.
+        # TODO(Tyler): But bigger picture, I want to think harder about how these
+        # classes are structured. It's making me nervous I built up behaviors that
+        # rely on calling `evaluate_in_context()` and would break if you
+        # called `with_context().evaluate()` instead.
+        # I think the behaviors mentioned can be refactored to fix this reliance,
+        # and then maybe we just remove `evaluate_in_context` entirely.
+
         # clone this instance, then run evaluate on that; accomplishes two things:
         # 1. don't have to worry about cleaning up _ctx
         # 2. instances can use @cached_property without surprising results
+        if data is None or dim is None or scope is None or rng is None:
+            ctx = _PartialContext(data, dim, scope, rng)
+        else:
+            ctx = _FullContext(data, dim, scope, rng)
         clone = deepcopy(self)
-        setattr(clone, "_ctx", _RealContext(data, dim, scope, rng))
+        setattr(clone, "_ctx", ctx)
         return clone
+
+    def defer_context(
+        self,
+        other: _DeferFunctionT,
+    ) -> _DeferFunctionT:
+        """Defer processing to another instance of a SimulationFunction."""
+        ctx = self._ctx
+        if isinstance(ctx, _EmptyContext):
+            return other.with_context()
+        elif isinstance(ctx, _PartialContext | _FullContext):
+            return other.with_context(
+                data=ctx._data,
+                dim=ctx._dim,
+                scope=ctx._scope,
+                rng=ctx._rng,
+            )
+        else:
+            raise TypeError("Unsupported context type.")
 
     def data(self, attribute: AttributeDef | str) -> NDArray:
         """Retrieve the value of a specific attribute."""
@@ -705,7 +769,7 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
         Evaluate this function within a context.
         epymorph calls this function; you generally don't need to.
         """
-        return super().with_context(data, dim, scope, rng).evaluate()
+        return self.with_context(data, dim, scope, rng).evaluate()
 
     @abstractmethod
     def evaluate(self) -> T_co:
@@ -716,9 +780,9 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
         """
 
     @final
-    def defer(self, other: "SimulationFunction[_DeferredT]") -> _DeferredT:
+    def defer(self, other: "SimulationFunction[_DeferResultT]") -> _DeferResultT:
         """Defer processing to another instance of a SimulationFunction."""
-        return other.evaluate_in_context(*self._ctx.export())
+        return self.defer_context(other).evaluate()
 
 
 class SimulationTickFunction(BaseSimulationFunction[T_co]):
@@ -752,10 +816,10 @@ class SimulationTickFunction(BaseSimulationFunction[T_co]):
 
     @final
     def defer(
-        self, other: "SimulationTickFunction[_DeferredT]", tick: Tick
-    ) -> _DeferredT:
+        self, other: "SimulationTickFunction[_DeferResultT]", tick: Tick
+    ) -> _DeferResultT:
         """Defer processing to another instance of a SimulationTickFunction."""
-        return other.evaluate_in_context(*self._ctx.export(), tick)
+        return self.defer_context(other).evaluate(tick)
 
 
 ###############
