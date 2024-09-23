@@ -6,14 +6,14 @@ census years.
 """
 
 from pathlib import Path
-from typing import Literal, Sequence, TypeGuard
+from typing import Literal, NamedTuple, Sequence, TypeGuard
 
 from geopandas import GeoDataFrame
 from geopandas import read_file as gp_read_file
 from pandas import DataFrame
 from pandas import concat as pd_concat
 
-from epymorph.cache import load_or_fetch_url, module_cache_path
+from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.error import GeographyError
 from epymorph.geography.us_census import STATE
 
@@ -81,6 +81,10 @@ In some TIGER years, data for the 4 territories were given in separate files.
 """
 
 
+def _url_to_cache_path(url: str) -> Path:
+    return _TIGER_CACHE_PATH / Path(url).name
+
+
 def _load_urls(
     cols: list[str],
     urls: list[str],
@@ -95,7 +99,7 @@ def _load_urls(
         # Fetch the contents of each file and read them as a DataFrame.
         dfs = [
             gp_read_file(
-                load_or_fetch_url(u, _TIGER_CACHE_PATH / Path(u).name),
+                load_or_fetch_url(u, _url_to_cache_path(u)),
                 engine="fiona",
                 ignore_geometry=ignore_geometry,
                 include_fields=cols,
@@ -130,6 +134,17 @@ def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataF
 def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
     """A type-guard function to ensure a year is a supported TIGER year."""
     return year in TIGER_YEARS
+
+
+class CacheEstimate(NamedTuple):
+    """Estimates related to data needed to fulfill TIGER requests."""
+
+    total_cache_size: int
+    """An estimate of the size of the files that we need to have cached to fulfill
+    a request."""
+    missing_cache_size: int
+    """An estimate of the size of the files that are not currently cached that we
+    would need to fulfill a request. Zero if we have all of the files already."""
 
 
 ##########
@@ -196,6 +211,20 @@ def get_states_info(year: TigerYear) -> DataFrame:
     return _get_info(*_get_states_config(year))
 
 
+def check_cache_states(year: TigerYear) -> CacheEstimate:
+    """Check the cache status for a US states and territories query."""
+    _, urls, _ = _get_states_config(year)
+    est_file_size = 9_000_000  # each states file is approx 9MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
+
+
 ############
 # COUNTIES #
 ############
@@ -248,6 +277,20 @@ def get_counties_info(year: TigerYear) -> DataFrame:
     without geography.
     """
     return _get_info(*_get_counties_config(year))
+
+
+def check_cache_counties(year: TigerYear) -> CacheEstimate:
+    """Check the cache status for a US counties query."""
+    _, urls, _ = _get_counties_config(year)
+    est_file_size = 75_000_000  # each county file is approx 75MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
 
 
 ##########
@@ -311,6 +354,22 @@ def get_tracts_info(
     return _get_info(*_get_tracts_config(year, state_id))
 
 
+def check_cache_tracts(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> CacheEstimate:
+    """Check the cache status for a US census tracts query."""
+    _, urls, _ = _get_tracts_config(year, state_id)
+    est_file_size = 7_000_000  # each tracts file is approx 7MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
+
+
 ################
 # BLOCK GROUPS #
 ################
@@ -370,3 +429,19 @@ def get_block_groups_info(
 ) -> DataFrame:
     """Get all US census block groups for the given census year, without geography."""
     return _get_info(*_get_block_groups_config(year, state_id))
+
+
+def check_cache_block_groups(
+    year: TigerYear, state_id: Sequence[str] | None = None
+) -> CacheEstimate:
+    """Check the cache status for a US census block groups query."""
+    _, urls, _ = _get_block_groups_config(year, state_id)
+    est_file_size = 1_250_000  # each block groups file is approx 1.25MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
