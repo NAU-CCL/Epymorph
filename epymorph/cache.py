@@ -272,6 +272,13 @@ def _resolve_cache_path(path: str | PathLike[str]) -> Path:
     return resolved
 
 
+def check_file_in_cache(cache_path: Path) -> bool:
+    """
+    Returns True if a file is currently in the cache.
+    """
+    return _resolve_cache_path(cache_path).exists()
+
+
 def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
     """
     Save a single file to the cache (overwriting the existing file, if any).

@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.data_shape import Shapes
+from epymorph.data_usage import DataEstimate
 from epymorph.simulation import AttributeDef, SimulationFunction
 
 T_co = TypeVar("T_co", bound=np.generic, covariant=True)
@@ -23,6 +24,15 @@ class Adrio(SimulationFunction[NDArray[T_co]]):
     to load data from external sources for epymorph simulations. This may be from
     web APIs, local files or database, or anything imaginable.
     """
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.__class__.__module__}.{self.__class__.__qualname__}"
+
+    def estimate_data(self) -> DataEstimate | None:
+        """Estimate the data usage of this ADRIO in a RUME.
+        If a reasonable estimate cannot be made, None is returned."""
+        return None
 
 
 AdrioClassT = TypeVar("AdrioClassT", bound=type[Adrio])

@@ -152,7 +152,7 @@ def _evaluation_context(
             if not isinstance(raw_value, Adrio):
                 value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
             else:
-                adrio_name = raw_value.__class__.__name__
+                adrio_name = raw_value.full_name
                 _events.on_adrio_start.publish(AdrioStart(adrio_name, name))
                 t0 = perf_counter()
                 value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
