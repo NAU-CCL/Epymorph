@@ -74,7 +74,7 @@ def map_data_by_county(
     numpy array whose ordering is the same as the nodes in the geo scope.
     """
     state_fips = tuple(STATE.truncate_list(scope.get_node_ids()))
-    gdf_counties = us_tiger.get_counties_geo(year)
+    gdf_counties = us_tiger.get_counties_geo(year, None)
     gdf_counties = _subset_states(gdf_counties, state_fips)
     gdf_borders = gdf_counties
     if outline == "states":

@@ -12,12 +12,22 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import accumulate, pairwise, starmap
-from typing import Callable, Mapping, NamedTuple, OrderedDict, Self, Sequence, final
+from typing import (
+    Callable,
+    Mapping,
+    NamedTuple,
+    OrderedDict,
+    Self,
+    Sequence,
+    final,
+)
 
 import numpy as np
 from numpy.typing import NDArray
 from sympy import Symbol
 
+from epymorph.adrio.adrio import Adrio
+from epymorph.cache import CACHE_PATH
 from epymorph.compartment_model import (
     BaseCompartmentModel,
     CombinedCompartmentModel,
@@ -28,6 +38,7 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import dtype_str
+from epymorph.data_usage import estimate_report
 from epymorph.database import AbsoluteName, ModuleNamePattern, NamePattern
 from epymorph.geography.scope import GeoScope
 from epymorph.initializer import Initializer
@@ -42,7 +53,7 @@ from epymorph.simulation import (
     TimeFrame,
     gpm_strata,
 )
-from epymorph.util import are_unique, map_values
+from epymorph.util import are_unique, list_not_none, map_values
 
 #######
 # GPM #
@@ -344,6 +355,33 @@ class Rume(ABC):
         # How would that work? Or maybe reconciling to time frame happens
         # at param evaluation time...
         return dataclasses.replace(self, time_frame=time_frame)
+
+    def estimate_data(
+        self,
+        *,
+        max_bandwidth: int = 1000**2,  # default: 1 MB/s
+    ) -> None:
+        """Prints a report estimating the data requirements of this RUME.
+
+        Includes data which must be downloaded and how much will be added to the file
+        cache. Provides a projected download time based on the given assumed maximum
+        network bandwidth (defaults to 1 MB/s).
+        """
+        estimates = list_not_none(
+            p.with_context(scope=self.scope, dim=self.dim).estimate_data()
+            for p in self.params.values()
+            if isinstance(p, Adrio)
+        )
+
+        lines = list[str]()
+        if len(estimates) == 0:
+            lines.append("ADRIO data usage is either negligible or non-estimable.")
+        else:
+            lines.append("ADRIO data usage estimation:")
+            lines.extend(estimate_report(CACHE_PATH, estimates, max_bandwidth))
+
+        for l in lines:
+            print(l)
 
 
 @dataclass(frozen=True)

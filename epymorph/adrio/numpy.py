@@ -33,7 +33,7 @@ class NPY(Adrio[Any]):
         self.array_slice = array_slice
 
     @override
-    def evaluate(self) -> NDArray:
+    def evaluate_adrio(self) -> NDArray:
         try:
             data = cast(NDArray, np.load(self.file_path))
             if self.array_slice is not None:
@@ -76,7 +76,7 @@ class NPZ(Adrio[Any]):
         self.array_slice = array_slice
 
     @override
-    def evaluate(self) -> NDArray:
+    def evaluate_adrio(self) -> NDArray:
         try:
             data = cast(NDArray, np.load(self.file_path)[self.array_name])
             if self.array_slice is not None:

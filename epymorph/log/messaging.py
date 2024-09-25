@@ -5,10 +5,13 @@ long-running tasks!
 """
 
 from contextlib import contextmanager
+from functools import partial
 from time import perf_counter
 from typing import Generator
 
-from epymorph.event import AdrioFinish, AdrioStart, EventBus, OnStart, OnTick
+from humanize import naturalsize
+
+from epymorph.event import AdrioProgress, EventBus, OnStart, OnTick
 from epymorph.util import progress, subscriptions
 
 _events = EventBus()
@@ -37,19 +40,45 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         start_time = perf_counter()
 
     def on_tick(tick: OnTick) -> None:
-        print(progress(tick.percent_complete), end="\r")
+        print(f"  {progress(tick.percent_complete)}", end="\r")
 
     def on_finish(_: None) -> None:
         end_time = perf_counter()
-        print(progress(1.0))
+        print(f"  {progress(1.0)}")
         if start_time is not None:
             print(f"Runtime: {(end_time - start_time):.3f}s")
 
-    def on_adrio_start(e: AdrioStart) -> None:
-        print(f"ADRIO {e.adrio_name} fetching `{e.attribute}`...", end="")
+    # keeping track of the length of the last line we printed
+    # lets us clear any trailing characters when rendering stuff
+    # after the progress bar of varying width
+    last_progress_length = 0
 
-    def on_adrio_finish(e: AdrioFinish) -> None:
-        print(f" done ({e.duration:.3f} seconds)")
+    def on_adrio_progress(e: AdrioProgress) -> None:
+        nonlocal last_progress_length
+        if e.ratio_complete == 0:
+            print(f"Loading {e.adrio_name}:")
+        if not e.final:
+            if e.download is None:
+                dl = ""
+            else:
+                total, downloaded, speed = e.download
+                ff = partial(naturalsize, binary=False)  # format file size
+                dwn = "?" if downloaded is None else ff(downloaded)
+                tot = "?" if total is None else ff(total)
+                spd = "?" if speed is None else ff(speed)
+                dl = f" {dwn}/{tot} ({spd}/s)"
+
+            line = f"  {progress(e.ratio_complete)}{dl}"
+            print(line.ljust(last_progress_length), end="\r")
+            last_progress_length = len(line)
+        else:
+            if e.duration is None:
+                dur = ""
+            else:
+                dur = f" ({e.duration:0.3f}s)"
+            line = f"  {progress(e.ratio_complete)}{dur}"
+            print(line.ljust(last_progress_length))
+            last_progress_length = 0
 
     with subscriptions() as subs:
         # Set up a subscriptions context, subscribe our handlers,
@@ -58,7 +87,6 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         subs.subscribe(_events.on_tick, on_tick)
         subs.subscribe(_events.on_finish, on_finish)
         if adrio:
-            subs.subscribe(_events.on_adrio_start, on_adrio_start)
-            subs.subscribe(_events.on_adrio_finish, on_adrio_finish)
+            subs.subscribe(_events.on_adrio_progress, on_adrio_progress)
         yield  # to outer context
         # And now our event handlers will be unsubscribed.

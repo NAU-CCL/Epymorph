@@ -69,6 +69,7 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-08-26-prism-adrio-demo.ipynb | Meaghan | | Demo and usage manual for PRISM ADRIO. |
 | 2024-08-28.ipynb | Trevor | | Demo of numpy ADRIOs. |
 | 2024-08-30.ipynb | Tyler | | Testing non-returner movement support. |
+| 2024-09-24.ipynb | Tyler | | Demonstrating ADRIO with simulated download activity. |
 
 ## Contributing
 

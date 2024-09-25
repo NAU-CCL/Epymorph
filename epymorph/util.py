@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
+from math import floor
 from re import compile as re_compile
 from typing import (
     Any,
@@ -94,7 +95,7 @@ def iterator_length(it: Iterable[Any]) -> int:
     return length
 
 
-def list_not_none(it: Iterable[T]) -> list[T]:
+def list_not_none(it: Iterable[T | None]) -> list[T]:
     """Convert an iterable to a list, skipping any entries that are None."""
     return [x for x in it if x is not None]
 
@@ -164,6 +165,11 @@ def as_list(x: T | list[T]) -> list[T]:
     If `x` is a list, return it unchanged. If it's a single value, wrap it in a list.
     """
     return x if isinstance(x, list) else [x]
+
+
+def zip_list(xs: Iterable[A], ys: Iterable[B]) -> list[tuple[A, B]]:
+    """Zip (strict) two iterables together as a list."""
+    return list(zip(xs, ys, strict=True))
 
 
 K = TypeVar("K")
@@ -513,12 +519,14 @@ def check_ndarray(
 # console decorations
 
 
-def progress(percent: float) -> str:
+def progress(percent: float, length: int = 20) -> str:
     """Creates a progress bar string."""
-    p = 100 * max(0.0, min(percent, 1.0))
-    n = int(p // 5)
-    bar = ("#" * n) + (" " * (20 - n))
-    return f"|{bar}| {p:.0f}% "
+    if length < 1:
+        raise ValueError("progress bar length cannot be less than 1")
+    p = max(0.0, min(percent, 1.0))
+    n = floor(length * p)
+    bar = ("#" * n) + (" " * (length - n))
+    return f"|{bar}| {(100 * p):.0f}% "
 
 
 # pub-sub events

@@ -6,16 +6,18 @@ census years.
 """
 
 from pathlib import Path
-from typing import Literal, Sequence, TypeGuard
+from typing import Literal, NamedTuple, Sequence, TypeGuard
 
 from geopandas import GeoDataFrame
 from geopandas import read_file as gp_read_file
 from pandas import DataFrame
 from pandas import concat as pd_concat
 
-from epymorph.cache import load_or_fetch_url, module_cache_path
+from epymorph.adrio.adrio import ProgressCallback
+from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.error import GeographyError
 from epymorph.geography.us_census import STATE
+from epymorph.util import zip_list
 
 # A fair question is why did we implement our own TIGER files loader instead of using
 # pygris? The short answer is for efficiently and to correct inconsistencies that matter
@@ -81,31 +83,47 @@ In some TIGER years, data for the 4 territories were given in separate files.
 """
 
 
+def _url_to_cache_path(url: str) -> Path:
+    return _TIGER_CACHE_PATH / Path(url).name
+
+
+class _DataConfig(NamedTuple):
+    urls: list[str]
+    """URLs for all of the required data files."""
+    columns: list[tuple[str, str]]
+    """Map each column's name in the source file to its final name in the result."""
+
+
 def _load_urls(
-    cols: list[str],
-    urls: list[str],
-    result_cols: list[str],
+    config: _DataConfig,
+    *,
     ignore_geometry: bool,
+    progress: ProgressCallback | None,
 ) -> DataFrame:
     """
     Load TIGER files either from disk cache or the network.
     The result is processed and returned as one large DataFrame.
     """
+    urls, columns = config
+    processing_steps = len(urls) + 1  # add one to account for the post-processing
     try:
         # Fetch the contents of each file and read them as a DataFrame.
-        dfs = [
-            gp_read_file(
-                load_or_fetch_url(u, _TIGER_CACHE_PATH / Path(u).name),
+        dfs = list[DataFrame]()
+        for i, u in enumerate(urls):
+            u_df = gp_read_file(
+                load_or_fetch_url(u, _url_to_cache_path(u)),
                 engine="fiona",
                 ignore_geometry=ignore_geometry,
-                include_fields=cols,
+                include_fields=[c for c, _ in columns],
             )
-            for u in urls
-        ]
+            dfs.append(u_df)
+            if progress is not None:
+                progress((i + 1) / processing_steps, None)
+
         # Concat the DataFrames, fix column names, and data quality checks.
         combined_df = (
             pd_concat(dfs, ignore_index=True)
-            .rename(columns=dict(zip(cols, result_cols)))
+            .rename(columns=dict(columns))
             .drop_duplicates()
         )
         # Drop records that aren't in our supported set of states.
@@ -116,15 +134,20 @@ def _load_urls(
         raise GeographyError(msg) from e
 
 
-def _get_geo(cols: list[str], urls: list[str], result_cols: list[str]) -> GeoDataFrame:
+def _get_geo(
+    config: _DataConfig,
+    progress: ProgressCallback | None,
+) -> GeoDataFrame:
     """Universal logic for loading a data set with its geography."""
-    combined_df = _load_urls(cols, urls, result_cols, ignore_geometry=False)
-    return GeoDataFrame(combined_df)
+    return GeoDataFrame(_load_urls(config, ignore_geometry=False, progress=progress))
 
 
-def _get_info(cols: list[str], urls: list[str], result_cols: list[str]) -> DataFrame:
+def _get_info(
+    config: _DataConfig,
+    progress: ProgressCallback | None,
+) -> DataFrame:
     """Universal logic for loading a data set without its geography."""
-    return _load_urls(cols, urls, result_cols, ignore_geometry=True)
+    return _load_urls(config, ignore_geometry=True, progress=progress)
 
 
 def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
@@ -132,12 +155,23 @@ def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
     return year in TIGER_YEARS
 
 
+class CacheEstimate(NamedTuple):
+    """Estimates related to data needed to fulfill TIGER requests."""
+
+    total_cache_size: int
+    """An estimate of the size of the files that we need to have cached to fulfill
+    a request."""
+    missing_cache_size: int
+    """An estimate of the size of the files that are not currently cached that we
+    would need to fulfill a request. Zero if we have all of the files already."""
+
+
 ##########
 # STATES #
 ##########
 
 
-def _get_states_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
+def _get_states_config(year: TigerYear) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (states)."""
     match year:
         case year if year in range(2011, 2024):
@@ -181,19 +215,42 @@ def _get_states_config(year: TigerYear) -> tuple[list[str], list[str], list[str]
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
+    columns = zip_list(
+        cols, ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
+    )
+    return _DataConfig(urls, columns)
 
 
-def get_states_geo(year: TigerYear) -> GeoDataFrame:
+def get_states_geo(
+    year: TigerYear,
+    progress: ProgressCallback | None = None,
+) -> GeoDataFrame:
     """Get all US states and territories for the given census year, with geography."""
-    return _get_geo(*_get_states_config(year))
+    return _get_geo(_get_states_config(year), progress)
 
 
-def get_states_info(year: TigerYear) -> DataFrame:
+def get_states_info(
+    year: TigerYear,
+    progress: ProgressCallback | None = None,
+) -> DataFrame:
     """
     Get all US states and territories for the given census year, without geography.
     """
-    return _get_info(*_get_states_config(year))
+    return _get_info(_get_states_config(year), progress)
+
+
+def check_cache_states(year: TigerYear) -> CacheEstimate:
+    """Check the cache status for a US states and territories query."""
+    urls, _ = _get_states_config(year)
+    est_file_size = 9_000_000  # each states file is approx 9MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
 
 
 ############
@@ -201,7 +258,7 @@ def get_states_info(year: TigerYear) -> DataFrame:
 ############
 
 
-def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[str]]:
+def _get_counties_config(year: TigerYear) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (counties)."""
     match year:
         case year if year in range(2011, 2024):
@@ -231,23 +288,44 @@ def _get_counties_config(year: TigerYear) -> tuple[list[str], list[str], list[st
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"]
+    columns = zip_list(cols, ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"])
+    return _DataConfig(urls, columns)
 
 
-def get_counties_geo(year: TigerYear) -> GeoDataFrame:
+def get_counties_geo(
+    year: TigerYear,
+    progress: ProgressCallback | None,
+) -> GeoDataFrame:
     """
     Get all US counties and county-equivalents for the given census year,
     with geography.
     """
-    return _get_geo(*_get_counties_config(year))
+    return _get_geo(_get_counties_config(year), progress)
 
 
-def get_counties_info(year: TigerYear) -> DataFrame:
+def get_counties_info(
+    year: TigerYear,
+    progress: ProgressCallback | None,
+) -> DataFrame:
     """
     Get all US counties and county-equivalents for the given census year,
     without geography.
     """
-    return _get_info(*_get_counties_config(year))
+    return _get_info(_get_counties_config(year), progress)
+
+
+def check_cache_counties(year: TigerYear) -> CacheEstimate:
+    """Check the cache status for a US counties query."""
+    urls, _ = _get_counties_config(year)
+    est_file_size = 75_000_000  # each county file is approx 75MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
 
 
 ##########
@@ -256,8 +334,9 @@ def get_counties_info(year: TigerYear) -> DataFrame:
 
 
 def _get_tracts_config(
-    year: TigerYear, state_id: Sequence[str] | None = None
-) -> tuple[list[str], list[str], list[str]]:
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (tracts)."""
     states = get_states_info(year)
     if state_id is not None:
@@ -294,21 +373,43 @@ def _get_tracts_config(
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
+    columns = zip_list(cols, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"])
+    return _DataConfig(urls, columns)
 
 
 def get_tracts_geo(
-    year: TigerYear, state_id: Sequence[str] | None = None
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+    progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
     """Get all US census tracts for the given census year, with geography."""
-    return _get_geo(*_get_tracts_config(year, state_id))
+    return _get_geo(_get_tracts_config(year, state_id), progress=progress)
 
 
 def get_tracts_info(
-    year: TigerYear, state_id: Sequence[str] | None = None
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+    progress: ProgressCallback | None = None,
 ) -> DataFrame:
     """Get all US census tracts for the given census year, without geography."""
-    return _get_info(*_get_tracts_config(year, state_id))
+    return _get_info(_get_tracts_config(year, state_id), progress=progress)
+
+
+def check_cache_tracts(
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+) -> CacheEstimate:
+    """Check the cache status for a US census tracts query."""
+    urls, _ = _get_tracts_config(year, state_id)
+    est_file_size = 7_000_000  # each tracts file is approx 7MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
 
 
 ################
@@ -317,8 +418,9 @@ def get_tracts_info(
 
 
 def _get_block_groups_config(
-    year: TigerYear, state_id: Sequence[str] | None = None
-) -> tuple[list[str], list[str], list[str]]:
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (block groups)."""
     states = get_states_info(year)
     if state_id is not None:
@@ -355,18 +457,40 @@ def _get_block_groups_config(
             ]
         case _:
             raise GeographyError(f"Unsupported year: {year}")
-    return cols, urls, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
+    columns = zip_list(cols, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"])
+    return _DataConfig(urls, columns)
 
 
 def get_block_groups_geo(
-    year: TigerYear, state_id: Sequence[str] | None = None
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+    progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
     """Get all US census block groups for the given census year, with geography."""
-    return _get_geo(*_get_block_groups_config(year, state_id))
+    return _get_geo(_get_block_groups_config(year, state_id), progress=progress)
 
 
 def get_block_groups_info(
-    year: TigerYear, state_id: Sequence[str] | None = None
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+    progress: ProgressCallback | None = None,
 ) -> DataFrame:
     """Get all US census block groups for the given census year, without geography."""
-    return _get_info(*_get_block_groups_config(year, state_id))
+    return _get_info(_get_block_groups_config(year, state_id), progress=progress)
+
+
+def check_cache_block_groups(
+    year: TigerYear,
+    state_id: Sequence[str] | None = None,
+) -> CacheEstimate:
+    """Check the cache status for a US census block groups query."""
+    urls, _ = _get_block_groups_config(year, state_id)
+    est_file_size = 1_250_000  # each block groups file is approx 1.25MB
+    total_files = len(urls)
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+    return CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )

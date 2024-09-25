@@ -307,6 +307,7 @@ dependencies = [
     { name = "census" },
     { name = "geopandas" },
     { name = "graphviz" },
+    { name = "humanize" },
     { name = "ipython" },
     { name = "jsonpickle" },
     { name = "matplotlib" },
@@ -331,6 +332,7 @@ requires-dist = [
     { name = "census", specifier = "~=0.8.22" },
     { name = "geopandas", specifier = "~=0.14.4" },
     { name = "graphviz", specifier = "~=0.20.3" },
+    { name = "humanize", specifier = "~=4.10.0" },
     { name = "ipython", specifier = "~=8.26.0" },
     { name = "jsonpickle", specifier = "~=3.2.1" },
     { name = "matplotlib", specifier = "~=3.9.0" },
@@ -444,6 +446,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fa/83/5a40d19b8347f017e417710907f824915fba411a9befd092e52746b63e9f/graphviz-0.20.3.zip", hash = "sha256:09d6bc81e6a9fa392e7ba52135a9d49f1ed62526f96499325930e87ca1b5925d", size = 256455 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/00/be/d59db2d1d52697c6adc9eacaf50e8965b6345cc143f671e1ed068818d5cf/graphviz-0.20.3-py3-none-any.whl", hash = "sha256:81f848f2904515d8cd359cc611faba817598d2feaac4027b266aa3eda7b3dde5", size = 47126 },
+]
+
+[[package]]
+name = "humanize"
+version = "4.10.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5d/b1/c8f05d5dc8f64030d8cc71e91307c1daadf6ec0d70bcd6eabdfd9b6f153f/humanize-4.10.0.tar.gz", hash = "sha256:06b6eb0293e4b85e8d385397c5868926820db32b9b654b932f57fa41c23c9978", size = 79192 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8f/49/a29c79bea335e52fb512a43faf84998c184c87fef82c65f568f8c56f2642/humanize-4.10.0-py3-none-any.whl", hash = "sha256:39e7ccb96923e732b5c2e27aeaa3b10a8dfeeba3eb965ba7b74a3eb0e30040a6", size = 126957 },
 ]
 
 [[package]]

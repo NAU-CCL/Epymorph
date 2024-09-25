@@ -6,7 +6,7 @@ import numpy as np
 
 from epymorph import util
 from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
-from epymorph.util import Event, subscriptions
+from epymorph.util import Event, progress, subscriptions
 from epymorph.util import match as m
 
 
@@ -104,6 +104,39 @@ class TestUtil(unittest.TestCase):
             util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim2, True))
         with self.assertRaises(util.NumpyTypeError):
             util.check_ndarray(arr, dtype=m.dtype(np.str_))
+
+
+class TestProgress(unittest.TestCase):
+    def test_zero_percent(self):
+        self.assertEqual(progress(0), "|                    | 0% ")
+
+    def test_full_percent(self):
+        self.assertEqual(progress(1), "|####################| 100% ")
+
+    def test_half_percent(self):
+        self.assertEqual(progress(0.5), "|##########          | 50% ")
+
+    def test_clamping_below_zero(self):
+        self.assertEqual(progress(-0.1), "|                    | 0% ")
+
+    def test_clamping_above_one(self):
+        self.assertEqual(progress(1.5), "|####################| 100% ")
+
+    def test_custom_length(self):
+        self.assertEqual(progress(0.5, 10), "|#####     | 50% ")
+
+    def test_small_length(self):
+        self.assertEqual(progress(0.51, 1), "| | 51% ")
+
+    def test_long_length(self):
+        self.assertEqual(
+            progress(0.7, 43), "|##############################             | 70% "
+        )
+
+    def test_invalid_length(self):
+        """Test with invalid length (less than 1)."""
+        with self.assertRaises(ValueError):
+            progress(0.5, 0)
 
 
 class TestEvent(unittest.TestCase):

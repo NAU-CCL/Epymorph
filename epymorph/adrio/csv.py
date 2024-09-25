@@ -210,7 +210,7 @@ class CSV(Adrio[Any]):
         self.skiprows = skiprows
 
     @override
-    def evaluate(self) -> NDArray[Any]:
+    def evaluate_adrio(self) -> NDArray[Any]:
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
             raise GeoValidationException(msg)
@@ -290,7 +290,7 @@ class CSVTimeSeries(Adrio[Any]):
         self.time_col = time_col
 
     @override
-    def evaluate(self) -> NDArray[Any]:
+    def evaluate_adrio(self) -> NDArray[Any]:
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
             raise GeoValidationException(msg)
@@ -383,7 +383,7 @@ class CSVMatrix(Adrio[Any]):
         self.skiprows = skiprows
 
     @override
-    def evaluate(self) -> NDArray[Any]:
+    def evaluate_adrio(self) -> NDArray[Any]:
         if len({self.from_key_col, self.to_key_col, self.data_col}) != 3:
             msg = "From key column, to key column, and data column must all be unique."
             raise GeoValidationException(msg)
