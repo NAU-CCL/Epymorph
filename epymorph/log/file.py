@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Generator
 
 from epymorph.event import (
-    AdrioFinish,
+    AdrioProgress,
     EventBus,
     OnMovementClause,
     OnMovementFinish,
@@ -63,11 +63,9 @@ def file_log(
         if start_time is not None:
             sim_log.info(f"Runtime: {(end_time - start_time):.3f}s")
 
-    def on_adrio_finish(e: AdrioFinish) -> None:
-        adrio_log.info(
-            f"ADRIO {e.adrio_name} fetched `{e.attribute}` "
-            f"in ({e.duration:.3f} seconds)"
-        )
+    def on_adrio_progress(e: AdrioProgress) -> None:
+        if e.final:
+            adrio_log.info(f"Loaded ADRIO {e.adrio_name} in ({e.duration:.3f} seconds)")
 
     def on_movement_start(e: OnMovementStart) -> None:
         mm_log.info("Processing movement for day %d, step %d.", e.day, e.step)
@@ -93,7 +91,7 @@ def file_log(
         subs.subscribe(_events.on_tick, on_tick)
         subs.subscribe(_events.on_finish, on_finish)
 
-        subs.subscribe(_events.on_adrio_finish, on_adrio_finish)
+        subs.subscribe(_events.on_adrio_progress, on_adrio_progress)
 
         subs.subscribe(_events.on_movement_start, on_movement_start)
         subs.subscribe(_events.on_movement_clause, on_movement_clause)

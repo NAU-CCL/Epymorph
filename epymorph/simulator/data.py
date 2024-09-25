@@ -1,6 +1,5 @@
 """Functions for managing simulation data."""
 
-from time import perf_counter
 from typing import Callable, Generator, Mapping, Sequence, TypeVar
 
 import numpy as np
@@ -18,7 +17,7 @@ from epymorph.database import (
     NamePattern,
 )
 from epymorph.error import AttributeException, InitException
-from epymorph.event import AdrioFinish, AdrioStart, EventBus
+from epymorph.event import EventBus
 from epymorph.params import ParamExpressionTimeAndNode, ParamFunction, ParamValue
 from epymorph.rume import GEO_LABELS, Gpm, Rume
 from epymorph.simulation import NamespacedAttributeResolver, gpm_strata
@@ -148,16 +147,7 @@ def _evaluation_context(
                 dep_name = namespace.to_absolute(dependency.name)
                 evaluate(dep_name, [*chain, name], dependency.default_value)
             data = NamespacedAttributeResolver(attr_db, rume.dim, namespace)
-
-            if not isinstance(raw_value, Adrio):
-                value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
-            else:
-                adrio_name = raw_value.full_name
-                _events.on_adrio_start.publish(AdrioStart(adrio_name, name))
-                t0 = perf_counter()
-                value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
-                t1 = perf_counter()
-                _events.on_adrio_finish.publish(AdrioFinish(adrio_name, name, t1 - t0))
+            value = raw_value.evaluate_in_context(data, rume.dim, rume.scope, rng)
 
         elif isinstance(raw_value, type) and issubclass(raw_value, ParamFunction):
             msg = (

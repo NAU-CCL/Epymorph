@@ -9,7 +9,7 @@ from typing import Literal, NamedTuple, Sequence, TypeGuard
 
 import numpy as np
 import pandas as pd
-from census import Census
+from census import Census, CensusException
 from numpy.typing import NDArray
 from pandas import DataFrame
 from typing_extensions import override
@@ -237,12 +237,16 @@ def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
     queries = _make_acs5_queries(scope)
 
     # fetch all queries and combine results
-    acs_df = pd.concat(
-        pd.DataFrame.from_records(
-            census.acs5.get(variables, geo=query, year=scope.year)
+    try:
+        acs_df = pd.concat(
+            pd.DataFrame.from_records(
+                census.acs5.get(variables, geo=query, year=scope.year)
+            )
+            for query in queries
         )
-        for query in queries
-    )
+    except CensusException as e:
+        err = "Unable to load data from the US Census API at this time."
+        raise DataResourceException(err) from e
     if acs_df.empty:
         msg = (
             "ACS5 query returned empty. "
@@ -277,7 +281,7 @@ class Population(Adrio[np.int64]):
     """
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = _validate_scope(self.scope)
         acs_df = _fetch_acs5(["B01001_001E"], scope)
         return acs_df["B01001_001E"].to_numpy(dtype=np.int64)
@@ -291,7 +295,7 @@ class PopulationByAgeTable(Adrio[np.int64]):
     """
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = _validate_scope(self.scope)
         # NOTE: asking acs5 explicitly for the [B01001_001E, ...] vars
         # seems to be about twice as fast as asking for group(B01001)
@@ -373,7 +377,7 @@ class PopulationByAge(Adrio[np.int64]):
         self._age_range = AgeRange(age_range_start, age_range_end)
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = _validate_scope(self.scope)
 
         age_ranges = [
@@ -408,7 +412,7 @@ class AverageHouseholdSize(Adrio[np.float64]):
     """
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         acs_df = _fetch_acs5(["B25010_001E"], scope)
         return acs_df["B25010_001E"].to_numpy(dtype=np.float64)
@@ -446,7 +450,7 @@ class DissimilarityIndex(Adrio[np.float64]):
         """The race category of the minority population of interest"""
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         high_scope = _validate_scope(self.scope)
         if isinstance(high_scope, BlockGroupScope):
             msg = "Dissimilarity index cannot be retreived for block group scope."
@@ -491,7 +495,7 @@ class GiniIndex(Adrio[np.float64]):
     """
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
 
         # if granularity is block groups, use the data of the parent tract
@@ -536,7 +540,7 @@ class MedianAge(Adrio[np.float64]):
     """
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         acs_df = _fetch_acs5(["B01002_001E"], scope)
         return acs_df["B01002_001E"].to_numpy(dtype=np.float64)
@@ -551,7 +555,7 @@ class MedianIncome(Adrio[np.float64]):
     """
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         acs_df = _fetch_acs5(["B19013_001E"], scope)
         return acs_df["B19013_001E"].to_numpy(dtype=np.float64)

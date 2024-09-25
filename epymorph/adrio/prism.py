@@ -142,7 +142,7 @@ class Precipitation(Adrio[np.float64]):
         self.date_range = _validate_dates(date_range)
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
         scope = _validate_scope(scope)
         centroids = self.data("centroid")
@@ -164,7 +164,7 @@ class DewPoint(Adrio[np.float64]):
         self.date_range = _validate_dates(date_range)
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
         scope = _validate_scope(scope)
         centroids = self.data("centroid")
@@ -199,7 +199,7 @@ class Temperature(Adrio[np.float64]):
         self.date_range = _validate_dates(date_range)
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
         scope = _validate_scope(scope)
         temp_var = self.temp_variables[self.temp_var]
@@ -232,7 +232,7 @@ class VaporPressureDeficit(Adrio[np.float64]):
         self.date_range = _validate_dates(date_range)
 
     @override
-    def evaluate(self) -> NDArray[np.float64]:
+    def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
         scope = _validate_scope(scope)
         vpd_var = self.vpd_variables[self.vpd_var]

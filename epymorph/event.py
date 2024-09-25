@@ -10,7 +10,6 @@ from numpy.typing import NDArray
 
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.database import AbsoluteName
 from epymorph.simulation import TimeFrame
 from epymorph.util import Event, Singleton
 
@@ -102,24 +101,42 @@ class OnMovementFinish(NamedTuple):
 ################
 
 
-class AdrioStart(NamedTuple):
-    """The payload of AdrioEvents.on_adrio_start"""
+class DownloadActivity(NamedTuple):
+    """A description of ADRIO network download activity.
+
+    All fields are optional, as it may be possible to measure some but not others
+    depending on the data source. ADRIOs should avoid reporting DownloadActivity
+    where all fields are None, and should instead just report None for
+    `AdrioProgress.download`"""
+
+    total: int | None
+    """How many bytes are expected to be downloaded?"""
+    downloaded: int | None
+    """How many bytes have been downloaded?"""
+    download_speed: int | None
+    """What is the current approximate download speed?"""
+
+
+class AdrioProgress(NamedTuple):
+    """The payload of AdrioEvents.on_adrio_progress
+
+    Perhaps not all ADRIOs will report progress, but those that do
+    should emit one event when they start (with `ratio_complete` == 0)
+    and one when they finish (with `ratio_complete` == 1). They are free
+    to report as many intermediate progress events as they like."""
 
     adrio_name: str
     """The name of the ADRIO."""
-    attribute: AbsoluteName
-    """The name of the attribute."""
-
-
-class AdrioFinish(NamedTuple):
-    """The payload of AdrioEvents.on_adrio_finish"""
-
-    adrio_name: str
-    """The name of the ADRIO."""
-    attribute: AbsoluteName
-    """The name of the attribute."""
-    duration: float
-    """The number of seconds spent fetching."""
+    # attribute: AbsoluteName # TODO: see if we can get AbsoluteName here...
+    # """The name of the attribute."""
+    final: bool
+    """Is this the last progress update for this ADRIO?"""
+    ratio_complete: float
+    """What ratio complete is it? (0: just started; 1: done)"""
+    download: DownloadActivity | None
+    """Download activity if any, and if it can be measured."""
+    duration: float | None
+    """If complete, how long did the ADRIO take overall (in seconds)?"""
 
 
 ############
@@ -155,14 +172,8 @@ class EventBus(metaclass=Singleton):
     """
 
     # ADRIO Events
-    on_adrio_start: Event[AdrioStart]
+    on_adrio_progress: Event[AdrioProgress]
     """Event fires when an ADRIO is fetching data."""
-
-    # on_adrio_progress: Event[AdrioProgress]
-    # """Event that fires when..."""
-
-    on_adrio_finish: Event[AdrioFinish]
-    """Event fires when an ADRIO has finished fetching data."""
 
     def __init__(self):
         # SimulationEvents
@@ -174,5 +185,4 @@ class EventBus(metaclass=Singleton):
         self.on_movement_clause = Event()
         self.on_movement_finish = Event()
         # AdrioEvents
-        self.on_adrio_start = Event()
-        self.on_adrio_finish = Event()
+        self.on_adrio_progress = Event()

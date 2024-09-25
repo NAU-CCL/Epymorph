@@ -231,7 +231,7 @@ class Commuters(Adrio[np.int64]):
         self.job_type = job_type
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = job_variables[self.job_type]
@@ -265,7 +265,7 @@ class CommutersByAge(Adrio[np.int64]):
         self.job_type = job_type
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         age_var = self.age_variables[self.age_range]
@@ -302,7 +302,7 @@ class CommutersByEarnings(Adrio[np.int64]):
         self.job_type = job_type
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         earning_var = self.earnings_variables[self.earning_range]
@@ -337,7 +337,7 @@ class CommutersByIndustry(Adrio[np.int64]):
         self.job_type = job_type
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         industry_var = self.industry_variables[self.industry]

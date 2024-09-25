@@ -361,7 +361,7 @@ def get_us_counties(year: int) -> CountiesInfo:
         raise GeographyError(f"Unsupported year: {year}")
 
     def _get_us_counties() -> CountiesInfo:
-        counties_df = us_tiger.get_counties_info(year).sort_values("GEOID")
+        counties_df = us_tiger.get_counties_info(year, None).sort_values("GEOID")
         return CountiesInfo(
             geoid=counties_df["GEOID"].to_numpy(np.str_),
             name=counties_df["NAME"].to_numpy(np.str_),

@@ -23,7 +23,7 @@ class Commuters(Adrio[np.int64]):
     """Makes an ADRIO to retrieve ACS commuting flow data."""
 
     @override
-    def evaluate(self) -> NDArray[np.int64]:
+    def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
 
         if not isinstance(scope, CensusScope):
