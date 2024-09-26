@@ -24,6 +24,9 @@ class AbsoluteHumidity(Adrio[np.float64]):
         temperature = self.data("temperature")
         relH = self.defer(RelativeHumidity())
         npHumidity = []
+
+        # equation from relative humidity to absolute humidity provided by following url
+        # https://carnotcycle.wordpress.com/2012/08/04/how-to-convert-relative-humidity-to-absolute-humidity/
         npHumidity = (
             (
                 6.112
@@ -55,6 +58,8 @@ class RelativeHumidity(Adrio[np.float64]):
         dewpoint = self.data("dewpoint")
         npHumidity = []
 
+        # equation for calculating relative humidity provided by following url
+        # https://qed.epa.gov/hms/meteorology/humidity/algorithms/#:~:text=Relative%20humidity%20is%20calculated%20using,is%20air%20temperature%20(celsius).
         npHumidity = 100 * (
             np.exp((17.625 * dewpoint) / (243.04 + dewpoint))
             / np.exp((17.625 * temperature) / (243.04 + temperature))
