@@ -27,15 +27,19 @@ class AbsoluteHumidity(Adrio[np.float64]):
 
         # equation from relative humidity to absolute humidity provided by following url
         # https://carnotcycle.wordpress.com/2012/08/04/how-to-convert-relative-humidity-to-absolute-humidity/
+        # values 17.67 and 243.5 are changed to 17.625 and 243.04 respectively to cover
+        # a larger range of temperature values with a smaller margin of error
+        # (Alduchov and Eskridge 1996)
+        constants = 6.112 * 2.16679
         npHumidity = (
             (
-                6.112
-                * np.exp((17.67 * temperature) / (temperature + 243.5))
-                * relH
-                * 2.1674
+                constants
+                * np.exp((17.625 * temperature) / (temperature + 243.04))
+                * (relH)
             )
             / (273.15 + temperature)
-        ) / 1000
+            / 1000
+        )
 
         return npHumidity
 
