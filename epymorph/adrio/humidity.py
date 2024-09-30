@@ -1,3 +1,5 @@
+from warnings import warn
+
 import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
@@ -38,7 +40,7 @@ class AbsoluteHumidity(Adrio[np.float64]):
                 * (relH)
             )
             / (273.15 + temperature)
-            / 1000
+            / 1000  # convert to kilograms
         )
 
         return npHumidity
@@ -68,5 +70,9 @@ class RelativeHumidity(Adrio[np.float64]):
             np.exp((17.625 * dewpoint) / (243.04 + dewpoint))
             / np.exp((17.625 * temperature) / (243.04 + temperature))
         )
+
+        # if the humidity exceeds 100%, warn users
+        if (npHumidity > 100).any():
+            warn("At least one value of relative humidity exceeds 100%.")
 
         return np.array(npHumidity, dtype=np.float64)
