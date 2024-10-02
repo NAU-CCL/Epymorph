@@ -34,6 +34,8 @@
 # You will use that to authenticate when the script prompts you -- use your GitHub username
 # as the username and the PAT itself as your password.
 #
+# New PATs may require NAU-CCL admin approval before they are active.
+#
 # === Why the two job files? (job.sh and example-job.py) ===
 #
 # The job.sh file configures Slurm job settings and executes Python with a proper environment.
@@ -72,7 +74,8 @@ if [ ! -d "epymorph" ]; then
     echo ""
     echo "You will first need to set up a PAT with read-access to the repo contents & metadata."
     echo "  https://github.com/settings/tokens?type=beta"
-    echo "Provide your user name and PAT when prompted..."
+    echo "  (You may need admin approval before the token is active.)"
+    echo "Provide your user name and use the PAT as your password when prompted..."
     echo ""
 
     git clone https://github.com/NAU-CCL/Epymorph.git epymorph
