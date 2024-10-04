@@ -98,7 +98,6 @@ def _fetch_raster(
         if progress is not None:
             # incremement progress (i + 1), and divide by the processing steps
             progress((i + 1) / processing_steps, None)
-        # (representing the progress by how many total files have been completed)
 
         yield file
 
@@ -155,52 +154,43 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
-def _estimate_size(
-    file_size: int, date_range: TimeFrame, attribute: str
-) -> CacheEstimate:
-    """
-    Estimate the size of all of the files, whether in cache or fetching.
-    """
-    # setup urls as list to check if theyre in the cache
-
-    # set up date variables to check stability
-    first_day = date_range.start_date
-    last_day = date_range.end_date
-    latest_date = datetype.today() - timedelta(days=1)
-
-    # the stability of PRISM data is defined by date, specified around the 6 month mark
-    six_months_ago = datetype.today() + relativedelta(months=-6)
-    last_completed_month = six_months_ago.replace(day=1) - timedelta(days=1)
-
-    date_list = [
-        first_day + timedelta(days=x) for x in range((last_day - first_day).days + 1)
-    ]
-
-    urls, _, _ = [
-        _generate_file_name(attribute, latest_date, last_completed_month, day)
-        for day in date_list
-    ]
-
-    total_files = date_range.duration_days
-    missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
-    )
-
-    est_file_size = Literal[file_size]
-
-    return CacheEstimate(
-        total_cache_size=total_files * est_file_size,
-        missing_cache_size=missing_files * est_file_size,
-    )
-
-
-def _estimate_data(
+def _estimate_prism(
     self, file_size: int, date_range: TimeFrame, attribute: str
 ) -> DataEstimate:
     """
     Grab estimates for the PRISM simulation.
     """
-    est = _estimate_size(file_size, date_range, attribute)
+    est_file_size = file_size
+    total_files = date_range.duration_days
+
+    # setup urls as list to check if theyre in the cache
+
+    # setup date variables
+    first_day = date_range.start_date
+    last_day = date_range.end_date
+    latest_date = datetype.today() - timedelta(days=1)
+    six_months_ago = datetype.today() + relativedelta(months=-6)
+    last_completed_month = six_months_ago.replace(day=1) - timedelta(days=1)
+    date_list = [
+        first_day + timedelta(days=x) for x in range((last_day - first_day).days + 1)
+    ]
+
+    # get url names to check in cache
+    urls = [
+        _generate_file_name(attribute, latest_date, last_completed_month, day)[0]
+        for day in date_list
+    ]
+
+    # sum the missing files
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+    )
+
+    # calculate the cache estimate
+    est = CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
 
     key = ""
     return DataEstimate(
@@ -227,10 +217,10 @@ class Precipitation(Adrio[np.float64]):
     def __init__(self, date_range: TimeFrame):
         self.date_range = _validate_dates(date_range)
 
-    # estimating data simulation
-    def estimate_sim(self) -> DataEstimate:
-        file_size = 1_200_00
-        return _estimate_data(self, file_size, self.date_range, "ppt")
+    def estimate_data(self) -> DataEstimate:
+        file_size = 1_200_000
+        est = _estimate_prism(self, file_size, self.date_range, "ppt")
+        return est
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -256,10 +246,13 @@ class DewPoint(Adrio[np.float64]):
     def __init__(self, date_range: TimeFrame):
         self.date_range = _validate_dates(date_range)
 
-    # estimating data simulation
-    def estimate_sim(self) -> DataEstimate:
-        file_size = 1_700_00
-        return _estimate_data(self, file_size, self.date_range, "tdmean")
+    def estimate_data(self) -> DataEstimate:
+        year = self.date_range.end_date.year
+        if year > 2020:
+            file_size = 1_800_000
+        else:
+            file_size = 1_400_000
+        return _estimate_prism(self, file_size, self.date_range, "tdmean")
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -296,10 +289,13 @@ class Temperature(Adrio[np.float64]):
         self.temp_var = temp_var
         self.date_range = _validate_dates(date_range)
 
-    # estimating data simulation
-    def estimate_sim(self) -> DataEstimate:
-        file_size = 1_700_00
-        return _estimate_data(self, file_size, self.date_range, self.temp_var)
+    def estimate_data(self) -> DataEstimate:
+        year = self.date_range.end_date.year
+        if year > 2020:
+            file_size = 1_700_000
+        else:
+            file_size = 1_400_000
+        return _estimate_prism(self, file_size, self.date_range, self.temp_var)
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -334,10 +330,13 @@ class VaporPressureDeficit(Adrio[np.float64]):
         self.vpd_var = vpd_var
         self.date_range = _validate_dates(date_range)
 
-    # estimating data simulation
-    def estimate_sim(self) -> DataEstimate:
-        file_size = 1_600_00
-        return _estimate_data(self, file_size, self.date_range, self.vpd_var)
+    def estimate_data(self) -> DataEstimate:
+        year = self.date_range.end_date.year
+        if year > 2020:
+            file_size = 1_700_000
+        else:
+            file_size = 1_300_000
+        return _estimate_prism(self, file_size, self.date_range, self.vpd_var)
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
