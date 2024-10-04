@@ -18,7 +18,7 @@ from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import STATE, CensusScope
-from epymorph.geography.us_tiger import CacheEstimate, _url_to_cache_path
+from epymorph.geography.us_tiger import CacheEstimate
 from epymorph.simulation import AttributeDef, TimeFrame
 
 _PRISM_CACHE_PATH = module_cache_path(__name__)
@@ -29,7 +29,7 @@ def _generate_file_name(
     latest_date: datetype,
     last_completed_month: datetype,
     date: datetype,
-) -> tuple[str, str, str]:
+) -> tuple[str, str]:
     """
     Generates the url for the given date and climate attribute. Returns a tuple
     of strings with the url, stability, and formatted date for other file name usage.
@@ -52,7 +52,9 @@ def _generate_file_name(
 
     url = f"https://ftp.prism.oregonstate.edu/daily/{attribute}/{year}/PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.zip"
 
-    return url, stability, formatted_date
+    bil_name = f"PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.bil"
+
+    return url, bil_name
 
 
 def _fetch_raster(
@@ -81,7 +83,7 @@ def _fetch_raster(
 
     # include i in the loop, representing the processing steps
     for i, single_date in enumerate(date_list):
-        url, stability, formatted_date = _generate_file_name(
+        url, bil_name = _generate_file_name(
             attribute, latest_date, last_completed_month, single_date
         )
 
@@ -92,11 +94,11 @@ def _fetch_raster(
         except Exception as e:
             raise DataResourceException("Unable to fetch PRISM data.") from e
 
-        file.name = f"PRISM_{attribute}_{stability}_4kmD2_{formatted_date}_bil.bil"
+        file.name = bil_name
 
         # if the progress isnt None
         if progress is not None:
-            # incremement progress (i + 1), and divide by the processing steps
+            # progress by one, increasing percentage done
             progress((i + 1) / processing_steps, None)
 
         yield file
@@ -181,9 +183,9 @@ def _estimate_prism(
         for day in date_list
     ]
 
-    # sum the missing files
+    # sum the files needed to download
     missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
+        1 for u in urls if check_file_in_cache(_PRISM_CACHE_PATH / Path(u).name)
     )
 
     # calculate the cache estimate
@@ -192,7 +194,7 @@ def _estimate_prism(
         missing_cache_size=missing_files * est_file_size,
     )
 
-    key = ""
+    key = f"prism:{attribute}:{date_range}"
     return DataEstimate(
         name=self.full_name,
         cache_key=key,
@@ -291,11 +293,12 @@ class Temperature(Adrio[np.float64]):
 
     def estimate_data(self) -> DataEstimate:
         year = self.date_range.end_date.year
+        temp_var = self.temp_variables[self.temp_var]
         if year > 2020:
             file_size = 1_700_000
         else:
             file_size = 1_400_000
-        return _estimate_prism(self, file_size, self.date_range, self.temp_var)
+        return _estimate_prism(self, file_size, self.date_range, temp_var)
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
