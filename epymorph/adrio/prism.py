@@ -32,7 +32,7 @@ def _generate_file_name(
 ) -> tuple[str, str]:
     """
     Generates the url for the given date and climate attribute. Returns a tuple
-    of strings with the url, stability, and formatted date for other file name usage.
+    of strings with the url and the name of the bil file within the zip file.
     """
 
     if date.year == latest_date.year and date.month == latest_date.month:
@@ -81,7 +81,6 @@ def _fetch_raster(
     # for progress tracking
     processing_steps = len(date_list) + 1
 
-    # include i in the loop, representing the processing steps
     for i, single_date in enumerate(date_list):
         url, bil_name = _generate_file_name(
             attribute, latest_date, last_completed_month, single_date
@@ -94,12 +93,12 @@ def _fetch_raster(
         except Exception as e:
             raise DataResourceException("Unable to fetch PRISM data.") from e
 
-        file.name = bil_name
-
         # if the progress isnt None
         if progress is not None:
             # progress by one, increasing percentage done
             progress((i + 1) / processing_steps, None)
+
+        file.name = bil_name
 
         yield file
 
@@ -160,7 +159,7 @@ def _estimate_prism(
     self, file_size: int, date_range: TimeFrame, attribute: str
 ) -> DataEstimate:
     """
-    Grab estimates for the PRISM simulation.
+    Calculate estimates for downloading PRISM files.
     """
     est_file_size = file_size
     total_files = date_range.duration_days
@@ -220,7 +219,7 @@ class Precipitation(Adrio[np.float64]):
         self.date_range = _validate_dates(date_range)
 
     def estimate_data(self) -> DataEstimate:
-        file_size = 1_200_000
+        file_size = 1_200_000  # no significant change in size, average to about 1.2MB
         est = _estimate_prism(self, file_size, self.date_range, "ppt")
         return est
 
@@ -250,10 +249,12 @@ class DewPoint(Adrio[np.float64]):
 
     def estimate_data(self) -> DataEstimate:
         year = self.date_range.end_date.year
+
+        # file sizes are larger after the year 2020
         if year > 2020:
-            file_size = 1_800_000
+            file_size = 1_800_000  # average to 1.8MB after 2020
         else:
-            file_size = 1_400_000
+            file_size = 1_400_000  # average to 1.4MB 2020 and before
         return _estimate_prism(self, file_size, self.date_range, "tdmean")
 
     @override
@@ -270,7 +271,7 @@ class DewPoint(Adrio[np.float64]):
 class Temperature(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the temperature in an area, represented
-      in degrees Celsius (°C).
+    in degrees Celsius (°C).
     """
 
     date_range: TimeFrame
@@ -294,10 +295,12 @@ class Temperature(Adrio[np.float64]):
     def estimate_data(self) -> DataEstimate:
         year = self.date_range.end_date.year
         temp_var = self.temp_variables[self.temp_var]
+
+        # file sizes are larger after the year 2020
         if year > 2020:
-            file_size = 1_700_000
+            file_size = 1_700_000  # average to 1.7MB after 2020
         else:
-            file_size = 1_400_000
+            file_size = 1_400_000  # average to 1.4MB 2020 and before
         return _estimate_prism(self, file_size, self.date_range, temp_var)
 
     @override
@@ -316,7 +319,7 @@ class Temperature(Adrio[np.float64]):
 class VaporPressureDeficit(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the vapor pressure deficit in an area,
-      represented in hectopascals (hPa).
+    represented in hectopascals (hPa).
     """
 
     date_range: TimeFrame
@@ -335,10 +338,12 @@ class VaporPressureDeficit(Adrio[np.float64]):
 
     def estimate_data(self) -> DataEstimate:
         year = self.date_range.end_date.year
+
+        # file sizes are larger after the year 2020
         if year > 2020:
-            file_size = 1_700_000
+            file_size = 1_700_000  # average to 1.7MB after 2020
         else:
-            file_size = 1_300_000
+            file_size = 1_300_000  # average to 1.3MB 2020 and before
         return _estimate_prism(self, file_size, self.date_range, self.vpd_var)
 
     @override
