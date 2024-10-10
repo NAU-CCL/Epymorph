@@ -8,11 +8,13 @@ import pandas as pd
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio
-from epymorph.cache import load_or_fetch_url, module_cache_path
+from epymorph.adrio.adrio import Adrio, ProgressCallback
+from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
+from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
+from epymorph.geography.us_tiger import CacheEstimate
 
 _LODES_CACHE_PATH = module_cache_path(__name__)
 
@@ -37,7 +39,11 @@ job_variables: dict[JobType, str] = {
 
 
 def _fetch_lodes(
-    scope: CensusScope, worker_type: str, job_type: str, year: int
+    scope: CensusScope,
+    worker_type: str,
+    job_type: str,
+    year: int,
+    progress: ProgressCallback,
 ) -> NDArray[np.int64]:
     """Fetches data from LODES commuting flow data for a given year"""
 
@@ -129,7 +135,10 @@ def _fetch_lodes(
     state_codes = state_fips_to_code(scope.year)
     state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
 
-    for state in state_abbreviations:
+    # start progress tracking
+    processing_steps = len(state_abbreviations) + 1
+
+    for i, state in enumerate(state_abbreviations):
         # construct the URL to fetch LODES data, reset to empty each time
         url_list = []
 
@@ -149,6 +158,9 @@ def _fetch_lodes(
             ]
         except Exception as e:
             raise DataResourceException("Unable to fetch LODES data.") from e
+
+        if progress is not None:
+            progress((i + 1) / processing_steps, None)
 
         unfiltered_df = [
             pd.read_csv(
@@ -215,6 +227,81 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
+def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataEstimate:
+    scope = _validate_scope(self.scope)
+    lodes_ver = "LODES8"
+
+    # get the states to estimate data sizes
+    if scope.granularity != "state":
+        states = STATE.truncate_list(scope.get_node_ids())
+    else:
+        states = scope.get_node_ids()
+
+    est_file_size = 0
+
+    # check for outlier states that have a higher file size
+    regular_states = len(states)  # number of non-outlier states
+
+    # if california is included
+    if "06" in states:
+        est_file_size += 77_000_000  # CA main files average to 77MB
+        regular_states -= 1
+
+    # if florida is included
+    if "12" in states:
+        est_file_size += 38_000_000  # FL main files average to 38MB
+        regular_states -= 1
+
+    # if there are multiple states, account for aux and main
+    if len(states) > 1:
+        regular_states = len(states)  # number of non-outlier states
+
+        # add the auxilary file size
+        est_file_size += 610_000 * len(states)  # aux files average to 610KB
+
+    # add the main files, which average to about 7.425MB (excluding the above outliers)
+    est_file_size += 7_425_000 * regular_states
+
+    # check for cache using urls
+    urls = []
+
+    # translate state FIPS code to state to use in URL
+    state_codes = state_fips_to_code(scope.year)
+    state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
+
+    # for each unique state
+    for state in state_abbreviations:
+        # if there is more than one state
+        if len(states) > 1:
+            # add the aux file
+            url_aux = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
+            urls.append(url_aux)
+
+        # add the main file
+        url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
+        urls.append(url_main)
+
+    total_files = len(urls)
+
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+    )
+
+    est = CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
+    key = f"lodes:{year}"
+    return DataEstimate(
+        name=self.full_name,
+        cache_key=key,
+        new_network_bytes=est.missing_cache_size,
+        new_cache_bytes=est.missing_cache_size,
+        total_cache_bytes=est.total_cache_size,
+        max_bandwidth=None,
+    )
+
+
 class Commuters(Adrio[np.int64]):
     """
     Creates an NxN matrix of integers representing the number of workers moving
@@ -230,12 +317,19 @@ class Commuters(Adrio[np.int64]):
         self.year = year
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = job_variables[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, "S000", job_var, self.year)
+        return _fetch_lodes(scope, "S000", job_var, self.year, self.progress)
 
 
 class CommutersByAge(Adrio[np.int64]):
@@ -264,13 +358,20 @@ class CommutersByAge(Adrio[np.int64]):
         self.age_range = age_range
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = job_variables[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         age_var = self.age_variables[self.age_range]
         job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, age_var, job_var, self.year)
+        return _fetch_lodes(scope, age_var, job_var, self.year, self.progress)
 
 
 class CommutersByEarnings(Adrio[np.int64]):
@@ -301,13 +402,20 @@ class CommutersByEarnings(Adrio[np.int64]):
         self.earning_range = earning_range
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = job_variables[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         earning_var = self.earnings_variables[self.earning_range]
         job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, earning_var, job_var, self.year)
+        return _fetch_lodes(scope, earning_var, job_var, self.year, self.progress)
 
 
 class CommutersByIndustry(Adrio[np.int64]):
@@ -336,10 +444,17 @@ class CommutersByIndustry(Adrio[np.int64]):
         self.industry = industry
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = job_variables[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         industry_var = self.industry_variables[self.industry]
         job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, industry_var, job_var, self.year)
+        return _fetch_lodes(scope, industry_var, job_var, self.year, self.progress)
