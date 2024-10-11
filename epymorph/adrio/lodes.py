@@ -159,6 +159,8 @@ def _fetch_lodes(
         except Exception as e:
             raise DataResourceException("Unable to fetch LODES data.") from e
 
+        # progress tracking here accounts for downloading aux and main files as one step
+        # since they are being downloaded one right after the other
         if progress is not None:
             progress((i + 1) / processing_steps, None)
 
@@ -237,59 +239,107 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     else:
         states = scope.get_node_ids()
 
-    est_file_size = 0
+    est_main_size = 0
+    est_aux_size = 0
 
-    # check for outlier states that have a higher file size
-    regular_states = len(states)  # number of non-outlier states
-
-    # if california is included
-    if "06" in states:
-        est_file_size += 77_000_000  # CA main files average to 77MB
-        regular_states -= 1
-
-    # if florida is included
-    if "12" in states:
-        est_file_size += 38_000_000  # FL main files average to 38MB
-        regular_states -= 1
+    main_files_avg = 8_200_000  # main files average to 8.2MB
+    aux_files_avg = 720_000  # aux files average to 720KB
 
     # if there are multiple states, account for aux and main
     if len(states) > 1:
-        regular_states = len(states)  # number of non-outlier states
-
         # add the auxilary file size
-        est_file_size += 610_000 * len(states)  # aux files average to 610KB
+        est_aux_size = aux_files_avg
 
-    # add the main files, which average to about 7.425MB (excluding the above outliers)
-    est_file_size += 7_425_000 * regular_states
+    # add the main files
+    est_main_size = main_files_avg
 
     # check for cache using urls
-    urls = []
+    urls_aux = []
+    urls_main = []
 
     # translate state FIPS code to state to use in URL
     state_codes = state_fips_to_code(scope.year)
     state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
 
-    # for each unique state
+    # get the urls for each state
     for state in state_abbreviations:
         # if there is more than one state
         if len(states) > 1:
             # add the aux file
             url_aux = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
-            urls.append(url_aux)
+            urls_aux.append(url_aux)
 
         # add the main file
         url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
-        urls.append(url_main)
+        urls_main.append(url_main)
 
-    total_files = len(urls)
+    total_state_files = len(states)
 
-    missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+    # check for missing main files
+    missing_main_files = total_state_files - sum(
+        1 for u in urls_main if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
     )
 
+    # check for missing aux files
+    missing_aux_files = total_state_files - sum(
+        1 for u in urls_aux if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+    )
+
+    outlier_sizes = 0
+    outlier_cache_sizes = 0
+
+    # account for outlier states that have a higher file size
+    if any(state in ["06", "48", "12", "36"] for state in states):
+        # case: california
+        if "06" in states:
+            # file size
+            outlier_sizes += 77_000_000
+            total_state_files -= 1
+            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/ca/od/ca_od_main_{job_type}_{year}.csv.gz"
+            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
+                outlier_cache_sizes += 77_000_000
+                missing_main_files -= 1
+
+        # case: texas
+        if "48" in states:
+            # file size
+            outlier_sizes += 50_000_000
+            total_state_files -= 1
+            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/tx/od/tx_od_main_{job_type}_{year}.csv.gz"
+            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
+                outlier_cache_sizes += 50_000_000
+                missing_main_files -= 1
+
+        # case: florida
+        if "12" in states:
+            # file size
+            outlier_sizes += 38_000_000
+            total_state_files -= 1
+            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/fl/od/fl_od_main_{job_type}_{year}.csv.gz"
+            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
+                outlier_cache_sizes += 38_000_000
+                missing_main_files -= 1
+
+        # case: new york
+        if "36" in states:
+            # file size
+            outlier_sizes += 35_000_000
+            total_state_files -= 1
+            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/ny/od/ny_od_main_{job_type}_{year}.csv.gz"
+            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
+                outlier_cache_sizes += 35_000_000
+                missing_main_files -= 1
+
     est = CacheEstimate(
-        total_cache_size=total_files * est_file_size,
-        missing_cache_size=missing_files * est_file_size,
+        # total cache size is all of the main and aux files and outlier state sizes
+        total_cache_size=(total_state_files * (est_main_size + est_aux_size))
+        + outlier_sizes,
+        # include missing main and aux files and missing outlier states
+        missing_cache_size=(
+            (missing_main_files * est_main_size)
+            + (missing_aux_files * est_aux_size)
+            + outlier_cache_sizes
+        ),
     )
     key = f"lodes:{year}"
     return DataEstimate(
