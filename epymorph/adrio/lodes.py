@@ -1,4 +1,4 @@
-"""ADRIOs thta access the US Census LODES files for commuting data."""
+"""ADRIOs that access the US Census LODES files for commuting data."""
 
 from pathlib import Path
 from typing import Literal
@@ -35,6 +35,61 @@ job_variables: dict[JobType, str] = {
     "Private Primary Jobs": "JT03",
     "All Federal Jobs": "JT04",
     "Federal Primary Jobs": "JT05",
+}
+
+# file estimates for JT00-JT03 main files
+StateFileEstimates = {
+    "ak": 970_000,
+    "al": 8_300_000,
+    "ar": 4_400_000,
+    "az": 11_500_000,
+    "ca": 72_300_000,
+    "co": 10_600_000,
+    "ct": 6_500_000,
+    "dc": 719_000,
+    "de": 1_400_000,
+    "fl": 36_700_000,
+    "ga": 17_900_000,
+    "hi": 1_900_000,
+    "ia": 6_200_000,
+    "id": 2_700_000,
+    "il": 26_000_000,
+    "in": 12_800_000,
+    "ks": 5_200_000,
+    "ky": 7_200_000,
+    "la": 8_100_000,
+    "ma": 8_200_000,
+    "md": 9_900_000,
+    "me": 2_400_000,
+    "mi": 18_820_000,
+    "mn": 11_300_000,
+    "mo": 11_300_000,
+    "ms": 4_400_000,
+    "mt": 1_800_000,
+    "nc": 18_200_000,
+    "nd": 1_400_000,
+    "ne": 3_800_000,
+    "nh": 2_300_000,
+    "nj": 16_400_000,
+    "nm": 3_100_000,
+    "nv": 4_700_000,
+    "ny": 35_200_000,
+    "oh": 23_500_000,
+    "ok": 6_700_000,
+    "or": 7_300_000,
+    "pa": 25_100_000,
+    "ri": 1_900_000,
+    "sc": 8_100_000,
+    "sd": 1_500_000,
+    "tn": 11_400_000,
+    "tx": 50_300_000,
+    "ut": 5_400_000,
+    "va": 14_600_000,
+    "vt": 1_080_000,
+    "wa": 12_500_000,
+    "wi": 11_700_000,
+    "wv": 2_600_000,
+    "wy": 972_000,
 }
 
 
@@ -242,17 +297,6 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     est_main_size = 0
     est_aux_size = 0
 
-    main_files_avg = 8_200_000  # main files average to 8.2MB
-    aux_files_avg = 720_000  # aux files average to 720KB
-
-    # if there are multiple states, account for aux and main
-    if len(states) > 1:
-        # add the auxilary file size
-        est_aux_size = aux_files_avg
-
-    # add the main files
-    est_main_size = main_files_avg
-
     # check for cache using urls
     urls_aux = []
     urls_main = []
@@ -261,86 +305,53 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     state_codes = state_fips_to_code(scope.year)
     state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
 
-    # get the urls for each state
+    total_state_files = len(states)
+
+    missing_main_files = 0
+
+    # get the urls for each state to check the cache
     for state in state_abbreviations:
-        # if there is more than one state
+        # if there is more than one state, add the aux file
         if len(states) > 1:
-            # add the aux file
             url_aux = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
             urls_aux.append(url_aux)
 
-        # add the main file
+        # add the main file regardless
         url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
         urls_main.append(url_main)
 
-    total_state_files = len(states)
+        # if the job type is JT04-JT05
+        if job_type not in {"JT04", "JT05"}:
+            est_main_size += StateFileEstimates[state]
+            missing_main_files = est_main_size
+            # check for main files in the cache
+            if check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
+                missing_main_files -= StateFileEstimates[state]
 
-    # check for missing main files
-    missing_main_files = total_state_files - sum(
-        1 for u in urls_main if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
-    )
+    # check the cache for main files if the job type is jt04-jt05
+    if job_type in {"JT04", "JT05"}:
+        missing_main_files = total_state_files - sum(
+            1 for u in urls_aux if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+        )
+        missing_main_files *= 86_200  # jt04-jt05 main files average to 86.2KB
 
-    # check for missing aux files
-    missing_aux_files = total_state_files - sum(
-        1 for u in urls_aux if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
-    )
+    # check for missing aux files, if needed
+    if len(states) > 1:
+        # check for job type
+        # avg of 18.7KB for JT04-JT05, average of 723KB otherwise
+        est_aux_size = 18_700 if job_type in {"JT04", "JT05"} else 723_000
+        missing_aux_files = total_state_files - sum(
+            1 for u in urls_aux if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+        )
 
-    outlier_sizes = 0
-    outlier_cache_sizes = 0
-
-    # account for outlier states that have a higher file size
-    if any(state in ["06", "48", "12", "36"] for state in states):
-        # case: california
-        if "06" in states:
-            # file size
-            outlier_sizes += 77_000_000
-            total_state_files -= 1
-            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/ca/od/ca_od_main_{job_type}_{year}.csv.gz"
-            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
-                outlier_cache_sizes += 77_000_000
-                missing_main_files -= 1
-
-        # case: texas
-        if "48" in states:
-            # file size
-            outlier_sizes += 50_000_000
-            total_state_files -= 1
-            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/tx/od/tx_od_main_{job_type}_{year}.csv.gz"
-            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
-                outlier_cache_sizes += 50_000_000
-                missing_main_files -= 1
-
-        # case: florida
-        if "12" in states:
-            # file size
-            outlier_sizes += 38_000_000
-            total_state_files -= 1
-            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/fl/od/fl_od_main_{job_type}_{year}.csv.gz"
-            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
-                outlier_cache_sizes += 38_000_000
-                missing_main_files -= 1
-
-        # case: new york
-        if "36" in states:
-            # file size
-            outlier_sizes += 35_000_000
-            total_state_files -= 1
-            url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/ny/od/ny_od_main_{job_type}_{year}.csv.gz"
-            if not check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
-                outlier_cache_sizes += 35_000_000
-                missing_main_files -= 1
+    else:
+        missing_aux_files = 0
 
     est = CacheEstimate(
-        # total cache size is all of the main and aux files and outlier state sizes
-        total_cache_size=(total_state_files * (est_main_size + est_aux_size))
-        + outlier_sizes,
-        # include missing main and aux files and missing outlier states
-        missing_cache_size=(
-            (missing_main_files * est_main_size)
-            + (missing_aux_files * est_aux_size)
-            + outlier_cache_sizes
-        ),
+        total_cache_size=(total_state_files * est_aux_size) + est_main_size,
+        missing_cache_size=(missing_main_files + (missing_aux_files * est_aux_size)),
     )
+
     key = f"lodes:{year}"
     return DataEstimate(
         name=self.full_name,
