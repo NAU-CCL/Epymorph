@@ -314,13 +314,14 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
 
         # add the main file regardless
         url_main = f"https://lehd.ces.census.gov/data/lodes/{LODESVersion}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
-        urls_main.append(url_main)
 
         # if the job type is not JT04-JT05, the file size is in the dictionary
         if job_type not in {"JT04", "JT05"}:
             est_main_size += StateFileEstimates[state]
             if check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
                 in_cache += StateFileEstimates[state]
+        else:
+            urls_main.append(url_main)
 
     # check the cache for main files if the job type is jt04-jt05
     if job_type in {"JT04", "JT05"}:
