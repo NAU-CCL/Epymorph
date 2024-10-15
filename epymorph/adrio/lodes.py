@@ -18,7 +18,9 @@ from epymorph.geography.us_tiger import CacheEstimate
 
 _LODES_CACHE_PATH = module_cache_path(__name__)
 
-# job type variables for use among all commuters classes
+LODESVersion = "LODES8"
+"""The current version of LODES"""
+
 JobType = Literal[
     "All Jobs",
     "Primary Jobs",
@@ -27,6 +29,7 @@ JobType = Literal[
     "All Federal Jobs",
     "Federal Primary Jobs",
 ]
+"""Job type variables for use among all commuters classes"""
 
 job_variables: dict[JobType, str] = {
     "All Jobs": "JT00",
@@ -37,7 +40,6 @@ job_variables: dict[JobType, str] = {
     "Federal Primary Jobs": "JT05",
 }
 
-# file estimates for JT00-JT03 main files
 StateFileEstimates = {
     "ak": 970_000,
     "al": 8_300_000,
@@ -91,6 +93,7 @@ StateFileEstimates = {
     "wv": 2_600_000,
     "wy": 972_000,
 }
+"""File estimates for JT00-JT03 main files"""
 
 
 def _fetch_lodes(
@@ -117,8 +120,6 @@ def _fetch_lodes(
     geocode_to_index = {geocode: i for i, geocode in enumerate(geoid)}
     geocode_len = len(geoid[0])
     data_frames = []
-    # can change the lodes version, default is the most recent LODES8
-    lodes_ver = "LODES8"
 
     if scope.granularity != "state":
         states = STATE.truncate_list(geoid)
@@ -198,13 +199,13 @@ def _fetch_lodes(
         url_list = []
 
         # always get main file (in state residency)
-        url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
+        url_main = f"https://lehd.ces.census.gov/data/lodes/{LODESVersion}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
         url_list.append(url_main)
 
         # if there are more than one state in the input,
         # get the aux files (out of state residence)
         if file_type == "aux":
-            url_aux = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
+            url_aux = f"https://lehd.ces.census.gov/data/lodes/{LODESVersion}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
             url_list.append(url_aux)
 
         try:
@@ -286,7 +287,11 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
 
 def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataEstimate:
     scope = _validate_scope(self.scope)
-    lodes_ver = "LODES8"
+    est_main_size = 0
+    est_aux_size = 0
+    urls_aux = []
+    urls_main = []
+    in_cache = 0
 
     # get the states to estimate data sizes
     if scope.granularity != "state":
@@ -294,36 +299,26 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     else:
         states = scope.get_node_ids()
 
-    est_main_size = 0
-    est_aux_size = 0
-
-    # check for cache using urls
-    urls_aux = []
-    urls_main = []
-
     # translate state FIPS code to state to use in URL
     state_codes = state_fips_to_code(scope.year)
     state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
 
     total_state_files = len(states)
 
-    in_cache = 0
-
     # get the urls for each state to check the cache
     for state in state_abbreviations:
         # if there is more than one state, add the aux file
         if len(states) > 1:
-            url_aux = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
+            url_aux = f"https://lehd.ces.census.gov/data/lodes/{LODESVersion}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
             urls_aux.append(url_aux)
 
         # add the main file regardless
-        url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
+        url_main = f"https://lehd.ces.census.gov/data/lodes/{LODESVersion}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
         urls_main.append(url_main)
 
-        # if the job type is JT04-JT05
+        # if the job type is not JT04-JT05, the file size is in the dictionary
         if job_type not in {"JT04", "JT05"}:
             est_main_size += StateFileEstimates[state]
-            # check for main files in the cache
             if check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
                 in_cache += StateFileEstimates[state]
 
@@ -336,12 +331,11 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
         )
         missing_main_files *= 86_200  # jt04-jt05 main files average to 86.2KB
     else:
-        missing_main_files = est_main_size - in_cache
+        missing_main_files = est_main_size - in_cache  # otherwise, adjust for cache
 
     # check for missing aux files, if needed
     if len(states) > 1:
-        # check for job type
-        # avg of 18.7KB for JT04-JT05, average of 723KB otherwise
+        # avg of 18.7KB for JT04-JT05 aux files, average of 723KB for aux otherwise
         est_aux_size = 18_700 if job_type in {"JT04", "JT05"} else 723_000
         missing_aux_files = total_state_files - sum(
             1 for u in urls_aux if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
