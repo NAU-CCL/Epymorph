@@ -353,7 +353,7 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
         missing_cache_size=missing_main_files + missing_aux_files,
     )
 
-    key = f"lodes:{year}"
+    key = f"lodes:{year}:{job_type}"
     return DataEstimate(
         name=self.full_name,
         cache_key=key,
