@@ -307,7 +307,7 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
 
     total_state_files = len(states)
 
-    missing_main_files = 0
+    in_cache = 0
 
     # get the urls for each state to check the cache
     for state in state_abbreviations:
@@ -323,17 +323,20 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
         # if the job type is JT04-JT05
         if job_type not in {"JT04", "JT05"}:
             est_main_size += StateFileEstimates[state]
-            missing_main_files = est_main_size
             # check for main files in the cache
             if check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
-                missing_main_files -= StateFileEstimates[state]
+                in_cache += StateFileEstimates[state]
 
     # check the cache for main files if the job type is jt04-jt05
     if job_type in {"JT04", "JT05"}:
         missing_main_files = total_state_files - sum(
-            1 for u in urls_aux if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+            1
+            for u in urls_main
+            if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
         )
         missing_main_files *= 86_200  # jt04-jt05 main files average to 86.2KB
+    else:
+        missing_main_files = est_main_size - in_cache
 
     # check for missing aux files, if needed
     if len(states) > 1:
@@ -347,9 +350,12 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     else:
         missing_aux_files = 0
 
+    missing_aux_files *= est_aux_size
+    est_aux_size *= total_state_files
+
     est = CacheEstimate(
-        total_cache_size=(total_state_files * est_aux_size) + est_main_size,
-        missing_cache_size=(missing_main_files + (missing_aux_files * est_aux_size)),
+        total_cache_size=est_aux_size + est_main_size,
+        missing_cache_size=missing_main_files + missing_aux_files,
     )
 
     key = f"lodes:{year}"
