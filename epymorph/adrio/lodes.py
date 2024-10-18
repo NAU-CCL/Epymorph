@@ -1,4 +1,4 @@
-"""ADRIOs thta access the US Census LODES files for commuting data."""
+"""ADRIOs that access the US Census LODES files for commuting data."""
 
 from pathlib import Path
 from typing import Literal
@@ -8,15 +8,19 @@ import pandas as pd
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio
-from epymorph.cache import load_or_fetch_url, module_cache_path
+from epymorph.adrio.adrio import Adrio, ProgressCallback
+from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
+from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
+from epymorph.geography.us_tiger import CacheEstimate
 
 _LODES_CACHE_PATH = module_cache_path(__name__)
 
-# job type variables for use among all commuters classes
+_LODES_VERSION = "LODES8"
+"""The current version of LODES"""
+
 JobType = Literal[
     "All Jobs",
     "Primary Jobs",
@@ -25,8 +29,9 @@ JobType = Literal[
     "All Federal Jobs",
     "Federal Primary Jobs",
 ]
+"""Job type variables for use among all commuters classes"""
 
-job_variables: dict[JobType, str] = {
+_JOB_VARIABLES: dict[JobType, str] = {
     "All Jobs": "JT00",
     "Primary Jobs": "JT01",
     "All Private Jobs": "JT02",
@@ -35,9 +40,83 @@ job_variables: dict[JobType, str] = {
     "Federal Primary Jobs": "JT05",
 }
 
+_STATE_FILE_ESTIMATES = {
+    "ak": 970_000,
+    "al": 8_300_000,
+    "ar": 4_400_000,
+    "az": 11_500_000,
+    "ca": 72_300_000,
+    "co": 10_600_000,
+    "ct": 6_500_000,
+    "dc": 719_000,
+    "de": 1_400_000,
+    "fl": 36_700_000,
+    "ga": 17_900_000,
+    "hi": 1_900_000,
+    "ia": 6_200_000,
+    "id": 2_700_000,
+    "il": 26_000_000,
+    "in": 12_800_000,
+    "ks": 5_200_000,
+    "ky": 7_200_000,
+    "la": 8_100_000,
+    "ma": 8_200_000,
+    "md": 9_900_000,
+    "me": 2_400_000,
+    "mi": 18_820_000,
+    "mn": 11_300_000,
+    "mo": 11_300_000,
+    "ms": 4_400_000,
+    "mt": 1_800_000,
+    "nc": 18_200_000,
+    "nd": 1_400_000,
+    "ne": 3_800_000,
+    "nh": 2_300_000,
+    "nj": 16_400_000,
+    "nm": 3_100_000,
+    "nv": 4_700_000,
+    "ny": 35_200_000,
+    "oh": 23_500_000,
+    "ok": 6_700_000,
+    "or": 7_300_000,
+    "pa": 25_100_000,
+    "ri": 1_900_000,
+    "sc": 8_100_000,
+    "sd": 1_500_000,
+    "tn": 11_400_000,
+    "tx": 50_300_000,
+    "ut": 5_400_000,
+    "va": 14_600_000,
+    "vt": 1_080_000,
+    "wa": 12_500_000,
+    "wi": 11_700_000,
+    "wv": 2_600_000,
+    "wy": 972_000,
+}
+"""File estimates for JT00-JT03 main files"""
+
+
+# function for creating the urls
+def _generate_lodes_file_name(
+    state: str, job_type: str, year: int, file_type: str
+) -> tuple[str, str]:
+    url_aux = ""
+    url_main = f"https://lehd.ces.census.gov/data/lodes/{_LODES_VERSION}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
+
+    # if there are more than one state in the input,
+    # get the aux files (out of state residence)
+    if file_type == "aux":
+        url_aux = f"https://lehd.ces.census.gov/data/lodes/{_LODES_VERSION}/{state}/od/{state}_od_{file_type}_{job_type}_{year}.csv.gz"
+
+    return url_aux, url_main
+
 
 def _fetch_lodes(
-    scope: CensusScope, worker_type: str, job_type: str, year: int
+    scope: CensusScope,
+    worker_type: str,
+    job_type: str,
+    year: int,
+    progress: ProgressCallback,
 ) -> NDArray[np.int64]:
     """Fetches data from LODES commuting flow data for a given year"""
 
@@ -56,8 +135,6 @@ def _fetch_lodes(
     geocode_to_index = {geocode: i for i, geocode in enumerate(geoid)}
     geocode_len = len(geoid[0])
     data_frames = []
-    # can change the lodes version, default is the most recent LODES8
-    lodes_ver = "LODES8"
 
     if scope.granularity != "state":
         states = STATE.truncate_list(geoid)
@@ -129,19 +206,17 @@ def _fetch_lodes(
     state_codes = state_fips_to_code(scope.year)
     state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
 
-    for state in state_abbreviations:
-        # construct the URL to fetch LODES data, reset to empty each time
+    # start progress tracking
+    processing_steps = len(state_abbreviations) + 1
+
+    for i, state in enumerate(state_abbreviations):
+        # construct list of urls to fetch LODES data
         url_list = []
+        url_aux, url_main = _generate_lodes_file_name(state, job_type, year, file_type)
 
-        # always get main file (in state residency)
-        url_main = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_main_{job_type}_{year}.csv.gz"
-        url_list.append(url_main)
-
-        # if there are more than one state in the input,
-        # get the aux files (out of state residence)
-        if file_type == "aux":
-            url_aux = f"https://lehd.ces.census.gov/data/lodes/{lodes_ver}/{state}/od/{state}_od_aux_{job_type}_{year}.csv.gz"
+        if url_aux:
             url_list.append(url_aux)
+        url_list.append(url_main)
 
         try:
             files = [
@@ -149,6 +224,11 @@ def _fetch_lodes(
             ]
         except Exception as e:
             raise DataResourceException("Unable to fetch LODES data.") from e
+
+        # progress tracking here accounts for downloading aux and main files as one step
+        # since they are being downloaded one right after the other
+        if progress is not None:
+            progress((i + 1) / processing_steps, None)
 
         unfiltered_df = [
             pd.read_csv(
@@ -215,6 +295,89 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
+def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataEstimate:
+    scope = _validate_scope(self.scope)
+    est_main_size = 0
+    est_aux_size = 0
+    urls_aux = []
+    urls_main = []
+    in_cache = 0
+    file_type = "main"
+
+    # get the states to estimate data sizes
+    if scope.granularity != "state":
+        states = STATE.truncate_list(scope.get_node_ids())
+    else:
+        states = scope.get_node_ids()
+
+    if len(states) > 1:
+        file_type = "aux"
+
+    # translate state FIPS code to state to use in URL
+    state_codes = state_fips_to_code(scope.year)
+    state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
+
+    total_state_files = len(states)
+
+    # get the urls for each state to check the cache
+    for state in state_abbreviations:
+        url_aux, url_main = _generate_lodes_file_name(state, job_type, year, file_type)
+
+        if len(states) > 1:
+            urls_aux.append(url_aux)
+
+        # if the job type is not JT04-JT05, the file size is in the dictionary
+        if job_type not in ["JT04", "JT05"]:
+            est_main_size += _STATE_FILE_ESTIMATES[state]
+            if check_file_in_cache(_LODES_CACHE_PATH / Path(url_main).name):
+                in_cache += _STATE_FILE_ESTIMATES[state]
+        else:
+            urls_main.append(url_main)
+
+    # check the cache for main files if the job type is jt04-jt05
+    if job_type in ["JT04", "JT05"]:
+        missing_main_files = total_state_files - sum(
+            1
+            for u in urls_main
+            if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+        )
+        # jt04-jt05 main files average to 86.2KB
+        total_missing_main_size = missing_main_files * 86_200
+    else:
+        total_missing_main_size = (
+            est_main_size - in_cache
+        )  # otherwise, adjust for cache
+
+    # check for missing aux files, if needed
+    if len(states) > 1:
+        # avg of 18.7KB for JT04-JT05 aux files, average of 723KB for aux otherwise
+        est_aux_size = 18_700 if job_type in ["JT04", "JT05"] else 723_000
+        missing_aux_files = total_state_files - sum(
+            1 for u in urls_aux if check_file_in_cache(_LODES_CACHE_PATH / Path(u).name)
+        )
+
+    else:
+        missing_aux_files = 0
+
+    total_missing_aux_size = missing_aux_files * est_aux_size
+    est_aux_size *= total_state_files
+
+    est = CacheEstimate(
+        total_cache_size=est_aux_size + est_main_size,
+        missing_cache_size=total_missing_main_size + total_missing_aux_size,
+    )
+
+    key = f"lodes:{year}:{job_type}"
+    return DataEstimate(
+        name=self.full_name,
+        cache_key=key,
+        new_network_bytes=est.missing_cache_size,
+        new_cache_bytes=est.missing_cache_size,
+        total_cache_bytes=est.total_cache_size,
+        max_bandwidth=None,
+    )
+
+
 class Commuters(Adrio[np.int64]):
     """
     Creates an NxN matrix of integers representing the number of workers moving
@@ -230,12 +393,19 @@ class Commuters(Adrio[np.int64]):
         self.year = year
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = _JOB_VARIABLES[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
-        job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, "S000", job_var, self.year)
+        job_var = _JOB_VARIABLES[self.job_type]
+        return _fetch_lodes(scope, "S000", job_var, self.year, self.progress)
 
 
 class CommutersByAge(Adrio[np.int64]):
@@ -264,13 +434,20 @@ class CommutersByAge(Adrio[np.int64]):
         self.age_range = age_range
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = _JOB_VARIABLES[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         age_var = self.age_variables[self.age_range]
-        job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, age_var, job_var, self.year)
+        job_var = _JOB_VARIABLES[self.job_type]
+        return _fetch_lodes(scope, age_var, job_var, self.year, self.progress)
 
 
 class CommutersByEarnings(Adrio[np.int64]):
@@ -301,13 +478,20 @@ class CommutersByEarnings(Adrio[np.int64]):
         self.earning_range = earning_range
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = _JOB_VARIABLES[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         earning_var = self.earnings_variables[self.earning_range]
-        job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, earning_var, job_var, self.year)
+        job_var = _JOB_VARIABLES[self.job_type]
+        return _fetch_lodes(scope, earning_var, job_var, self.year, self.progress)
 
 
 class CommutersByIndustry(Adrio[np.int64]):
@@ -336,10 +520,17 @@ class CommutersByIndustry(Adrio[np.int64]):
         self.industry = industry
         self.job_type = job_type
 
+    def estimate_data(self) -> DataEstimate:
+        scope = self.scope
+        scope = _validate_scope(scope)
+        job_var = _JOB_VARIABLES[self.job_type]
+        est = _estimate_lodes(self, scope, job_var, self.year)
+        return est
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
         scope = _validate_scope(scope)
         industry_var = self.industry_variables[self.industry]
-        job_var = job_variables[self.job_type]
-        return _fetch_lodes(scope, industry_var, job_var, self.year)
+        job_var = _JOB_VARIABLES[self.job_type]
+        return _fetch_lodes(scope, industry_var, job_var, self.year, self.progress)
