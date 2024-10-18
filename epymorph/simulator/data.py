@@ -49,7 +49,10 @@ def _evaluation_context(
         children={
             # which falls back to GPM params, as scoped to that GPM
             gpm_strata(gpm.name): Database[ParamValue](
-                {k.to_absolute(gpm_strata(gpm.name)): v for k, v in gpm.params.items()}
+                {
+                    k.to_absolute(gpm_strata(gpm.name)): v
+                    for k, v in (gpm.params or {}).items()
+                }
             )
             for gpm in rume.strata
         },

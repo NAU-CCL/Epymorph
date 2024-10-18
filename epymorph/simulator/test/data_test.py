@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from epymorph import *
 from epymorph.compartment_model import MultistrataModelSymbols, edge
 from epymorph.data_type import AttributeArray
-from epymorph.database import Database, NamePattern
+from epymorph.database import Database, ModuleNamePattern, NamePattern
 from epymorph.error import AttributeException
 from epymorph.geography.us_census import StateScope
 from epymorph.params import (
@@ -90,8 +90,11 @@ class EvaluateParamsTest(unittest.TestCase):
                     mm=mm_library["centroids"](),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
-                        "beta": 99.0,  # we'll override this value to test shadowing
-                        "phi": 33.0,  # test GPM value resolution
+                        ModuleNamePattern.parse(k): v
+                        for k, v in {
+                            "beta": 99.0,  # we'll override this value to test shadowing
+                            "phi": 33.0,  # test GPM value resolution
+                        }.items()
                     },
                 ),
             ],

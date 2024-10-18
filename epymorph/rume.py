@@ -60,6 +60,7 @@ from epymorph.util import are_unique, list_not_none, map_values
 #######
 
 
+@dataclass(frozen=True)
 class Gpm:
     """
     A GPM (short for Geo-Population Model) combines an IPM, MM, and
@@ -71,21 +72,15 @@ class Gpm:
     ipm: CompartmentModel
     mm: MovementModel
     init: Initializer
-    params: Mapping[ModuleNamePattern, ParamValue]
+    params: Mapping[ModuleNamePattern, ParamValue] | None = field(default=None)
 
-    def __init__(
-        self,
-        name: str,
-        ipm: CompartmentModel,
-        mm: MovementModel,
-        init: Initializer,
-        params: Mapping[str, ParamValue] | None = None,
-    ):
-        self.name = name
-        self.ipm = ipm
-        self.mm = mm
-        self.init = init
-        self.params = {ModuleNamePattern.parse(k): v for k, v in (params or {}).items()}
+    # NOTE: constructing a ModuleNamePattern object is a bit awkward from an interface
+    # perspective; much more ergonomic to just be able to use strings -- but that
+    # requires a parsing call. Doing that parsing here is awkward for a dataclass.
+    # And we could design around that but I'm not certain this feature isn't destinated
+    # to be removed anyway... so for now users will have to do the parsing or maybe
+    # we'll add a utility function that effectively does this:
+    # params = {ModuleNamePattern.parse(k): v for k, v in (params or {}).items()}
 
 
 ########
@@ -402,7 +397,7 @@ class SingleStrataRume(Rume):
     ) -> Self:
         """Create a RUME with only a single strata."""
         return cls(
-            strata=[Gpm(DEFAULT_STRATA, ipm, mm, init, {})],
+            strata=[Gpm(DEFAULT_STRATA, ipm, mm, init)],
             ipm=ipm,
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
             scope=scope,
