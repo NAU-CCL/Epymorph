@@ -6,7 +6,8 @@ from pandas import read_excel
 from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio
-from epymorph.cache import load_or_fetch_url, module_cache_path
+from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
+from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -15,6 +16,7 @@ from epymorph.geography.us_census import (
     StateScopeAll,
     TractScope,
 )
+from epymorph.geography.us_tiger import CacheEstimate
 
 _COMMFLOWS_CACHE_PATH = module_cache_path(__name__)
 
@@ -22,9 +24,60 @@ _COMMFLOWS_CACHE_PATH = module_cache_path(__name__)
 class Commuters(Adrio[np.int64]):
     """Makes an ADRIO to retrieve ACS commuting flow data."""
 
+    def estimate_data(self) -> DataEstimate:
+        total_files = 1
+        scope = self.scope
+
+        if not isinstance(scope, CensusScope):
+            msg = "Census scope is required for commuting flows data."
+            raise DataResourceException(msg)
+
+        # check for invalid granularity
+        if isinstance(scope, TractScope | BlockGroupScope):
+            msg = (
+                "Commuting data cannot be retrieved for tract "
+                "or block group granularities"
+            )
+            raise DataResourceException(msg)
+
+        year = scope.year
+        est_file_size = 0
+
+        # file size is dependant on the year
+        if year == 2010:
+            est_file_size = 7_200_000  # 2010 table1 is 7.2MB
+        elif year == 2015:
+            est_file_size = 6_700_000  # 2015 table1 is 6.7MB
+        elif year == 2020:
+            est_file_size = 5_800_000  # 2020 table1 is 5.8MB
+        # check if not one of years??
+
+        # only one url, just check if in cache or not
+        if check_file_in_cache(_COMMFLOWS_CACHE_PATH / f"{year}.xlsx"):
+            missing_files = 0
+        else:
+            missing_files = 1
+
+        # cache estimate
+        est = CacheEstimate(
+            total_cache_size=total_files * est_file_size,
+            missing_cache_size=missing_files * est_file_size,
+        )
+
+        key = f"commflows:{year}"
+        return DataEstimate(
+            name=self.full_name,
+            cache_key=key,
+            new_network_bytes=est.missing_cache_size,
+            new_cache_bytes=est.missing_cache_size,
+            total_cache_bytes=est.total_cache_size,
+            max_bandwidth=None,
+        )
+
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = self.scope
+        progress = self.progress
 
         if not isinstance(scope, CensusScope):
             msg = "Census scope is required for commuting flows data."
@@ -57,6 +110,9 @@ class Commuters(Adrio[np.int64]):
                 f"Commuting data cannot be retrieved for {passed_year}, "
                 "fetching {year} data instead."
             )
+
+        # start progress tracking, +1 for post processing
+        processing_steps = 2
 
         if year != 2010:
             url = f"https://www2.census.gov/programs-surveys/demo/tables/metro-micro/{year}/commuting-flows-{year}/table1.xlsx"
@@ -118,6 +174,10 @@ class Commuters(Adrio[np.int64]):
             commuter_file = load_or_fetch_url(url, cache_path)
         except Exception as e:
             raise DataResourceException("Unable to fetch commuting flows data.") from e
+
+        # increment progress, just one step here
+        if progress is not None:
+            progress(1 / processing_steps, None)
 
         # download communter data spreadsheet as a pandas dataframe
         data_df = read_excel(
