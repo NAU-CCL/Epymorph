@@ -9,6 +9,7 @@ from epymorph.adrio.adrio import Adrio
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
+from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (
     BlockGroupScope,
     CensusScope,
@@ -21,26 +22,52 @@ from epymorph.geography.us_tiger import CacheEstimate
 _COMMFLOWS_CACHE_PATH = module_cache_path(__name__)
 
 
+def _validate_year(scope: CensusScope):
+    year = scope.year
+    if year not in [2010, 2015, 2020]:
+        # if invalid year is close to a valid year, fetch valid data and notify user
+        passed_year = year
+        if year in range(2010, 2015):
+            year = 2010
+        elif year in range(2015, 2020):
+            year = 2015
+        elif year in range(2020, 2024):
+            year = 2020
+        else:
+            msg = "Invalid year. Commuting data is only available for 2010-2023"
+            raise DataResourceException(msg)
+
+        print(
+            f"Commuting data cannot be retrieved for {passed_year}, "
+            f"fetching {year} data instead."
+        )
+
+    return year
+
+
+def _validate_scope(scope: GeoScope) -> CensusScope:
+    if not isinstance(scope, CensusScope):
+        msg = "Census scope is required for commuting flows data."
+        raise DataResourceException(msg)
+
+    # check for invalid granularity
+    if isinstance(scope, TractScope | BlockGroupScope):
+        msg = (
+            "Commuting data cannot be retrieved for tract "
+            "or block group granularities"
+        )
+        raise DataResourceException(msg)
+
+    return scope
+
+
 class Commuters(Adrio[np.int64]):
     """Makes an ADRIO to retrieve ACS commuting flow data."""
 
     def estimate_data(self) -> DataEstimate:
-        total_files = 1
-        scope = self.scope
+        scope = _validate_scope(self.scope)
+        year = _validate_year(scope)
 
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for commuting flows data."
-            raise DataResourceException(msg)
-
-        # check for invalid granularity
-        if isinstance(scope, TractScope | BlockGroupScope):
-            msg = (
-                "Commuting data cannot be retrieved for tract "
-                "or block group granularities"
-            )
-            raise DataResourceException(msg)
-
-        year = scope.year
         est_file_size = 0
 
         # file size is dependant on the year
@@ -50,17 +77,15 @@ class Commuters(Adrio[np.int64]):
             est_file_size = 6_700_000  # 2015 table1 is 6.7MB
         elif year == 2020:
             est_file_size = 5_800_000  # 2020 table1 is 5.8MB
-        # check if not one of years??
 
         # only one url, just check if in cache or not
-        if check_file_in_cache(_COMMFLOWS_CACHE_PATH / f"{year}.xlsx"):
-            missing_files = 0
-        else:
-            missing_files = 1
+        missing_files = (
+            0 if check_file_in_cache(_COMMFLOWS_CACHE_PATH / f"{year}.xlsx") else 1
+        )
 
         # cache estimate
         est = CacheEstimate(
-            total_cache_size=total_files * est_file_size,
+            total_cache_size=est_file_size,
             missing_cache_size=missing_files * est_file_size,
         )
 
@@ -76,40 +101,9 @@ class Commuters(Adrio[np.int64]):
 
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
-        scope = self.scope
+        scope = _validate_scope(self.scope)
+        year = _validate_year(scope)
         progress = self.progress
-
-        if not isinstance(scope, CensusScope):
-            msg = "Census scope is required for commuting flows data."
-            raise DataResourceException(msg)
-
-        # check for invalid granularity
-        if isinstance(scope, TractScope | BlockGroupScope):
-            msg = (
-                "Commuting data cannot be retrieved for tract "
-                "or block group granularities"
-            )
-            raise DataResourceException(msg)
-
-        # check for valid year
-        year = scope.year
-        if year not in [2010, 2015, 2020]:
-            # if invalid year is close to a valid year, fetch valid data and notify user
-            passed_year = year
-            if year in range(2010, 2015):
-                year = 2010
-            elif year in range(2015, 2020):
-                year = 2015
-            elif year in range(2020, 2024):
-                year = 2020
-            else:
-                msg = "Invalid year. Commuting data is only available for 2010-2023"
-                raise DataResourceException(msg)
-
-            print(
-                f"Commuting data cannot be retrieved for {passed_year}, "
-                "fetching {year} data instead."
-            )
 
         # start progress tracking, +1 for post processing
         processing_steps = 2
