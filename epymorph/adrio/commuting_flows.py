@@ -58,6 +58,29 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
         )
         raise DataResourceException(msg)
 
+    year = scope.year
+    node_ids = scope.get_node_ids()
+    # a discrepancy exists in data for Connecticut counties in 2020 and 2021
+    # raise an exception if this data is requested for these years.
+    if year in [2020, 2021] and any(
+        connecticut_county in node_ids
+        for connecticut_county in [
+            "09001",
+            "09003",
+            "09005",
+            "09007",
+            "09009",
+            "09011",
+            "09013",
+            "09015",
+        ]
+    ):
+        msg = (
+            "Commuting flows data cannot be retrieved for Connecticut counties "
+            "for years 2020 or 2021."
+        )
+        raise DataResourceException(msg)
+
     return scope
 
 
@@ -141,27 +164,6 @@ class Commuters(Adrio[np.int64]):
             header_num = 4
 
         node_ids = scope.get_node_ids()
-
-        # a discrepancy exists in data for Connecticut counties in 2020 and 2021
-        # raise an exception if this data is requested for these years.
-        if year in [2020, 2021] and any(
-            connecticut_county in node_ids
-            for connecticut_county in [
-                "09001",
-                "09003",
-                "09005",
-                "09007",
-                "09009",
-                "09011",
-                "09013",
-                "09015",
-            ]
-        ):
-            msg = (
-                "Commuting flows data cannot be retrieved for Connecticut counties "
-                "for years 2020 or 2021."
-            )
-            raise DataResourceException(msg)
 
         try:
             cache_path = _COMMFLOWS_CACHE_PATH / f"{year}.xlsx"
