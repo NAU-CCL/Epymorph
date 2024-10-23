@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, adrio_cache
+from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
@@ -232,18 +232,30 @@ def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
             raise DataResourceException("Unsupported query.")
 
 
-def _fetch_acs5(variables: list[str], scope: CensusScope) -> DataFrame:
+def _fetch_acs5(
+    variables: list[str], scope: CensusScope, progress: ProgressCallback
+) -> DataFrame:
     census = _get_api()
     queries = _make_acs5_queries(scope)
 
     # fetch all queries and combine results
     try:
-        acs_df = pd.concat(
-            pd.DataFrame.from_records(
-                census.acs5.get(variables, geo=query, year=scope.year)
+        # a potential solution...
+        acs_data = []
+        processing_steps = len(queries) + 1
+        print(processing_steps)
+        for i, query in enumerate(queries):
+            acs_data.append(
+                pd.DataFrame.from_records(
+                    census.acs5.get(variables, geo=query, year=scope.year)
+                )
             )
-            for query in queries
-        )
+
+            if progress is not None:
+                progress((i + 1) / processing_steps, None)
+
+        acs_df = pd.concat(acs_data)
+
     except CensusException as e:
         err = "Unable to load data from the US Census API at this time."
         raise DataResourceException(err) from e
@@ -283,7 +295,7 @@ class Population(Adrio[np.int64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.int64]:
         scope = _validate_scope(self.scope)
-        acs_df = _fetch_acs5(["B01001_001E"], scope)
+        acs_df = _fetch_acs5(["B01001_001E"], scope, self.progress)
         return acs_df["B01001_001E"].to_numpy(dtype=np.int64)
 
 
@@ -301,7 +313,7 @@ class PopulationByAgeTable(Adrio[np.int64]):
         # seems to be about twice as fast as asking for group(B01001)
         age_vars = [var for var, _ in _get_group_vars(scope.year, "B01001")]
         age_vars.sort()
-        acs_df = _fetch_acs5(age_vars, scope)
+        acs_df = _fetch_acs5(age_vars, scope, self.progress)
         return acs_df[age_vars].to_numpy(dtype=np.int64)
 
 
@@ -414,7 +426,7 @@ class AverageHouseholdSize(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        acs_df = _fetch_acs5(["B25010_001E"], scope)
+        acs_df = _fetch_acs5(["B25010_001E"], scope, self.progress)
         return acs_df["B25010_001E"].to_numpy(dtype=np.float64)
 
 
@@ -461,13 +473,13 @@ class DissimilarityIndex(Adrio[np.float64]):
         minority_var = self.race_variables[self.minority_pop]
 
         # Fetch the data for the upper scope.
-        high_df = _fetch_acs5([majority_var, minority_var], high_scope).rename(
-            columns={majority_var: "high_majority", minority_var: "high_minority"}
-        )
+        high_df = _fetch_acs5(
+            [majority_var, minority_var], high_scope, self.progress
+        ).rename(columns={majority_var: "high_majority", minority_var: "high_minority"})
         # Fetch the data for the lower scope.
-        low_df = _fetch_acs5([majority_var, minority_var], low_scope).rename(
-            columns={majority_var: "low_majority", minority_var: "low_minority"}
-        )
+        low_df = _fetch_acs5(
+            [majority_var, minority_var], low_scope, self.progress
+        ).rename(columns={majority_var: "low_majority", minority_var: "low_minority"})
         # Create a merge key by truncating the lower scope's GEOID.
         gran = get_census_granularity(high_scope.granularity)
         low_df["geoid"] = low_df["geoid"].apply(gran.truncate)
@@ -505,7 +517,7 @@ class GiniIndex(Adrio[np.float64]):
                 "fetching tract level data instead."
             )
             tracts = scope.raise_granularity()
-            tract_df = _fetch_acs5(["B19083_001E"], tracts)
+            tract_df = _fetch_acs5(["B19083_001E"], tracts, self.progress)
             as_tract = np.vectorize(TRACT.truncate)
             cbg_df = pd.DataFrame(
                 {
@@ -520,7 +532,7 @@ class GiniIndex(Adrio[np.float64]):
                 suffixes=(None, "_y"),
             )
         else:
-            result_df = _fetch_acs5(["B19083_001E"], scope)
+            result_df = _fetch_acs5(["B19083_001E"], scope, self.progress)
 
         return (
             result_df["B19083_001E"]
@@ -542,7 +554,7 @@ class MedianAge(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        acs_df = _fetch_acs5(["B01002_001E"], scope)
+        acs_df = _fetch_acs5(["B01002_001E"], scope, self.progress)
         return acs_df["B01002_001E"].to_numpy(dtype=np.float64)
 
 
@@ -557,5 +569,5 @@ class MedianIncome(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        acs_df = _fetch_acs5(["B19013_001E"], scope)
+        acs_df = _fetch_acs5(["B19013_001E"], scope, self.progress)
         return acs_df["B19013_001E"].to_numpy(dtype=np.float64)
