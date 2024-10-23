@@ -52,7 +52,7 @@ dependencies = [
 
 [tool.uv]
 dev-dependencies = [
-    "ruff>=0.6.2",
+    "ruff>=0.7.0",
     "ipykernel>=6.29.5",
     "setuptools>=74.0.0",
 ]
