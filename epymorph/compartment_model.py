@@ -120,10 +120,12 @@ def _as_events(trxs: Iterable[TransitionDef]) -> Iterator[EdgeDef]:
 
 
 def _remap_edge(e: EdgeDef, symbol_mapping: dict[Symbol, Symbol]) -> EdgeDef:
+    f = symbol_mapping[x] if (x := e.compartment_from) not in exogenous_states else x
+    t = symbol_mapping[x] if (x := e.compartment_to) not in exogenous_states else x
     return EdgeDef(
         rate=substitute(e.rate, symbol_mapping),
-        compartment_from=symbol_mapping[e.compartment_from],
-        compartment_to=symbol_mapping[e.compartment_to],
+        compartment_from=f,
+        compartment_to=t,
     )
 
 
