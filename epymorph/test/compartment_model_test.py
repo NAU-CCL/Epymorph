@@ -1,5 +1,6 @@
 # pylint: disable=missing-docstring,unused-variable
 import unittest
+from typing import Sequence
 
 from sympy import Max
 from sympy import symbols as sympy_symbols
@@ -10,7 +11,9 @@ from epymorph.compartment_model import (
     CombinedCompartmentModel,
     CompartmentDef,
     CompartmentModel,
+    EdgeDef,
     MultistrataModelSymbols,
+    TransitionDef,
     compartment,
     edge,
 )
@@ -344,5 +347,83 @@ class CompartmentModelTest(unittest.TestCase):
                     I_bbb,
                     beta_bbb_aaa * S_bbb * I_aaa / Max(1, S_aaa + I_aaa + R_aaa),
                 ),
+            ],
+        )
+
+    def test_combined_02(self):
+        # Test a combined model using exogenous classes.
+        class SirsBirthDeath(CompartmentModel):
+            compartments = [
+                compartment("S"),
+                compartment("I"),
+                compartment("R"),
+            ]
+
+            requirements = [
+                AttributeDef("beta", type=float, shape=Shapes.TxN),
+                AttributeDef("gamma", type=float, shape=Shapes.TxN),
+                AttributeDef("xi", type=float, shape=Shapes.TxN),
+                AttributeDef("birth_rate", type=float, shape=Shapes.TxN),
+                AttributeDef("death_rate", type=float, shape=Shapes.TxN),
+            ]
+
+            def edges(self, symbols):
+                [S, I, R] = symbols.all_compartments
+                [b, g, x, br, dr] = symbols.all_requirements
+                N = Max(1, S + I + R)
+                return [
+                    edge(S, I, rate=b * S * I / N),
+                    edge(I, R, rate=g * I),
+                    edge(R, S, rate=x * R),
+                    edge(BIRTH, S, rate=br * N),
+                    edge(S, DEATH, rate=dr * S),
+                    edge(I, DEATH, rate=dr * I),
+                    edge(R, DEATH, rate=dr * R),
+                ]
+
+        strata = [("one", SirsBirthDeath()), ("two", SirsBirthDeath())]
+        meta_requirements = ()
+
+        def meta_edges(symbols: MultistrataModelSymbols) -> Sequence[TransitionDef]:
+            [S1, I1, R1] = symbols.strata_compartments("one")
+            [S2, I2, R2] = symbols.strata_compartments("two")
+            [b1, *_] = symbols.strata_requirements("one")
+            [b2, *_] = symbols.strata_requirements("two")
+            N1 = Max(1, S1 + I1 + R1)
+            N2 = Max(1, S2 + I2 + R2)
+            return [
+                edge(S1, I1, rate=b1 * S1 * I2 / N2),
+                edge(S2, I2, rate=b2 * S2 * I1 / N1),
+            ]
+
+        multi_ipm = CombinedCompartmentModel(strata, meta_requirements, meta_edges)
+
+        self.assertEquals(
+            [x.name for x in multi_ipm.compartments],
+            ["S_one", "I_one", "R_one", "S_two", "I_two", "R_two"],
+        )
+        self.assertEquals(
+            [
+                f"{x.compartment_from}->{x.compartment_to}"
+                for x in multi_ipm.transitions
+                if isinstance(x, EdgeDef)
+            ],
+            [
+                "S_one->I_one",
+                "I_one->R_one",
+                "R_one->S_one",
+                "birth_exogenous->S_one",
+                "S_one->death_exogenous",
+                "I_one->death_exogenous",
+                "R_one->death_exogenous",
+                "S_two->I_two",
+                "I_two->R_two",
+                "R_two->S_two",
+                "birth_exogenous->S_two",
+                "S_two->death_exogenous",
+                "I_two->death_exogenous",
+                "R_two->death_exogenous",
+                "S_one->I_one",  # meta edge
+                "S_two->I_two",  # meta edge
             ],
         )

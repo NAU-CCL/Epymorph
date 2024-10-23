@@ -460,7 +460,7 @@ class MultistrataRumeBuilder(ABC):
     """
 
     @abstractmethod
-    def meta_edges(self, symbols: MultistrataModelSymbols) -> list[TransitionDef]:
+    def meta_edges(self, symbols: MultistrataModelSymbols) -> Sequence[TransitionDef]:
         """
         When implementing a MultistrataRumeBuilder, override this method
         to build the meta-transition-edges -- the edges which represent
