@@ -353,8 +353,6 @@ def _api_query(
         formatted_fips = ",".join(f"'{node}'" for node in fips)
         location_clauses = [f"{info.fips_col} in ({formatted_fips})"]
 
-    # processing steps
-    # + 1 for post processing
     processing_steps = len(location_clauses) + 1
 
     date_clause = (
@@ -363,7 +361,7 @@ def _api_query(
         f"and '{time_frame.end_date + timedelta(days=1)}T00:00:00'"
     )
 
-    cdc_queries = []
+    cdc_queries = list[DataFrame]()
 
     for i, loc_clause in enumerate(location_clauses):
         cdc_queries.append(_query_location(info, loc_clause, date_clause))

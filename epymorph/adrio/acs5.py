@@ -240,10 +240,8 @@ def _fetch_acs5(
 
     # fetch all queries and combine results
     try:
-        # a potential solution...
-        acs_data = []
+        acs_data = list[DataFrame]()
         processing_steps = len(queries) + 1
-        print(processing_steps)
         for i, query in enumerate(queries):
             acs_data.append(
                 pd.DataFrame.from_records(
