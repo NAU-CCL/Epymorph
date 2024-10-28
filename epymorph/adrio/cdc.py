@@ -366,8 +366,7 @@ def _api_query(
     for i, loc_clause in enumerate(location_clauses):
         cdc_queries.append(_query_location(info, loc_clause, date_clause))
 
-        if progress is not None:
-            progress((i + 1) / processing_steps, None)
+        progress((i + 1) / processing_steps, None)
 
     cdc_df = concat(cdc_queries)
 

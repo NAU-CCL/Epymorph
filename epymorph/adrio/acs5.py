@@ -249,8 +249,7 @@ def _fetch_acs5(
                 )
             )
 
-            if progress is not None:
-                progress((i + 1) / processing_steps, None)
+            progress((i + 1) / processing_steps, None)
 
         acs_df = pd.concat(acs_data)
 
