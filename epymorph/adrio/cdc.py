@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, concat, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio
+from epymorph.adrio.adrio import Adrio, ProgressCallback
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (
@@ -33,7 +33,10 @@ class QueryInfo(NamedTuple):
 
 
 def _fetch_cases(
-    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+    attrib_name: str,
+    scope: CensusScope,
+    time_frame: TimeFrame,
+    progress: ProgressCallback,
 ) -> NDArray[np.float64]:
     """
     Fetches data from HealthData dataset reporting COVID-19 cases per 100k population.
@@ -53,7 +56,9 @@ def _fetch_cases(
         attrib_name,
     )
 
-    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(
+        info, scope.get_node_ids(), time_frame, scope.granularity, progress
+    )
 
     cdc_df = cdc_df.rename(columns={"county_fips": "fips"})
 
@@ -76,7 +81,11 @@ def _fetch_cases(
 
 
 def _fetch_facility_hospitalization(
-    attrib_name: str, scope: CensusScope, time_frame: TimeFrame, replace_sentinel: int
+    attrib_name: str,
+    scope: CensusScope,
+    time_frame: TimeFrame,
+    replace_sentinel: int,
+    progress: ProgressCallback,
 ) -> NDArray[np.float64]:
     """
     Fetches data from HealthData dataset reporting number of people hospitalized for
@@ -101,7 +110,9 @@ def _fetch_facility_hospitalization(
         attrib_name,
     )
 
-    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(
+        info, scope.get_node_ids(), time_frame, scope.granularity, progress
+    )
 
     if scope.granularity == "state":
         cdc_df["fips_code"] = [STATE.extract(x) for x in cdc_df["fips_code"]]
@@ -133,7 +144,10 @@ def _fetch_facility_hospitalization(
 
 
 def _fetch_state_hospitalization(
-    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+    attrib_name: str,
+    scope: CensusScope,
+    time_frame: TimeFrame,
+    progress: ProgressCallback,
 ) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting number of people hospitalized for COVID-19
@@ -167,7 +181,7 @@ def _fetch_state_hospitalization(
     fips = scope.get_node_ids()
     state_codes = np.array([state_mapping[x] for x in fips])
 
-    cdc_df = _api_query(info, state_codes, time_frame, scope.granularity)
+    cdc_df = _api_query(info, state_codes, time_frame, scope.granularity, progress)
 
     cdc_df = cdc_df.groupby(["week_end_date", "jurisdiction"]).sum()
     cdc_df = cdc_df.reset_index()
@@ -184,7 +198,10 @@ def _fetch_state_hospitalization(
 
 
 def _fetch_vaccination(
-    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+    attrib_name: str,
+    scope: CensusScope,
+    time_frame: TimeFrame,
+    progress: ProgressCallback,
 ) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting total COVID-19 vaccination numbers.
@@ -201,7 +218,9 @@ def _fetch_vaccination(
         "https://data.cdc.gov/resource/8xkx-amqh.csv?", "date", "fips", attrib_name
     )
 
-    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(
+        info, scope.get_node_ids(), time_frame, scope.granularity, progress
+    )
 
     cdc_df = cdc_df.pivot_table(index="date", columns="fips", values=info.data_col)
 
@@ -214,7 +233,10 @@ def _fetch_vaccination(
 
 
 def _fetch_deaths_county(
-    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+    attrib_name: str,
+    scope: CensusScope,
+    time_frame: TimeFrame,
+    progress: ProgressCallback,
 ) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting number of deaths from COVID-19.
@@ -245,7 +267,9 @@ def _fetch_deaths_county(
             attrib_name,
         )
 
-    cdc_df = _api_query(info, scope.get_node_ids(), time_frame, scope.granularity)
+    cdc_df = _api_query(
+        info, scope.get_node_ids(), time_frame, scope.granularity, progress
+    )
 
     if scope.granularity == "state":
         cdc_df = cdc_df.groupby(["week_ending_date", info.fips_col]).sum()
@@ -264,7 +288,10 @@ def _fetch_deaths_county(
 
 
 def _fetch_deaths_state(
-    attrib_name: str, scope: CensusScope, time_frame: TimeFrame
+    attrib_name: str,
+    scope: CensusScope,
+    time_frame: TimeFrame,
+    progress: ProgressCallback,
 ) -> NDArray[np.float64]:
     """
     Fetches data from CDC dataset reporting number of deaths from COVID-19 and other
@@ -289,7 +316,7 @@ def _fetch_deaths_state(
         True,
     )
 
-    cdc_df = _api_query(info, state_names, time_frame, scope.granularity)
+    cdc_df = _api_query(info, state_names, time_frame, scope.granularity, progress)
 
     cdc_df = cdc_df.groupby(["end_date", "state"]).sum()
     cdc_df = cdc_df.reset_index()
@@ -308,6 +335,7 @@ def _api_query(
     fips: NDArray,
     time_frame: TimeFrame,
     granularity: CensusGranularityName,
+    progress: ProgressCallback,
 ) -> DataFrame:
     """
     Composes URLs to query API and sends query requests.
@@ -325,18 +353,22 @@ def _api_query(
         formatted_fips = ",".join(f"'{node}'" for node in fips)
         location_clauses = [f"{info.fips_col} in ({formatted_fips})"]
 
+    processing_steps = len(location_clauses) + 1
+
     date_clause = (
         f"{info.date_col} "
         f"between '{time_frame.start_date}T00:00:00' "
         f"and '{time_frame.end_date + timedelta(days=1)}T00:00:00'"
     )
 
-    cdc_df = concat(
-        [
-            _query_location(info, loc_clause, date_clause)
-            for loc_clause in location_clauses
-        ]
-    )
+    cdc_queries = list[DataFrame]()
+
+    for i, loc_clause in enumerate(location_clauses):
+        cdc_queries.append(_query_location(info, loc_clause, date_clause))
+
+        progress((i + 1) / processing_steps, None)
+
+    cdc_df = concat(cdc_queries)
 
     cdc_df = cdc_df.sort_values(by=[info.date_col, info.fips_col])
     return cdc_df
@@ -389,7 +421,9 @@ class CovidCasesPer100k(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_cases("covid_cases_per_100k", scope, self.time_frame)
+        return _fetch_cases(
+            "covid_cases_per_100k", scope, self.time_frame, self.progress
+        )
 
 
 class CovidHospitalizationsPer100k(Adrio[np.float64]):
@@ -405,7 +439,7 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_cases(
-            "covid_hospital_admissions_per_100k", scope, self.time_frame
+            "covid_hospital_admissions_per_100k", scope, self.time_frame, self.progress
         )
 
 
@@ -432,6 +466,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
             scope,
             self.time_frame,
             self.replace_sentinel,
+            self.progress,
         )
 
 
@@ -458,6 +493,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
             scope,
             self.time_frame,
             self.replace_sentinel,
+            self.progress,
         )
 
 
@@ -484,6 +520,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
             scope,
             self.time_frame,
             self.replace_sentinel,
+            self.progress,
         )
 
 
@@ -510,6 +547,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
             scope,
             self.time_frame,
             self.replace_sentinel,
+            self.progress,
         )
 
 
@@ -526,7 +564,7 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization(
-            "avg_admissions_all_covid_confirmed", scope, self.time_frame
+            "avg_admissions_all_covid_confirmed", scope, self.time_frame, self.progress
         )
 
 
@@ -543,7 +581,10 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization(
-            "total_admissions_all_covid_confirmed", scope, self.time_frame
+            "total_admissions_all_covid_confirmed",
+            scope,
+            self.time_frame,
+            self.progress,
         )
 
 
@@ -560,7 +601,10 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization(
-            "avg_admissions_all_influenza_confirmed", scope, self.time_frame
+            "avg_admissions_all_influenza_confirmed",
+            scope,
+            self.time_frame,
+            self.progress,
         )
 
 
@@ -577,7 +621,10 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
         return _fetch_state_hospitalization(
-            "total_admissions_all_influenza_confirmed", scope, self.time_frame
+            "total_admissions_all_influenza_confirmed",
+            scope,
+            self.time_frame,
+            self.progress,
         )
 
 
@@ -593,7 +640,9 @@ class FullCovidVaccinations(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_vaccination("series_complete_yes", scope, self.time_frame)
+        return _fetch_vaccination(
+            "series_complete_yes", scope, self.time_frame, self.progress
+        )
 
 
 class OneDoseCovidVaccinations(Adrio[np.float64]):
@@ -611,7 +660,9 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_vaccination("administered_dose1_recip", scope, self.time_frame)
+        return _fetch_vaccination(
+            "administered_dose1_recip", scope, self.time_frame, self.progress
+        )
 
 
 class CovidBoosterDoses(Adrio[np.float64]):
@@ -626,7 +677,9 @@ class CovidBoosterDoses(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_vaccination("booster_doses", scope, self.time_frame)
+        return _fetch_vaccination(
+            "booster_doses", scope, self.time_frame, self.progress
+        )
 
 
 class CovidDeathsCounty(Adrio[np.float64]):
@@ -641,7 +694,9 @@ class CovidDeathsCounty(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_deaths_county("covid_19_deaths", scope, self.time_frame)
+        return _fetch_deaths_county(
+            "covid_19_deaths", scope, self.time_frame, self.progress
+        )
 
 
 class CovidDeathsState(Adrio[np.float64]):
@@ -656,7 +711,9 @@ class CovidDeathsState(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_deaths_state("covid_19_deaths", scope, self.time_frame)
+        return _fetch_deaths_state(
+            "covid_19_deaths", scope, self.time_frame, self.progress
+        )
 
 
 class InfluenzaDeathsState(Adrio[np.float64]):
@@ -671,4 +728,6 @@ class InfluenzaDeathsState(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = _validate_scope(self.scope)
-        return _fetch_deaths_state("influenza_deaths", scope, self.time_frame)
+        return _fetch_deaths_state(
+            "influenza_deaths", scope, self.time_frame, self.progress
+        )
