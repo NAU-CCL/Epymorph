@@ -368,18 +368,33 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         cache. Provides a projected download time based on the given assumed maximum
         network bandwidth (defaults to 1 MB/s).
         """
+
         estimates = list_not_none(
             p.with_context(scope=self.scope, dim=self.dim).estimate_data()
             for p in self.params.values()
             if isinstance(p, Adrio)
         )
 
+        adrio_params = []
+
+        for p in self.params.values():
+            if isinstance(p, Adrio):
+                if (
+                    p.with_context(scope=self.scope, dim=self.dim).estimate_data()
+                    is None
+                ):
+                    adrio_params.append(p.full_name)
+                else:
+                    adrio_params.append(
+                        p.with_context(scope=self.scope, dim=self.dim).estimate_data()
+                    )
+
         lines = list[str]()
         if len(estimates) == 0:
             lines.append("ADRIO data usage is either negligible or non-estimable.")
         else:
             lines.append("ADRIO data usage estimation:")
-            lines.extend(estimate_report(CACHE_PATH, estimates, max_bandwidth))
+            lines.extend(estimate_report(CACHE_PATH, adrio_params, max_bandwidth))
 
         for l in lines:
             print(l)
