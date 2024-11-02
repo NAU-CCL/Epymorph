@@ -13,16 +13,13 @@ from epymorph.adrio.adrio import Adrio
 from epymorph.error import DataResourceException, GeoValidationException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (
-    STATE,
     CensusScope,
     CountyScope,
     StateScope,
-    get_census_granularity,
-    get_us_counties,
-    get_us_states,
-    state_code_to_fips,
 )
-from epymorph.simulation import TimeFrame
+from epymorph.geography.us_geography import STATE, CensusGranularity
+from epymorph.geography.us_tiger import get_counties, get_states
+from epymorph.time import TimeFrame
 
 KeySpecifier = Literal["state_abbrev", "county_state", "geoid"]
 
@@ -68,19 +65,19 @@ def _parse_abbrev(
         msg = "State scope is required to use state abbreviation key format."
         raise DataResourceException(msg)
 
-    state_mapping = state_code_to_fips(scope.year)
+    state_mapping = get_states(scope.year).state_code_to_fips
 
     result_df = df.copy()
     result_df[key_col] = [state_mapping.get(x) for x in result_df[key_col]]
     if result_df[key_col].isna().any():
         raise DataResourceException("Invalid state code in key column.")
-    result_df = result_df[result_df[key_col].isin(scope.get_node_ids())]
+    result_df = result_df[result_df[key_col].isin(scope.node_ids)]
 
     if key_col2 is not None:
         result_df[key_col2] = [state_mapping.get(x) for x in result_df[key_col2]]
         if result_df[key_col2].isna().any():
             raise DataResourceException("Invalid state code in second key column.")
-        result_df = result_df[result_df[key_col2].isin(scope.get_node_ids())]
+        result_df = result_df[result_df[key_col2].isin(scope.node_ids)]
 
     return result_df
 
@@ -98,13 +95,13 @@ def _parse_county_state(
         raise DataResourceException(msg)
 
     # make counties info dataframe
-    counties_info = get_us_counties(scope.year)
+    counties_info = get_counties(scope.year)
     counties_info_df = DataFrame(
         {"geoid": counties_info.geoid, "name": counties_info.name}
     )
 
     # make states info dataframe
-    states_info = get_us_states(scope.year)
+    states_info = get_states(scope.year)
     states_info_df = DataFrame(
         {"state_geoid": states_info.geoid, "state_name": states_info.name}
     )
@@ -152,14 +149,14 @@ def _parse_geoid(
         msg = "Census scope is required to use geoid key format."
         raise DataResourceException(msg)
 
-    granularity = get_census_granularity(scope.granularity)
+    granularity = CensusGranularity.of(scope.granularity)
     if not all(granularity.matches(x) for x in df[key_col]):
         raise DataResourceException("Invalid geoid in key column.")
 
     result_df = df.copy()
-    result_df = result_df[result_df[key_col].isin(scope.get_node_ids())]
+    result_df = result_df[result_df[key_col].isin(scope.node_ids)]
     if key_col2 is not None:
-        result_df = result_df[result_df[key_col2].isin(scope.get_node_ids())]
+        result_df = result_df[result_df[key_col2].isin(scope.node_ids)]
 
     return result_df
 
@@ -169,7 +166,7 @@ def _validate_result(scope: GeoScope, data: Series) -> None:
     Ensures that the key column for an attribute contains at least one entry
     for every node in the scope.
     """
-    if set(data) != set(scope.get_node_ids()):
+    if set(data) != set(scope.node_ids):
         msg = (
             "Key column missing keys for geographies in scope "
             "or contains unrecognized keys."

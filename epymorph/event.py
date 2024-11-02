@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 
 from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.simulation import TimeFrame
+from epymorph.time import TimeFrame
 from epymorph.util import Event, Singleton
 
 #####################

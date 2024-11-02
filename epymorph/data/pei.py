@@ -13,9 +13,7 @@ import numpy as np
 from epymorph.data_type import CentroidDType
 from epymorph.geography.us_census import StateScope
 
-pei_scope = StateScope.in_states_by_code(
-    states_code=["FL", "GA", "MD", "NC", "SC", "VA"], year=2015
-)
+pei_scope = StateScope.in_states(states=["FL", "GA", "MD", "NC", "SC", "VA"], year=2015)
 
 pei_centroids = np.array(
     [

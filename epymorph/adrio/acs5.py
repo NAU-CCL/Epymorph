@@ -20,17 +20,18 @@ from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (
-    BLOCK_GROUP,
-    COUNTY,
-    STATE,
-    TRACT,
     BlockGroupScope,
     CensusScope,
     CountyScope,
     StateScope,
-    StateScopeAll,
     TractScope,
-    get_census_granularity,
+)
+from epymorph.geography.us_geography import (
+    BLOCK_GROUP,
+    COUNTY,
+    STATE,
+    TRACT,
+    CensusGranularity,
 )
 from epymorph.simulation import AttributeDef
 from epymorph.util import filter_with_mask
@@ -114,11 +115,11 @@ def is_acs5_year(year: int) -> TypeGuard[Acs5Year]:
 def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
     """Creates census API queries that cover the given scope."""
     match scope:
-        case StateScopeAll():
-            return [{"for": "state:*"}]
-
         case StateScope(includes_granularity="state", includes=includes):
-            return [{"for": f"state:{','.join(includes)}"}]
+            if scope.is_all_states():
+                return [{"for": "state:*"}]
+            else:
+                return [{"for": f"state:{','.join(includes)}"}]
 
         case CountyScope(includes_granularity="state", includes=includes):
             return [
@@ -274,7 +275,7 @@ def _fetch_acs5(
 
     # check and sort results for 1:1 match with scope
     try:
-        geoid_df = pd.DataFrame({"geoid": scope.get_node_ids()})
+        geoid_df = pd.DataFrame({"geoid": scope.node_ids})
         return geoid_df.merge(acs_df, on="geoid", how="left", validate="1:1")
     except pd.errors.MergeError:
         msg = "Fetched data was not an exact match for the scope's geographies."
@@ -478,7 +479,7 @@ class DissimilarityIndex(Adrio[np.float64]):
             [majority_var, minority_var], low_scope, self.progress
         ).rename(columns={majority_var: "low_majority", minority_var: "low_minority"})
         # Create a merge key by truncating the lower scope's GEOID.
-        gran = get_census_granularity(high_scope.granularity)
+        gran = CensusGranularity.of(high_scope.granularity)
         low_df["geoid"] = low_df["geoid"].apply(gran.truncate)
 
         # Merge and compute score.
@@ -518,8 +519,8 @@ class GiniIndex(Adrio[np.float64]):
             as_tract = np.vectorize(TRACT.truncate)
             cbg_df = pd.DataFrame(
                 {
-                    "geoid": scope.get_node_ids(),
-                    "tract_geoid": as_tract(scope.get_node_ids()),
+                    "geoid": scope.node_ids,
+                    "tract_geoid": as_tract(scope.node_ids),
                 }
             )
             result_df = cbg_df.merge(

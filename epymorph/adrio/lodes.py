@@ -13,8 +13,9 @@ from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_
 from epymorph.data_usage import DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import STATE, CensusScope, state_fips_to_code
-from epymorph.geography.us_tiger import CacheEstimate
+from epymorph.geography.us_census import CensusScope
+from epymorph.geography.us_geography import STATE
+from epymorph.geography.us_tiger import CacheEstimate, get_states
 
 _LODES_CACHE_PATH = module_cache_path(__name__)
 
@@ -130,14 +131,14 @@ def _fetch_lodes(
 
     # initialize variables
     aggregated_data = None
-    geoid = scope.get_node_ids()
+    geoid = scope.node_ids
     n_geocode = len(geoid)
     geocode_to_index = {geocode: i for i, geocode in enumerate(geoid)}
     geocode_len = len(geoid[0])
     data_frames = []
 
     if scope.granularity != "state":
-        states = STATE.truncate_list(geoid)
+        states = list(STATE.truncate_unique(geoid))
     else:
         states = geoid
 
@@ -203,7 +204,7 @@ def _fetch_lodes(
             raise DataResourceException(message)
 
     # translate state FIPS code to state to use in URL
-    state_codes = state_fips_to_code(scope.year)
+    state_codes = get_states(scope.year).state_fips_to_code
     state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
 
     # start progress tracking
@@ -306,15 +307,15 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
 
     # get the states to estimate data sizes
     if scope.granularity != "state":
-        states = STATE.truncate_list(scope.get_node_ids())
+        states = list(STATE.truncate_unique(scope.node_ids))
     else:
-        states = scope.get_node_ids()
+        states = scope.node_ids
 
     if len(states) > 1:
         file_type = "aux"
 
     # translate state FIPS code to state to use in URL
-    state_codes = state_fips_to_code(scope.year)
+    state_codes = get_states(scope.year).state_fips_to_code
     state_abbreviations = [state_codes.get(fips, "").lower() for fips in states]
 
     total_state_files = len(states)

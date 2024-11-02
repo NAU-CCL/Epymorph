@@ -23,6 +23,7 @@ from epymorph.params import (
 )
 from epymorph.rume import Gpm, MultistrataRume, Rume
 from epymorph.simulator.data import evaluate_params
+from epymorph.time import TimeFrame
 
 
 class EvaluateParamsTest(unittest.TestCase):
@@ -100,7 +101,7 @@ class EvaluateParamsTest(unittest.TestCase):
             ],
             meta_requirements=meta_requirements,
             meta_edges=meta_edges,
-            scope=StateScope.in_states(["04", "35"]),
+            scope=StateScope.in_states(["04", "35"], year=2020),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params=rume_params or self._default_params(),
         )

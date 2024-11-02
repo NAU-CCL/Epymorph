@@ -14,10 +14,11 @@ from epymorph.error import (
     IpmSimNaNException,
     MmSimException,
 )
-from epymorph.geography.scope import CustomScope
+from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import StateScope
 from epymorph.rume import SingleStrataRume
 from epymorph.simulation import AttributeDef
+from epymorph.time import TimeFrame
 
 
 class SimulateTest(unittest.TestCase):
@@ -29,7 +30,7 @@ class SimulateTest(unittest.TestCase):
 
     def _pei_scope(self) -> StateScope:
         pei_states = ["FL", "GA", "MD", "NC", "SC", "VA"]
-        return StateScope.in_states_by_code(pei_states, 2010)
+        return StateScope.in_states(pei_states, 2010)
 
     def _pei_geo(self) -> Mapping[str, NDArray]:
         # We don't want to use real ADRIOs here because they could fail
@@ -80,41 +81,41 @@ class SimulateTest(unittest.TestCase):
         )
 
         self.assertGreater(
-            out1.prevalence[:, :, 0].max(),
+            out1.compartments[:, :, 0].max(),
             0,
-            "S prevalence should be greater than zero at some point in the sim.",
+            "S compartment should be greater than zero at some point in the sim.",
         )
         self.assertGreater(
-            out1.prevalence[:, :, 1].max(),
+            out1.compartments[:, :, 1].max(),
             0,
-            "I prevalence should be greater than zero at some point in the sim.",
+            "I compartment should be greater than zero at some point in the sim.",
         )
         self.assertGreater(
-            out1.prevalence[:, :, 2].max(),
+            out1.compartments[:, :, 2].max(),
             0,
-            "R prevalence should be greater than zero at some point in the sim.",
+            "R compartment should be greater than zero at some point in the sim.",
         )
         self.assertGreater(
-            out1.incidence[:, :, 0].max(),
+            out1.events[:, :, 0].max(),
             0,
-            "S-to-I incidence should be greater than zero at some point in the sim.",
+            "S-to-I event should be greater than zero at some point in the sim.",
         )
         self.assertGreater(
-            out1.incidence[:, :, 1].max(),
+            out1.events[:, :, 1].max(),
             0,
-            "I-to-R incidence should be greater than zero at some point in the sim.",
+            "I-to-R event should be greater than zero at some point in the sim.",
         )
         self.assertGreater(
-            out1.incidence[:, :, 2].max(),
+            out1.events[:, :, 2].max(),
             0,
-            "R-to-S incidence should be greater than zero at some point in the sim.",
+            "R-to-S event should be greater than zero at some point in the sim.",
         )
 
         self.assertGreaterEqual(
-            out1.prevalence.min(), 0, "Prevalence can never be less than zero."
+            out1.compartments.min(), 0, "Compartments can never be less than zero."
         )
         self.assertGreaterEqual(
-            out1.incidence.min(), 0, "Incidence can never be less than zero."
+            out1.events.min(), 0, "Events can never be less than zero."
         )
 
         out2 = sim.run(
@@ -122,15 +123,18 @@ class SimulateTest(unittest.TestCase):
         )
 
         np.testing.assert_array_equal(
-            out1.incidence,
-            out2.incidence,
-            "Running the sim twice with the same RNG should yield the same incidence.",
+            out1.events,
+            out2.events,
+            "Running the sim twice with the same RNG should yield the same events.",
         )
 
         np.testing.assert_array_equal(
-            out1.prevalence,
-            out2.prevalence,
-            "Running the sim twice with the same RNG should yield the same prevalence.",
+            out1.compartments,
+            out2.compartments,
+            (
+                "Running the sim twice with the same RNG should yield the same "
+                "compartments."
+            ),
         )
 
     def test_override_params(self):
@@ -163,9 +167,9 @@ class SimulateTest(unittest.TestCase):
         )
 
         # We expect in the first result, some people do make the R->S transition,
-        self.assertFalse(np.all(out1.incidence[:, 0, 2] == 0))
+        self.assertFalse(np.all(out1.events[:, 0, 2] == 0))
         # while in the second result, no one does.
-        self.assertTrue(np.all(out2.incidence[:, 0, 2] == 0))
+        self.assertTrue(np.all(out2.events[:, 0, 2] == 0))
 
     def test_less_than_zero_err(self):
         """

@@ -10,7 +10,7 @@ from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import SimDType
 from epymorph.database import Database, ModuleNamespace, NamePattern
 from epymorph.error import AttributeException, InitException
-from epymorph.geography.scope import CustomScope
+from epymorph.geography.custom import CustomScope
 from epymorph.simulation import AttributeDef, NamespacedAttributeResolver
 
 
@@ -25,7 +25,7 @@ def test_context(additional_data: dict[str, NDArray] | None = None):
         events=3,
     )
     params = {
-        "label": scope.get_node_ids(),
+        "label": scope.node_ids,
         "population": np.array([100, 200, 300, 400, 500], dtype=SimDType),
         "foosball_championships": np.array([2, 4, 1, 9, 6]),
         **(additional_data or {}),

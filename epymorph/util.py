@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import cache, wraps
 from math import floor
 from re import compile as re_compile
 from typing import (
@@ -14,6 +15,7 @@ from typing import (
     Literal,
     Mapping,
     OrderedDict,
+    ParamSpec,
     Self,
     TypeGuard,
     TypeVar,
@@ -26,6 +28,17 @@ from typing_extensions import deprecated
 
 acceptable_name = re_compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 """A pattern that matches generally acceptable names for use across epymorph."""
+
+
+def normalize_str(value: str) -> str:
+    """Normalize a string for permissive search."""
+    return value.strip().lower()
+
+
+def normalize_list(values: list[str]) -> list[str]:
+    """Normalize a list of strings for permissive search."""
+    return list(map(normalize_str, values))
+
 
 # function utilities
 
@@ -56,6 +69,17 @@ def call_all(*fs: Callable[[], Any]) -> None:
     """Given a list of no-arg functions, call all of the functions and return None."""
     for f in fs:
         f()
+
+
+P = ParamSpec("P")
+
+
+def cache_transparent(func: Callable[P, T]) -> Callable[P, T]:
+    """Decorates a function with functools.cache but maintains its signature."""
+    # cache() transforms the function into an _lru_cache_wrapper,
+    # which is technically correct but mostly unhelpful.
+    # Generally we don't want the user to know or care that a function is cached.
+    return wraps(func)(cache(func))  # type: ignore
 
 
 # collection utilities
@@ -160,11 +184,18 @@ def filter_with_mask(
     return matched, mask
 
 
-def as_list(x: T | list[T]) -> list[T]:
+def as_list(x: T | Iterable[T]) -> list[T]:
     """
-    If `x` is a list, return it unchanged. If it's a single value, wrap it in a list.
+    If `x` is a list, return it unchanged.
+    If it's some other kind of iterable, expand it into a list.
+    If it's a single value, turn it into a single-item list.
     """
-    return x if isinstance(x, list) else [x]
+    if isinstance(x, list):
+        return x
+    elif isinstance(x, Iterable):
+        return [*x]
+    else:
+        return [x]
 
 
 def zip_list(xs: Iterable[A], ys: Iterable[B]) -> list[tuple[A, B]]:
@@ -264,6 +295,17 @@ def prefix(length: int) -> Callable[[NDArray[np.str_]], NDArray[np.str_]]:
     return np.vectorize(lambda x: x[0:length], otypes=[np.str_])
 
 
+def mask(length: int, selection: slice | list[int]) -> NDArray[np.bool_]:
+    """
+    Creates a boolean mask of a given `length` where all elements identified
+    by `selection` are True and all others are False. The selection can be
+    a slice or a list of indices.
+    """
+    mask = np.zeros(shape=length, dtype=np.bool_)
+    mask[selection] = True
+    return mask
+
+
 RADIUS_MI = 3959.87433  # radius of earth in mi
 
 
@@ -333,6 +375,9 @@ def dtype_name(d: np.dtype) -> str:
     if d.isbuiltin:
         return d.name
     return str(d)
+
+
+# Matchers
 
 
 T_contra = TypeVar("T_contra", contravariant=True)

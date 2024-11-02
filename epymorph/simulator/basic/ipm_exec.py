@@ -34,8 +34,8 @@ class Result(NamedTuple):
 
     events: SimArray
     """events that happened this tick (an (N,E) array)"""
-    prevalence: SimArray
-    """updated prevalence as a result of these events (an (N,C) array)."""
+    compartments: SimArray
+    """updated compartments as a result of these events (an (N,C) array)."""
 
 
 ############################################################
@@ -69,7 +69,7 @@ def _compile_transitions(model: BaseCompartmentModel) -> list[CompiledTransition
 
     def f(transition: TransitionDef) -> CompiledTransition:
         match transition:
-            case EdgeDef(rate, _, _):
+            case EdgeDef(_, rate, _, _):
                 rate_lambda = lambdify(rate_params, rate)
                 return CompiledEdge(rate_lambda)
             case ForkDef(rate, edges, prob):
@@ -171,11 +171,11 @@ class IpmExecutor:
         """
         Applies the IPM for this tick, mutating the world state.
         Returns the location-specific events that happened this tick (an (N,E) array)
-        and the new prevalence resulting from these events (an (N,C) array).
+        and the new compartments resulting from these events (an (N,C) array).
         """
         _, N, C, E = self._rume.dim.TNCE
         tick_events = np.zeros((N, E), dtype=SimDType)
-        tick_prevalence = np.zeros((N, C), dtype=SimDType)
+        tick_compartments = np.zeros((N, C), dtype=SimDType)
 
         for node in range(N):
             cohorts = self._world.get_cohort_array(node)
@@ -188,9 +188,9 @@ class IpmExecutor:
             location_delta = cohort_deltas.sum(axis=0, dtype=SimDType)
 
             tick_events[node] = occurrences
-            tick_prevalence[node] = effective + location_delta
+            tick_compartments[node] = effective + location_delta
 
-        return Result(tick_events, tick_prevalence)
+        return Result(tick_events, tick_compartments)
 
     def _events(self, tick: Tick, node: int, effective_pop: SimArray) -> SimArray:
         """
@@ -283,7 +283,7 @@ class IpmExecutor:
                 {
                     name: value
                     for name, value in zip(
-                        [c.name for c in self._rume.ipm.compartments],
+                        [c.name.full for c in self._rume.ipm.compartments],
                         rate_attrs[: self._rume.dim.compartments],
                     )
                 },
