@@ -1,11 +1,11 @@
 import unittest
 
-from epymorph.data_usage import DataEstimate, estimate_total
+from epymorph.data_usage import AvailableDataEstimate, estimate_total
 
 
 class DataUsageTest(unittest.TestCase):
     def test_estimate_total_1(self):
-        e1 = DataEstimate(
+        e1 = AvailableDataEstimate(
             name="Thing One",
             cache_key="thing-one",
             new_network_bytes=179,
@@ -14,7 +14,7 @@ class DataUsageTest(unittest.TestCase):
             total_cache_bytes=307,
         )
 
-        e2 = DataEstimate(
+        e2 = AvailableDataEstimate(
             name="Thing Two",
             cache_key="thing-two",
             new_network_bytes=283,
@@ -34,7 +34,7 @@ class DataUsageTest(unittest.TestCase):
         self.assertAlmostEqual(actual.download_time, (179 / 13) + (283 / 7))
 
     def test_estimate_total_2(self):
-        e1 = DataEstimate(
+        e1 = AvailableDataEstimate(
             name="Thing One A",
             cache_key="same-key",
             new_network_bytes=179,
@@ -43,7 +43,7 @@ class DataUsageTest(unittest.TestCase):
             total_cache_bytes=307,
         )
 
-        e2 = DataEstimate(
+        e2 = AvailableDataEstimate(
             name="Thing Two",
             cache_key="different-key",
             new_network_bytes=283,
@@ -54,7 +54,7 @@ class DataUsageTest(unittest.TestCase):
 
         # because this duplicates the key of e1,
         # it will not be counted towards the total
-        e3 = DataEstimate(
+        e3 = AvailableDataEstimate(
             name="Thing One B",
             cache_key="same-key",
             new_network_bytes=179,
