@@ -384,6 +384,17 @@ class PopulationByAge(Adrio[np.int64]):
     _age_range: AgeRange
 
     def __init__(self, age_range_start: int, age_range_end: int | None):
+        """
+        Initializes the population by age table with a starting age and an end age to
+        define the total age range.
+
+        Parameters
+        ----------
+        age_range_start : int
+            The starting age for the age range to include for the population table.
+        age_range_end : int
+            The ending age for the age range to include for the population table.
+        """
         self._age_range = AgeRange(age_range_start, age_range_end)
 
     @override
@@ -454,6 +465,22 @@ class DissimilarityIndex(Adrio[np.float64]):
     minority_pop: RaceCategory
 
     def __init__(self, majority_pop: RaceCategory, minority_pop: RaceCategory):
+        """
+        Initializes the fetching for the array of segregation with a majority and
+        minority population.
+
+        Parameters
+        ----------
+        majority_pop : RaceCategory
+            The race category representing the majority population for the amount of
+            segregation (options:, 'White', 'Black', 'Native', 'Asian',
+            'Pacific Islander', 'Other').
+
+        minority_pop : RaceCategory
+            The race category representing the minority population within the
+            segregation analysis (options:, 'White', 'Black', 'Native', 'Asian',
+            'Pacific Islander', 'Other').
+        """
         self.majority_pop = majority_pop
         """The race category of the majority population"""
         self.minority_pop = minority_pop

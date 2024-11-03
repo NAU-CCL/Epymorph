@@ -391,6 +391,19 @@ class Commuters(Adrio[np.int64]):
     job_type: JobType
 
     def __init__(self, year: int, job_type: JobType = "All Jobs"):
+        """
+        Initializes the commuters matrix with the year and with the type of job, which
+        defaults to "All Jobs".
+
+        Parameters
+        ----------
+        year : int
+            The year for all of the commuting data.
+        job_type : JobType
+            The category of job all resulting commuters work under (options: "All Jobs",
+            "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
+            "All Federal Jobs", "Federal Primary Jobs").
+        """
         self.year = year
         self.job_type = job_type
 
@@ -431,6 +444,22 @@ class CommutersByAge(Adrio[np.int64]):
     age_range: AgeRange
 
     def __init__(self, year: int, age_range: AgeRange, job_type: JobType = "All Jobs"):
+        """
+        Initializes the commuters by age matrix with the year, the age range, and the
+        type of job, which defaults to "All Jobs".
+
+        Parameters
+        ----------
+        year : int
+            The year for all of the commuting data.
+        age_range : AgeRange
+            The defined age range that all commuters fall under
+            (options: '29 and Under', '30_54', '55 and Over').
+        job_type : JobType
+            The category of job all resulting commuters work under (options: "All Jobs",
+            "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
+            "All Federal Jobs", "Federal Primary Jobs").
+        """
         self.year = year
         self.age_range = age_range
         self.job_type = job_type
@@ -475,6 +504,22 @@ class CommutersByEarnings(Adrio[np.int64]):
     def __init__(
         self, year: int, earning_range: EarningRange, job_type: JobType = "All Jobs"
     ):
+        """
+        Initializes the commuters by monthly earnings matrix with the year, the earning
+        range, and the type of job, which defaults to "All Jobs".
+
+        Parameters
+        ----------
+        year : int
+            The year for all of the commuting data.
+        earning_range : EarningRange
+            The defined monthly earnings range that all commuters fall under
+            (options: '$1250 and Under', '$1251_$3333', '$3333 and Over').
+        job_type : JobType
+            The category of job all resulting commuters work under (options: "All Jobs",
+            "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
+            "All Federal Jobs", "Federal Primary Jobs").
+        """
         self.year = year
         self.earning_range = earning_range
         self.job_type = job_type
@@ -517,6 +562,22 @@ class CommutersByIndustry(Adrio[np.int64]):
     industry: Industries
 
     def __init__(self, year: int, industry: Industries, job_type: JobType = "All Jobs"):
+        """
+        Initializes the commuters by industry matrix with the year, the industry type,
+        and the type of job, which defaults to "All Jobs".
+
+        Parameters
+        ----------
+        year : int
+            The year for all of the commuting data.
+        industry : Industries
+            The defined industry that all commuters fall under
+            (options: 'Goods Producing', 'Trade Transport Utility', 'Other').
+        job_type : JobType
+            The category of job all resulting commuters work under (options: "All Jobs",
+            "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
+            "All Federal Jobs", "Federal Primary Jobs").
+        """
         self.year = year
         self.industry = industry
         self.job_type = job_type
