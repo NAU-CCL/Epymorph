@@ -3,7 +3,7 @@ from functools import partial
 from math import floor, inf
 from pathlib import Path
 from shutil import disk_usage
-from typing import Sequence, Union
+from typing import Sequence
 
 from humanize import naturaldelta, naturalsize
 
@@ -52,7 +52,7 @@ class AvailableDataEstimate:
     This includes new cached files and previously cached files."""
 
 
-DataEstimate = Union[EmptyDataEstimate, AvailableDataEstimate]
+DataEstimate = EmptyDataEstimate | AvailableDataEstimate
 
 
 @dataclass(frozen=True)
