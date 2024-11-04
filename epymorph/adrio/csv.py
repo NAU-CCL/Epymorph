@@ -12,11 +12,7 @@ from typing_extensions import override
 from epymorph.adrio.adrio import Adrio
 from epymorph.error import DataResourceException, GeoValidationException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import (
-    CensusScope,
-    CountyScope,
-    StateScope,
-)
+from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
 from epymorph.geography.us_geography import STATE, CensusGranularity
 from epymorph.geography.us_tiger import get_counties, get_states
 from epymorph.time import TimeFrame
@@ -344,7 +340,7 @@ class CSVTimeSeries(Adrio[Any]):
 
 
 class CSVMatrix(Adrio[Any]):
-    """Recieves an NxN-shaped array of any type from a user-provided CSV file."""
+    """Retrieves an NxN-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
     """The path to the CSV file containing data."""

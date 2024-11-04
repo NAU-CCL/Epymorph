@@ -13,9 +13,7 @@ from typing_extensions import override
 from epymorph.adrio.adrio import Adrio, ProgressCallback
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import (
-    CensusScope,
-)
+from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE, CensusGranularityName
 from epymorph.geography.us_tiger import get_states
 from epymorph.time import TimeFrame
@@ -400,7 +398,10 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
 
 
 class CovidCasesPer100k(Adrio[np.float64]):
-    """Number of COVID-19 cases per 100k population."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    number of COVID-19 cases per 100k population.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -417,7 +418,10 @@ class CovidCasesPer100k(Adrio[np.float64]):
 
 
 class CovidHospitalizationsPer100k(Adrio[np.float64]):
-    """Number of COVID-19 hospitalizations per 100k population."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    number of COVID-19 hospitalizations per 100k population.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -434,7 +438,10 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
 
 
 class CovidHospitalizationAvgFacility(Adrio[np.float64]):
-    """Weekly averages of COVID-19 hospitalizations from facility level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly averages of COVID-19 hospitalizations from the facility level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -461,7 +468,10 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
 
 
 class CovidHospitalizationSumFacility(Adrio[np.float64]):
-    """Weekly sums of all COVID-19 hospitalizations from facility level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly sums of all COVID-19 hospitalizations from the facility level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -488,7 +498,10 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
 
 
 class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
-    """Weekly averages of influenza hospitalizations from facility level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly averages of influenza hospitalizations from the facility level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -515,7 +528,10 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
 
 
 class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
-    """Weekly sums of influenza hospitalizations from facility level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly sums of influenza hospitalizations from the facility level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -542,7 +558,10 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
 
 
 class CovidHospitalizationAvgState(Adrio[np.float64]):
-    """Weekly averages of COVID-19 hospitalizations from state level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly averages of COVID-19 hospitalizations from the state level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -559,7 +578,10 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
 
 
 class CovidHospitalizationSumState(Adrio[np.float64]):
-    """Weekly sums of COVID-19 hospitalizations from state level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly sums of COVID-19 hospitalizations from the state level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -579,7 +601,10 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
 
 
 class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
-    """Weekly averages of influenza hospitalizations from state level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly averages of influenza hospitalizations from the state level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -599,7 +624,10 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
 
 
 class InfluenzaHospitalizationSumState(Adrio[np.float64]):
-    """Weekly sums of influenza hospitalizations from state level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly sums of influenza hospitalizations from the state level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -619,7 +647,10 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
 
 
 class FullCovidVaccinations(Adrio[np.float64]):
-    """Cumulative total number of individuals fully vaccinated for COVID-19."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    cumulative total number of individuals fully vaccinated for COVID-19.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -637,8 +668,9 @@ class FullCovidVaccinations(Adrio[np.float64]):
 
 class OneDoseCovidVaccinations(Adrio[np.float64]):
     """
-    Cumulative total number of individuals with at least one dose of
-    COVID-19 vaccination.
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    cumulative total number of individuals with at least one dose of COVID-19
+    vaccination.
     """
 
     time_frame: TimeFrame
@@ -656,7 +688,10 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
 
 
 class CovidBoosterDoses(Adrio[np.float64]):
-    """Cumulative total number of COVID-19 booster doses administered."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    cumulative total number of COVID-19 booster doses administered.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -673,7 +708,10 @@ class CovidBoosterDoses(Adrio[np.float64]):
 
 
 class CovidDeathsCounty(Adrio[np.float64]):
-    """Weekly total COVID-19 deaths from county level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly total of COVID-19 deaths from the county level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -690,7 +728,10 @@ class CovidDeathsCounty(Adrio[np.float64]):
 
 
 class CovidDeathsState(Adrio[np.float64]):
-    """Weekly total COVID-19 deaths from state level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly total of COVID-19 deaths from the state level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""
@@ -707,7 +748,10 @@ class CovidDeathsState(Adrio[np.float64]):
 
 
 class InfluenzaDeathsState(Adrio[np.float64]):
-    """Weekly total influenza deaths from state level dataset."""
+    """
+    Creates a TxN matrix of tuples, containing a date and a float representing the
+    weekly total of influenza deaths from the state level dataset.
+    """
 
     time_frame: TimeFrame
     """The time period the data encompasses."""

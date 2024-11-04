@@ -217,7 +217,7 @@ class Precipitation(Adrio[np.float64]):
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
-    A centroid, or an array of centroids, is required to fetch for a specific point of
+    An array of centroids is required to fetch for a specific point of
     data.
     """
 
@@ -258,7 +258,7 @@ class DewPoint(Adrio[np.float64]):
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
-    A centroid, or an array of centroids, is required to fetch for a specific point of
+    An array of centroids is required to fetch for a specific point of
     data.
     """
 
@@ -304,7 +304,7 @@ class Temperature(Adrio[np.float64]):
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
-    A centroid, or array of centroids, is required to fetch for a specific point of
+    An array of centroids is required to fetch for a specific point of
     data.
     """
 
@@ -368,7 +368,7 @@ class VaporPressureDeficit(Adrio[np.float64]):
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
-    A centroid, or array of centroids, is required to fetch for a specific point of
+    An array of centroids is required to fetch for a specific point of
     data.
     """
 

@@ -380,12 +380,14 @@ class PopulationByAge(Adrio[np.int64]):
     POP_BY_AGE_TABLE = AttributeDef("population_by_age_table", int, Shapes.NxA)
 
     requirements = [POP_BY_AGE_TABLE]
+    """The population by age table is required for retrieving the population totals by
+    age range."""
 
     _age_range: AgeRange
 
     def __init__(self, age_range_start: int, age_range_end: int | None):
         """
-        Initializes the population by age table with a starting age and an end age to
+        Initializes the population by age array with a starting age and an end age to
         define the total age range.
 
         Parameters

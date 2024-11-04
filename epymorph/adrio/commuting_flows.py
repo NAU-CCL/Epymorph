@@ -84,7 +84,10 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
 
 
 class Commuters(Adrio[np.int64]):
-    """Makes an ADRIO to retrieve ACS commuting flow data."""
+    """
+    Creates an NxN matrix of integers representing commuters from the ACS commuting
+    flow data.
+    """
 
     def estimate_data(self) -> DataEstimate:
         scope = _validate_scope(self.scope)
