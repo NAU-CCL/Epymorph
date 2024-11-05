@@ -10,7 +10,7 @@ from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.data_type import CentroidDType, StructDType
-from epymorph.data_usage import DataEstimate
+from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
@@ -127,7 +127,7 @@ class _UsTigerAdrio(Adrio[T_co], ABC):
                     f"{x} is not a supported granularity for us_tiger attributes."
                 )
         key = f"us_tiger:{scope.granularity}:{year}"
-        return DataEstimate(
+        return AvailableDataEstimate(
             name=self.full_name,
             cache_key=key,
             new_network_bytes=est.missing_cache_size,

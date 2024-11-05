@@ -10,7 +10,7 @@ from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio, ProgressCallback
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
-from epymorph.data_usage import DataEstimate
+from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
@@ -369,7 +369,7 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     )
 
     key = f"lodes:{year}:{job_type}"
-    return DataEstimate(
+    return AvailableDataEstimate(
         name=self.full_name,
         cache_key=key,
         new_network_bytes=est.missing_cache_size,

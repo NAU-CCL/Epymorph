@@ -14,7 +14,7 @@ from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType
-from epymorph.data_usage import DataEstimate
+from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
@@ -196,7 +196,7 @@ def _estimate_prism(
     )
 
     key = f"prism:{attribute}:{date_range}"
-    return DataEstimate(
+    return AvailableDataEstimate(
         name=self.full_name,
         cache_key=key,
         new_network_bytes=est.missing_cache_size,

@@ -55,7 +55,7 @@ from epymorph.simulation import (
     gpm_strata,
 )
 from epymorph.time import TimeFrame
-from epymorph.util import are_unique, list_not_none, map_values
+from epymorph.util import are_unique, map_values
 
 #######
 # GPM #
@@ -368,11 +368,12 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         cache. Provides a projected download time based on the given assumed maximum
         network bandwidth (defaults to 1 MB/s).
         """
-        estimates = list_not_none(
+
+        estimates = [
             p.with_context(scope=self.scope, dim=self.dim).estimate_data()
             for p in self.params.values()
             if isinstance(p, Adrio)
-        )
+        ]
 
         lines = list[str]()
         if len(estimates) == 0:

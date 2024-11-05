@@ -9,7 +9,16 @@ from humanize import naturaldelta, naturalsize
 
 
 @dataclass(frozen=True)
-class DataEstimate:
+class EmptyDataEstimate:
+    """An empty data estimate given that the provided data does not support the
+    calculation of the data usage of a data fetch operation."""
+
+    name: str
+    """The name of the given ADRIO."""
+
+
+@dataclass(frozen=True)
+class AvailableDataEstimate:
     """An estimate for the data usage of a data fetch operation.
 
     Operations may download data and may utilize disk caching, so we would like
@@ -43,6 +52,9 @@ class DataEstimate:
     This includes new cached files and previously cached files."""
 
 
+DataEstimate = EmptyDataEstimate | AvailableDataEstimate
+
+
 @dataclass(frozen=True)
 class DataEstimateTotal:
     new_network_bytes: int
@@ -71,15 +83,16 @@ def estimate_total(
 
     cache_keys = set[str]()
     for e in estimates:
-        if e.cache_key in cache_keys:
-            continue
-        cache_keys.add(e.cache_key)
-        new_net += e.new_network_bytes
-        new_cache += e.new_cache_bytes
-        tot_cache += e.total_cache_bytes
-        download_time += e.new_network_bytes / (
-            min(max_bandwidth, e.max_bandwidth or inf)
-        )
+        if isinstance(e, AvailableDataEstimate):
+            if e.cache_key in cache_keys:
+                continue
+            cache_keys.add(e.cache_key)
+            new_net += e.new_network_bytes
+            new_cache += e.new_cache_bytes
+            tot_cache += e.total_cache_bytes
+            download_time += e.new_network_bytes / (
+                min(max_bandwidth, e.max_bandwidth or inf)
+            )
 
     return DataEstimateTotal(new_net, new_cache, tot_cache, download_time)
 
@@ -102,14 +115,16 @@ def estimate_report(
     cache_keys = set[str]()
     result = list[str]()
     for e in estimates:
-        if e.cache_key in cache_keys:
-            line = f"- {e.name} will not require any additional data"
+        if isinstance(e, AvailableDataEstimate):
+            if e.cache_key in cache_keys or (
+                (e.new_network_bytes) == 0 or (e.new_cache_bytes) == 0
+            ):
+                line = f"- {e.name} will be pulled from cache"
+            else:
+                line = f"- {e.name} will download {ff(e.new_network_bytes)} of new data"
+            cache_keys.add(e.cache_key)
         else:
-            line = (
-                f"- {e.name} will download {ff(e.new_network_bytes)} "
-                f"and write {ff(e.new_cache_bytes)} to disk"
-            )
-        cache_keys.add(e.cache_key)
+            line = f"- {e.name} (no estimate available)"
         result.append(line)
 
     total = estimate_total(estimates, max_bandwidth)
