@@ -20,6 +20,8 @@ class AbsoluteHumidity(Adrio[np.float64]):
         AttributeDef("temperature", type=float, shape=Shapes.TxN),
         AttributeDef("dewpoint", type=float, shape=Shapes.TxN),
     ]
+    """The temperature and dew point temperature from the PRISM ADRIO are required to
+    calculate the absolute humidity."""
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -57,6 +59,8 @@ class RelativeHumidity(Adrio[np.float64]):
         AttributeDef("temperature", type=float, shape=Shapes.TxN),
         AttributeDef("dewpoint", type=float, shape=Shapes.TxN),
     ]
+    """The temperature and dew point temperature from the PRISM ADRIO are required to
+    calculate the relative humidity."""
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:

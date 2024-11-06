@@ -134,6 +134,17 @@ class Scale(Adrio[np.float64]):
     _factor: float
 
     def __init__(self, parent: Adrio[np.int64 | np.float64], factor: float):
+        """
+        Initializes scaling with the ADRIO to be scaled and with the factor to multiply
+        those resulting ADRIO values by.
+
+        Parameters
+        ----------
+        parent : Adrio[np.int64 | np.float64]
+            The ADRIO to scale all values for.
+        factor : float
+            The factor to multiply all resulting ADRIO values by.
+        """
         self._parent = parent
         self._factor = factor
 

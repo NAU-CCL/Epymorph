@@ -216,8 +216,20 @@ class Precipitation(Adrio[np.float64]):
     date_range: TimeFrame
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
+    """
+    An array of centroids is required to fetch for a specific point of
+    data.
+    """
 
     def __init__(self, date_range: TimeFrame):
+        """
+        Initializes the precipitation matrix with the date range.
+
+        Parameters
+        ----------
+        date_range : TimeFrame
+            The range of dates to fetch precipitation data for.
+        """
         self.date_range = _validate_dates(date_range)
 
     def estimate_data(self) -> DataEstimate:
@@ -245,8 +257,20 @@ class DewPoint(Adrio[np.float64]):
     date_range: TimeFrame
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
+    """
+    An array of centroids is required to fetch for a specific point of
+    data.
+    """
 
     def __init__(self, date_range: TimeFrame):
+        """
+        Initializes the dew point temperature matrix with the date range.
+
+        Parameters
+        ----------
+        date_range : TimeFrame
+            The range of dates to fetch dew point temperature data for.
+        """
         self.date_range = _validate_dates(date_range)
 
     def estimate_data(self) -> DataEstimate:
@@ -279,6 +303,10 @@ class Temperature(Adrio[np.float64]):
     date_range: TimeFrame
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
+    """
+    An array of centroids is required to fetch for a specific point of
+    data.
+    """
 
     TemperatureType = Literal["Minimum", "Mean", "Maximum"]
 
@@ -291,6 +319,18 @@ class Temperature(Adrio[np.float64]):
     temp_var: TemperatureType
 
     def __init__(self, date_range: TimeFrame, temp_var: TemperatureType):
+        """
+        Initializes the temperature matrix with the date range and the statistical
+        measure for the temperature.
+
+        Parameters
+        ----------
+        date_range : TimeFrame
+            The range of dates to fetch precipitation data for.
+        temp_var : TemperatureType
+            The measure of the temperature for a single date (options: 'Minimum',
+            'Mean', 'Maximum').
+        """
         self.temp_var = temp_var
         self.date_range = _validate_dates(date_range)
 
@@ -327,6 +367,10 @@ class VaporPressureDeficit(Adrio[np.float64]):
     date_range: TimeFrame
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
+    """
+    An array of centroids is required to fetch for a specific point of
+    data.
+    """
 
     VPDType = Literal["Minimum", "Maximum"]
 
@@ -335,6 +379,18 @@ class VaporPressureDeficit(Adrio[np.float64]):
     vpd_var: VPDType
 
     def __init__(self, date_range: TimeFrame, vpd_var: VPDType):
+        """
+        Initializes the vapor pressure deficit matrix with the date range and the
+        statistical measure for the vapor pressure deficit.
+
+        Parameters
+        ----------
+        date_range : TimeFrame
+            The range of dates to fetch precipitation data for.
+        vpd_var : VPDType
+            The measure of the vapor pressure deficit for a single date
+            (options: 'Minimum', 'Maximum').
+        """
         self.vpd_var = vpd_var
         self.date_range = _validate_dates(date_range)
 

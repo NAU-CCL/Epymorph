@@ -380,10 +380,24 @@ class PopulationByAge(Adrio[np.int64]):
     POP_BY_AGE_TABLE = AttributeDef("population_by_age_table", int, Shapes.NxA)
 
     requirements = [POP_BY_AGE_TABLE]
+    """The population by age table is required for retrieving the population totals by
+    age range."""
 
     _age_range: AgeRange
 
     def __init__(self, age_range_start: int, age_range_end: int | None):
+        """
+        Initializes the population by age array with a starting age and an end age to
+        define the total age range.
+
+        Parameters
+        ----------
+        age_range_start : int
+            The starting age for the age range to retrieve from the population table.
+        age_range_end : int | None
+            The inclusive ending age for the age range to retrieve from the population
+            table. If None, the range includes all ages at and above age_range_start.
+        """
         self._age_range = AgeRange(age_range_start, age_range_end)
 
     @override
@@ -454,6 +468,22 @@ class DissimilarityIndex(Adrio[np.float64]):
     minority_pop: RaceCategory
 
     def __init__(self, majority_pop: RaceCategory, minority_pop: RaceCategory):
+        """
+        Initializes the fetching for the array of segregation with a majority and
+        minority population.
+
+        Parameters
+        ----------
+        majority_pop : RaceCategory
+            The race category representing the majority population for the amount of
+            segregation (options:, 'White', 'Black', 'Native', 'Asian',
+            'Pacific Islander', 'Other').
+
+        minority_pop : RaceCategory
+            The race category representing the minority population within the
+            segregation analysis (options:, 'White', 'Black', 'Native', 'Asian',
+            'Pacific Islander', 'Other').
+        """
         self.majority_pop = majority_pop
         """The race category of the majority population"""
         self.minority_pop = minority_pop
