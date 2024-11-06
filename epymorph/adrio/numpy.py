@@ -24,6 +24,18 @@ class NPY(Adrio[Any]):
     def __init__(
         self, file_path: PathLike, array_slice: _ArraySlice | None = None
     ) -> None:
+        """
+        Initializes the array of user-provided .npy file of data with a file path and
+        optional array slice(s).
+
+        Parameters
+        ----------
+        file_path : PathLike
+            The path to the .npy file to retrieve the array data from.
+        array_slice : _ArraySlice | None
+            The optional slice or slices to apply to the array. If None, the entire
+            array is returned (default is None).
+        """
         if Path(file_path).suffix != ".npy":
             msg = (
                 "Incorrect file type. Only .npy files can be loaded through NPY ADRIOs."
@@ -66,6 +78,20 @@ class NPZ(Adrio[Any]):
         array_name: str,
         array_slice: _ArraySlice | None = None,
     ) -> None:
+        """
+        Initializes the array of user-provided .npz file of data with a file path, array
+        name, and optional array slice(s).
+
+        Parameters
+        ----------
+        file_path : PathLike
+            The path to the .npy file to retrieve the array data from.
+        array_name: str
+            The name of the array to retrieve from the user-given file.
+        array_slice : _ArraySlice | None
+            The optional slice or slices to apply to the array. If None, the entire
+            array is returned (default is None).
+        """
         if Path(file_path).suffix != ".npz":
             msg = (
                 "Incorrect file type. Only .npz files can be loaded through NPZ ADRIOs."

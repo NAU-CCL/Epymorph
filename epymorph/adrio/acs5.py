@@ -393,9 +393,10 @@ class PopulationByAge(Adrio[np.int64]):
         Parameters
         ----------
         age_range_start : int
-            The starting age for the age range to include for the population table.
-        age_range_end : int
-            The ending age for the age range to include for the population table.
+            The starting age for the age range to retrieve from the population table.
+        age_range_end : int | None
+            The inclusive ending age for the age range to retrieve from the population
+            table. If None, the range includes all ages at and above age_range_start.
         """
         self._age_range = AgeRange(age_range_start, age_range_end)
 
