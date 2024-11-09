@@ -36,7 +36,6 @@ from epymorph.util import (
     acceptable_name,
     are_instances,
     are_unique,
-    as_list,
     filter_unique,
     iterator_length,
 )
@@ -929,6 +928,50 @@ class QuantitySelection(QuantityStrategy):
     def labels(self) -> Sequence[str]:
         return [q.name.full for q in self.selected]
 
+    @property
+    def compartment_index(self) -> int:
+        """Return the selected compartment index, if and only if there is exactly
+        one compartment in the selection. Otherwise, raises ValueError
+        See `compartment_indices()` if you want to select possibly multiple indices."""
+        indices = self.compartment_indices
+        if len(indices) != 1:
+            err = (
+                "Your selection must contain exactly one compartment to use this "
+                "method. Use `compartment_indices()` if you want to select more."
+            )
+            raise ValueError(err)
+        return indices[0]
+
+    @property
+    def compartment_indices(self) -> tuple[int, ...]:
+        """Return the selected compartment indices. These indices may be useful
+        for instance to access a simulation output's `compartments` result array.
+        May be an empty tuple."""
+        C = self.ipm.num_compartments
+        return tuple(i for i in np.flatnonzero(self.selection) if i < C)
+
+    @property
+    def event_index(self) -> int:
+        """Return the selected event index, if and only if there is exactly
+        one event in the selection. Otherwise, raises ValueError.
+        See `event_indices()` if you want to select possibly multiple indices."""
+        indices = self.event_indices
+        if len(indices) != 1:
+            err = (
+                "Your selection must contain exactly one event to use this "
+                "method. Use `event_indices()` if you want to select more."
+            )
+            raise ValueError(err)
+        return indices[0]
+
+    @property
+    def event_indices(self) -> tuple[int, ...]:
+        """Return the selected event indices. These indices may be useful
+        for instance to access a simulation output's `events` result array.
+        May be an empty tuple."""
+        C = self.ipm.num_compartments
+        return tuple(i - C for i in np.flatnonzero(self.selection) if i >= C)
+
     def group(
         self,
         *,
@@ -1098,8 +1141,8 @@ class QuantitySelector:
         Providing an empty sequence implies selecting none of that type.
         Multiple patterns are combined as though by boolean-or.
         """
-        cs = as_list(compartments)
-        es = as_list(events)
+        cs = [compartments] if isinstance(compartments, str) else [*compartments]
+        es = [events] if isinstance(events, str) else [*events]
         c_mask = self._mask() if len(cs) == 0 else self.compartments(*cs).selection
         e_mask = self._mask() if len(es) == 0 else self.events(*es).selection
         return QuantitySelection(self._ipm, c_mask | e_mask)

@@ -184,20 +184,6 @@ def filter_with_mask(
     return matched, mask
 
 
-def as_list(x: T | Iterable[T]) -> list[T]:
-    """
-    If `x` is a list, return it unchanged.
-    If it's some other kind of iterable, expand it into a list.
-    If it's a single value, turn it into a single-item list.
-    """
-    if isinstance(x, list):
-        return x
-    elif isinstance(x, Iterable):
-        return [*x]
-    else:
-        return [x]
-
-
 def zip_list(xs: Iterable[A], ys: Iterable[B]) -> list[tuple[A, B]]:
     """Zip (strict) two iterables together as a list."""
     return list(zip(xs, ys, strict=True))

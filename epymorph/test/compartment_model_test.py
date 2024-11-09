@@ -465,3 +465,135 @@ class CompartmentModelTest(unittest.TestCase):
                 (n("S", None, "two"), n("I", None, "two")),
             ],
         )
+
+
+class _TestSir(CompartmentModel):
+    compartments = [
+        compartment("S", tags=["test_tag"]),
+        compartment("I"),
+        compartment("R"),
+    ]
+
+    requirements = [
+        AttributeDef("beta", float, Shapes.N),
+        AttributeDef("gamma", float, Shapes.N),
+    ]
+
+    def edges(self, symbols):
+        S, I, R = symbols.compartments("S", "I", "R")
+        beta, gamma = symbols.requirements("beta", "gamma")
+        return [
+            edge(S, I, rate=beta * S * I),
+            edge(I, R, rate=gamma * I),
+        ]
+
+
+class QuantityStrategyTest(unittest.TestCase):
+    def test_select_compartments(self):
+        ipm = _TestSir()
+        self.assertEqual(
+            ipm.select.compartments().labels,
+            ["S", "I", "R"],
+        )
+        self.assertEqual(
+            ipm.select.compartments("S").labels,
+            ["S"],
+        )
+        self.assertEqual(
+            ipm.select.compartments("S*").labels,
+            ["S"],
+        )
+        self.assertEqual(
+            ipm.select.compartments("S", "R").labels,
+            ["S", "R"],
+        )
+        self.assertEqual(
+            ipm.select.compartments("*").labels,
+            ["S", "I", "R"],
+        )
+
+    def test_select_nonmatching_compartment(self):
+        ipm = _TestSir()
+        with self.assertRaises(ValueError):
+            ipm.select.compartments("S", "X")
+
+    def test_select_events(self):
+        ipm = _TestSir()
+        self.assertEqual(
+            ipm.select.events().labels,
+            ["S → I", "I → R"],
+        )
+        self.assertEqual(
+            ipm.select.events("S->I").labels,
+            ["S → I"],
+        )
+        self.assertEqual(
+            ipm.select.events("*->I").labels,
+            ["S → I"],
+        )
+        self.assertEqual(
+            ipm.select.events("S->*").labels,
+            ["S → I"],
+        )
+        self.assertEqual(
+            ipm.select.events("*->*").labels,
+            ["S → I", "I → R"],
+        )
+        self.assertEqual(
+            ipm.select.events("S->I*").labels,
+            ["S → I"],
+        )
+        self.assertEqual(
+            ipm.select.events("S*->*").labels,
+            ["S → I"],
+        )
+
+    def test_select_nonmatching_event(self):
+        ipm = _TestSir()
+        with self.assertRaises(ValueError):
+            ipm.select.events("S->X")
+
+    def test_select_by(self):
+        ipm = _TestSir()
+        self.assertEqual(
+            ipm.select.by(compartments="S", events="S->I").labels,
+            ["S", "S → I"],
+        )
+        self.assertEqual(
+            ipm.select.by(compartments="S").labels,
+            ["S"],
+        )
+        self.assertEqual(
+            ipm.select.by(events="S->I").labels,
+            ["S → I"],
+        )
+        self.assertEqual(
+            ipm.select.by(compartments=["S", "I"], events=["S->I", "I->R"]).labels,
+            ["S", "I", "S → I", "I → R"],
+        )
+
+
+class QuantitySelectionTest(unittest.TestCase):
+    def test_compartment_index(self):
+        ipm = _TestSir()
+        self.assertEqual(1, ipm.select.compartments("I").compartment_index)
+        with self.assertRaises(ValueError):
+            ipm.select.compartments("I", "R").compartment_index
+        with self.assertRaises(ValueError):
+            ipm.select.compartments().compartment_index
+
+    def test_compartment_indices(self):
+        ipm = _TestSir()
+        self.assertEqual((0, 2), ipm.select.compartments("S", "R").compartment_indices)
+
+    def test_event_index(self):
+        ipm = _TestSir()
+        self.assertEqual(0, ipm.select.events("S->I").event_index)
+        with self.assertRaises(ValueError):
+            ipm.select.events("S->I", "I->R").event_index
+        with self.assertRaises(ValueError):
+            ipm.select.events().event_index
+
+    def test_event_indices(self):
+        ipm = _TestSir()
+        self.assertEqual((0, 1), ipm.select.events("S->I", "I->R").event_indices)
