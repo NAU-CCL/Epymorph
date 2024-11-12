@@ -5,10 +5,12 @@ long-running tasks!
 """
 
 from contextlib import contextmanager
+from datetime import timedelta
 from functools import partial
 from time import perf_counter
 from typing import Generator
 
+import humanize
 from humanize import naturalsize
 
 from epymorph.event import AdrioProgress, EventBus, OnStart, OnTick
@@ -25,6 +27,8 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
     """
 
     start_time: float | None = None
+    last_progress_time: float | None = None
+    total_progress_time = 0.0
 
     def on_start(e: OnStart) -> None:
         start_date = e.dim.start_date
@@ -40,7 +44,36 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         start_time = perf_counter()
 
     def on_tick(tick: OnTick) -> None:
-        print(f"  {progress(tick.percent_complete)}", end="\r")
+        nonlocal last_progress_time
+        nonlocal total_progress_time
+        # get the current time from the start
+        last_progress_time = perf_counter() - start_time
+        # if just starting, initialize total and average process time
+        if last_progress_time is None:
+            total_progress_time = last_progress_time
+            average_process_time = total_progress_time
+        # otherwise, get the processing time from the last processing step
+        else:
+            last_progress_time -= total_progress_time
+            # add to the average and divide by the number of steps
+            total_progress_time += last_progress_time
+            average_process_time = total_progress_time / (tick.tick_index + 1)
+
+        # get the amount of ticks left for the simulation
+        ticks_left = ((tick.tick_index + 1) / tick.percent_complete) - (
+            tick.tick_index + 1
+        )
+        # multiply the remaining ticks by the average processing time
+        estimate = ticks_left * average_process_time
+
+        # display the time remaining
+        delta = timedelta(seconds=estimate)
+        time_remaining = humanize.precisedelta(delta, minimum_unit="seconds")
+        print(
+            f"  {progress(tick.percent_complete)} ({time_remaining} remaining)         "
+            f"   ",
+            end="\r",
+        )
 
     def on_finish(_: None) -> None:
         end_time = perf_counter()
