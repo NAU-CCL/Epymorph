@@ -100,10 +100,19 @@ class PlotRenderer:
 
             case ("tick", "day"):
                 # Convert ticks to simulation-day scale:
-                # e.g.: [0.333, 1.0, 1.333, 2.0, ...]
+                # e.g.: [0.0, 0.333, 1.0, 1.333, ...]
+                # NOTE: each tick is represented as the start of its timespan,
+                # even though to be perfectly accurate the data value is recorded
+                # at the *end* of that timespan -- the result of the tick happening.
+                # This is to align with how this is handled with date values, which
+                # are also recorded at the end of the date but get represented as the
+                # start of the date in the time scale.
                 def ticks_to_days(time_groups: pd.Series) -> pd.Series:
-                    deltas = np.array(dim.tau_step_lengths).cumsum()
-                    days = np.tile(deltas, dim.days).cumsum()
+                    deltas = np.array([0, *dim.tau_step_lengths]).cumsum()[:-1]
+                    days = (
+                        np.arange(dim.days).repeat(dim.tau_steps)  #
+                        + np.tile(deltas, dim.days)
+                    )
                     ticks = np.arange(dim.days * dim.tau_steps)
                     time_map = dict(zip(ticks, days))
                     return time_groups.apply(lambda x: time_map[x])
