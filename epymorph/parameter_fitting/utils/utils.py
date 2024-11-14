@@ -60,7 +60,7 @@ def quantiles(items: List[float]) -> List[float]:
             0.990,
         ]
     )
-    return list(np.quantile(items, qtl_mark))
+    return np.quantile(items, qtl_mark, axis=0)
 
 
 # @staticmethod

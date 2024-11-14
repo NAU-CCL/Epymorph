@@ -49,7 +49,7 @@ class ParticleFilterOutput:
 
         output.append("\nTrue Data:")
         output.extend(
-            f"  {val:.3f}" for val in self.true_data[:5]
+            f"  {val:.3f}" for val in self.true_data[:5].flatten()
         )  # Show first 5 values for true data
 
         output.append("\nModel Data:")

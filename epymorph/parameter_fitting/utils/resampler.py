@@ -76,59 +76,41 @@ class WeightsResampling:
 
         return index
 
-    def compute_weights(
-        self, current_obs_data: np.ndarray, particles: list
-    ) -> np.ndarray:
+    def compute_weights(self, current_obs_data: np.ndarray, states: list) -> np.ndarray:
         """
         Computes the weights for each particle based on the likelihood of the
         current observation.
 
         Args:
             current_obs_data (np.ndarray): The current observation data.
-            particles (list): A list of particles, where each particle is a tuple of
+            states (list): A list of states, where each state is a tuple of
             state and observations.
 
         Returns:
             np.ndarray: An array of computed weights normalized to sum to 1.
         """
-        weights = np.zeros(self.N)
-        # coeff = self.static_params[self.model_param]
-
-        # index = self.get_index()
+        log_weights = np.zeros(self.N)
 
         for i in range(self.N):
-            # expected = coeff * particles[i][0][0][self.index]
-            expected = particles[i][0][0][self.index]
-            # print("particles[i] = ", particles[i])
-            # expected = particles[i][0][0][index]
+            expected = states[i][0][:, self.index]
             try:
-                weights[i] = self.likelihood_fn.compute(
-                    current_obs_data, expected + 0.0001
+                log_weights[i] = np.sum(
+                    np.log(
+                        self.likelihood_fn.compute(current_obs_data, expected + 0.0001)
+                    )
                 )
-            except (ValueError, FloatingPointError) as e:
-                print(
-                    f"Error: {e}. model data = "
-                    f"{current_obs_data} true data = {expected}"
-                )
-                # print(f"Weights are zero  b = {current_obs_data}   E_j  = {expected}")
-
-            # if weights[i] == 0:
-            #     print(f"Weights are zero  b = {current_obs_data}   E_j  = {expected}")
-            # if np.isnan(weights[i]):
-            #     print(
-            #         "NaN found in likelihood for particle "
-            #         f"{i}: expected={expected}, obs_data={current_obs_data}"
-            #     )
-
-        # weights = weights / np.sum(weights)
-
-        sum_weights = np.sum(weights)
-        if sum_weights == 0:
-            weights = np.ones_like(weights) / len(weights)
-        else:
-            weights = weights / sum_weights
-
-        # weights = weights / sum_weights
+            except (ValueError, FloatingPointError):
+                log_weights[i] = -np.inf
+        try:
+            shifted_log_weights = log_weights - np.max(log_weights, keepdims=True)
+        except FloatingPointError:
+            shifted_log_weights = np.zeros(shape=log_weights.shape)
+        underflow_lower_bound = -(10**2)
+        clipped_log_weights = np.clip(
+            shifted_log_weights, a_min=underflow_lower_bound, a_max=None
+        )
+        weights = np.exp(clipped_log_weights)
+        weights = weights / np.sum(weights, keepdims=True)
 
         return np.squeeze(weights)
 
@@ -167,3 +149,86 @@ class WeightsResampling:
             new_weight * weight for weight, new_weight in zip(weights, new_weights)
         ]
         return updated_weights
+
+
+class ResamplingByNode(WeightsResampling):
+    def compute_weights(self, current_obs_data: np.ndarray, states: list) -> np.ndarray:
+        """
+        Computes the weights for each particle based on the likelihood of the
+        current observation.
+
+        Args:
+            current_obs_data (np.ndarray): The current observation data.
+            states (list): A list of states, where each state is a tuple of
+            state and observations.
+
+        Returns:
+            np.ndarray: An array of computed weights normalized to sum to 1.
+        """
+
+        n_nodes = states[0][0].shape[0]
+        log_weights = np.zeros(shape=(n_nodes, self.N))
+
+        for i_node in range(n_nodes):
+            for i_particle in range(self.N):
+                expected = states[i_particle][0][i_node, self.index]
+                try:
+                    log_weights[i_node, i_particle] = np.log(
+                        self.likelihood_fn.compute(
+                            current_obs_data[i_node], expected + 0.0001
+                        )
+                    )
+                except (ValueError, FloatingPointError):
+                    log_weights[i_node, i_particle] = -np.inf
+
+        shifted_log_weights = log_weights - np.max(log_weights, axis=1, keepdims=True)
+        underflow_lower_bound = -(10**2)
+        clipped_log_weights = np.clip(
+            shifted_log_weights, a_min=underflow_lower_bound, a_max=None
+        )
+        weights = np.exp(clipped_log_weights)
+        weights = weights / np.sum(weights, axis=1, keepdims=True)
+
+        return weights
+
+    def resample_particles(self, particles: list, weights: np.ndarray) -> list:
+        """
+        Resamples particles based on the computed weights.
+
+        Args:
+            particles (list): A list of particles, where each particle is a tuple of
+            state and observations.
+            weights (np.ndarray): An array of weights corresponding to each particle.
+
+        Returns:
+            list: A list of resampled particles.
+        """
+        n_nodes = weights.shape[0]
+        # for i_node in range(n_nodes):
+
+        resampled_indices = np.zeros(shape=(n_nodes, self.N), dtype=np.int_)
+        for i_node in range(n_nodes):
+            resampled_indices[i_node, :] = rng.choice(
+                np.arange(self.N, dtype=np.int_),
+                size=self.N,
+                replace=True,
+                p=weights[i_node, :],
+            )
+
+        resampled_particles = []
+        for i_particle in range(self.N):
+            new_x = np.copy(particles[i_particle][0])
+            new_beta = np.copy(particles[i_particle][1]["beta"])
+
+            for i_node in range(n_nodes):
+                new_x[i_node, :] = particles[resampled_indices[i_node, i_particle]][0][
+                    i_node, :
+                ]
+                new_beta[i_node] = particles[resampled_indices[i_node, i_particle]][1][
+                    "beta"
+                ][i_node]
+            resampled_particles.append((new_x, {"beta": new_beta}))
+
+        # [resampled_particles.append(particles[idx]) for idx in resampled_indices[0, :]]
+
+        return resampled_particles

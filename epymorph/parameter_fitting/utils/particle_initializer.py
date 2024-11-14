@@ -76,7 +76,7 @@ class ParticleInitializer:
 
         for _ in range(self.num_particles):
             observations = {
-                _: self.dynamic_params[_].distribution.rvs(1)[0]  # type: ignore
+                _: self.dynamic_params[_].distribution.rvs(size=self.rume.dim.nodes)  # type: ignore
                 for _ in self.dynamic_params.keys()
             }
 

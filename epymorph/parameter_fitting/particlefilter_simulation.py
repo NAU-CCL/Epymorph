@@ -219,7 +219,16 @@ class FilterSimulation:
         time_axis = range(len(self.cases))
 
         # Plot the values over time as a bar plot
-        plt.bar(time_axis, self.cases, color="blue")
+
+        plt.bar(time_axis, self.cases[:, 0])
+        n_nodes = self.cases.shape[1]
+        for i_node in range(n_nodes - 1):
+            plt.bar(
+                time_axis,
+                self.cases[:, i_node + 1],
+                bottom=self.cases[:, 0 : i_node + 1].sum(axis=1),
+            )
+
         # plt.xlabel('Time')
         # plt.ylabel('Estimated new cases')
         plt.title("Observations plot over time")

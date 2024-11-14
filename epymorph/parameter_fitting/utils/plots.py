@@ -18,7 +18,9 @@ import numpy as np
 from epymorph.parameter_fitting.output import ParticleFilterOutput
 
 
-def params_plot(output: ParticleFilterOutput, parameter: Literal["infection rate"]):
+def params_plot(
+    output: ParticleFilterOutput, parameter: Literal["infection rate"], node_index=0
+):
     if parameter == "infection rate":
         key = "beta"
 
@@ -27,10 +29,12 @@ def params_plot(output: ParticleFilterOutput, parameter: Literal["infection rate
         output.param_quantiles[key]
     )  # Assuming param_quantiles is a dictionary with 'beta' as a key
 
+    # print(key_quantiles.shape)
+
     # Check if quantiles have the correct shape (at least 1D)
-    if key_quantiles.ndim != 2:
-        print("Error: Quantiles data should be 2D (e.g., for different time points).")
-        return
+    # if key_quantiles.ndim != 2:
+    #     print("Error: Quantiles data should be 2D (e.g., for different time points).")
+    #     return
 
     plt.title(f"{parameter} Quantiles Over Time")
 
@@ -38,10 +42,10 @@ def params_plot(output: ParticleFilterOutput, parameter: Literal["infection rate
     plt.fill_between(
         np.arange(0, len(key_quantiles)),
         key_quantiles[
-            :, 3
+            :, 3, node_index
         ],  # Adjust the column index based on the quantile you want (e.g., 25th and 75th percentiles)
         key_quantiles[
-            :, 22 - 3
+            :, 22 - 3, node_index
         ],  # Adjust as needed based on the quantiles' positions in the data
         facecolor="blue",
         zorder=10,
@@ -51,9 +55,9 @@ def params_plot(output: ParticleFilterOutput, parameter: Literal["infection rate
     plt.fill_between(
         np.arange(0, len(key_quantiles)),
         key_quantiles[
-            :, 6
+            :, 6, node_index
         ],  # Adjust for another quantile (e.g., 10th and 90th percentiles)
-        key_quantiles[:, 22 - 6],  # Adjust accordingly
+        key_quantiles[:, 22 - 6, node_index],  # Adjust accordingly
         facecolor="blue",
         zorder=11,
         alpha=0.4,
@@ -63,7 +67,7 @@ def params_plot(output: ParticleFilterOutput, parameter: Literal["infection rate
     # Optionally plot the median or central quantile (e.g., 50th percentile)
     plt.plot(
         np.arange(0, len(key_quantiles)),
-        key_quantiles[:, 11],
+        key_quantiles[:, 11, node_index],
         color="red",
         zorder=12,
         label="Median (50th Percentile)",
@@ -82,6 +86,7 @@ def model_fit(
     output: ParticleFilterOutput,
     quantile_lower: float = 0.25,
     quantile_upper: float = 0.75,
+    node_index=0,
 ):
     """
     Plot model data, true data, and artificially created quantiles (lower and upper bounds).
@@ -93,13 +98,13 @@ def model_fit(
     - quantile_upper: The upper quantile (fraction of model data) as a multiplier (e.g., 0.75 for 75% upper bound).
     """
     # Calculate artificial lower and upper bounds based on the model data
-    lower_bound = output.model_data * (1 - quantile_lower)
-    upper_bound = output.model_data * (1 + quantile_upper)
+    lower_bound = output.model_data[:, node_index] * (1 - quantile_lower)
+    upper_bound = output.model_data[:, node_index] * (1 + quantile_upper)
 
     # Plot the model data (central line)
     plt.figure(figsize=(10, 6))
     plt.plot(
-        output.model_data,
+        output.model_data[:, node_index],
         label="Model Data",
         color="red",
         linestyle="-",
@@ -109,7 +114,7 @@ def model_fit(
 
     # Plot the true data (observed values)
     plt.plot(
-        output.true_data,
+        output.true_data[:, node_index],
         label="True Data",
         color="green",
         linestyle="--",

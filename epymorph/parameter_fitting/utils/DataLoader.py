@@ -2,7 +2,6 @@ from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
-from pandas import read_csv
 
 # noqa: F405
 from epymorph.adrio.cdc import *  # noqa: F403
@@ -57,14 +56,20 @@ class DataLoader:
             return dates, sim_data
 
         if isinstance(flu_sum, CSVTimeSeries):
-            csv_df = read_csv(flu_sum.file_path)
-            dates, cases = (
-                csv_df.Date.to_numpy().flatten(),
-                csv_df.Cases.to_numpy().flatten(),
+            # csv_df = read_csv(flu_sum.file_path)
+            # dates, cases = (
+            #     csv_df.Date.to_numpy().flatten(),
+            #     csv_df.Cases.to_numpy().flatten(),
+            # )
+
+            # # dates = to_datetime(dates)
+            # rng = np.random.default_rng()
+            # sim_data = rng.poisson(cases)
+
+            cases = flu_sum.evaluate_in_context(
+                data, self.rume.dim, self.rume.scope, rng
             )
 
-            # dates = to_datetime(dates)
-            rng = np.random.default_rng()
-            sim_data = rng.poisson(cases)
+            dates = flu_sum.time_frame.to_numpy()
 
-            return dates, sim_data
+            return dates, cases

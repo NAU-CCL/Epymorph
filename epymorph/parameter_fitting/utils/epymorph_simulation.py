@@ -101,11 +101,10 @@ class EpymorphSimulation:
 
         else:
             # print("stat", state)
-            state = state.tolist()[-1]
+            state = state[-1, ...]
 
         # print("output =", output)
-
         # print("output.prevalence =", output.prevalence)
-        propagated_x = np.array(output.compartments.tolist()[-1], dtype=np.int64)
+        propagated_x = np.array(output.compartments[-1, ...], dtype=np.int64)
 
         return propagated_x, state
