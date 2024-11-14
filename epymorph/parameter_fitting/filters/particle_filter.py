@@ -37,7 +37,7 @@ class ParticleFilter(BaseFilter):
         utils (Utils): Utility functions for quantiles and data saving.
     """
 
-    def __init__(self, num_particles: int) -> None:
+    def __init__(self, num_particles: int, resampler=WeightsResampling) -> None:
         """
         Initializes the ParticleFilter with the given number of particles.
 
@@ -51,6 +51,7 @@ class ParticleFilter(BaseFilter):
         self.beta_values = []
         self.rng = np.random.default_rng()
         # self.utils = Utils()
+        self.resampler = resampler
 
     def propagate_particles(
         self,
@@ -96,15 +97,10 @@ class ParticleFilter(BaseFilter):
             for param, val in observations.items():
                 dynamics = params_space[param].dynamics
                 if isinstance(dynamics, GeometricBrownianMotion):
-                    if pd.isna(observation):
-                        new_observations[param] = val
-                    else:
-                        new_observations[param] = params_perturb.gbm(
-                            val, dynamics.volatility
-                        )
-                        # new_observations[param] = np.exp(
-                        #     np.random.normal(np.log(val), 0.1 * np.sqrt(duration))
-                        # )
+                    new_observations[param] = val
+                    new_observations[param] = params_perturb.gbm(
+                        val, dynamics.volatility
+                    )
                 else:
                     new_observations[param] = val
 
@@ -176,14 +172,16 @@ class ParticleFilter(BaseFilter):
         """
         dates = pd.to_datetime(dates)
         data = cases
+        if len(data.shape) == 1:
+            data = data[:, np.newaxis]
         # is_sum = observations["is_sum"]
-        is_sum = True
+        is_sum = False
         num_observations = len(data)
 
         initializer = ParticleInitializer(self.num_particles, rume, params_space)
         particles = initializer.initialize_particles()
         simulation = EpymorphSimulation(rume, dates[0])  # .strftime("%Y-%m-%d"))
-        weights_resampling = WeightsResampling(
+        weights_resampling = self.resampler(
             self.num_particles, rume, likelihood_fn, model_link, index
         )
 
@@ -200,6 +198,7 @@ class ParticleFilter(BaseFilter):
         for t in tqdm(range(num_observations)):
             # print("Iteration: ", t)
             n = 1
+            # print(particles[0])
             if t > 0:
                 # while pd.isna(data[t]):
                 #     t += 1
@@ -215,7 +214,7 @@ class ParticleFilter(BaseFilter):
                     duration,
                     is_sum,
                     model_link,
-                    data[t],
+                    0,  # The observation is unused.
                     params_space,
                 )
                 # print("propagate")
@@ -224,18 +223,26 @@ class ParticleFilter(BaseFilter):
                 #     t += 1
                 propagated_particles = states = particles
 
-            model_data.append(np.mean([particle[0][0][1] for particle in states]))
+            model_data.append(
+                np.mean(
+                    [np.array(particle[0])[:, index] for particle in states], axis=0
+                )
+            )
 
-            total_propagated_particles = [
-                (np.sum(pp[0], axis=0).reshape(1, -1), {"beta": pp[1]["beta"]})
-                for pp in propagated_particles
-            ]
+            # print(np.array([particle[0][0][1] for particle in states]))
 
-            if pd.isna(data[t]):
+            # total_propagated_particles = [
+            #     (np.sum(pp[0], axis=0).reshape(1, -1), {"beta": pp[1]["beta"]})
+            #     for pp in propagated_particles
+            # ]
+
+            total_propagated_particles = propagated_particles
+
+            if np.all(np.isnan(data[t, ...])):
                 particles = total_propagated_particles.copy()
 
             else:
-                new_weights = weights_resampling.compute_weights(data[t], states)
+                new_weights = weights_resampling.compute_weights(data[t, ...], states)
 
                 if np.any(np.isnan(new_weights)):
                     raise ValueError("NaN values found in computed weights.")
@@ -260,7 +267,7 @@ class ParticleFilter(BaseFilter):
 
             for key, values in key_values.items():
                 if values:
-                    self.param_quantiles[key].append(utils.quantiles(values))
+                    self.param_quantiles[key].append(utils.quantiles(np.array(values)))
                     self.param_values[key].append(np.mean(values))
 
             t += 1
