@@ -5,8 +5,8 @@ long-running tasks!
 """
 
 from contextlib import contextmanager
-from datetime import timedelta
 from functools import partial
+from math import ceil
 from time import perf_counter
 from typing import Generator
 
@@ -41,6 +41,9 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         nonlocal start_time
         start_time = perf_counter()
 
+    # keeping track of the length of the last line we printed
+    # lets us clear any trailing characters when rendering stuff
+    # after the progress bar of varying width
     last_progress_length = 0
 
     def on_tick(tick: OnTick) -> None:
@@ -54,28 +57,21 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         # multiply the remaining ticks by the average processing time
         estimate = ticks_left * average_process_time
 
-        delta = timedelta(seconds=estimate)
-        time_remaining = humanize.precisedelta(
-            int(delta.total_seconds()), minimum_unit="seconds"
-        )
+        time_remaining = humanize.precisedelta(ceil(estimate), minimum_unit="seconds")
         formatted_time = f"({time_remaining} remaining)"
         line = f"  {progress(tick.percent_complete)}"
         # if no time remaining, omit the time progress
-        if delta > timedelta(0):
+        if estimate > 0:
             line += f"{formatted_time}"
         print(line.ljust(last_progress_length), end="\r")
         last_progress_length = len(line)
 
     def on_finish(_: None) -> None:
         end_time = perf_counter()
-        print(f"  {progress(1.0)}")
+        line = f"  {progress(1.0)}"
+        print(line.ljust(last_progress_length), end="\n")
         if start_time is not None:
             print(f"Runtime: {(end_time - start_time):.3f}s")
-
-    # keeping track of the length of the last line we printed
-    # lets us clear any trailing characters when rendering stuff
-    # after the progress bar of varying width
-    last_progress_length = 0
 
     def on_adrio_progress(e: AdrioProgress) -> None:
         nonlocal last_progress_length
