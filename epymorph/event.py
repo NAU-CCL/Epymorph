@@ -34,6 +34,7 @@ class OnTick(NamedTuple):
 
     tick_index: int
     percent_complete: float
+    dim: SimDimensions
 
 
 ###################

@@ -27,8 +27,6 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
     """
 
     start_time: float | None = None
-    last_progress_time: float | None = None
-    total_progress_time = 0.0
 
     def on_start(e: OnStart) -> None:
         start_date = e.dim.start_date
@@ -43,37 +41,30 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         nonlocal start_time
         start_time = perf_counter()
 
-    def on_tick(tick: OnTick) -> None:
-        nonlocal last_progress_time
-        nonlocal total_progress_time
-        # get the current time from the start
-        last_progress_time = perf_counter() - start_time
-        # if just starting, initialize total and average process time
-        if last_progress_time is None:
-            total_progress_time = last_progress_time
-            average_process_time = total_progress_time
-        # otherwise, get the processing time from the last processing step
-        else:
-            last_progress_time -= total_progress_time
-            # add to the average and divide by the number of steps
-            total_progress_time += last_progress_time
-            average_process_time = total_progress_time / (tick.tick_index + 1)
+    last_progress_length = 0
 
-        # get the amount of ticks left for the simulation
-        ticks_left = ((tick.tick_index + 1) / tick.percent_complete) - (
-            tick.tick_index + 1
-        )
+    def on_tick(tick: OnTick) -> None:
+        nonlocal last_progress_length
+        ticks_complete = tick.tick_index + 1
+        total_process_time = perf_counter() - start_time
+        average_process_time = total_process_time / ticks_complete
+
+        ticks_left = tick.dim.ticks - ticks_complete
+
         # multiply the remaining ticks by the average processing time
         estimate = ticks_left * average_process_time
 
-        # display the time remaining
         delta = timedelta(seconds=estimate)
-        time_remaining = humanize.precisedelta(delta, minimum_unit="seconds")
-        print(
-            f"  {progress(tick.percent_complete)} ({time_remaining} remaining)         "
-            f"   ",
-            end="\r",
+        time_remaining = humanize.precisedelta(
+            int(delta.total_seconds()), minimum_unit="seconds"
         )
+        formatted_time = f"({time_remaining} remaining)"
+        line = f"  {progress(tick.percent_complete)}"
+        # if no time remaining, omit the time progress
+        if delta > timedelta(0):
+            line += f"{formatted_time}"
+        print(line.ljust(last_progress_length), end="\r")
+        last_progress_length = len(line)
 
     def on_finish(_: None) -> None:
         end_time = perf_counter()

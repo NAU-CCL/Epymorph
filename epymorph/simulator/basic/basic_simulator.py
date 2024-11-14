@@ -128,7 +128,7 @@ class BasicSimulator:
                 out.compartments[tick.sim_index] = tick_compartments
 
             t = tick.sim_index
-            _events.on_tick.publish(OnTick(t, (t + 1) / dim.ticks))
+            _events.on_tick.publish(OnTick(t, (t + 1) / dim.ticks, dim))
 
         _events.on_finish.publish(None)
 
