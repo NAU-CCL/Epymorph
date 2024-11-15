@@ -6,9 +6,11 @@ long-running tasks!
 
 from contextlib import contextmanager
 from functools import partial
+from math import ceil
 from time import perf_counter
 from typing import Generator
 
+import humanize
 from humanize import naturalsize
 
 from epymorph.event import AdrioProgress, EventBus, OnStart, OnTick
@@ -39,19 +41,37 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         nonlocal start_time
         start_time = perf_counter()
 
-    def on_tick(tick: OnTick) -> None:
-        print(f"  {progress(tick.percent_complete)}", end="\r")
-
-    def on_finish(_: None) -> None:
-        end_time = perf_counter()
-        print(f"  {progress(1.0)}")
-        if start_time is not None:
-            print(f"Runtime: {(end_time - start_time):.3f}s")
-
     # keeping track of the length of the last line we printed
     # lets us clear any trailing characters when rendering stuff
     # after the progress bar of varying width
     last_progress_length = 0
+
+    def on_tick(tick: OnTick) -> None:
+        nonlocal last_progress_length
+        ticks_complete = tick.tick_index + 1
+        total_process_time = perf_counter() - start_time
+        average_process_time = total_process_time / ticks_complete
+
+        ticks_left = tick.dim.ticks - ticks_complete
+
+        # multiply the remaining ticks by the average processing time
+        estimate = ticks_left * average_process_time
+
+        time_remaining = humanize.precisedelta(ceil(estimate), minimum_unit="seconds")
+        formatted_time = f"({time_remaining} remaining)"
+        line = f"  {progress(tick.percent_complete)}"
+        # if no time remaining, omit the time progress
+        if estimate > 0:
+            line += f"{formatted_time}"
+        print(line.ljust(last_progress_length), end="\r")
+        last_progress_length = len(line)
+
+    def on_finish(_: None) -> None:
+        end_time = perf_counter()
+        line = f"  {progress(1.0)}"
+        print(line.ljust(last_progress_length), end="\n")
+        if start_time is not None:
+            print(f"Runtime: {(end_time - start_time):.3f}s")
 
     def on_adrio_progress(e: AdrioProgress) -> None:
         nonlocal last_progress_length
