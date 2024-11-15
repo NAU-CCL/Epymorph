@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, concat, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback
+from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
@@ -397,6 +397,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
+@adrio_cache
 class CovidCasesPer100k(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -417,6 +418,7 @@ class CovidCasesPer100k(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidHospitalizationsPer100k(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -437,6 +439,7 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidHospitalizationAvgFacility(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -467,6 +470,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidHospitalizationSumFacility(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -497,6 +501,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -527,6 +532,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -557,6 +563,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidHospitalizationAvgState(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -577,6 +584,7 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidHospitalizationSumState(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -600,6 +608,7 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -623,6 +632,7 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class InfluenzaHospitalizationSumState(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -646,6 +656,7 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class FullCovidVaccinations(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -666,6 +677,7 @@ class FullCovidVaccinations(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class OneDoseCovidVaccinations(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -687,6 +699,7 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidBoosterDoses(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -707,6 +720,7 @@ class CovidBoosterDoses(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidDeathsCounty(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -727,6 +741,7 @@ class CovidDeathsCounty(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class CovidDeathsState(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -747,6 +762,7 @@ class CovidDeathsState(Adrio[np.float64]):
         )
 
 
+@adrio_cache
 class InfluenzaDeathsState(Adrio[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the

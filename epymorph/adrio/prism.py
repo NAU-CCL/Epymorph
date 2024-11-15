@@ -248,6 +248,7 @@ class Precipitation(Adrio[np.float64]):
         return raster_vals
 
 
+@adrio_cache
 class DewPoint(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the dew point temperature in an area,
@@ -294,6 +295,7 @@ class DewPoint(Adrio[np.float64]):
         return raster_vals
 
 
+@adrio_cache
 class Temperature(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the temperature in an area, represented
@@ -347,6 +349,7 @@ class Temperature(Adrio[np.float64]):
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
+        print("heyhey")
         scope = self.scope
         scope = _validate_scope(scope)
         temp_var = self.temp_variables[self.temp_var]
@@ -358,6 +361,7 @@ class Temperature(Adrio[np.float64]):
         return raster_vals
 
 
+@adrio_cache
 class VaporPressureDeficit(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the vapor pressure deficit in an area,

@@ -8,7 +8,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback
+from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceException
@@ -379,6 +379,7 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     )
 
 
+@adrio_cache
 class Commuters(Adrio[np.int64]):
     """
     Creates an NxN matrix of integers representing the number of workers moving
@@ -422,6 +423,7 @@ class Commuters(Adrio[np.int64]):
         return _fetch_lodes(scope, "S000", job_var, self.year, self.progress)
 
 
+@adrio_cache
 class CommutersByAge(Adrio[np.int64]):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
@@ -480,6 +482,7 @@ class CommutersByAge(Adrio[np.int64]):
         return _fetch_lodes(scope, age_var, job_var, self.year, self.progress)
 
 
+@adrio_cache
 class CommutersByEarnings(Adrio[np.int64]):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
@@ -540,6 +543,7 @@ class CommutersByEarnings(Adrio[np.int64]):
         return _fetch_lodes(scope, earning_var, job_var, self.year, self.progress)
 
 
+@adrio_cache
 class CommutersByIndustry(Adrio[np.int64]):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
