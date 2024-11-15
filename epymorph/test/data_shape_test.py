@@ -1,23 +1,15 @@
 # pylint: disable=missing-docstring
 import unittest
-from datetime import date
 from functools import reduce
 from typing import Any, TypeGuard, TypeVar
 
 import numpy as np
 
-from epymorph.data_shape import Shapes, SimDimensions, parse_shape
+from epymorph.data_shape import Dimensions, Shapes, parse_shape
 
 _to_str = np.vectorize(str)
 
-_dim = SimDimensions.build(
-    tau_step_lengths=[0.5, 0.5],
-    start_date=date(2020, 1, 1),
-    days=90,
-    nodes=6,
-    compartments=3,
-    events=2,
-)
+_dim = Dimensions.of(T=90, N=6, C=3, E=2)
 
 T = TypeVar("T")
 
@@ -139,11 +131,17 @@ class DataShape(unittest.TestCase):
                 f"Failure in test case {i}: "
                 f"({shape}, {input_value}, {broadcast}, {expected})"
             )
-            actual = shape.adapt(_dim, input_value, broadcast)
             if expected is None:
-                self.assertIsNone(actual, error)
-            elif self.assert_not_none(actual, error):
-                np.testing.assert_array_equal(actual, expected, error)
+                # Using None to indicate that we expect the adaptation to fail;
+                # and the failure mode is to raise ValueError.
+                with self.assertRaises(ValueError, msg=error):
+                    shape.adapt(_dim, input_value, broadcast)
+            else:
+                # If expected is not None, anticipate adapation to be successful;
+                # check returned value is a match.
+                actual = shape.adapt(_dim, input_value, broadcast)
+                if self.assert_not_none(actual, msg=error):
+                    np.testing.assert_array_equal(actual, expected, err_msg=error)
 
     def test_adapt_scalar(self):
         self.adapt_test_framework(
@@ -161,12 +159,13 @@ class DataShape(unittest.TestCase):
         )
 
     def test_adapt_node(self):
+        N = _dim.N
         node_values = np.asarray([41.0, 42.0, 43.0, 44.0, 45.0, 46.0])
         self.adapt_test_framework(
             Shapes.N,
             [
                 # Test S
-                (np.asarray(42.0), True, np.full(_dim.nodes, 42.0)),
+                (np.asarray(42.0), True, np.full(N, 42.0)),
                 (np.asarray(42.0), False, None),
                 # Test N
                 (node_values.copy(), True, node_values),
@@ -179,16 +178,12 @@ class DataShape(unittest.TestCase):
                 (np.arange(30), False, None),
                 # Test NxN
                 (
-                    np.arange(_dim.nodes * _dim.nodes).reshape(
-                        (_dim.nodes, _dim.nodes)
-                    ),
+                    np.arange(N * N).reshape((N, N)),
                     True,
                     None,
                 ),
                 (
-                    np.arange(_dim.nodes * _dim.nodes).reshape(
-                        (_dim.nodes, _dim.nodes)
-                    ),
+                    np.arange(N * N).reshape((N, N)),
                     False,
                     None,
                 ),
@@ -199,12 +194,13 @@ class DataShape(unittest.TestCase):
         )
 
     def test_adapt_time(self):
-        time_values = np.arange(_dim.days) + 40
+        T = _dim.T
+        time_values = np.arange(T) + 40
         self.adapt_test_framework(
             Shapes.T,
             [
                 # Test S
-                (np.asarray(42.0), True, np.full(_dim.days, 42.0)),
+                (np.asarray(42.0), True, np.full(T, 42.0)),
                 (np.asarray(42.0), False, None),
                 # Test T
                 (time_values.copy(), True, time_values),
@@ -213,16 +209,16 @@ class DataShape(unittest.TestCase):
                 (np.arange(40) * 7, True, None),
                 (np.arange(40) * 7, False, None),
                 # Test > T
-                (np.arange(200) * 13, True, np.arange(_dim.days) * 13),
-                (np.arange(200) * 13, False, np.arange(_dim.days) * 13),
+                (np.arange(200) * 13, True, np.arange(T) * 13),
+                (np.arange(200) * 13, False, np.arange(T) * 13),
                 # Test TxT
                 (
-                    (np.arange(_dim.days * _dim.days)).reshape((_dim.days, _dim.days)),
+                    (np.arange(T * T)).reshape((T, T)),
                     True,
                     None,
                 ),
                 (
-                    (np.arange(_dim.days * _dim.days)).reshape((_dim.days, _dim.days)),
+                    (np.arange(T * T)).reshape((T, T)),
                     False,
                     None,
                 ),
@@ -233,8 +229,9 @@ class DataShape(unittest.TestCase):
         )
 
     def test_adapt_node_and_node(self):
-        nxn = (_dim.nodes, _dim.nodes)
-        nxn_values = np.arange(_dim.nodes * _dim.nodes).reshape(nxn) + 42
+        N = _dim.N
+        nxn = (N, N)
+        nxn_values = np.arange(N * N).reshape(nxn) + 42
         self.adapt_test_framework(
             Shapes.NxN,
             [
@@ -248,16 +245,16 @@ class DataShape(unittest.TestCase):
                 (np.arange(10), True, None),
                 (np.arange(10), False, None),
                 # Test N
-                (np.arange(_dim.nodes), True, None),
-                (np.arange(_dim.nodes), False, None),
+                (np.arange(N), True, None),
+                (np.arange(N), False, None),
                 # Test NxN
                 (nxn_values.copy(), True, nxn_values),
                 (nxn_values.copy(), False, nxn_values),
                 # Test Nx10 and 10xN
-                (np.arange(_dim.nodes * 10).reshape((_dim.nodes, 10)), True, None),
-                (np.arange(_dim.nodes * 10).reshape((_dim.nodes, 10)), False, None),
-                (np.arange(_dim.nodes * 10).reshape((10, _dim.nodes)), True, None),
-                (np.arange(_dim.nodes * 10).reshape((10, _dim.nodes)), False, None),
+                (np.arange(N * 10).reshape((N, 10)), True, None),
+                (np.arange(N * 10).reshape((N, 10)), False, None),
+                (np.arange(N * 10).reshape((10, N)), True, None),
+                (np.arange(N * 10).reshape((10, N)), False, None),
                 # Test higher dimension
                 (np.arange(27).reshape((3, 3, 3)), True, None),
                 (np.arange(27).reshape((3, 3, 3)), False, None),
@@ -265,10 +262,11 @@ class DataShape(unittest.TestCase):
         )
 
     def test_adapt_time_and_node(self):
-        txn = (_dim.days, _dim.nodes)
-        txt = (_dim.days, _dim.days)
-        nxn = (_dim.nodes, _dim.nodes)
-        txn_values = np.arange(_dim.days * _dim.nodes).reshape(txn) + 40
+        T, N = _dim.T, _dim.N
+        txn = (T, N)
+        txt = (T, T)
+        nxn = (N, N)
+        txn_values = np.arange(T * N).reshape(txn) + 40
         self.adapt_test_framework(
             Shapes.TxN,
             [
@@ -285,29 +283,29 @@ class DataShape(unittest.TestCase):
                 (
                     np.arange(999),
                     True,
-                    np.tile(np.arange(_dim.days), (_dim.nodes, 1)).T,
+                    np.tile(np.arange(T), (N, 1)).T,
                 ),
                 (np.arange(999), False, None),
                 # Test N
                 (
-                    np.arange(_dim.nodes),
+                    np.arange(N),
                     True,
-                    np.tile(np.arange(_dim.nodes), (_dim.days, 1)),
+                    np.tile(np.arange(N), (T, 1)),
                 ),
-                (np.arange(_dim.nodes), False, None),
+                (np.arange(N), False, None),
                 # Test T
                 (
-                    np.arange(_dim.days),
+                    np.arange(T),
                     True,
-                    np.tile(np.arange(_dim.days), (_dim.nodes, 1)).T,
+                    np.tile(np.arange(T), (N, 1)).T,
                 ),
-                (np.arange(_dim.days), False, None),
+                (np.arange(T), False, None),
                 # Test NxN
-                ((np.arange(_dim.nodes * _dim.nodes)).reshape(nxn), True, None),
-                ((np.arange(_dim.nodes * _dim.nodes)).reshape(nxn), False, None),
+                ((np.arange(N * N)).reshape(nxn), True, None),
+                ((np.arange(N * N)).reshape(nxn), False, None),
                 # Test TxT
-                ((np.arange(_dim.days * _dim.days)).reshape(txt), True, None),
-                ((np.arange(_dim.days * _dim.days)).reshape(txt), False, None),
+                ((np.arange(T * T)).reshape(txt), True, None),
+                ((np.arange(T * T)).reshape(txt), False, None),
                 # Test TxN
                 (txn_values.copy(), True, txn_values),
                 (txn_values.copy(), False, txn_values),

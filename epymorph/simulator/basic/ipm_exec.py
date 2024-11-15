@@ -15,15 +15,17 @@ from epymorph.compartment_model import (
     TransitionDef,
     exogenous_states,
 )
-from epymorph.data_type import AttributeArray, AttributeValue, SimArray, SimDType
-from epymorph.database import Database
+from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.data_type import AttributeValue, SimArray, SimDType
+from epymorph.database import DataResolver
 from epymorph.error import (
+    AttributeException,
     IpmSimInvalidProbsException,
     IpmSimLessThanZeroException,
     IpmSimNaNException,
 )
 from epymorph.rume import Rume
-from epymorph.simulation import AttributeResolver, Tick
+from epymorph.simulation import Tick
 from epymorph.simulator.world import World
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
@@ -108,7 +110,7 @@ class IpmExecutor:
     """the RUME"""
     _world: World
     """the world state"""
-    _data: Database[AttributeArray]
+    _data: DataResolver
     """resolver for simulation data"""
     _rng: np.random.Generator
     """the simulation RNG"""
@@ -137,7 +139,7 @@ class IpmExecutor:
         self,
         rume: Rume,
         world: World,
-        data: Database[AttributeArray],
+        data: DataResolver,
         rng: np.random.Generator,
     ):
         ipm = rume.ipm
@@ -163,9 +165,43 @@ class IpmExecutor:
         self._apply_matrix = _make_apply_matrix(ipm)
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
-        self._attribute_values_txn = AttributeResolver(
-            data, rume.dim
-        ).resolve_txn_series(list(ipm.requirements_dict.items()))
+        self._attribute_values_txn = self.resolve_txn_series(data, ipm, rume.dim)
+        # TODO:
+        # self._attribute_values_txn = AttributeResolver(
+        #     data, rume.dim
+        # ).resolve_txn_series(list(ipm.requirements_dict.items()))
+
+    def resolve_txn_series(
+        self,
+        data: DataResolver,
+        ipm: BaseCompartmentModel,
+        dim: SimDimensions,
+    ):
+        """
+        Generates the series of values for the given attributes.
+        Each item produced by the generator is a sequence of values,
+        one for each attribute (in the given order).
+        The sequence of items is generated in simulation order --
+        day=0, tau step=0, node=0; then day=0, tau_step=0; node=1; and so on.
+        """
+        days = dim.days
+        taus = dim.tau_steps
+        nodes = dim.nodes
+
+        attributes = ipm.requirements_dict
+        if any(ak.shape != Shapes.TxN for _, ak in attributes.items()):
+            msg = "Cannot generate a TxN series unless all attributes are TxN."
+            raise AttributeException(msg)
+
+        attr_values = [
+            data.resolve(name, definition) for name, definition in attributes.items()
+        ]
+
+        for t in range(days):
+            node_values = [[array[t, n] for array in attr_values] for n in range(nodes)]
+            for _ in range(taus):
+                for vals in node_values:
+                    yield vals
 
     def apply(self, tick: Tick) -> Result:
         """

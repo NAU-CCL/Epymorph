@@ -10,7 +10,6 @@ from typing import Protocol, TypeVar
 import numpy as np
 import pandas as pd
 
-from epymorph.adrio.adrio import Adrio
 from epymorph.compartment_model import (
     BaseCompartmentModel,
     CompartmentDef,
@@ -22,7 +21,6 @@ from epymorph.database import NamePattern
 from epymorph.geography.scope import GeoAggregation, GeoScope, GeoSelection
 from epymorph.log.messaging import sim_messaging
 from epymorph.rume import Rume
-from epymorph.simulator.data import evaluate_param
 from epymorph.time import Dim, TimeAggregation, TimeFrame, TimeSelection
 from epymorph.util import mask
 
@@ -220,13 +218,9 @@ def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> Rum
             },
         )
     else:
-        # Save to cache; evaluate ADRIOs and store the ndarray results
+        # Save to cache; evaluate parameters and store the resulting ndarrays
         with sim_messaging():
-            values = {
-                str(name): evaluate_param(rume, str(name))
-                for name, value in rume.params.items()
-                if isinstance(value, Adrio)
-            }
+            values = rume.evaluate_params().to_dict(simplify_names=True)
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(path, **values)
         return rume

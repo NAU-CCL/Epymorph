@@ -4,7 +4,6 @@ from typing import Callable, Mapping
 
 import numpy as np
 
-from epymorph.database import NamePattern
 from epymorph.error import (
     AttributeException,
     CompilationException,
@@ -17,17 +16,12 @@ from epymorph.error import (
 )
 from epymorph.event import EventBus, OnStart, OnTick
 from epymorph.geography.scope import GeoScope
-from epymorph.params import ParamValue
 from epymorph.rume import GEO_LABELS, Rume
-from epymorph.simulation import simulation_clock
+from epymorph.simulation import ParamValue, simulation_clock
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
-from epymorph.simulator.data import (
-    evaluate_params,
-    initialize_rume,
-    validate_requirements,
-)
+from epymorph.simulator.data import initialize_rume
 from epymorph.simulator.world_list import ListWorld
 from epymorph.time import TimeFrame
 
@@ -69,14 +63,7 @@ class BasicSimulator:
             CompilationException,
         ):
             try:
-                db = evaluate_params(
-                    rume=rume,
-                    override_params={
-                        NamePattern.parse(k): v for k, v in (params or {}).items()
-                    },
-                    rng=rng,
-                )
-                validate_requirements(rume, db)
+                data = rume.evaluate_params(override_params=params, rng=rng)
             except AttributeException as e:
                 msg = f"RUME attribute requirements were not met. See errors:\n- {e}"
                 raise SimValidationException(msg) from None
@@ -87,14 +74,13 @@ class BasicSimulator:
                 raise SimValidationException(msg) from None
 
         with error_gate("initializing the simulation", InitException):
-            initial_values = initialize_rume(rume, rng, db)
+            initial_values = initialize_rume(rume, rng, data)
 
             # Should always match because `evaluate_params` includes a default.
-            matched = db.query(GEO_LABELS)
-            if matched is None:
+            if (labels_value := data.resolve(GEO_LABELS.key, GEO_LABELS.value)) is None:
                 geo_labels = rume.scope.labels.tolist()
             else:
-                geo_labels = matched.value.tolist()
+                geo_labels = labels_value.tolist()
 
             out = Output(
                 dim=dim,
@@ -108,8 +94,8 @@ class BasicSimulator:
             world = ListWorld.from_initials(initial_values)
 
         with error_gate("compiling the simulation", CompilationException):
-            ipm_exec = IpmExecutor(rume, world, db, rng)
-            movement_exec = MovementExecutor(rume, world, db, rng)
+            ipm_exec = IpmExecutor(rume, world, data, rng)
+            movement_exec = MovementExecutor(rume, world, data, rng)
 
         _events.on_start.publish(OnStart(self.__class__.__name__, dim, rume.time_frame))
 

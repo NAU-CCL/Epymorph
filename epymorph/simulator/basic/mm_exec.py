@@ -1,16 +1,13 @@
-from copy import deepcopy
-
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data_type import AttributeArray, SimDType
-from epymorph.database import Database, ModuleNamespace
+from epymorph.data_type import SimDType
+from epymorph.database import DataResolver, ModuleNamespace
 from epymorph.error import MmSimException
 from epymorph.event import EventBus, OnMovementClause, OnMovementFinish, OnMovementStart
 from epymorph.movement_model import MovementClause
 from epymorph.rume import Rume
 from epymorph.simulation import (
-    NamespacedAttributeResolver,
     Tick,
     gpm_strata,
     resolve_tick_delta,
@@ -107,7 +104,7 @@ class MovementExecutor:
         self,
         rume: Rume,
         world: World,
-        db: Database[AttributeArray],
+        data: DataResolver,
         rng: np.random.Generator,
     ):
         self._rume = rume
@@ -117,13 +114,15 @@ class MovementExecutor:
         # Clone and set context on clauses.
         self._clauses = []
         for strata, model in self._rume.mms.items():
-            data = NamespacedAttributeResolver(
-                data=db,
-                dim=rume.dim,
-                namespace=ModuleNamespace(gpm_strata(strata), "mm"),
-            )
+            namespace = ModuleNamespace(gpm_strata(strata), "mm")
             for clause in model.clauses:
-                c = deepcopy(clause).with_context(data, rume.dim, rume.scope, rng)
+                c = clause.with_context_internal(
+                    namespace,
+                    data,
+                    rume.dim,
+                    rume.scope,
+                    rng,
+                )
                 self._clauses.append((strata, c))
 
     def apply(self, tick: Tick) -> None:
@@ -141,6 +140,7 @@ class MovementExecutor:
 
             try:
                 requested_movers = clause.evaluate(tick)
+                np.fill_diagonal(requested_movers, 0)
             except Exception as e:
                 # NOTE: catching exceptions here is necessary to get nice error messages
                 # for some value error cause by incorrect parameter and/or clause

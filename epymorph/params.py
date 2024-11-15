@@ -5,20 +5,20 @@ This module also defines the types of acceptable input values for simulation par
 """
 
 from abc import ABC, abstractmethod
-from typing import Literal, Sequence, TypeVar, Union, final
+from typing import Literal, TypeVar, final
 
 import numpy as np
 from numpy.typing import NDArray
 from sympy import Expr, Symbol
 
-from epymorph.adrio.adrio import Adrio
+from epymorph.data_shape import SimDimensions
 from epymorph.data_type import (
+    AttributeArray,
     AttributeValue,
-    ScalarDType,
-    ScalarValue,
-    StructDType,
-    StructValue,
 )
+from epymorph.database import AbsoluteName, DataResolver, evaluate_param
+from epymorph.error import AttributeException
+from epymorph.geography.scope import GeoScope
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
 
@@ -31,6 +31,21 @@ class ParamFunction(SimulationFunction[NDArray[T_co]], ABC):
     Parameter functions can be specified in a variety of forms;
     this class describe the common elements.
     """
+
+
+@evaluate_param.register
+def _(
+    value: ParamFunction,
+    name: AbsoluteName,
+    data: DataResolver,
+    dim: SimDimensions | None,
+    scope: GeoScope | None,
+    rng: np.random.Generator | None,
+) -> AttributeArray:
+    # depth-first evaluation guarantees `data` has our dependencies.
+    namespace = name.to_namespace()
+    sim_func = value.with_context_internal(namespace, data, dim, scope, rng)
+    return np.asarray(sim_func.evaluate())
 
 
 class ParamFunctionNumpy(ParamFunction[T_co]):
@@ -237,14 +252,18 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
         return np.broadcast_to(np.array(result, dtype=np.float64), (D, N))
 
 
-ListValue = Sequence[Union[ScalarValue, StructValue, "ListValue"]]
-ParamValue = (
-    ScalarValue
-    | StructValue
-    | ListValue
-    | ParamFunction
-    | Adrio
-    | Expr
-    | NDArray[ScalarDType | StructDType]
-)
-"""All acceptable input forms for parameter values."""
+@evaluate_param.register
+def _(
+    value: Expr,
+    name: AbsoluteName,
+    data: DataResolver,
+    dim: SimDimensions | None,
+    scope: GeoScope | None,
+    rng: np.random.Generator | None,
+) -> AttributeArray:
+    # Automatically convert sympy expressions into a ParamFunction instance.
+    try:
+        expr_func = ParamExpressionTimeAndNode(value)
+    except ValueError as e:
+        raise AttributeException(str(e)) from None
+    return evaluate_param(expr_func, name, data, dim, scope, rng)

@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import Enum
 from functools import cache, wraps
 from math import floor
 from re import compile as re_compile
@@ -14,6 +15,7 @@ from typing import (
     Iterable,
     Literal,
     Mapping,
+    NamedTuple,
     OrderedDict,
     ParamSpec,
     Self,
@@ -38,6 +40,58 @@ def normalize_str(value: str) -> str:
 def normalize_list(values: list[str]) -> list[str]:
     """Normalize a list of strings for permissive search."""
     return list(map(normalize_str, values))
+
+
+class AnsiColor(Enum):
+    # Standard Colors
+    BLACK = 30
+    RED = 31
+    GREEN = 32
+    YELLOW = 33
+    BLUE = 34
+    MAGENTA = 35
+    CYAN = 36
+    WHITE = 37
+    # Bright Colors
+    BRIGHT_BLACK = 90
+    BRIGHT_RED = 91
+    BRIGHT_GREEN = 92
+    BRIGHT_YELLOW = 93
+    BRIGHT_BLUE = 94
+    BRIGHT_MAGENTA = 95
+    BRIGHT_CYAN = 96
+    BRIGHT_WHITE = 97
+
+
+class AnsiStyle(Enum):
+    RESET = 0  # Reset all styles
+    BOLD = 1  # Bold text
+    DIM = 2  # Dim text
+    ITALIC = 3  # Italic text
+    UNDERLINE = 4  # Underlined text
+    STRIKETHROUGH = 9  # Strikethrough text
+
+
+def ansi_stylize(
+    text: str,
+    color: AnsiColor | None = AnsiColor.WHITE,
+    style: AnsiStyle | None = None,
+) -> str:
+    """Uses ANSI escape codes to stylize a given text, which may not work everywhere.
+    Any applied color or style are reset after the text.
+
+    Parameters
+    ----------
+    color : AnsiColor, optional
+        The text color to apply.
+    style : AnsiStyle, optional
+        The text style to apply.
+    """
+    # ANSI reference: https://en.wikipedia.org/wiki/ANSI_escape_code
+    codes = [str(x.value) for x in (color, style) if x is not None]
+    if len(codes) == 0:
+        return text
+    return f"\033[{';'.join(codes)}m{text}\033[{AnsiStyle.RESET.value}m"
 
 
 # function utilities
@@ -191,6 +245,13 @@ def zip_list(xs: Iterable[A], ys: Iterable[B]) -> list[tuple[A, B]]:
 
 K = TypeVar("K")
 V = TypeVar("V")
+
+
+class KeyValue(Generic[K, V], NamedTuple):
+    """A generic named tuple for key/value pairs."""
+
+    key: K
+    value: V
 
 
 def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:

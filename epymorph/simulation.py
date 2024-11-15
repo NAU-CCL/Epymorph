@@ -2,41 +2,51 @@
 
 from abc import ABC, ABCMeta, abstractmethod
 from copy import deepcopy
-from dataclasses import dataclass, field
 from datetime import date, timedelta
-from functools import cache
 from typing import (
     Any,
     Callable,
-    Generator,
     Generic,
     Iterable,
+    Literal,
+    Mapping,
     NamedTuple,
     Self,
     Sequence,
     Type,
     TypeVar,
+    Union,
     final,
-    overload,
 )
 
 import numpy as np
 from jsonpickle.util import is_picklable
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
+from sympy import Expr
 
-from epymorph.data_shape import DataShape, Shapes, SimDimensions
+from epymorph.data_shape import SimDimensions
 from epymorph.data_type import (
     AttributeArray,
-    AttributeType,
-    AttributeValue,
-    dtype_as_np,
-    dtype_check,
+    ScalarDType,
+    ScalarValue,
+    StructDType,
+    StructValue,
 )
-from epymorph.database import AbsoluteName, AttributeName, Database, ModuleNamespace
-from epymorph.error import AttributeException
+from epymorph.database import (
+    NAMESPACE_PLACEHOLDER,
+    AttributeDef,
+    AttributeName,
+    Database,
+    DataResolver,
+    ModuleNamespace,
+    NamePattern,
+    RecursiveValue,
+    ReqTree,
+    is_recursive_value,
+)
 from epymorph.geography.scope import GeoScope
-from epymorph.util import acceptable_name, are_instances, are_unique
+from epymorph.util import are_instances, are_unique
 
 
 def default_rng(
@@ -121,252 +131,6 @@ def simulation_clock(dim: SimDimensions) -> Iterable[Tick]:
         curr_date += one_day
 
 
-############################
-# Attributes and resolvers #
-############################
-
-
-AttributeT = TypeVar("AttributeT", bound=AttributeType)
-"""The data type of an attribute; maps to the numpy type of the attribute array."""
-
-# NOTE: I had AttributeT as covariant originally but that seems to cause pyright
-# some headache interpreting typed method overloads (which is practically the
-# whole point of making AttributeKey generic).
-# So for now this must be invariant, but I think that's okay.
-# Rather than being able to say things like:
-# `AttributeKey[type[int] | type[float]]`
-# you have to say `AttributeKey[type[int]] | AttributeKey[type[float]]`.
-
-
-@dataclass(frozen=True)
-class AttributeKey(Generic[AttributeT]):
-    """The identity of a simulation attribute."""
-
-    name: str
-    type: AttributeT
-    shape: DataShape
-
-    def __post_init__(self):
-        if acceptable_name.match(self.name) is None:
-            raise ValueError(f"Invalid attribute name: {self.name}")
-        try:
-            dtype_as_np(self.type)
-        except Exception as e:
-            msg = (
-                f"AttributeDef's type is not correctly specified: {self.type}\n"
-                "See documentation for appropriate type designations."
-            )
-            raise ValueError(msg) from e
-        object.__setattr__(self, "attribute_name", AttributeName(self.name))
-
-    @overload
-    def dtype(self: "AttributeKey[type[int]]") -> np.dtype[np.int64]: ...
-    @overload
-    def dtype(self: "AttributeKey[type[float]]") -> np.dtype[np.float64]: ...
-    @overload
-    def dtype(self: "AttributeKey[type[str]]") -> np.dtype[np.str_]: ...
-
-    # providing overloads for structured types is basically impossible
-    # without mapped types, so callers are on their own for that.
-    # Normally I'd make dtype a property, but pylance seems to have a hard time
-    # with overloads on properties.
-
-    def dtype(self) -> np.dtype:
-        """Return the dtype of this attribute in a numpy-equivalent type."""
-        return dtype_as_np(self.type)
-
-
-@dataclass(frozen=True)
-class AttributeDef(AttributeKey[AttributeT]):
-    """
-    Definition of a simulation attribute;
-    the identity plus optional default value and comment.
-    """
-
-    name: str
-    type: AttributeT
-    shape: DataShape
-    default_value: AttributeValue | None = field(default=None, compare=False)
-    comment: str | None = field(default=None, compare=False)
-
-    def __post_init__(self):
-        if acceptable_name.match(self.name) is None:
-            raise ValueError(f"Invalid attribute name: {self.name}")
-        try:
-            dtype_as_np(self.type)
-        except Exception as e:
-            msg = (
-                f"AttributeDef's type is not correctly specified: {self.type}\n"
-                "See documentation for appropriate type designations."
-            )
-            raise ValueError(msg) from e
-        if self.default_value is not None and not dtype_check(
-            self.type, self.default_value
-        ):
-            msg = "AttributeDef's default value does not align with its dtype."
-            raise ValueError(msg)
-
-
-class _BaseAttributeResolver:
-    """Base class for attribute resolvers."""
-
-    _data: Database[AttributeArray]
-    _dim: SimDimensions
-
-    def __init__(self, data: Database[AttributeArray], dim: SimDimensions):
-        self._data = data
-        self._dim = dim
-
-    def _resolve(self, attr: tuple[AbsoluteName, AttributeKey]) -> NDArray:
-        """
-        Resolve an attribute value by AbsoluteName and convert it to the
-        type and shape in the given AttributeKey.
-        """
-        name, attr_key = attr
-        matched = self._data.query(name)
-        if matched is None:
-            msg = f"Missing attribute '{name}'"
-            raise AttributeException(msg)
-
-        # Assume that we've already validated the attributes, so we don't have
-        # to do that every time.
-        # In standard simulation workflows, we should therefore not see misses
-        # or incompatibilities.
-        # But they are possible in use-cases outside these workflows.
-
-        try:
-            value = matched.value
-            value = value.astype(
-                attr_key.dtype(),
-                casting="safe",
-                subok=False,
-                copy=False,
-            )
-            value = attr_key.shape.adapt(self._dim, value, allow_broadcast=True)
-        except Exception as e:
-            msg = (
-                f"Attribute '{name}' (given as '{matched.pattern}') is "
-                "not properly specified. Not a compatible type."
-            )
-            raise AttributeException(msg) from e
-        if value is None:
-            msg = (
-                f"Attribute '{name}' (given as '{matched.pattern}') is "
-                "not properly specified. Not a compatible shape."
-            )
-            raise AttributeException(msg)
-        return value
-
-
-class AttributeResolver(_BaseAttributeResolver):
-    """
-    Wraps a Database of AttributeArrays to provide the ability to access to that data
-    by AttributeKey within a particular ModuleNamespace.
-    """
-
-    @overload
-    def resolve(
-        self, attr: tuple[AbsoluteName, AttributeKey[type[int]]]
-    ) -> NDArray[np.int64]: ...
-
-    @overload
-    def resolve(
-        self, attr: tuple[AbsoluteName, AttributeKey[type[float]]]
-    ) -> NDArray[np.float64]: ...
-
-    @overload
-    def resolve(
-        self, attr: tuple[AbsoluteName, AttributeKey[type[str]]]
-    ) -> NDArray[np.str_]: ...
-
-    @overload
-    def resolve(self, attr: tuple[AbsoluteName, AttributeKey[Any]]) -> NDArray[Any]: ...
-
-    def resolve(self, attr: tuple[AbsoluteName, AttributeKey]) -> NDArray:
-        """
-        Retrieve the value of a specific attribute, typed and shaped appropriately.
-        """
-        return super()._resolve(attr)
-
-    def resolve_txn_series(
-        self,
-        attributes: Sequence[tuple[AbsoluteName, AttributeKey]],
-    ) -> Generator[Iterable[AttributeValue], None, None]:
-        """
-        Generates the series of values for the given attributes.
-        Each item produced by the generator is a sequence of values,
-        one for each attribute (in the given order).
-        The sequence of items is generated in simulation order --
-        day=0, tau step=0, node=0; then day=0, tau_step=0; node=1; and so on.
-        """
-        days = self._dim.days
-        taus = self._dim.tau_steps
-        nodes = self._dim.nodes
-
-        if any(ak.shape != Shapes.TxN for _, ak in attributes):
-            msg = "Cannot generate a TxN series unless all attributes are TxN."
-            raise AttributeException(msg)
-
-        attr_values = [self.resolve(a) for a in attributes]
-
-        for t in range(days):
-            node_values = [[array[t, n] for array in attr_values] for n in range(nodes)]
-            for _ in range(taus):
-                for vals in node_values:
-                    yield vals
-
-
-class NamespacedAttributeResolver(_BaseAttributeResolver):
-    """
-    Wraps a Database of AttributeArrays to provide the ability to access to that data
-    by AttributeKey within a particular ModuleNamespace.
-    """
-
-    _namespace: ModuleNamespace
-
-    def __init__(
-        self,
-        data: Database[AttributeArray],
-        dim: SimDimensions,
-        namespace: ModuleNamespace,
-    ):
-        super().__init__(data, dim)
-        self._namespace = namespace
-
-    @overload
-    def resolve(self, attr: AttributeKey[type[int]]) -> NDArray[np.int64]: ...
-    @overload
-    def resolve(self, attr: AttributeKey[type[float]]) -> NDArray[np.float64]: ...
-    @overload
-    def resolve(self, attr: AttributeKey[type[str]]) -> NDArray[np.str_]: ...
-    @overload
-    def resolve(self, attr: AttributeKey[Any]) -> NDArray[Any]: ...
-
-    def resolve(self, attr: AttributeKey) -> NDArray:
-        """
-        Retrieve the value of a specific attribute, typed and shaped appropriately.
-        """
-        # Assume that we've already validated the attributes, so we don't have to
-        # do that every time.
-        # In practice we should not see misses or type/shape incompatibilities.
-        name = self._namespace.to_absolute(attr.name)
-        return super()._resolve((name, attr))
-
-    def resolve_name(self, attr_name: str) -> NDArray:
-        """
-        Retrieve the value of a specific attribute by name.
-        Note: using `resolve()` is preferred when possible,
-        since in that case we can usually provide a properly typed result.
-        """
-        name = self._namespace.to_absolute(attr_name)
-        matched = self._data.query(name)
-        if matched is None:
-            msg = f"Missing attribute '{name}'"
-            raise AttributeException(msg)
-        else:
-            return matched.value
-
-
 ########################
 # Simulation functions #
 ########################
@@ -383,8 +147,22 @@ class _Context(ABC):
     evaluation of SimulationFunctions without a full RUME.
     """
 
+    def _invalid_context(
+        self,
+        component: Literal["data", "dim", "scope", "rng"],
+    ) -> TypeError:
+        err = (
+            "Missing function context during evaluation.\n"
+            "Simulation function tried to access "
+            f"'{component}' but this has not been provided. "
+            "Call `with_context()` first, providing all context that is required "
+            "by this function. Then call `evaluate()` on the returned object "
+            "to compute the value."
+        )
+        return TypeError(err)
+
     @abstractmethod
-    def data(self, attribute: AttributeDef) -> NDArray:
+    def data(self, attribute: AttributeDef) -> AttributeArray:
         """Retrieve the value of an attribute."""
 
     @property
@@ -402,101 +180,99 @@ class _Context(ABC):
     def rng(self) -> np.random.Generator:
         """The simulation's random number generator."""
 
-
-class _EmptyContext(_Context):
-    def data(self, attribute: AttributeDef) -> NDArray:
-        raise TypeError("Invalid access of function context.")
-
-    @property
-    def dim(self) -> SimDimensions:
-        raise TypeError("Invalid access of function context.")
-
-    @property
-    def scope(self) -> GeoScope:
-        raise TypeError("Invalid access of function context.")
-
-    @property
-    def rng(self) -> np.random.Generator:
-        raise TypeError("Invalid access of function context.")
-
-
-_EMPTY_CONTEXT = _EmptyContext()
+    @staticmethod
+    def of(
+        namespace: ModuleNamespace,
+        data: DataResolver | None,
+        dim: SimDimensions | None,
+        scope: GeoScope | None,
+        rng: np.random.Generator | None,
+    ) -> "_PartialContext | _FullContext":
+        if (
+            namespace is None
+            or data is None
+            or dim is None
+            or scope is None
+            or rng is None
+        ):
+            return _PartialContext(namespace, data, dim, scope, rng)
+        else:
+            return _FullContext(namespace, data, dim, scope, rng)
 
 
 class _PartialContext(_Context):
-    _cached_data: Callable[[AttributeDef], AttributeArray] | None
-    _data: NamespacedAttributeResolver | None
+    _namespace: ModuleNamespace
+    _data: DataResolver | None
     _dim: SimDimensions | None
     _scope: GeoScope | None
     _rng: np.random.Generator | None
 
     def __init__(
         self,
-        data: NamespacedAttributeResolver | None,
+        namespace: ModuleNamespace,
+        data: DataResolver | None,
         dim: SimDimensions | None,
         scope: GeoScope | None,
         rng: np.random.Generator | None,
     ):
-        self._cached_data = None if data is None else cache(data.resolve)
+        self._namespace = namespace
         self._data = data
         self._dim = dim
         self._scope = scope
         self._rng = rng
 
     def data(self, attribute: AttributeDef) -> NDArray:
-        # attribute resolutions are cached because implementations may be
-        # calling this function within a hot loop
-        # (and we can't just throw @cache on this method because it interferes
-        # with abstract method overriding)
-        if self._cached_data is None:
-            raise TypeError("Missing function context: data")
-        return self._cached_data(attribute)
+        if self._data is None:
+            raise self._invalid_context("data")
+        name = self._namespace.to_absolute(attribute.name)
+        return self._data.resolve(name, attribute)
 
     @property
     def dim(self) -> SimDimensions:
         if self._dim is None:
-            raise TypeError("Missing function context: dim")
+            raise self._invalid_context("dim")
         return self._dim
 
     @property
     def scope(self) -> GeoScope:
         if self._scope is None:
-            raise TypeError("Missing function context: scope")
+            raise self._invalid_context("scope")
         return self._scope
 
     @property
     def rng(self) -> np.random.Generator:
         if self._rng is None:
-            raise TypeError("Missing function context: rng")
+            raise self._invalid_context("rng")
         return self._rng
 
 
+_EMPTY_CONTEXT = _PartialContext(NAMESPACE_PLACEHOLDER, None, None, None, None)
+
+
 class _FullContext(_Context):
-    _cached_data: Callable[[AttributeDef], AttributeArray]
-    _data: NamespacedAttributeResolver
+    _namespace: ModuleNamespace
+    _data: DataResolver
     _dim: SimDimensions
     _scope: GeoScope
     _rng: np.random.Generator
 
     def __init__(
         self,
-        data: NamespacedAttributeResolver,
+        namespace: ModuleNamespace,
+        data: DataResolver,
         dim: SimDimensions,
         scope: GeoScope,
         rng: np.random.Generator,
     ):
-        self._cached_data = cache(data.resolve)
+        self._namespace = namespace
         self._data = data
         self._dim = dim
         self._scope = scope
         self._rng = rng
 
     def data(self, attribute: AttributeDef) -> NDArray:
-        # attribute resolutions are cached because implementations may be
-        # calling this function within a hot loop
-        # (and we can't just throw @cache on this method because it interferes
-        # with abstract method overriding)
-        return self._cached_data(attribute)
+        name = self._namespace.to_absolute(attribute.name)
+        return self._data.resolve(name, attribute)
 
     @property
     def dim(self) -> SimDimensions:
@@ -590,57 +366,78 @@ class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionCla
     requirements: Sequence[AttributeDef] = ()
     """The attribute definitions describing the data requirements for this function."""
 
-    _ctx: _Context = _EMPTY_CONTEXT
+    randomized: bool = False
+    """Should this function be re-evaluated every time it's referenced in a RUME?
+    (Mostly useful for randomized results.) If False, even a function that utilizes
+    the context RNG will only be computed once, resulting in a single random value
+    that is shared by all references during evaluation."""
 
+    _ctx: _FullContext | _PartialContext = _EMPTY_CONTEXT
+
+    @final
     def with_context(
         self,
-        data: NamespacedAttributeResolver | None = None,
+        namespace: ModuleNamespace = NAMESPACE_PLACEHOLDER,
+        params: "Mapping[str, ParamValue] | None" = None,
         dim: SimDimensions | None = None,
         scope: GeoScope | None = None,
         rng: np.random.Generator | None = None,
     ) -> Self:
-        """
-        Constructs a clone of this instance which has access to the given context.
-        epymorph calls this function; you generally don't need to.
-        """
-        # TODO(Tyler): it should probably be an error if someone tries to set a context
-        # on a simfunc that isn't currently Empty.
-        # TODO(Tyler): But bigger picture, I want to think harder about how these
-        # classes are structured. It's making me nervous I built up behaviors that
-        # rely on calling `evaluate_in_context()` and would break if you
-        # called `with_context().evaluate()` instead.
-        # I think the behaviors mentioned can be refactored to fix this reliance,
-        # and then maybe we just remove `evaluate_in_context` entirely.
+        """Constructs a clone of this instance which has access to the given context."""
+        # This version allows users to specify data using strings for names.
+        # epymorph should use `with_context_internal()` whenever possible.
 
+        if params is None:
+            params = {}
+        try:
+            for p in params:
+                AttributeName(p)
+        except ValueError:
+            err = (
+                "When evaluating a sim function this way, namespaced params "
+                "are not allowed (names using '::') because those values would "
+                "not be able to contribute to the evaluation. "
+                "Specify param names as simple strings instead."
+            )
+            raise ValueError(err)
+        reqs = ReqTree.of(
+            {namespace.to_absolute(req.name): req for req in self.requirements},
+            Database({NamePattern.parse(k): v for k, v in params.items()}),
+        )
+        data = reqs.evaluate(dim, scope, rng)
+        return self.with_context_internal(namespace, data, dim, scope, rng)
+
+    def with_context_internal(
+        self,
+        namespace: ModuleNamespace = NAMESPACE_PLACEHOLDER,
+        data: DataResolver | None = None,
+        dim: SimDimensions | None = None,
+        scope: GeoScope | None = None,
+        rng: np.random.Generator | None = None,
+    ) -> Self:
+        """Constructs a clone of this instance which has access to the given context."""
         # clone this instance, then run evaluate on that; accomplishes two things:
         # 1. don't have to worry about cleaning up _ctx
         # 2. instances can use @cached_property without surprising results
-        if data is None or dim is None or scope is None or rng is None:
-            ctx = _PartialContext(data, dim, scope, rng)
-        else:
-            ctx = _FullContext(data, dim, scope, rng)
         clone = deepcopy(self)
-        setattr(clone, "_ctx", ctx)
+        setattr(clone, "_ctx", _Context.of(namespace, data, dim, scope, rng))
         return clone
 
+    @final
     def defer_context(
         self,
         other: _DeferFunctionT,
     ) -> _DeferFunctionT:
         """Defer processing to another instance of a SimulationFunction."""
-        ctx = self._ctx
-        if isinstance(ctx, _EmptyContext):
-            return other.with_context()
-        elif isinstance(ctx, _PartialContext | _FullContext):
-            return other.with_context(
-                data=ctx._data,
-                dim=ctx._dim,
-                scope=ctx._scope,
-                rng=ctx._rng,
-            )
-        else:
-            raise TypeError("Unsupported context type.")
+        return other.with_context_internal(
+            namespace=self._ctx._namespace,
+            data=self._ctx._data,
+            dim=self._ctx._dim,
+            scope=self._ctx._scope,
+            rng=self._ctx._rng,
+        )
 
+    @final
     def data(self, attribute: AttributeDef | str) -> NDArray:
         """Retrieve the value of a specific attribute."""
         if isinstance(attribute, str):
@@ -657,20 +454,28 @@ class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionCla
             )
         return self._ctx.data(req)
 
+    @final
     @property
     def dim(self) -> SimDimensions:
         """The simulation dimensions."""
         return self._ctx.dim
 
+    @final
     @property
     def scope(self) -> GeoScope:
         """The simulation GeoScope."""
         return self._ctx.scope
 
+    @final
     @property
     def rng(self) -> np.random.Generator:
         """The simulation's random number generator."""
         return self._ctx.rng
+
+
+@is_recursive_value.register
+def _(value: BaseSimulationFunction) -> RecursiveValue | None:
+    return RecursiveValue(value.requirements, value.randomized)
 
 
 class SimulationFunction(BaseSimulationFunction[T_co]):
@@ -680,19 +485,6 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
     Implement a SimulationFunction by extending this class and overriding the
     `evaluate()` method.
     """
-
-    def evaluate_in_context(
-        self,
-        data: NamespacedAttributeResolver,
-        dim: SimDimensions,
-        scope: GeoScope,
-        rng: np.random.Generator,
-    ) -> T_co:
-        """
-        Evaluate this function within a context.
-        epymorph calls this function; you generally don't need to.
-        """
-        return self.with_context(data, dim, scope, rng).evaluate()
 
     @abstractmethod
     def evaluate(self) -> T_co:
@@ -715,20 +507,6 @@ class SimulationTickFunction(BaseSimulationFunction[T_co]):
     and overriding the `evaluate()` method.
     """
 
-    def evaluate_in_context(
-        self,
-        data: NamespacedAttributeResolver,
-        dim: SimDimensions,
-        scope: GeoScope,
-        rng: np.random.Generator,
-        tick: Tick,
-    ) -> T_co:
-        """
-        Evaluate this function within a context.
-        epymorph calls this function; you generally don't need to.
-        """
-        return super().with_context(data, dim, scope, rng).evaluate(tick)
-
     @abstractmethod
     def evaluate(self, tick: Tick) -> T_co:
         """
@@ -743,6 +521,78 @@ class SimulationTickFunction(BaseSimulationFunction[T_co]):
     ) -> _DeferResultT:
         """Defer processing to another instance of a SimulationTickFunction."""
         return self.defer_context(other).evaluate(tick)
+
+
+########################
+# Parameter Resolution #
+########################
+
+
+ListValue = Sequence[Union[ScalarValue, StructValue, "ListValue"]]
+ParamValue = Union[
+    ScalarValue,
+    StructValue,
+    ListValue,
+    SimulationFunction,
+    Expr,
+    NDArray[ScalarDType | StructDType],
+]
+"""All acceptable input forms for parameter values."""
+
+
+# def evaluate_param(
+#     node: ReqNode[ParamValue],
+#     data: DataResolver,
+#     dim: SimDimensions | None,
+#     scope: GeoScope | None,
+#     rng: np.random.Generator | None,
+# ) -> AttributeArray:
+#     if isinstance(node.resolution, DefaultValue | ParameterValue):
+#         raw_value = node.value
+#     else:
+#         # MissingValue case should have already raised an error
+#         err = f"Unsupported resolution type ({type(node.resolution)})"
+#         raise AttributeException(err)
+
+#     if raw_value is None:
+#         # This shouldn't happen -- when a node's resolution is
+#         # Default/ParameterValue, it should always have a value.
+#         # So this error indicates a bug in the construction of the ReqTree.
+#         err = "Internal error: unable to resolve value for requirement."
+#         raise AttributeException(err)
+
+#     # Raw value conversions:
+#     if isinstance(raw_value, Expr):
+#         # Automatically convert sympy expressions into a ParamFunction instance.
+#         try:
+#             raw_value = ParamExpressionTimeAndNode(raw_value)
+#         except ValueError as e:
+#             raise AttributeException(str(e)) from None
+
+#     # Otherwise, evaluate and store the parameter based on its type.
+#     if isinstance(raw_value, SimulationFunction):
+#         # SimFunc: depth-first evaluation guarantees `resolved`
+#         # contains all of the data that we will need.
+#         namespace = node.name.to_namespace()
+#         sim_func = raw_value.with_context_internal(namespace, data, dim, scope, rng)
+#         return np.asarray(sim_func.evaluate())
+#     elif isinstance(raw_value, np.ndarray):
+#         # numpy array: make a copy so we don't risk unexpected mutations
+#         return raw_value.copy()
+#     elif isinstance(raw_value, int | float | str | tuple | Sequence):
+#         # scalar value or python collection: re-pack it as a numpy array
+#         return np.asarray(raw_value, dtype=None)
+#     elif (
+#         isinstance(raw_value, type)  #
+#         and issubclass(raw_value, SimulationFunction)
+#     ):
+#         # forgot to instantiate: a common error worth checking for
+#         err = "ParamFunction/Adrio was given as a class instead of an instance."
+#         raise AttributeException(err)
+#     else:
+#         # unsupported value!
+#         err = f"Parameter not a supported type (found: {type(raw_value)})"
+#         raise AttributeException(err)
 
 
 ###############

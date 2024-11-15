@@ -12,9 +12,18 @@ import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.data_shape import Shapes
+from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.data_type import AttributeArray
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
+from epymorph.database import (
+    NAMESPACE_PLACEHOLDER,
+    AbsoluteName,
+    DataResolver,
+    ModuleNamespace,
+    evaluate_param,
+)
 from epymorph.event import AdrioProgress, DownloadActivity, EventBus
+from epymorph.geography.scope import GeoScope
 from epymorph.simulation import AttributeDef, SimulationFunction
 
 T_co = TypeVar("T_co", bound=np.generic, covariant=True)
@@ -95,27 +104,55 @@ class Adrio(SimulationFunction[NDArray[T_co]]):
         )
 
 
+@evaluate_param.register
+def _(
+    value: Adrio,
+    name: AbsoluteName,
+    data: DataResolver,
+    dim: SimDimensions | None,
+    scope: GeoScope | None,
+    rng: np.random.Generator | None,
+) -> AttributeArray:
+    # depth-first evaluation guarantees `data` has our dependencies.
+    namespace = name.to_namespace()
+    sim_func = value.with_context_internal(namespace, data, dim, scope, rng)
+    return np.asarray(sim_func.evaluate())
+
+
 AdrioClassT = TypeVar("AdrioClassT", bound=type[Adrio])
 
 
 def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
     """Adrio class decorator to add result-caching behavior."""
 
-    original_eval = cls.evaluate_in_context
-    cached_value: NDArray | None = None
+    orig_with_context = cls.with_context_internal
+    cached_instance: AdrioClassT | None = None
     cached_hash: int | None = None
 
-    @functools.wraps(original_eval)
-    def evaluate_in_context(self, data, dim, scope, rng):
-        req_hashes = (data.resolve(r).data.tobytes() for r in self.requirements)
-        curr_hash = hash(tuple([dim, scope, *req_hashes]))
-        nonlocal cached_value, cached_hash
-        if cached_value is None or cached_hash != curr_hash:
-            cached_value = original_eval(self, data, dim, scope, rng)
+    @functools.wraps(orig_with_context)
+    def with_context_internal(
+        self,
+        namespace: ModuleNamespace = NAMESPACE_PLACEHOLDER,
+        data: DataResolver | None = None,
+        dim: SimDimensions | None = None,
+        scope: GeoScope | None = None,
+        rng: np.random.Generator | None = None,
+    ):
+        if data is None:
+            req_hashes = ()
+        else:
+            req_hashes = (
+                data.resolve(namespace.to_absolute(r.name), r).tobytes()
+                for r in self.requirements
+            )
+        curr_hash = hash(tuple([str(namespace), dim, scope, *req_hashes]))
+        nonlocal cached_instance, cached_hash
+        if cached_instance is None or cached_hash != curr_hash:
+            cached_instance = orig_with_context(self, namespace, data, dim, scope, rng)
             cached_hash = curr_hash
-        return cached_value
+        return cached_instance
 
-    cls.evaluate_in_context = evaluate_in_context
+    cls.with_context_internal = with_context_internal
     return cls
 
 

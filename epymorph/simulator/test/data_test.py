@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring
 import math
 import unittest
 
@@ -9,8 +8,10 @@ from numpy.typing import NDArray
 
 from epymorph import *
 from epymorph.compartment_model import MultistrataModelSymbols, edge
-from epymorph.data_type import AttributeArray
-from epymorph.database import Database, ModuleNamePattern, NamePattern
+from epymorph.data.ipm.sirs import Sirs
+from epymorph.data.mm.centroids import Centroids
+from epymorph.data_type import AttributeArray, CentroidDType
+from epymorph.database import AbsoluteName, ModuleNamePattern
 from epymorph.error import AttributeException
 from epymorph.geography.us_census import StateScope
 from epymorph.params import (
@@ -18,31 +19,30 @@ from epymorph.params import (
     ParamFunctionNumpy,
     ParamFunctionScalar,
     ParamFunctionTimeAndNode,
-    ParamValue,
     simulation_symbols,
 )
 from epymorph.rume import Gpm, MultistrataRume, Rume
-from epymorph.simulator.data import evaluate_params
+from epymorph.simulation import ParamValue
+from epymorph.simulator.data import evaluate_rume_params
 from epymorph.time import TimeFrame
 
 
 class EvaluateParamsTest(unittest.TestCase):
     def assert_db(
-        self, db: Database[AttributeArray], key: str, value: AttributeArray
+        self,
+        db: dict[AbsoluteName, AttributeArray],
+        key: str,
+        value: AttributeArray,
     ) -> None:
-        matched = db.query(key)
+        matched = db.get(AbsoluteName.parse(key))
         if matched is None:
             self.fail(f"Database did not contain the expected key: {key}")
         else:
-            match_pattern, match_value = matched
-            msg = (
-                f"Database value at key {key} (matched as {match_pattern}) "
-                "did not match expected."
-            )
+            msg = f"Database value at key {key} did not match expected."
             if value.dtype == np.float64:
-                npt.assert_array_almost_equal(match_value, value, err_msg=msg)  # type: ignore
+                npt.assert_array_almost_equal(matched, value, err_msg=msg)  # type: ignore
             else:
-                npt.assert_array_equal(match_value, value, err_msg=msg)
+                npt.assert_array_equal(matched, value, err_msg=msg)
 
     def _default_params(self) -> dict[str, ParamValue]:
         return {
@@ -57,7 +57,7 @@ class EvaluateParamsTest(unittest.TestCase):
             "gpm:aaa::*::population": [100, 200],
             "gpm:bbb::*::population": np.array([300, 400], dtype=np.int64),
             # param names can also include leading stars explicitly
-            "*::*::centroid": [(1.0, 1.0), (2.0, 2.0)],
+            "*::*::centroid": np.array([(1.0, 1.0), (2.0, 2.0)], dtype=CentroidDType),
         }
 
     def _create_rume(self, rume_params: dict[str, ParamValue] | None = None) -> Rume:
@@ -78,8 +78,8 @@ class EvaluateParamsTest(unittest.TestCase):
             strata=[
                 Gpm(
                     name="aaa",
-                    ipm=ipm_library["sirs"](),
-                    mm=mm_library["centroids"](),
+                    ipm=Sirs(),
+                    mm=Centroids(),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
                         # leave phi unspecified to test default value resolution
@@ -87,8 +87,8 @@ class EvaluateParamsTest(unittest.TestCase):
                 ),
                 Gpm(
                     name="bbb",
-                    ipm=ipm_library["sirs"](),
-                    mm=mm_library["centroids"](),
+                    ipm=Sirs(),
+                    mm=Centroids(),
                     init=init.SingleLocation(location=0, seed_size=100),
                     params={
                         ModuleNamePattern.parse(k): v
@@ -109,11 +109,11 @@ class EvaluateParamsTest(unittest.TestCase):
     def test_eval_1(self):
         rume = self._create_rume()
 
-        db = evaluate_params(rume, {}, np.random.default_rng(1))
+        db = evaluate_rume_params(rume, rng=np.random.default_rng(1)).to_dict()
 
         # We should have as many entries in our DB as we have attributes in the RUME,
         # plus 1 (for geo labels).
-        self.assertEqual(len(db._data), len(rume.requirements) + 1)
+        self.assertEqual(len(db), len(rume.requirements) + 1)
 
         self.assert_db(db, "gpm:aaa::ipm::beta", np.array(0.4, dtype=np.float64))
         self.assert_db(db, "gpm:bbb::ipm::beta", np.array(0.3, dtype=np.float64))
@@ -143,33 +143,29 @@ class EvaluateParamsTest(unittest.TestCase):
         self.assert_db(
             db,
             "gpm:aaa::mm::centroid",
-            np.array([(1.0, 1.0), (2.0, 2.0)], dtype=np.float64),
+            np.array([(1.0, 1.0), (2.0, 2.0)], dtype=CentroidDType),
         )
         self.assert_db(
             db,
             "gpm:bbb::mm::centroid",
-            np.array([(1.0, 1.0), (2.0, 2.0)], dtype=np.float64),
+            np.array([(1.0, 1.0), (2.0, 2.0)], dtype=CentroidDType),
         )
 
         # When params are provided as the same literal value,
         # they should evaluate to the same object.
-        m1, m2 = db.query("gpm:aaa::ipm::gamma"), db.query("gpm:bbb::ipm::gamma")
-        if m1 is None or m2 is None:
-            self.fail("Gamma values not found.")
-        else:
-            self.assertIs(m1.value, m2.value)
+        x1 = db[AbsoluteName.parse("gpm:aaa::ipm::gamma")]
+        x2 = db[AbsoluteName.parse("gpm:bbb::ipm::gamma")]
+        self.assertIs(x1, x2)
 
     def test_eval_2(self):
         # Test with override values.
         rume = self._create_rume()
 
-        db = evaluate_params(
+        db = evaluate_rume_params(
             rume,
-            {
-                NamePattern("*", "*", "beta"): 0.5,
-            },
-            np.random.default_rng(1),
-        )
+            override_params={"*::*::beta": 0.5},
+            rng=np.random.default_rng(1),
+        ).to_dict()
 
         # Beta should be overridden from test case 1,
         self.assert_db(db, "gpm:aaa::ipm::beta", np.array(0.5, dtype=np.float64))
@@ -188,16 +184,13 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume(params)
 
-        with self.assertRaises(ExceptionGroup) as e:
-            evaluate_params(rume, {}, np.random.default_rng(1))
+        with self.assertRaises(AttributeException) as ctx:
+            evaluate_rume_params(rume, rng=np.random.default_rng(1))
 
-        [e0, e1] = e.exception.exceptions
-        combined_error_msg = f"{e0} {e1}".lower()
-        self.assertIsInstance(e0, AttributeException)
-        self.assertIsInstance(e1, AttributeException)
-        self.assertIn("missing required parameter", combined_error_msg)
-        self.assertIn("gpm:aaa::ipm::gamma", combined_error_msg)
-        self.assertIn("gpm:bbb::ipm::gamma", combined_error_msg)
+        err = str(ctx.exception).lower()
+        self.assertIn("there are missing values", err)
+        self.assertIn("gpm:aaa::ipm::gamma", err)
+        self.assertIn("gpm:bbb::ipm::gamma", err)
 
     def test_eval_sympy_expression(self):
         # Test param as sympy expression
@@ -206,13 +199,11 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_params(
+        db = evaluate_rume_params(
             rume,
-            {
-                NamePattern.parse("gpm:aaa::ipm::beta"): beta_expr,
-            },
-            np.random.default_rng(1),
-        )
+            override_params={"gpm:aaa::ipm::beta": beta_expr},
+            rng=np.random.default_rng(1),
+        ).to_dict()
 
         expected = np.stack(
             [
@@ -248,13 +239,11 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_params(
+        db = evaluate_rume_params(
             rume,
-            {
-                NamePattern.parse("gpm:aaa::ipm::beta"): Beta(4.0),
-            },
-            np.random.default_rng(1),
-        )
+            override_params={"gpm:aaa::ipm::beta": Beta(4.0)},
+            rng=np.random.default_rng(1),
+        ).to_dict()
 
         expected = np.stack(
             [
@@ -279,13 +268,11 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_params(
+        db = evaluate_rume_params(
             rume,
-            {
-                NamePattern.parse("ipm::xi"): Xi(),
-            },
-            np.random.default_rng(1),
-        )
+            override_params={"ipm::xi": Xi()},
+            rng=np.random.default_rng(1),
+        ).to_dict()
 
         expected_aaa = np.array([(0.4 / 5), (0.4 / 10)], dtype=np.float64)
         expected_bbb = np.array([(0.3 / 5), (0.3 / 10)], dtype=np.float64)
@@ -299,7 +286,9 @@ class EvaluateParamsTest(unittest.TestCase):
             requirements = [BETA]
 
             def evaluate1(self) -> float:
-                return float(self.data(self.BETA)) / 4.0
+                beta = self.data(self.BETA)
+                print(beta, type(beta), beta.dtype)
+                return float(beta) / 4.0
 
         class Xi(ParamFunctionNumpy):
             ALPHA = AttributeDef("alpha", float, Shapes.S)
@@ -314,16 +303,16 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_params(
+        db = evaluate_rume_params(
             rume,
-            {
-                NamePattern.parse("gpm:aaa::ipm::alpha"): 9,
-                NamePattern.parse("gpm:aaa::ipm::beta"): 0.4,
-                NamePattern.parse("gpm:aaa::ipm::gamma"): Gamma(),
-                NamePattern.parse("gpm:aaa::ipm::xi"): Xi(),
+            override_params={
+                "gpm:aaa::ipm::alpha": 9,
+                "gpm:aaa::ipm::beta": 0.4,
+                "gpm:aaa::ipm::gamma": Gamma(),
+                "gpm:aaa::ipm::xi": Xi(),
             },
-            np.random.default_rng(1),
-        )
+            rng=np.random.default_rng(1),
+        ).to_dict()
 
         self.assert_db(db, "gpm:aaa::ipm::alpha", np.array(9))
         self.assert_db(db, "gpm:aaa::ipm::beta", np.array(0.4))
@@ -349,20 +338,16 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        with self.assertRaises(ExceptionGroup) as e:
-            evaluate_params(
+        with self.assertRaises(AttributeException) as ctx:
+            evaluate_rume_params(
                 rume,
-                {
-                    NamePattern.parse("gpm:aaa::ipm::gamma"): Gamma(),
-                    NamePattern.parse("gpm:aaa::ipm::xi"): Xi(),
+                override_params={
+                    "gpm:aaa::ipm::gamma": Gamma(),
+                    "gpm:aaa::ipm::xi": Xi(),
                 },
-                np.random.default_rng(1),
+                rng=np.random.default_rng(1),
             )
 
-        [e0, e1] = e.exception.exceptions
-        combined_error_msg = f"{e0} {e1}".lower()
-        self.assertIsInstance(e0, AttributeException)
-        self.assertIsInstance(e1, AttributeException)
-        self.assertIn("circular dependency", combined_error_msg)
-        self.assertIn("gpm:aaa::ipm::gamma", combined_error_msg)
-        self.assertIn("gpm:aaa::ipm::xi", combined_error_msg)
+        err = str(ctx.exception).lower()
+        self.assertIn("circular dependency", err)
+        self.assertIn("gpm:aaa::ipm::gamma", err)

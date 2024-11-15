@@ -14,16 +14,12 @@ from functools import cached_property
 from math import isclose
 from typing import Any, Literal, Sequence, Type, TypeVar, cast
 
-import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.geography.scope import GeoScope
 from epymorph.simulation import (
     NEVER,
     AttributeDef,
-    NamespacedAttributeResolver,
     SimulationFunctionClass,
     SimulationTickFunction,
     Tick,
@@ -182,21 +178,22 @@ class MovementClause(
         You can also use `defer` to utilize another MovementClause instance.
         """
 
-    def evaluate_in_context(
-        self,
-        data: NamespacedAttributeResolver,
-        dim: SimDimensions,
-        scope: GeoScope,
-        rng: np.random.Generator,
-        tick: Tick,
-    ) -> NDArray[SimDType]:
-        """
-        Evaluate this function within a context.
-        epymorph calls this function; you generally don't need to.
-        """
-        requested = super().evaluate_in_context(data, dim, scope, rng, tick)
-        np.fill_diagonal(requested, 0)
-        return requested
+    # TODO:
+    # def evaluate_in_context(
+    #     self,
+    #     data: NamespacedAttributeResolver,
+    #     dim: SimDimensions,
+    #     scope: GeoScope,
+    #     rng: np.random.Generator,
+    #     tick: Tick,
+    # ) -> NDArray[SimDType]:
+    #     """
+    #     Evaluate this function within a context.
+    #     epymorph calls this function; you generally don't need to.
+    #     """
+    #     requested = super().evaluate_in_context(data, dim, scope, rng, tick)
+    #     np.fill_diagonal(requested, 0)
+    #     return requested
 
 
 #################

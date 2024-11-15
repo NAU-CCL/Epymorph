@@ -38,24 +38,34 @@ from epymorph.compartment_model import (
     MultistrataModelSymbols,
     TransitionDef,
 )
-from epymorph.data_shape import SimDimensions
+from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import dtype_str
 from epymorph.data_usage import estimate_report
-from epymorph.database import AbsoluteName, ModuleNamePattern, NamePattern
+from epymorph.database import (
+    AbsoluteName,
+    Database,
+    DatabaseWithFallback,
+    DatabaseWithStrataFallback,
+    DataResolver,
+    ModuleNamePattern,
+    NamePattern,
+    ReqTree,
+)
 from epymorph.geography.scope import GeoScope
 from epymorph.initializer import Initializer
 from epymorph.movement_model import MovementClause, MovementModel
-from epymorph.params import ParamSymbol, ParamValue, simulation_symbols
+from epymorph.params import ParamSymbol, simulation_symbols
 from epymorph.simulation import (
     DEFAULT_STRATA,
     META_STRATA,
     AttributeDef,
+    ParamValue,
     TickDelta,
     TickIndex,
     gpm_strata,
 )
 from epymorph.time import TimeFrame
-from epymorph.util import are_unique, map_values
+from epymorph.util import KeyValue, are_unique, map_values
 
 #######
 # GPM #
@@ -90,7 +100,15 @@ class Gpm:
 ########
 
 
-GEO_LABELS = AbsoluteName(META_STRATA, "geo", "label")
+GEO_LABELS = KeyValue(
+    AbsoluteName(META_STRATA, "geo", "label"),
+    AttributeDef(
+        "label",
+        str,
+        Shapes.N,
+        comment="Labels to use for each geo node.",
+    ),
+)
 """
 If this attribute is provided to a RUME, it will be used as labels for the geo node.
 Otherwise we'll use the labels from the geo scope.
@@ -370,7 +388,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         """
 
         estimates = [
-            p.with_context(scope=self.scope, dim=self.dim).estimate_data()
+            p.with_context_internal(scope=self.scope, dim=self.dim).estimate_data()
             for p in self.params.values()
             if isinstance(p, Adrio)
         ]
@@ -384,6 +402,58 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
         for l in lines:
             print(l)
+
+    def requirements_tree(
+        self,
+        override_params: Mapping[NamePattern, ParamValue] | None = None,
+    ) -> ReqTree:
+        """Compute the requirements tree for the given RUME."""
+        label_name, label_def = GEO_LABELS
+        requirements = {
+            **self.requirements,
+            # Artificially require the special geo labels attribute.
+            label_name: label_def,
+        }
+
+        params_db = DatabaseWithStrataFallback(
+            data={**self.params},
+            children={
+                **{
+                    # which falls back to GPM params, as scoped to that GPM
+                    gpm_strata(gpm.name): Database[ParamValue](
+                        {
+                            k.to_absolute(gpm_strata(gpm.name)): v
+                            for k, v in (gpm.params or {}).items()
+                        }
+                    )
+                    for gpm in self.strata
+                },
+                "meta": Database[ParamValue](
+                    {label_name.to_pattern(): self.scope.labels}
+                ),
+            },
+        )
+        # If override_params is not empty, wrap vals_db in another fallback layer.
+        if override_params is not None and len(override_params) > 0:
+            params_db = DatabaseWithFallback({**override_params}, params_db)
+
+        return ReqTree.of(requirements, params_db)
+
+    def evaluate_params(
+        self,
+        override_params: Mapping[NamePattern, ParamValue]
+        | Mapping[str, ParamValue]
+        | None = None,
+        rng: np.random.Generator | None = None,
+    ) -> DataResolver:
+        ps = None
+        if override_params is not None:
+            ps = {NamePattern.of(k): v for k, v in override_params.items()}
+        if rng is None:
+            rng = np.random.default_rng()
+
+        reqs = self.requirements_tree(ps)
+        return reqs.evaluate(self.dim, self.scope, rng)
 
 
 @dataclass(frozen=True)

@@ -1,11 +1,9 @@
-# pylint: disable=missing-docstring
 import unittest
-from unittest.mock import Mock
 
 import numpy as np
 
 from epymorph import util
-from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
+from epymorph.data_shape import DataShapeMatcher, Dimensions, Shapes
 from epymorph.util import Event, progress, subscriptions
 from epymorph.util import match as m
 
@@ -50,9 +48,7 @@ class TestUtil(unittest.TestCase):
         # None of these should raise NumpyTypeError
         arr = np.array([1, 2, 3], dtype=np.int64)
 
-        dim = Mock(SimDimensions)
-        dim.nodes = 3
-        dim.days = 10
+        dim = Dimensions.of(T=10, N=3)
 
         util.check_ndarray(arr)
         util.check_ndarray(arr, dtype=m.dtype(np.int64))
@@ -91,16 +87,12 @@ class TestUtil(unittest.TestCase):
         arr = np.arange(12).reshape((3, 4))
 
         # Doesn't raise...
-        dim1 = Mock(SimDimensions)
-        dim1.nodes = 4
-        dim1.days = 3
+        dim1 = Dimensions.of(T=3, N=4)
         util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim1, True))
 
         # Does raise...
         with self.assertRaises(util.NumpyTypeError):
-            dim2 = Mock(SimDimensions)
-            dim2.nodes = 3
-            dim2.days = 4
+            dim2 = Dimensions.of(T=4, N=3)
             util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim2, True))
         with self.assertRaises(util.NumpyTypeError):
             util.check_ndarray(arr, dtype=m.dtype(np.str_))
