@@ -349,7 +349,6 @@ class Temperature(Adrio[np.float64]):
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
-        print("heyhey")
         scope = self.scope
         scope = _validate_scope(scope)
         temp_var = self.temp_variables[self.temp_var]
