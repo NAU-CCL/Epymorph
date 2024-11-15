@@ -41,6 +41,7 @@ class DataLoader:
             dates = cases_flat[
                 "date"
             ].flatten()  # Extract dates (first element of each tuple)
+
             case_counts = (
                 cases_flat["data"].astype(int).flatten()
             )  # Extract case counts (second element)
@@ -56,10 +57,10 @@ class DataLoader:
             return dates, sim_data
 
         if isinstance(flu_sum, CSVTimeSeries):
-            # csv_df = read_csv(flu_sum.file_path)
+            csv_df = read_csv(flu_sum.file_path)
             # dates, cases = (
-            #     csv_df.Date.to_numpy().flatten(),
-            #     csv_df.Cases.to_numpy().flatten(),
+            #     csv_df.Date.to_numpy(),
+            #     csv_df.Cases.to_numpy(),
             # )
 
             # # dates = to_datetime(dates)
@@ -70,6 +71,8 @@ class DataLoader:
                 data, self.rume.dim, self.rume.scope, rng
             )
 
-            dates = flu_sum.time_frame.to_numpy()
+            dates = csv_df.Date.to_numpy()
+
+            # dates = flu_sum.time_frame.to_numpy()
 
             return dates, cases

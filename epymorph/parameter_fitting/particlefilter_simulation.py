@@ -15,6 +15,8 @@ from email import utils
 from pathlib import Path
 from typing import Any, Dict
 
+import numpy as np
+
 from epymorph import *  # noqa: F403
 from epymorph.parameter_fitting.filters.base_filters import BaseFilter
 from epymorph.parameter_fitting.likelihoods.base_likelihood import Likelihood
@@ -63,6 +65,9 @@ class FilterSimulation:
         self.validate()
 
         self.dates, self.cases = self.dataloader.load_data(self.observations)
+
+        if len(self.cases.shape) < 2:
+            self.cases = self.cases[..., np.newaxis]
 
         shutil.rmtree("./epymorph/parameter_fitting/data")
 

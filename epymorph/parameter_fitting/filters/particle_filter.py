@@ -127,7 +127,7 @@ class ParticleFilter(BaseFilter):
         data = cases
         if len(data.shape) == 1:
             data = data[:, np.newaxis]
-        is_sum = False
+        is_sum = True
         num_observations = len(data)
 
         initializer = ParticleInitializer(self.num_particles, rume, params_space)
