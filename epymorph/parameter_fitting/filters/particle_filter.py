@@ -89,7 +89,7 @@ class ParticleFilter(BaseFilter):
 
             new_parameters = {}
 
-            for param, val in observations.items():
+            for param, val in parameters.items():
                 dynamics = params_space[param].dynamics
                 if isinstance(dynamics, GeometricBrownianMotion):
                     new_parameters[param] = val
