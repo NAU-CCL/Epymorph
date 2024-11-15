@@ -30,9 +30,8 @@ class FilterSimulation:
         likelihood_fn: Any,
         filter_type: Any,
         params_space: Dict[str, EstimateParameters],
-        observations: Any,  # Optional[Dict[str, Any]],
-        # fillna: str,
-    ):  # type: ignore
+        observations: Any,
+    ):
         """
         Initializes the FilterSimulation class.
 
@@ -53,15 +52,12 @@ class FilterSimulation:
         self.likelihood_fn: Any = likelihood_fn
         self.filter_type: Any = filter_type
         self.params_space: Dict[str, EstimateParameters] = params_space
-        # self.model_param: str = model_link[1]
         self.ipm = self.rume.ipm
         self.model_link: str = self.observations.model_link.replace("->", "→")
         self.compartments = [compartment.name for compartment in self.ipm.compartments]
         self.events = [e.name.full for e in self.ipm.events]
         self.is_sum = True  # self.observations["is_sum"]
         self.dataloader = DataLoader(self.rume)
-        # if fillna is not None:
-        #     self.handle_missing_values(fillna)
 
         # Perform validation
         self.validate()
@@ -89,28 +85,6 @@ class FilterSimulation:
                 "Invalid fillna method. Choose from 'ffill', 'bfill', 'interpolate', 'mean' or 'median'."
             )
 
-        # data_df = pd.DataFrame(
-        #     {"Date": self.observations["Date"], "Cases": self.observations["Cases"]}
-        # )
-
-        # if method == "ffill":
-        #     data_df["Cases"] = data_df["Cases"].fillna(method="ffill")  # type: ignore
-        # elif method == "bfill":
-        #     data_df["Cases"] = data_df["Cases"].fillna(method="bfill")  # type: ignore
-        # elif method == "interpolate":
-        #     data_df["Cases"] = data_df["Cases"].interpolate(method="linear").astype(int)
-        # elif method == "mean":
-        #     data_df["Cases"] = (
-        #         data_df["Cases"].fillna(data_df["Cases"].mean()).astype(int)
-        #     )
-        # elif method == "median":
-        #     data_df["Cases"] = (
-        #         data_df["Cases"].fillna(data_df["Cases"].median()).astype(int)
-        #     )
-
-        # self.observations["Date"] = data_df["Date"].tolist()
-        # self.observations["Cases"] = data_df["Cases"].tolist()
-
     def validate(self) -> None:
         """
         Validates the input parameters for the simulation.
@@ -118,9 +92,6 @@ class FilterSimulation:
         Raises:
             ValueError: If any required field is missing or if types are incorrect.
         """
-        # Validate rume dictionary
-        # required_keys = ['geo', 'ipm', 'mm',
-        #                  'static_params', 'seed_size', 'num_population']
 
         # Validate likelihood function
         if not isinstance(self.likelihood_fn, Likelihood):
@@ -152,7 +123,6 @@ class FilterSimulation:
         if not isinstance(self.params_space, dict):
             raise ValueError("p_estimates must be a dictionary.")
 
-        # ipm_params = [param.name for param in self.ipm.requirements]
         # Validate each entry in the p_estimates dictionary
         for key, value in self.params_space.items():
             if not isinstance(value, EstimateParameters):
@@ -162,17 +132,8 @@ class FilterSimulation:
             if not isinstance(key, str):
                 raise ValueError("Keys in p_estimates must be strings.")
             if key not in ["beta"]:
-                # raise ValueError(
-                #     "Invalid estimation parameter is passed.\n" "Valid parameters: ",
-                #     [param.name for param in self.ipm.requirements],
-                # )
-                # raise ValueError(
-                #     "Invalid estimation parameter is passed.\nValid parameters: ",
-                #     [param.name for param in self.ipm.requirements],
-                # )
                 raise ValueError(
                     "Invalid estimation parameter is passed.\nValid parameters: beta"
-                    # [param.name for param in self.ipm.requirements],
                 )
 
     def get_index(self) -> int:
@@ -186,7 +147,6 @@ class FilterSimulation:
             index = self.events.index(self.model_link)
         else:
             index = self.compartments.index(self.model_link)
-        # print("index = ", index)
 
         return index
 
@@ -204,7 +164,6 @@ class FilterSimulation:
             self.rume,
             self.likelihood_fn,
             self.params_space,
-            # self.observations,
             self.model_link,
             index,
             self.dates,
@@ -229,8 +188,6 @@ class FilterSimulation:
                 bottom=self.cases[:, 0 : i_node + 1].sum(axis=1),
             )
 
-        # plt.xlabel('Time')
-        # plt.ylabel('Estimated new cases')
         plt.title("Observations plot over time")
         plt.grid(True)
         plt.show()

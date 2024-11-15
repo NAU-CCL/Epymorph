@@ -48,7 +48,7 @@ class EpymorphSimulation:
     def propagate(
         self,
         seird: np.ndarray,
-        observations: dict,
+        parameters: dict,
         rume: Any,
         date: str,
         duration: int,
@@ -60,7 +60,7 @@ class EpymorphSimulation:
 
         Args:
             seird (np.ndarray): Initial state of the system to be used in the simulation.
-            observations (dict): A dictionary of parameters to be updated in the simulation.
+            parameters (dict): A dictionary of parameters to be updated in the simulation.
             sim (StandardSimulation): The simulation object to be used for propagation.
             date (str): The date to start the propagation in 'YYYY-MM-DD' format.
             duration (int): The duration for which the simulation should be propagated.
@@ -84,7 +84,7 @@ class EpymorphSimulation:
 
         # Run the simulation and return the propagated state
         # print("observations = ", observations)
-        output = sim.run(observations)
+        output = sim.run(parameters)
 
         # state = np.array([[0]])
         # print("output.prevalence =", output.prevalence

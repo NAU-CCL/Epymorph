@@ -31,8 +31,6 @@ class ParticleFilter(BaseFilter):
         num_particles (int): Number of particles.
         observations_quantiles (Dict[str, List[float]]): Quantiles of observations.
         observations_values (Dict[str, List[float]]): Mean values of observations.
-        beta_quantiles (List[float]): Quantiles of beta values.
-        beta_values (List[float]): Mean values of beta.
         rng (np.random.Generator): Random number generator.
         utils (Utils): Utility functions for quantiles and data saving.
     """
@@ -47,8 +45,6 @@ class ParticleFilter(BaseFilter):
         self.num_particles = num_particles
         self.param_quantiles = {}
         self.param_values = {}
-        self.beta_quantiles = []
-        self.beta_values = []
         self.rng = np.random.default_rng()
         self.resampler = resampler
 
@@ -187,13 +183,6 @@ class ParticleFilter(BaseFilter):
                 particles = weights_resampling.resample_particles(
                     total_propagated_particles, new_weights
                 )
-
-            self.beta_quantiles.append(
-                utils.quantiles([particle[1]["beta"] for particle in particles])
-            )
-            self.beta_values.append(
-                np.mean([particle[1]["beta"] for particle in particles])
-            )
 
             key_values = {key: [] for key in self.param_quantiles.keys()}
 
