@@ -16,7 +16,7 @@ from epymorph.parameter_fitting.filters.base_filters import BaseFilter
 from epymorph.parameter_fitting.output import ParticleFilterOutput
 from epymorph.parameter_fitting.utils import utils
 from epymorph.parameter_fitting.utils.epymorph_simulation import EpymorphSimulation
-from epymorph.parameter_fitting.utils.ParameterEstimation import EstimateParameters
+from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
 from epymorph.parameter_fitting.utils.ParamsPerturb import Perturb
 from epymorph.parameter_fitting.utils.particle_initializer import ParticleInitializer
 from epymorph.parameter_fitting.utils.resampler import WeightsResampling

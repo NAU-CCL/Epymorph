@@ -20,15 +20,6 @@ class DataLoader:
         dim = Mock(spec=SimDimensions)
         rng = Mock(spec=np.random.Generator)
 
-        # start_date = self.rume.time_frame.start_date
-        # # duration = 7 * self.rume.time_frame.duration_days
-        # end_date = start_date + datetime.timedelta(
-        #     days=self.rume.time_frame.duration_days
-        # )
-
-        # # time_period = TimeFrame.range("2022-01-01", "2022-10-01")
-        # time_period = TimeFrame.range(start_date, end_date)
-
         flu_sum = observations.source
 
         if isinstance(flu_sum, SimulationFunctionClass):
@@ -63,16 +54,10 @@ class DataLoader:
             #     csv_df.Cases.to_numpy(),
             # )
 
-            # # dates = to_datetime(dates)
-            # rng = np.random.default_rng()
-            # sim_data = rng.poisson(cases)
-
             cases = flu_sum.evaluate_in_context(
                 data, self.rume.dim, self.rume.scope, rng
             )
 
             dates = csv_df.Date.to_numpy()
-
-            # dates = flu_sum.time_frame.to_numpy()
 
             return dates, cases

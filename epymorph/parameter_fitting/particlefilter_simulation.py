@@ -21,8 +21,8 @@ from epymorph import *  # noqa: F403
 from epymorph.parameter_fitting.filters.base_filters import BaseFilter
 from epymorph.parameter_fitting.likelihoods.base_likelihood import Likelihood
 from epymorph.parameter_fitting.utils import utils
-from epymorph.parameter_fitting.utils.DataLoader import DataLoader
-from epymorph.parameter_fitting.utils.ParameterEstimation import EstimateParameters
+from epymorph.parameter_fitting.utils.data_loader import DataLoader
+from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
 
 
 class FilterSimulation:

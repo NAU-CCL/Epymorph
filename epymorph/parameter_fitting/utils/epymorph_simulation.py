@@ -68,8 +68,6 @@ class EpymorphSimulation:
         Returns:
             np.ndarray: The propagated state of the system as a NumPy array.
         """
-        # # Update simulation parameters with current observations
-        # Initialize an empty dictionary
 
         rume_propagate = dataclasses.replace(
             self.rume,
@@ -81,30 +79,20 @@ class EpymorphSimulation:
         )
 
         sim = BasicSimulator(rume_propagate)
-
-        # Run the simulation and return the propagated state
-        # print("observations = ", observations)
         output = sim.run(parameters)
 
-        # state = np.array([[0]])
-        # print("output.prevalence =", output.prevalence
         state = (
             output.compartments
             if model_link in output.compartment_labels
             else output.events_per_day
         )
 
-        # elif model_link in output.event_labels:
-        #     state = output.incidence_per_day
         if is_sum:
             state = np.array(np.sum(state, axis=0), dtype=np.int64)
 
         else:
-            # print("stat", state)
             state = state[-1, ...]
 
-        # print("output =", output)
-        # print("output.prevalence =", output.prevalence)
         propagated_x = np.array(output.compartments[-1, ...], dtype=np.int64)
 
         return propagated_x, state

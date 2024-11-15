@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 
 from epymorph.database import NamePattern
-from epymorph.parameter_fitting.utils.ParameterEstimation import EstimateParameters
+from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
 from epymorph.simulator.data import evaluate_params, initialize_rume
 
 
