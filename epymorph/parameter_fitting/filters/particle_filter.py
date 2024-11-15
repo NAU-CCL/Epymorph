@@ -50,7 +50,6 @@ class ParticleFilter(BaseFilter):
         self.beta_quantiles = []
         self.beta_values = []
         self.rng = np.random.default_rng()
-        # self.utils = Utils()
         self.resampler = resampler
 
     def propagate_particles(
@@ -65,7 +64,6 @@ class ParticleFilter(BaseFilter):
         observation: int,
         params_space,
     ):
-        # ) -> List[Tuple[np.ndarray, Dict[str, float]]]:
         """
         Propagates particles through the simulation model.
 
@@ -84,72 +82,31 @@ class ParticleFilter(BaseFilter):
         states = []
 
         params_perturb = Perturb(duration)
-        for x, observations in particles:
+        for compartments, parameters in particles:
             propagated_x, state = simulation.propagate(
-                x, observations, rume, date, duration, is_sum, model_link
+                compartments, parameters, rume, date, duration, is_sum, model_link
             )
 
-            # if propagated_x is None:
-            #     return None, None
-
-            new_observations = {}
+            new_parameters = {}
 
             for param, val in observations.items():
                 dynamics = params_space[param].dynamics
                 if isinstance(dynamics, GeometricBrownianMotion):
-                    new_observations[param] = val
-                    new_observations[param] = params_perturb.gbm(
-                        val, dynamics.volatility
-                    )
+                    new_parameters[param] = val
+                    new_parameters[param] = params_perturb.gbm(val, dynamics.volatility)
                 else:
-                    new_observations[param] = val
+                    new_parameters[param] = val
 
-            propagated_particles.append((propagated_x, new_observations))
+            propagated_particles.append((propagated_x, new_parameters))
             states.append((state, 0))
-            # new_infections.append(infections)
-
-        # static_params = ["gamma", "eta"]
-        # if static_params in list(observations.keys()):
-        #     log_static_params = np.log(
-        #         np.array(
-        #             [
-        #                 [obs[param] for param in static_params]
-        #                 for _, obs in propagated_particles
-        #             ]
-        #         )
-        #     )
-        #     weights = np.ones(len(particles)) / len(particles)
-        #     log_mean = np.average(log_static_params, axis=0, weights=weights)
-        #     cov = np.cov(log_static_params.T, aweights=weights)
-        #     a = np.sqrt(1 - (0.5**2))
-
-        #     for i in range(len(particles)):
-        #         if len(static_params) == 1:
-        #              new_statics = np.exp(
-        #                 self.rng.normal(
-        #                     a * log_static_params[i] + (1 - a) * log_mean,
-        #                     (0.5**2) * np.sqrt(cov),
-        #                 )
-        #             )
-        #         else:
-        #             new_statics = np.exp(
-        #                 self.rng.multivariate_normal(
-        #                     a * log_static_params[i] + (1 - a) * log_mean,
-        #                     (0.5**2) * cov,
-        #                 )
-        #             )
-        #         for j, static in enumerate(new_statics):
-        #             propagated_particles[i][1][static_params[j]] = static
 
         return propagated_particles, states
 
     def run(
         self,
-        # **kwargs: Any,
         rume: Any,
         likelihood_fn: Any,
         params_space: Dict[str, EstimateParameters],
-        # observations: Dict[str, Any],
         model_link: Any,
         index: int,
         dates: Any,
@@ -174,18 +131,16 @@ class ParticleFilter(BaseFilter):
         data = cases
         if len(data.shape) == 1:
             data = data[:, np.newaxis]
-        # is_sum = observations["is_sum"]
         is_sum = False
         num_observations = len(data)
 
         initializer = ParticleInitializer(self.num_particles, rume, params_space)
         particles = initializer.initialize_particles()
-        simulation = EpymorphSimulation(rume, dates[0])  # .strftime("%Y-%m-%d"))
+        simulation = EpymorphSimulation(rume, dates[0])
         weights_resampling = self.resampler(
             self.num_particles, rume, likelihood_fn, model_link, index
         )
 
-        # sim = simulation.initialize_simulation(particles[0])
         for key in params_space.keys():
             self.param_quantiles[key] = []
             self.param_values[key] = []
@@ -194,18 +149,10 @@ class ParticleFilter(BaseFilter):
 
         model_data = []
 
-        # while t < num_observations:
         for t in tqdm(range(num_observations)):
-            # print("Iteration: ", t)
             n = 1
-            # print(particles[0])
             if t > 0:
-                # while pd.isna(data[t]):
-                #     t += 1
-                #     n += 1
                 duration = (dates[t] - dates[t - n]).days
-                # duration = 1
-                # print("duration=", duration)
                 propagated_particles, states = self.propagate_particles(
                     particles,
                     rume,
@@ -217,10 +164,7 @@ class ParticleFilter(BaseFilter):
                     0,  # The observation is unused.
                     params_space,
                 )
-                # print("propagate")
             else:
-                # while pd.isna(data[t]):
-                #     t += 1
                 propagated_particles = states = particles
 
             model_data.append(
@@ -228,13 +172,6 @@ class ParticleFilter(BaseFilter):
                     [np.array(particle[0])[:, index] for particle in states], axis=0
                 )
             )
-
-            # print(np.array([particle[0][0][1] for particle in states]))
-
-            # total_propagated_particles = [
-            #     (np.sum(pp[0], axis=0).reshape(1, -1), {"beta": pp[1]["beta"]})
-            #     for pp in propagated_particles
-            # ]
 
             total_propagated_particles = propagated_particles
 
@@ -272,18 +209,6 @@ class ParticleFilter(BaseFilter):
 
             t += 1
 
-        # utils.save_data(self.param_quantiles, True)
-        # utils.save_data(self.param_values, False)
-
-        # out = [{"beta_quantiles": self.beta_quantiles, "beta_values": self.beta_values}]
-
-        # out = ["infection rate", self.beta_values]
-
-        # model_data_df = pd.DataFrame(model_data)
-
-        # model_data_df.to_csv(
-        #     "./epymorph/parameter_fitting/data/model_data.csv", index=False
-        # )
         out = ParticleFilterOutput(
             self.num_particles,
             str(rume.time_frame.duration_days) + " days ",
