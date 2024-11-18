@@ -3,11 +3,12 @@ This module provides the ParticleInitializer class for initializing particles in
 Each particle is initialized with a state and corresponding observations based on specified parameters.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import numpy as np
 
 from epymorph.database import NamePattern
+from epymorph.parameter_fitting.filters.particle import Particle
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
 from epymorph.simulator.data import evaluate_params, initialize_rume
 
@@ -49,7 +50,7 @@ class ParticleInitializer:
         # self.geo = rume['geo']
         # self.nodes = self.geo.nodes
 
-    def initialize_particles(self) -> List[Tuple[np.ndarray, Dict[str, float]]]:
+    def initialize_particles(self) -> List[Particle]:
         """
         Initializes particles with random values within the specified ranges for dynamic
         parameters.
@@ -62,26 +63,30 @@ class ParticleInitializer:
         for _ in self.dynamic_params.keys():
             new_param = NamePattern(strata="*", module="*", id=_)
 
-            # Assign a value to the new 'beta' parameter
-            self.rume.params[new_param] = (
-                100  # Replace 0.5 with the desired value for beta
-            )
+            self.rume.params[new_param] = 100
             self.rume.params
 
         rng = np.random.default_rng()
         data = evaluate_params(self.rume, {}, rng)
         initial_state = initialize_rume(self.rume, rng, data)
+        initial_events_state = np.zeros_like(initial_state)
 
         particles = []
 
         for _ in range(self.num_particles):
-            observations = {
+            parameters = {
                 _: self.dynamic_params[_].distribution.rvs(size=self.rume.dim.nodes)  # type: ignore
                 for _ in self.dynamic_params.keys()
             }
 
             particle_state = initial_state
 
-            particles.append((particle_state, observations))
+            particle = Particle(
+                state=initial_state,
+                parameters=parameters,
+                events_state=initial_events_state,
+            )
+
+            particles.append(particle)
 
         return particles

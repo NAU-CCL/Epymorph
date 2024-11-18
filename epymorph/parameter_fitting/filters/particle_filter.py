@@ -5,7 +5,7 @@ The filter estimates dynamic and static parameters through particle propagation
 and resampling.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from epymorph.parameter_fitting.dynamics.dynamics import GeometricBrownianMotion
 from epymorph.parameter_fitting.filters.base_filters import BaseFilter
+from epymorph.parameter_fitting.filters.particle import Particle
 from epymorph.parameter_fitting.output import ParticleFilterOutput
 from epymorph.parameter_fitting.utils import utils
 from epymorph.parameter_fitting.utils.epymorph_simulation import EpymorphSimulation
@@ -29,8 +30,8 @@ class ParticleFilter(BaseFilter):
 
     Attributes:
         num_particles (int): Number of particles.
-        observations_quantiles (Dict[str, List[float]]): Quantiles of observations.
-        observations_values (Dict[str, List[float]]): Mean values of observations.
+        parameter_quantiles (Dict[str, List[np.array]]): Quantiles of parameters over time.
+        parameter_values (Dict[str, List[np.array]]): Mean values of parameters over time.
         rng (np.random.Generator): Random number generator.
         utils (Utils): Utility functions for quantiles and data saving.
     """
@@ -50,7 +51,7 @@ class ParticleFilter(BaseFilter):
 
     def propagate_particles(
         self,
-        particles: List[Tuple[np.ndarray, Dict[str, float]]],
+        particles: List[Particle],
         rume: Any,
         simulation: EpymorphSimulation,
         date: str,
@@ -58,8 +59,8 @@ class ParticleFilter(BaseFilter):
         is_sum: bool,
         model_link: str,
         observation: int,
-        params_space,
-    ):
+        params_space: Dict[str, EstimateParameters],
+    ) -> List[Particle]:
         """
         Propagates particles through the simulation model.
 
@@ -67,7 +68,7 @@ class ParticleFilter(BaseFilter):
             particles (List[Tuple[np.ndarray, Dict[str, float]]]): List of particles.
             sim (Any): Simulation object.
             simulation (EpymorphSimulation): Epymorph simulation object.
-            date (str): Current date in simulation.
+            date (str): Current date in simulation format.
             duration (int): Duration of propagation.
             is_sum (bool): Whether to sum the beta values over the duration.
 
@@ -75,17 +76,22 @@ class ParticleFilter(BaseFilter):
             List[Tuple[np.ndarray, Dict[str, float]]]: List of propagated particles.
         """
         propagated_particles = []
-        states = []
 
         params_perturb = Perturb(duration)
-        for compartments, parameters in particles:
-            propagated_x, state = simulation.propagate(
-                compartments, parameters, rume, date, duration, is_sum, model_link
+        for particle in particles:
+            propagated_state, events_state = simulation.propagate(
+                particle.state,
+                particle.parameters,
+                rume,
+                date,
+                duration,
+                is_sum,
+                model_link,
             )
 
             new_parameters = {}
 
-            for param, val in parameters.items():
+            for param, val in particle.parameters.items():
                 dynamics = params_space[param].dynamics
                 if isinstance(dynamics, GeometricBrownianMotion):
                     new_parameters[param] = val
@@ -93,10 +99,11 @@ class ParticleFilter(BaseFilter):
                 else:
                     new_parameters[param] = val
 
-            propagated_particles.append((propagated_x, new_parameters))
-            states.append((state, 0))
+            propagated_particles.append(
+                Particle(propagated_state, new_parameters, events_state)
+            )
 
-        return propagated_particles, states
+        return propagated_particles
 
     def run(
         self,
@@ -106,8 +113,8 @@ class ParticleFilter(BaseFilter):
         model_link: Any,
         index: int,
         dates: Any,
-        cases: Any,
-    ) -> Any:
+        cases: List[np.ndarray],
+    ) -> ParticleFilterOutput:
         """
         Runs the particle filter to estimate parameters.
 
@@ -149,7 +156,7 @@ class ParticleFilter(BaseFilter):
             n = 1
             if t > 0:
                 duration = (dates[t] - dates[t - n]).days
-                propagated_particles, states = self.propagate_particles(
+                propagated_particles = self.propagate_particles(
                     particles,
                     rume,
                     simulation,
@@ -161,35 +168,39 @@ class ParticleFilter(BaseFilter):
                     params_space,
                 )
             else:
-                propagated_particles = states = particles
+                propagated_particles = particles
 
             model_data.append(
                 np.mean(
-                    [np.array(particle[0])[:, index] for particle in states], axis=0
+                    [
+                        np.array(particle.events_state)[:, index]
+                        for particle in propagated_particles
+                    ],
+                    axis=0,
                 )
             )
 
-            total_propagated_particles = propagated_particles
-
             if np.all(np.isnan(data[t, ...])):
-                particles = total_propagated_particles.copy()
+                particles = propagated_particles.copy()
 
             else:
-                new_weights = weights_resampling.compute_weights(data[t, ...], states)
+                new_weights = weights_resampling.compute_weights(
+                    data[t, ...], propagated_particles
+                )
 
                 if np.any(np.isnan(new_weights)):
                     raise ValueError("NaN values found in computed weights.")
 
                 particles = weights_resampling.resample_particles(
-                    total_propagated_particles, new_weights
+                    propagated_particles, new_weights
                 )
 
             key_values = {key: [] for key in self.param_quantiles.keys()}
 
             for particle in particles:
                 for key in key_values.keys():
-                    if key in particle[1]:
-                        key_values[key].append(particle[1][key])
+                    if key in particle.parameters:
+                        key_values[key].append(particle.parameters[key])
 
             for key, values in key_values.items():
                 if values:

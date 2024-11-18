@@ -7,6 +7,8 @@ particles based on these weights, and updating weights as needed.
 
 import numpy as np
 
+from epymorph.parameter_fitting.filters.particle import Particle
+
 rng = np.random.default_rng()
 
 
@@ -76,7 +78,9 @@ class WeightsResampling:
 
         return index
 
-    def compute_weights(self, current_obs_data: np.ndarray, states: list) -> np.ndarray:
+    def compute_weights(
+        self, current_obs_data: np.ndarray, particles: list
+    ) -> np.ndarray:
         """
         Computes the weights for each particle based on the likelihood of the
         current observation.
@@ -92,7 +96,7 @@ class WeightsResampling:
         log_weights = np.zeros(self.N)
 
         for i in range(self.N):
-            expected = states[i][0][:, self.index]
+            expected = particles[i].events_state[:, self.index]
             try:
                 log_weights[i] = np.sum(
                     np.log(
@@ -152,7 +156,9 @@ class WeightsResampling:
 
 
 class ResamplingByNode(WeightsResampling):
-    def compute_weights(self, current_obs_data: np.ndarray, states: list) -> np.ndarray:
+    def compute_weights(
+        self, current_obs_data: np.ndarray, particles: list
+    ) -> np.ndarray:
         """
         Computes the weights for each particle based on the likelihood of the
         current observation.
@@ -166,12 +172,12 @@ class ResamplingByNode(WeightsResampling):
             np.ndarray: An array of computed weights normalized to sum to 1.
         """
 
-        n_nodes = states[0][0].shape[0]
+        n_nodes = particles[0].state.shape[0]
         log_weights = np.zeros(shape=(n_nodes, self.N))
 
         for i_node in range(n_nodes):
             for i_particle in range(self.N):
-                expected = states[i_particle][0][i_node, self.index]
+                expected = particles[i_particle].events_state[i_node, self.index]
                 try:
                     log_weights[i_node, i_particle] = np.log(
                         self.likelihood_fn.compute(
@@ -191,7 +197,9 @@ class ResamplingByNode(WeightsResampling):
 
         return weights
 
-    def resample_particles(self, particles: list, weights: np.ndarray) -> list:
+    def resample_particles(
+        self, particles: list[Particle], weights: np.ndarray
+    ) -> list:
         """
         Resamples particles based on the computed weights.
 
@@ -217,17 +225,23 @@ class ResamplingByNode(WeightsResampling):
 
         resampled_particles = []
         for i_particle in range(self.N):
-            new_x = np.copy(particles[i_particle][0])
-            new_beta = np.copy(particles[i_particle][1]["beta"])
+            new_state = np.copy(particles[i_particle].state)
+            new_beta = np.copy(particles[i_particle].parameters["beta"])
 
             for i_node in range(n_nodes):
-                new_x[i_node, :] = particles[resampled_indices[i_node, i_particle]][0][
-                    i_node, :
-                ]
-                new_beta[i_node] = particles[resampled_indices[i_node, i_particle]][1][
-                    "beta"
-                ][i_node]
-            resampled_particles.append((new_x, {"beta": new_beta}))
+                new_state[i_node, :] = particles[
+                    resampled_indices[i_node, i_particle]
+                ].state[i_node, :]
+                new_beta[i_node] = particles[
+                    resampled_indices[i_node, i_particle]
+                ].parameters["beta"][i_node]
+            resampled_particles.append(
+                Particle(
+                    new_state,
+                    {"beta": new_beta},
+                    events_state=np.zeros_like(particles[i_particle].events_state),
+                )
+            )
 
         # [resampled_particles.append(particles[idx]) for idx in resampled_indices[0, :]]
 
