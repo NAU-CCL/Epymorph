@@ -1,10 +1,3 @@
-"""
-This module defines the WeightsResampling class for computing and resampling particle weights in particle filtering.
-
-The WeightsResampling class handles the calculation of weights based on the likelihood of observations, resampling
-particles based on these weights, and updating weights as needed.
-"""
-
 import numpy as np
 
 from epymorph.parameter_fitting.filters.particle import Particle
@@ -47,7 +40,7 @@ class WeightsResampling:
         likelihood_fn,
         model_link: str,
         index: int,
-    ):
+    ) -> None:
         """
         Initializes the WeightsResampling class with provided parameters.
 
@@ -63,20 +56,6 @@ class WeightsResampling:
         self.likelihood_fn = likelihood_fn
         self.model_link = model_link
         self.index = index
-
-    def get_index(self) -> int:
-        """
-        Retrieves the index of the model link in the IPM or compartment names.
-
-        Returns:
-            int: The index of the model link.
-        """
-        if "->" in self.model_link or "→" in self.model_link:
-            index = self.rume["ipm"].event_names.index(self.model_link)
-        else:
-            index = self.rume["ipm"].compartment_names.index(self.model_link)
-
-        return index
 
     def compute_weights(
         self, current_obs_data: np.ndarray, particles: list

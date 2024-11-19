@@ -1,6 +1,8 @@
 """
-This module provides the ParticleInitializer class for initializing particles in the particle filter.
-Each particle is initialized with a state and corresponding observations based on specified parameters.
+This module provides the ParticleInitializer class for
+initializing particles in the particle filter.
+Each particle is initialized with a state and corresponding
+observations based on specified parameters.
 """
 
 from typing import Any, Dict, List
@@ -22,7 +24,8 @@ class ParticleInitializer:
         num_population (int): Number of population.
         seed_size (int): Seed size.
         static_params (Dict[str, Any]): Static parameters.
-        dynamic_params (Dict[str, Tuple[float, float]]): Dynamic parameters with their ranges.
+        dynamic_params (Dict[str, Tuple[float, float]]):
+        Dynamic parameters with their ranges.
         geo (Dict[str, Any]): Geographical information.
         nodes (int): Number of nodes in the geographical network.
     """
@@ -47,8 +50,6 @@ class ParticleInitializer:
         self.rume = rume
         self.dynamic_params = dynamic_params
         self.rng = np.random.default_rng()
-        # self.geo = rume['geo']
-        # self.nodes = self.geo.nodes
 
     def initialize_particles(self) -> List[Particle]:
         """
@@ -79,8 +80,7 @@ class ParticleInitializer:
                 for _ in self.dynamic_params.keys()
             }
 
-            particle_state = initial_state
-
+            # Create a Particle instance with the initial state and parameters
             particle = Particle(
                 state=initial_state,
                 parameters=parameters,

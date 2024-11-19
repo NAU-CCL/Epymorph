@@ -23,7 +23,7 @@ import pandas as pd
 
 
 # @staticmethod
-def quantiles(items: List[float]) -> List[float]:
+def quantiles(items: np.ndarray) -> List[float]:
     """
     Computes specified quantiles for a list of items.
 

@@ -3,17 +3,15 @@ This module defines the EpymorphSimulation class for initializing and running
 simulations using the Epymorph library.
 
 The EpymorphSimulation class is responsible for setting up the simulation environment
-and propagating simulations
-based on provided observations and parameters.
+and propagating simulations based on provided observations and parameters.
 """
 
 import dataclasses
-from typing import Any
+from typing import Any, Tuple
 
 import numpy as np
 
-# ruff: noqa: F405
-from epymorph import *  # noqa: F403
+from epymorph import BasicSimulator, TimeFrame, init  # noqa: F403
 
 
 class EpymorphSimulation:
@@ -21,25 +19,18 @@ class EpymorphSimulation:
     A class to initialize and run simulations using the Epymorph library.
 
     Attributes:
-        rume (dict): A dictionary containing simulation parameters including
-        'rume', 'static_params', 'scope' and
+        rume (dict): A dictionary containing the model and simulation parameters,
+        such as 'rume', 'static_params', 'scope', etc.
         start_date (str): The start date for the simulation in 'YYYY-MM-DD' format.
-
-    Methods:
-        initialize_simulation(initial_particle: tuple) -> StandardSimulation:
-            Initializes the simulation with the given initial particle.
-
-        propagate(seird: np.ndarray, observations: dict, sim: StandardSimulation,
-        date: str, duration: int) -> np.ndarray:
-            Propagates the simulation for a specified duration and returns the output.
     """
 
     def __init__(self, rume: Any, start_date: str):
         """
-        Initializes the EpymorphSimulation class with provided parameters.
+        Initializes the EpymorphSimulation class with the provided parameters.
 
         Args:
-            rume (dict): A dictionary of parameters required for simulation.
+            rume (dict): A dictionary of parameters required for the simulation,
+            including model settings.
             start_date (str): The start date for the simulation in 'YYYY-MM-DD' format.
         """
         self.rume = rume
@@ -47,52 +38,71 @@ class EpymorphSimulation:
 
     def propagate(
         self,
-        seird: np.ndarray,
+        state: np.ndarray,
         parameters: dict,
         rume: Any,
         date: str,
         duration: int,
         is_sum: bool,
         model_link: str,
-    ):
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Propagates the simulation for a specified duration and returns the output.
+        Propagates the simulation for a specified duration and returns the final state.
 
         Args:
-            seird (np.ndarray): Initial state of the system to be used in the simulation.
-            parameters (dict): A dictionary of parameters to be updated in the simulation.
-            sim (StandardSimulation): The simulation object to be used for propagation.
-            date (str): The date to start the propagation in 'YYYY-MM-DD' format.
-            duration (int): The duration for which the simulation should be propagated.
+            state (np.ndarray): Initial state of the system (e.g., SIRH compartments)
+            to be used in the simulation.
+            observations (dict): A dictionary containing the parameter values
+            (such as beta, gamma, etc.) to update in the simulation.
+            rume (Any): The model configuration to run the simulation.
+            date (str): The starting date for the simulation in 'YYYY-MM-DD' format.
+            duration (int): The number of days the simulation should be propagated.
+            is_sum (bool): Whether to return the sum of the compartments (if true)
+            or the final state.
+            model_link (str): Specifies which model output to return, either from
+            compartments or events.
 
         Returns:
-            np.ndarray: The propagated state of the system as a NumPy array.
+            Tuple[np.ndarray, np.ndarray]: A tuple containing the final compartment
+            state and the processed state (either the sum or last day).
         """
 
+        # Create a copy of the RUME model with updated parameters and time frame
         rume_propagate = dataclasses.replace(
             self.rume,
-            time_frame=TimeFrame.of(date, duration),
+            time_frame=TimeFrame.of(date, duration),  # Set simulation duration
             strata=[
-                dataclasses.replace(g, init=init.Explicit(initials=seird))
-                for g in rume.strata
+                dataclasses.replace(
+                    g, init=init.Explicit(initials=state)
+                )  # Initialize with state values
+                for g in rume.strata  # For each stratum, set the initial state
             ],
         )
 
+        # Initialize the simulation using the BasicSimulator from the Epymorph library
         sim = BasicSimulator(rume_propagate)
+
+        # Run the simulation and collect the output based on observations (dynamic params)
         output = sim.run(parameters)
 
-        state = (
+        # Determine whether to return compartments or events based on the model link
+        events_state = (
             output.compartments
             if model_link in output.compartment_labels
             else output.events_per_day
         )
 
+        # Sum the state values if the flag `is_sum` is set
         if is_sum:
-            state = np.array(np.sum(state, axis=0), dtype=np.int64)
-
+            events_state = np.array(
+                np.sum(events_state, axis=0), dtype=np.int64
+            )  # Sum across all compartments
         else:
-            state = state[-1, ...]
+            events_state = events_state[
+                -1, ...
+            ]  # Get the last day's state if not summing
 
+        # Return the final propagated state as an integer array
         propagated_x = np.array(output.compartments[-1, ...], dtype=np.int64)
 
-        return propagated_x, state
+        return propagated_x, events_state
