@@ -78,7 +78,7 @@ class DataLoader:
                 data, self.rume.dim, self.rume.scope, rng
             )
 
-            dates = csv_df.Date.to_numpy()
+            dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
 
             return dates, cases
 

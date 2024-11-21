@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -7,9 +7,11 @@ import pandas as pd
 from epymorph.parameter_fitting.dynamics.dynamics import GeometricBrownianMotion
 from epymorph.parameter_fitting.filters.base_filters import BaseFilter
 from epymorph.parameter_fitting.filters.particle import Particle
+from epymorph.parameter_fitting.likelihoods.base_likelihood import Likelihood
 from epymorph.parameter_fitting.output import ParticleFilterOutput
 from epymorph.parameter_fitting.utils import utils
 from epymorph.parameter_fitting.utils.epymorph_simulation import EpymorphSimulation
+from epymorph.parameter_fitting.utils.observations import ModelLink
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
 from epymorph.parameter_fitting.utils.ParamsPerturb import Perturb
 from epymorph.parameter_fitting.utils.particle_initializer import ParticleInitializer
@@ -51,11 +53,9 @@ class ParticleFilter(BaseFilter):
         simulation: EpymorphSimulation,
         date: str,
         duration: int,
-        is_sum: bool,
-        model_link: str,
-        observation: int,
+        model_link: ModelLink,
         params_space: Dict[str, EstimateParameters],
-    ) -> List[Particle]:
+    ) -> Tuple[List[Particle], List[np.ndarray]]:
         """
         Propagates particles through the simulation model.
 
@@ -67,17 +67,16 @@ class ParticleFilter(BaseFilter):
             particles.
             date (str): Current date in simulation format.
             duration (int): Duration of propagation.
-            is_sum (bool): Whether to sum the beta values over the duration.
-            model_link (str): Link to the model to use for prediction.
-            observation (int): Observation for the current time step.
+            model_link (ModelLink): Link to the model to use for prediction.
             params_space (Dict[str, EstimateParameters]): Parameter space for the model.
 
         Returns:
             Tuple:
                 - A list of propagated Particle objects with updated observations.
-                - A list of states for each particle after propagation.
+                - A list of expected observations for each particle after propagation.
         """
         propagated_particles = []
+        expected_observations = []
 
         # Initialize perturbation handler
         params_perturb = Perturb(duration)
@@ -85,13 +84,12 @@ class ParticleFilter(BaseFilter):
         # Propagate each particle through the model
         for particle in particles:
             # Use the particle's state and parameters for propagation
-            propagated_state, events_state = simulation.propagate(
+            new_state, observation = simulation.propagate(
                 particle.state,
                 particle.parameters,
                 rume,
                 date,
                 duration,
-                is_sum,
                 model_link,
             )
 
@@ -106,19 +104,18 @@ class ParticleFilter(BaseFilter):
                     new_parameters[param] = val
 
             # Create a new particle with the propagated state and updated parameters
-            propagated_particles.append(
-                Particle(propagated_state, new_parameters, events_state)
-            )
+            propagated_particles.append(Particle(new_state, new_parameters))
 
-        return propagated_particles
+            expected_observations.append(observation)
+
+        return propagated_particles, expected_observations
 
     def run(
         self,
         rume: Any,
-        likelihood_fn: Any,
+        likelihood_fn: Likelihood,
         params_space: Dict[str, EstimateParameters],
-        model_link: Any,
-        index: int,
+        model_link: ModelLink,
         dates: Any,
         cases: List[np.ndarray],
     ) -> ParticleFilterOutput:
@@ -153,7 +150,6 @@ class ParticleFilter(BaseFilter):
         print(f"• {dates[0]} to {dates[-1]} ({rume.time_frame.duration_days} days)")
         print(f"• {self.num_particles} particles")
 
-        is_sum = True  # Flag for summing the beta values
         num_observations = len(data)
 
         # Initialize the particles, simulation, and resampling tools
@@ -161,7 +157,10 @@ class ParticleFilter(BaseFilter):
         particles = initializer.initialize_particles()
         simulation = EpymorphSimulation(rume, dates[0])
         weights_resampling = self.resampler(
-            self.num_particles, rume, likelihood_fn, model_link, index
+            self.num_particles,
+            rume,
+            likelihood_fn,
+            model_link,
         )
 
         # Prepare containers for storing results
@@ -176,30 +175,24 @@ class ParticleFilter(BaseFilter):
             n = 1  # Number of days to look back for the previous observation
             if t > 0:
                 duration = (dates[t] - dates[t - n]).days
-
-                # Propagate particles and update their states
-                propagated_particles = self.propagate_particles(
-                    particles,
-                    rume,
-                    simulation,
-                    dates[t].strftime("%Y-%m-%d"),
-                    duration,
-                    is_sum,
-                    model_link,
-                    0,  # The observation is unused.
-                    params_space,
-                )
-
             else:
-                propagated_particles = particles
+                duration = 1
+
+            # Propagate particles and update their states
+            propagated_particles, expected_observations = self.propagate_particles(
+                particles,
+                rume,
+                simulation,
+                dates[t].strftime("%Y-%m-%d"),
+                duration,
+                model_link,
+                params_space,
+            )
 
             # Append model data (mean of particle states) for this time step
             model_data.append(
                 np.mean(
-                    [
-                        np.array(particle.events_state)[:, index]
-                        for particle in propagated_particles
-                    ],
+                    [obs for obs in expected_observations],
                     axis=0,
                 ).astype(int)  # Ensure the final mean is also an integer
             )
@@ -212,7 +205,7 @@ class ParticleFilter(BaseFilter):
                 # Pass the entire observation (all columns for that time step)
                 new_weights = weights_resampling.compute_weights(
                     data[t, ...],  # This will pass all data for the current time step
-                    propagated_particles,
+                    expected_observations,
                 )
 
                 if np.any(np.isnan(new_weights)):

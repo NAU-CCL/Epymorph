@@ -70,7 +70,6 @@ class ParticleInitializer:
         rng = np.random.default_rng()
         data = evaluate_params(self.rume, {}, rng)
         initial_state = initialize_rume(self.rume, rng, data)
-        initial_events_state = np.zeros_like(initial_state)
 
         particles = []
 
@@ -84,7 +83,6 @@ class ParticleInitializer:
             particle = Particle(
                 state=initial_state,
                 parameters=parameters,
-                events_state=initial_events_state,
             )
 
             particles.append(particle)

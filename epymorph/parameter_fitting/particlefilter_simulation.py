@@ -20,7 +20,7 @@ from epymorph.parameter_fitting.filters.base_filters import BaseFilter
 from epymorph.parameter_fitting.likelihoods.base_likelihood import Likelihood
 from epymorph.parameter_fitting.output import ParticleFilterOutput
 from epymorph.parameter_fitting.utils.data_loader import DataLoader
-from epymorph.parameter_fitting.utils.observations import Observations
+from epymorph.parameter_fitting.utils.observations import ModelLink, Observations
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
 
 
@@ -50,7 +50,6 @@ class FilterSimulation:
     def __init__(
         self,
         rume: Any,
-        likelihood_fn: Likelihood,
         filter_type: BaseFilter,
         params_space: Dict[str, EstimateParameters],
         observations: Observations,
@@ -61,7 +60,6 @@ class FilterSimulation:
         Args:
             rume (Any): Runtime environment or configuration for the epidemiological
             model.
-            likelihood_fn (Likelihood): Likelihood function used for the filter.
             filter_type (BaseFilter): Type of particle filter to be used.
             params_space (Dict[str, EstimateParameters]): A dictionary containing
             parameter estimates.
@@ -72,16 +70,15 @@ class FilterSimulation:
         """
         self.rume: Any = rume
         self.observations: Observations = observations
-        self.likelihood_fn: Likelihood = likelihood_fn
+        self.likelihood_fn: Likelihood = observations.likelihood
         self.filter_type: BaseFilter = filter_type
         self.params_space: Dict[str, EstimateParameters] = params_space
 
         # Initialize simulation-related attributes
         self.ipm = self.rume.ipm
-        self.model_link: str = self.observations.model_link.replace("->", "→")
+        self.model_link: ModelLink = self.observations.model_link
         self.compartments = [compartment.name for compartment in self.ipm.compartments]
         self.events = [e.name.full for e in self.ipm.events]
-        self.is_sum = True
 
         # Initialize DataLoader to handle data fetching
         self.dataloader = DataLoader(self.rume)
@@ -113,22 +110,6 @@ class FilterSimulation:
         if not isinstance(self.filter_type, BaseFilter):
             raise ValueError("The 'filter_type' must be an instance of BaseFilter.")
 
-        # Validate model link
-        if self.model_link not in self.events + self.compartments:
-            raise ValueError(
-                f"Model link '{self.model_link}' must match with an event"
-                " or compartment in the provided IPM. Supported:"
-                f" {self.events + self.compartments}."
-            )
-
-        if self.model_link in self.compartments and self.is_sum:
-            print(
-                "Warning: Data passed cannot be cumulative for the"
-                f" model link '{self.model_link}', "
-                "as it could exceed the total population."
-                " Try using non-aggregated data (is_sum=False)."
-            )
-
         # Validate parameter space
         if not isinstance(self.params_space, dict):
             raise ValueError("The 'params_space' must be a dictionary.")
@@ -139,29 +120,10 @@ class FilterSimulation:
                     "Each value in 'params_space' must be an instance of"
                     f" EstimateParameters Invalid entry for '{key}'."
                 )
-            if key not in ["beta"]:
-                raise ValueError(
-                    f"Invalid parameter '{key}' in params_space. Valid parameters:"
-                    " 'beta'."
-                )
 
         # Validate observations
         if not isinstance(self.observations, Observations):
             raise ValueError("The 'observations' must be an instance of Observations.")
-
-    def get_index(self) -> int:
-        """
-        Retrieves the index of the model link in the list of IPM events or compartments.
-
-        Returns:
-            int: The index of the model link.
-        """
-        if "->" in self.model_link or "→" in self.model_link:
-            index = self.events.index(self.model_link)
-        else:
-            index = self.compartments.index(self.model_link)
-
-        return index
 
     def run(self) -> ParticleFilterOutput:
         """
@@ -170,14 +132,12 @@ class FilterSimulation:
         Returns:
             ParticleFilterOutput: The output of the filter simulation containing results.
         """
-        index = self.get_index()
 
         output = self.filter_type.run(
             self.rume,
             self.likelihood_fn,
             self.params_space,
             self.model_link,
-            index,
             self.dates,
             self.cases,
         )
