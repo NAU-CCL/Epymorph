@@ -26,7 +26,7 @@ from epymorph.event import AdrioProgress, DownloadActivity, EventBus
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import AttributeDef, SimulationFunction
 
-T_co = TypeVar("T_co", bound=np.generic, covariant=True)
+ResultDType = TypeVar("ResultDType", bound=np.generic)
 """The result type of an Adrio."""
 
 ProgressCallback = Callable[[float, DownloadActivity | None], None]
@@ -34,7 +34,7 @@ ProgressCallback = Callable[[float, DownloadActivity | None], None]
 _events = EventBus()
 
 
-class Adrio(SimulationFunction[NDArray[T_co]]):
+class Adrio(SimulationFunction[NDArray[ResultDType]]):
     """
     ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
     to load data from external sources for epymorph simulations. This may be from
@@ -51,7 +51,7 @@ class Adrio(SimulationFunction[NDArray[T_co]]):
         return EmptyDataEstimate(self.full_name)
 
     @abstractmethod
-    def evaluate_adrio(self) -> NDArray[T_co]:
+    def evaluate_adrio(self) -> NDArray[ResultDType]:
         """
         Implement this method to provide logic for the function.
         Your implementation is free to use `data`, `dim`, and `rng`.
@@ -60,7 +60,7 @@ class Adrio(SimulationFunction[NDArray[T_co]]):
 
     @override
     @final
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         """The ADRIO parent class overrides this to provide ADRIO-specific
         functionality. ADRIO implementations should override `evaluate_adrio`."""
         _events.on_adrio_progress.publish(

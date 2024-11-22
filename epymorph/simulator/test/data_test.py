@@ -23,7 +23,6 @@ from epymorph.params import (
 )
 from epymorph.rume import Gpm, MultistrataRume, Rume
 from epymorph.simulation import ParamValue
-from epymorph.simulator.data import evaluate_rume_params
 from epymorph.time import TimeFrame
 
 
@@ -109,7 +108,7 @@ class EvaluateParamsTest(unittest.TestCase):
     def test_eval_1(self):
         rume = self._create_rume()
 
-        db = evaluate_rume_params(rume, rng=np.random.default_rng(1)).to_dict()
+        db = rume.evaluate_params(rng=np.random.default_rng(1)).to_dict()
 
         # We should have as many entries in our DB as we have attributes in the RUME,
         # plus 1 (for geo labels).
@@ -161,8 +160,7 @@ class EvaluateParamsTest(unittest.TestCase):
         # Test with override values.
         rume = self._create_rume()
 
-        db = evaluate_rume_params(
-            rume,
+        db = rume.evaluate_params(
             override_params={"*::*::beta": 0.5},
             rng=np.random.default_rng(1),
         ).to_dict()
@@ -185,7 +183,7 @@ class EvaluateParamsTest(unittest.TestCase):
         rume = self._create_rume(params)
 
         with self.assertRaises(AttributeException) as ctx:
-            evaluate_rume_params(rume, rng=np.random.default_rng(1))
+            rume.evaluate_params(rng=np.random.default_rng(1))
 
         err = str(ctx.exception).lower()
         self.assertIn("there are missing values", err)
@@ -199,8 +197,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_rume_params(
-            rume,
+        db = rume.evaluate_params(
             override_params={"gpm:aaa::ipm::beta": beta_expr},
             rng=np.random.default_rng(1),
         ).to_dict()
@@ -239,8 +236,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_rume_params(
-            rume,
+        db = rume.evaluate_params(
             override_params={"gpm:aaa::ipm::beta": Beta(4.0)},
             rng=np.random.default_rng(1),
         ).to_dict()
@@ -268,8 +264,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_rume_params(
-            rume,
+        db = rume.evaluate_params(
             override_params={"ipm::xi": Xi()},
             rng=np.random.default_rng(1),
         ).to_dict()
@@ -303,8 +298,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        db = evaluate_rume_params(
-            rume,
+        db = rume.evaluate_params(
             override_params={
                 "gpm:aaa::ipm::alpha": 9,
                 "gpm:aaa::ipm::beta": 0.4,
@@ -339,8 +333,7 @@ class EvaluateParamsTest(unittest.TestCase):
         rume = self._create_rume()
 
         with self.assertRaises(AttributeException) as ctx:
-            evaluate_rume_params(
-                rume,
+            rume.evaluate_params(
                 override_params={
                     "gpm:aaa::ipm::gamma": Gamma(),
                     "gpm:aaa::ipm::xi": Xi(),

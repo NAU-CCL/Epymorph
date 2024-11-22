@@ -1,5 +1,6 @@
 """General simulation requisites and utility functions."""
 
+import functools
 from abc import ABC, ABCMeta, abstractmethod
 from copy import deepcopy
 from datetime import date, timedelta
@@ -344,10 +345,20 @@ class SimulationFunctionClass(ABCMeta):
         # But a simple workaround is to use a def function and,
         # if needed, partial function application.
 
+        if (orig_evaluate := dct.get("evaluate")) is not None:
+
+            @functools.wraps(orig_evaluate)
+            def evaluate(self, *args, **kwargs):
+                result = orig_evaluate(self, *args, **kwargs)
+                self.validate(result)
+                return result
+
+            dct["evaluate"] = evaluate
+
         return super().__new__(mcs, name, bases, dct)
 
 
-T_co = TypeVar("T_co", covariant=True)
+ResultT = TypeVar("ResultT")
 """The result type of a SimulationFunction."""
 
 _DeferResultT = TypeVar("_DeferResultT")
@@ -356,7 +367,7 @@ _DeferFunctionT = TypeVar("_DeferFunctionT", bound="BaseSimulationFunction")
 """The type of a SimulationFunction during deference."""
 
 
-class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionClass):
+class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunctionClass):
     """
     A function which runs in the context of a simulation to produce a value
     (as a numpy array). This base class exists to share functionality without
@@ -373,6 +384,11 @@ class BaseSimulationFunction(ABC, Generic[T_co], metaclass=SimulationFunctionCla
     that is shared by all references during evaluation."""
 
     _ctx: _FullContext | _PartialContext = _EMPTY_CONTEXT
+
+    def validate(self, result: ResultT) -> None:
+        """Override this method to validate the evaluation result.
+        Implementations should raise an appropriate error if results
+        are not valid."""
 
     @final
     def with_context(
@@ -478,7 +494,7 @@ def _(value: BaseSimulationFunction) -> RecursiveValue | None:
     return RecursiveValue(value.requirements, value.randomized)
 
 
-class SimulationFunction(BaseSimulationFunction[T_co]):
+class SimulationFunction(BaseSimulationFunction[ResultT]):
     """
     A function which runs in the context of a simulation to produce a value
     (as a numpy array).
@@ -487,7 +503,7 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
     """
 
     @abstractmethod
-    def evaluate(self) -> T_co:
+    def evaluate(self) -> ResultT:
         """
         Implement this method to provide logic for the function.
         Your implementation is free to use `data`, `dim`, and `rng`.
@@ -500,7 +516,7 @@ class SimulationFunction(BaseSimulationFunction[T_co]):
         return self.defer_context(other).evaluate()
 
 
-class SimulationTickFunction(BaseSimulationFunction[T_co]):
+class SimulationTickFunction(BaseSimulationFunction[ResultT]):
     """
     A function which runs in the context of a simulation to produce a sim-time-specific
     value (as a numpy array). Implement a SimulationTickFunction by extending this class
@@ -508,7 +524,7 @@ class SimulationTickFunction(BaseSimulationFunction[T_co]):
     """
 
     @abstractmethod
-    def evaluate(self, tick: Tick) -> T_co:
+    def evaluate(self, tick: Tick) -> ResultT:
         """
         Implement this method to provide logic for the function.
         Your implementation is free to use `data`, `dim`, and `rng`.

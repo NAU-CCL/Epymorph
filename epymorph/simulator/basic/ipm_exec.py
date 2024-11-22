@@ -166,10 +166,6 @@ class IpmExecutor:
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
         self._attribute_values_txn = self.resolve_txn_series(data, ipm, rume.dim)
-        # TODO:
-        # self._attribute_values_txn = AttributeResolver(
-        #     data, rume.dim
-        # ).resolve_txn_series(list(ipm.requirements_dict.items()))
 
     def resolve_txn_series(
         self,

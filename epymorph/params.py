@@ -22,11 +22,11 @@ from epymorph.geography.scope import GeoScope
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
 
-T_co = TypeVar("T_co", bound=np.generic, covariant=True)
+ResultDType = TypeVar("ResultDType", bound=np.generic)
 """The result type of a ParamFunction."""
 
 
-class ParamFunction(SimulationFunction[NDArray[T_co]], ABC):
+class ParamFunction(SimulationFunction[NDArray[ResultDType]], ABC):
     """
     Parameter functions can be specified in a variety of forms;
     this class describe the common elements.
@@ -48,33 +48,33 @@ def _(
     return np.asarray(sim_func.evaluate())
 
 
-class ParamFunctionNumpy(ParamFunction[T_co]):
+class ParamFunctionNumpy(ParamFunction[ResultDType]):
     """A param function which produces a numpy array for the full data series."""
 
     @abstractmethod
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         """
         Produce a numpy array containing all of this parameter's values.
         This method must assure the values are the appropriate shape and data type.
         """
 
 
-class _ParamFunction1(ParamFunction[T_co], ABC):
+class _ParamFunction1(ParamFunction[ResultDType], ABC):
     """Base class for parameter functions which calculate results one at a time."""
 
-    dtype: type[T_co] | None = None
+    dtype: type[ResultDType] | None = None
     """
     The result type of this function. If specified, results will be coerced accordingly.
     """
 
 
-class ParamFunctionScalar(_ParamFunction1[T_co]):
+class ParamFunctionScalar(_ParamFunction1[ResultDType]):
     """
     A param function which produces a scalar value (which is the full data series).
     """
 
     @final
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         return np.array(self.evaluate1(), dtype=self.dtype)
 
     @abstractmethod
@@ -82,11 +82,11 @@ class ParamFunctionScalar(_ParamFunction1[T_co]):
         """Produce a scalar value for this parameter in the given simulation context."""
 
 
-class ParamFunctionTime(_ParamFunction1[T_co]):
+class ParamFunctionTime(_ParamFunction1[ResultDType]):
     """A param function which produces a time-series of data, one value at a time."""
 
     @final
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         result = [self.evaluate1(day) for day in range(self.dim.days)]
         return np.array(result, dtype=self.dtype)
 
@@ -98,11 +98,11 @@ class ParamFunctionTime(_ParamFunction1[T_co]):
         """
 
 
-class ParamFunctionNode(_ParamFunction1[T_co]):
+class ParamFunctionNode(_ParamFunction1[ResultDType]):
     """A param function which produces a node-series of data, one value at a time."""
 
     @final
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         result = [self.evaluate1(n) for n in range(self.dim.nodes)]
         return np.array(result, dtype=self.dtype)
 
@@ -114,14 +114,14 @@ class ParamFunctionNode(_ParamFunction1[T_co]):
         """
 
 
-class ParamFunctionNodeAndNode(_ParamFunction1[T_co]):
+class ParamFunctionNodeAndNode(_ParamFunction1[ResultDType]):
     """
     A param function which produces a node-by-node matrix of data,
     one value at a time.
     """
 
     @final
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         result = [
             [self.evaluate1(n1, n2) for n2 in range(self.dim.nodes)]
             for n1 in range(self.dim.nodes)
@@ -136,14 +136,14 @@ class ParamFunctionNodeAndNode(_ParamFunction1[T_co]):
         """
 
 
-class ParamFunctionNodeAndCompartment(_ParamFunction1[T_co]):
+class ParamFunctionNodeAndCompartment(_ParamFunction1[ResultDType]):
     """
     A param function which produces a node-by-disease-compartment matrix of data,
     one value at a time.
     """
 
     @final
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         result = [
             [self.evaluate1(n, c) for c in range(self.dim.compartments)]
             for n in range(self.dim.nodes)
@@ -158,13 +158,13 @@ class ParamFunctionNodeAndCompartment(_ParamFunction1[T_co]):
         """
 
 
-class ParamFunctionTimeAndNode(_ParamFunction1[T_co]):
+class ParamFunctionTimeAndNode(_ParamFunction1[ResultDType]):
     """
     A param function which produces a time-by-node matrix of data, one value at a time.
     """
 
     @final
-    def evaluate(self) -> NDArray[T_co]:
+    def evaluate(self) -> NDArray[ResultDType]:
         result = [
             [self.evaluate1(day, n) for n in range(self.dim.nodes)]
             for day in range(self.dim.days)

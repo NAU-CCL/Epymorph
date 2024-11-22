@@ -46,6 +46,10 @@ class AttributeException(ValidationException):
     """Exception handling data attributes."""
 
 
+class AttributeExceptionGroup(ExceptionGroup, AttributeException):
+    """Multiple exceptions encountered handling data attributes."""
+
+
 class GeoValidationException(ValidationException):
     """Exception for invalid GEO."""
 

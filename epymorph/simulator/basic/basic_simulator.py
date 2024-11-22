@@ -21,7 +21,6 @@ from epymorph.simulation import ParamValue, simulation_clock
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
-from epymorph.simulator.data import initialize_rume
 from epymorph.simulator.world_list import ListWorld
 from epymorph.time import TimeFrame
 
@@ -74,7 +73,7 @@ class BasicSimulator:
                 raise SimValidationException(msg) from None
 
         with error_gate("initializing the simulation", InitException):
-            initial_values = initialize_rume(rume, rng, data)
+            initial_values = rume.initialize(data, rng)
 
             # Should always match because `evaluate_params` includes a default.
             if (labels_value := data.resolve(GEO_LABELS.key, GEO_LABELS.value)) is None:

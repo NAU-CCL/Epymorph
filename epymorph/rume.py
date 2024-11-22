@@ -39,7 +39,7 @@ from epymorph.compartment_model import (
     TransitionDef,
 )
 from epymorph.data_shape import Shapes, SimDimensions
-from epymorph.data_type import dtype_str
+from epymorph.data_type import SimArray, dtype_str
 from epymorph.data_usage import estimate_report
 from epymorph.database import (
     AbsoluteName,
@@ -48,9 +48,11 @@ from epymorph.database import (
     DatabaseWithStrataFallback,
     DataResolver,
     ModuleNamePattern,
+    ModuleNamespace,
     NamePattern,
     ReqTree,
 )
+from epymorph.error import InitException
 from epymorph.geography.scope import GeoScope
 from epymorph.initializer import Initializer
 from epymorph.movement_model import MovementClause, MovementModel
@@ -65,7 +67,11 @@ from epymorph.simulation import (
     gpm_strata,
 )
 from epymorph.time import TimeFrame
-from epymorph.util import KeyValue, are_unique, map_values
+from epymorph.util import (
+    KeyValue,
+    are_unique,
+    map_values,
+)
 
 #######
 # GPM #
@@ -454,6 +460,40 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
         reqs = self.requirements_tree(ps)
         return reqs.evaluate(self.dim, self.scope, rng)
+
+    def _strata_dim(self, gpm: Gpm) -> SimDimensions:
+        T, N, _, _ = self.dim.TNCE
+        C = gpm.ipm.num_compartments
+        E = gpm.ipm.num_events
+        return dataclasses.replace(
+            self.dim,
+            compartments=C,
+            events=E,
+            TNCE=(T, N, C, E),
+        )
+
+    def initialize(self, data: DataResolver, rng: np.random.Generator) -> SimArray:
+        """
+        Executes Initializers for a multi-strata simulation by running each strata's
+        Initializer and combining the results. Raises InitException on error.
+        """
+        try:
+            return np.column_stack(
+                [
+                    gpm.init.with_context_internal(
+                        namespace=ModuleNamespace(gpm_strata(gpm.name), "init"),
+                        data=data,
+                        dim=self._strata_dim(gpm),
+                        scope=self.scope,
+                        rng=rng,
+                    ).evaluate()
+                    for gpm in self.strata
+                ]
+            )
+        except InitException as e:
+            raise e
+        except Exception as e:
+            raise InitException("Initializer failed during evaluation.") from e
 
 
 @dataclass(frozen=True)

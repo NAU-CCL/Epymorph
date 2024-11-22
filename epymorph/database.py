@@ -41,7 +41,7 @@ from epymorph.data_type import (
     dtype_check,
     dtype_str,
 )
-from epymorph.error import AttributeException
+from epymorph.error import AttributeException, AttributeExceptionGroup
 from epymorph.geography.scope import GeoScope
 from epymorph.util import (
     AnsiColor,
@@ -346,7 +346,7 @@ class AttributeDef(Generic[AttributeT]):
 
     def __post_init__(self):
         if acceptable_name.match(self.name) is None:
-            raise AttributeError(f"Invalid attribute name: {self.name}")
+            raise ValueError(f"Invalid attribute name: {self.name}")
         try:
             dtype_as_np(self.type)
         except Exception as e:
@@ -354,7 +354,7 @@ class AttributeDef(Generic[AttributeT]):
                 f"AttributeDef's type is not correctly specified: {self.type}\n"
                 "See documentation for appropriate type designations."
             )
-            raise AttributeError(msg) from e
+            raise ValueError(msg) from e
         if (
             self.default_value is not None  #
             and not dtype_check(self.type, self.default_value)
@@ -363,7 +363,7 @@ class AttributeDef(Generic[AttributeT]):
                 "AttributeDef's default value does not align with its dtype "
                 f"('{self.name}')."
             )
-            raise AttributeError(msg)
+            raise ValueError(msg)
 
     @overload
     def dtype(self: "AttributeDef[type[int]]") -> np.dtype[np.int64]: ...
@@ -1043,7 +1043,7 @@ def evaluate_requirements(
             errors.append(e)
 
     if len(errors) > 0:
-        raise ExceptionGroup("Errors found evaluating parameters.", errors)
+        raise AttributeExceptionGroup("Errors found evaluating parameters.", errors)
 
     return resolved
 

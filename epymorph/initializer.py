@@ -11,6 +11,7 @@ from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
 from epymorph.data_type import SimArray, SimDType
@@ -28,36 +29,25 @@ class Initializer(SimulationFunction[SimArray], ABC):
     of populations by IPM compartment for every simulation node.
     """
 
-    # TODO:
-    # def evaluate_in_context(
-    #     self,
-    #     data: NamespacedAttributeResolver,
-    #     dim: SimDimensions,
-    #     scope: GeoScope,
-    #     rng: np.random.Generator,
-    # ) -> SimArray:
-    #     result = super().evaluate_in_context(data, dim, scope, rng)
+    @override
+    def validate(self, result) -> None:
+        # Must be an NxC array of integers, none less than zero.
+        try:
+            check_ndarray(
+                result,
+                dtype=match.dtype(SimDType),
+                shape=DataShapeMatcher(Shapes.NxC, self.dim, allow_broadcast=False),
+            )
+        except NumpyTypeError as e:
+            msg = f"Invalid return type from '{self.__class__.__name__}'"
+            raise InitException(msg) from e
 
-    #     # Result validation: it must be an NxC array of integers
-    #     # where no value is less than zero.
-    #     try:
-    #         check_ndarray(
-    #             result,
-    #             dtype=match.dtype(SimDType),
-    #             shape=DataShapeMatcher(Shapes.NxC, dim, allow_broadcast=False),
-    #         )
-    #     except NumpyTypeError as e:
-    #         msg = f"Invalid return type from '{self.__class__.__name__}'"
-    #         raise InitException(msg) from e
-
-    #     if np.min(result) < 0:
-    #         msg = (
-    #             f"Initializer '{self.__class__.__name__}' returned "
-    #             "values less than zero"
-    #         )
-    #         raise InitException(msg)
-
-    #     return result
+        if np.min(result) < 0:
+            msg = (
+                f"Initializer '{self.__class__.__name__}' returned "
+                "values less than zero."
+            )
+            raise InitException(msg)
 
 
 # Initializer utility functions

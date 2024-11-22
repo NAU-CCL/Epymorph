@@ -178,23 +178,6 @@ class MovementClause(
         You can also use `defer` to utilize another MovementClause instance.
         """
 
-    # TODO:
-    # def evaluate_in_context(
-    #     self,
-    #     data: NamespacedAttributeResolver,
-    #     dim: SimDimensions,
-    #     scope: GeoScope,
-    #     rng: np.random.Generator,
-    #     tick: Tick,
-    # ) -> NDArray[SimDType]:
-    #     """
-    #     Evaluate this function within a context.
-    #     epymorph calls this function; you generally don't need to.
-    #     """
-    #     requested = super().evaluate_in_context(data, dim, scope, rng, tick)
-    #     np.fill_diagonal(requested, 0)
-    #     return requested
-
 
 #################
 # MovementModel #
