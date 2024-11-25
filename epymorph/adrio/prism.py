@@ -248,6 +248,7 @@ class Precipitation(Adrio[np.float64]):
         return raster_vals
 
 
+@adrio_cache
 class DewPoint(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the dew point temperature in an area,
@@ -294,6 +295,7 @@ class DewPoint(Adrio[np.float64]):
         return raster_vals
 
 
+@adrio_cache
 class Temperature(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the temperature in an area, represented
@@ -358,6 +360,7 @@ class Temperature(Adrio[np.float64]):
         return raster_vals
 
 
+@adrio_cache
 class VaporPressureDeficit(Adrio[np.float64]):
     """
     Creates an TxN matrix of floats representing the vapor pressure deficit in an area,
