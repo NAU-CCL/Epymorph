@@ -23,8 +23,10 @@ from typing import (
     Literal,
     Mapping,
     NamedTuple,
+    Protocol,
     Self,
     Sequence,
+    TypeGuard,
     TypeVar,
     overload,
 )
@@ -727,11 +729,9 @@ class ResolutionTree:
         )
 
 
-V = TypeVar("V")
-"""The value type for a requirements tree."""
+class RecursiveValue(Protocol):
+    """A parameter value that itself may depend on other parameter values."""
 
-
-class RecursiveValue(NamedTuple):
     requirements: Sequence[AttributeDef]
     """Defines the data requirements for this value."""
     randomized: bool
@@ -740,8 +740,13 @@ class RecursiveValue(NamedTuple):
 
 
 @singledispatch
-def is_recursive_value(value: object) -> RecursiveValue | None:
-    return None
+def is_recursive_value(value: object) -> TypeGuard[RecursiveValue]:
+    """TypeGuard for RecursiveValues, implemented by single dispatch."""
+    return False
+
+
+V = TypeVar("V")
+"""The value type for a requirements tree."""
 
 
 @dataclass(frozen=True)
@@ -819,15 +824,15 @@ class ReqTree(Generic[V]):
             if (val_match := params.query(name)) is not None:
                 # User provided a parameter value to use.
                 pattern, value = val_match
-                if (recursive := is_recursive_value(value)) is not None:
+                if is_recursive_value(value):
                     # might have its own requirements
                     ns = name.to_namespace()
                     children = tuple(
                         recurse(ns.to_absolute(r.name), r, [name, *chain])
-                        for r in recursive.requirements
+                        for r in value.requirements
                     )
                     # is this resolution node cacheable?
-                    cacheable = not recursive.randomized
+                    cacheable = not value.randomized
                 else:
                     children = ()
                     cacheable = True

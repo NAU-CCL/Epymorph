@@ -15,6 +15,7 @@ from typing import (
     Self,
     Sequence,
     Type,
+    TypeGuard,
     TypeVar,
     Union,
     final,
@@ -490,8 +491,8 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
 
 
 @is_recursive_value.register
-def _(value: BaseSimulationFunction) -> RecursiveValue | None:
-    return RecursiveValue(value.requirements, value.randomized)
+def _(value: BaseSimulationFunction) -> TypeGuard[RecursiveValue]:
+    return True
 
 
 class SimulationFunction(BaseSimulationFunction[ResultT]):
