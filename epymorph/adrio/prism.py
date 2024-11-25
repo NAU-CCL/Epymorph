@@ -3,6 +3,7 @@ from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Generator, Literal
+from warnings import warn
 
 import numpy as np
 import rasterio.io as rio
@@ -17,7 +18,6 @@ from epymorph.data_type import CentroidType
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceException
 from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE
 from epymorph.geography.us_tiger import CacheEstimate
 from epymorph.simulation import AttributeDef
@@ -116,6 +116,7 @@ def _make_centroid_strategy_adrio(
 
     # read in each file
     for raster_file in raster_files:
+        values = []
         with rio.ZipMemoryFile(raster_file) as zip_contents:
             with zip_contents.open(raster_file.name) as dataset:
                 values = [x[0] for x in dataset.sample(centroids)]
@@ -138,14 +139,11 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
     return date_range
 
 
-def _validate_scope(scope: GeoScope) -> CensusScope:
+def _validate_scope(
+    scope: GeoScope, raster_data: NDArray, centroids: NDArray, error: str
+) -> NDArray[np.float64]:
     state_fips = list(STATE.truncate_unique(scope.node_ids))
     excluded_fips = ["72", "02", "15"]
-
-    # require census scope for raster values
-    if not isinstance(scope, CensusScope):
-        msg = "Census scope is required for PRISM attributes."
-        raise DataResourceException(msg)
 
     # scope cannot be in Puerto Rico, Alaska, or Hawaii
     if any(state in excluded_fips for state in state_fips):
@@ -154,7 +152,52 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
             "attributes. Please enter a geoid within the 48 contiguous states."
         )
         raise DataResourceException(msg)
-    return scope
+
+    # check for any invalid values, handle error accordingly
+    if np.any(raster_data == -9999):
+        indices = np.where(raster_data == -9999)[1]
+        invalid_centroids = np.unique(centroids[indices])
+        invalid_nodes = np.unique(scope.node_ids[indices])
+
+        table_title = ["\nGEOID               Centroid"]
+        for node, centroid in zip(invalid_nodes, invalid_centroids):
+            table_title.append(f"{str(node).ljust(20)}{centroid}")
+
+        node_table = "\n".join(table_title)
+
+        error_msg = (
+            "\nOne or more of the centroids provided are outside of the "
+            "geographic bounds defined by PRISM. PRISM has not returned "
+            "data for the following nodes and centroids:"
+            f"\n{node_table}"
+            "\n\nThis issue may occur if a centroid is placed in a body of water"
+            " or is located outside of the 48 contiguous United States. "
+            "\n\nThere are a couple of ways to handle this: "
+            "\n1. Adjust the centroids"
+            "\n  - If feasible, adjust the above centroids accordingly to be on land, "
+            "within the 48 adjoining U.S. states."
+            "\n\n2. Error Handling"
+            "\n  - By default, PRISM ADRIOs will default to raise an error when a "
+            "centroid does not return valid data. "
+            "\n  - This setting can be changed by "
+            "setting the error parameter at the end of the PRISM ADRIO calls to any "
+            "of the following: "
+            "\n\t- `error='raise'`: Raise an error when out-of-bound centroids are "
+            "given. No resulting matrices will be shown (default)."
+            "\n\t- `error='warn'`: Issues a warning about invalid centroids, but "
+            "displays the resulting matrices as well."
+            "\n\t- `error='ignore'`: Does not display any message concerning invalid "
+            "centroids and returns the resulting matrices."
+        )
+
+        if error == "raise":
+            raise DataResourceException(error_msg)
+        elif error == "warn":
+            warn(error_msg)
+        elif error == "ignore":
+            pass
+
+    return raster_data
 
 
 def _estimate_prism(
@@ -221,7 +264,11 @@ class Precipitation(Adrio[np.float64]):
     data.
     """
 
-    def __init__(self, date_range: TimeFrame):
+    def __init__(
+        self,
+        date_range: TimeFrame,
+        errors: Literal["raise", "warn", "ignore"] = "raise",
+    ):
         """
         Initializes the precipitation matrix with the date range.
 
@@ -231,6 +278,7 @@ class Precipitation(Adrio[np.float64]):
             The range of dates to fetch precipitation data for.
         """
         self.date_range = _validate_dates(date_range)
+        self.error = errors
 
     def estimate_data(self) -> DataEstimate:
         file_size = 1_200_000  # no significant change in size, average to about 1.2MB
@@ -240,11 +288,11 @@ class Precipitation(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
-        scope = _validate_scope(scope)
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             "ppt", self.date_range, centroids, self.progress
         )
+        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
         return raster_vals
 
 
@@ -263,7 +311,11 @@ class DewPoint(Adrio[np.float64]):
     data.
     """
 
-    def __init__(self, date_range: TimeFrame):
+    def __init__(
+        self,
+        date_range: TimeFrame,
+        errors: Literal["raise", "warn", "ignore"] = "raise",
+    ):
         """
         Initializes the dew point temperature matrix with the date range.
 
@@ -273,6 +325,7 @@ class DewPoint(Adrio[np.float64]):
             The range of dates to fetch dew point temperature data for.
         """
         self.date_range = _validate_dates(date_range)
+        self.error = errors
 
     def estimate_data(self) -> DataEstimate:
         year = self.date_range.end_date.year
@@ -287,11 +340,11 @@ class DewPoint(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
-        scope = _validate_scope(scope)
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             "tdmean", self.date_range, centroids, self.progress
         )
+        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
         return raster_vals
 
 
@@ -320,7 +373,12 @@ class Temperature(Adrio[np.float64]):
 
     temp_var: TemperatureType
 
-    def __init__(self, date_range: TimeFrame, temp_var: TemperatureType):
+    def __init__(
+        self,
+        date_range: TimeFrame,
+        temp_var: TemperatureType,
+        errors: Literal["raise", "warn", "ignore"] = "raise",
+    ):
         """
         Initializes the temperature matrix with the date range and the statistical
         measure for the temperature.
@@ -335,6 +393,7 @@ class Temperature(Adrio[np.float64]):
         """
         self.temp_var = temp_var
         self.date_range = _validate_dates(date_range)
+        self.error = errors
 
     def estimate_data(self) -> DataEstimate:
         year = self.date_range.end_date.year
@@ -350,13 +409,12 @@ class Temperature(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
-        scope = _validate_scope(scope)
         temp_var = self.temp_variables[self.temp_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             temp_var, self.date_range, centroids, self.progress
         )
-
+        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
         return raster_vals
 
 
@@ -381,7 +439,12 @@ class VaporPressureDeficit(Adrio[np.float64]):
 
     vpd_var: VPDType
 
-    def __init__(self, date_range: TimeFrame, vpd_var: VPDType):
+    def __init__(
+        self,
+        date_range: TimeFrame,
+        vpd_var: VPDType,
+        errors: Literal["raise", "warn", "ignore"] = "raise",
+    ):
         """
         Initializes the vapor pressure deficit matrix with the date range and the
         statistical measure for the vapor pressure deficit.
@@ -396,6 +459,7 @@ class VaporPressureDeficit(Adrio[np.float64]):
         """
         self.vpd_var = vpd_var
         self.date_range = _validate_dates(date_range)
+        self.error = errors
 
     def estimate_data(self) -> DataEstimate:
         year = self.date_range.end_date.year
@@ -410,10 +474,10 @@ class VaporPressureDeficit(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         scope = self.scope
-        scope = _validate_scope(scope)
         vpd_var = self.vpd_variables[self.vpd_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             vpd_var, self.date_range, centroids, self.progress
         )
+        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
         return raster_vals
