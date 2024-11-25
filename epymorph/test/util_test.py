@@ -52,24 +52,32 @@ class TestUtil(unittest.TestCase):
 
         util.check_ndarray(arr)
         util.check_ndarray(arr, dtype=m.dtype(np.int64))
-        util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.N, dim, True))
+        util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.N, dim))
         util.check_ndarray(
-            arr, dtype=m.dtype(np.int64), shape=DataShapeMatcher(Shapes.N, dim, True)
+            arr,
+            dtype=m.dtype(np.int64),
+            shape=DataShapeMatcher(
+                Shapes.N,
+                dim,
+            ),
         )
         util.check_ndarray(
             arr,
             dtype=m.dtype(np.int64, np.float64),
-            shape=DataShapeMatcher(Shapes.N, dim, True),
+            shape=DataShapeMatcher(Shapes.N, dim),
         )
         util.check_ndarray(
             arr,
             dtype=m.dtype(np.float64, np.int64),
-            shape=DataShapeMatcher(Shapes.N, dim, False),
+            shape=DataShapeMatcher(Shapes.N, dim, exact=True),
         )
         util.check_ndarray(
             arr,
             dtype=m.dtype(np.int64, np.float64),
-            shape=DataShapeMatcher(Shapes.TxN, dim, True),
+            shape=DataShapeMatcher(
+                Shapes.TxN,
+                dim,
+            ),
         )
 
     def test_check_ndarray_02(self):

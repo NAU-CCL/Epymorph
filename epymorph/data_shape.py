@@ -230,15 +230,17 @@ DataT = TypeVar("DataT", bound=np.generic)
 class DataShape(ABC):
     """Description of a data attribute's shape relative to a simulation context."""
 
-    # TODO: remove allow_broadcast?
     @abstractmethod
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        """Returns a tuple with the lengths of the dimensions in this shape.
+        If an axis is of indeterminate length, that axis is represented as -1."""
+
+    @abstractmethod
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
         """Does the given value match this shape expression?"""
 
     @abstractmethod
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
         """Adapt the given value to this shape; raise ValueError if we can't."""
 
 
@@ -246,13 +248,17 @@ class DataShape(ABC):
 class Scalar(DataShape):
     """A scalar value."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return ()
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
         return value.shape == tuple()
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
-        if not self.matches(dim, value, allow_broadcast):
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
+        if not self.matches(dim, value):
             raise ValueError("Not able to adapt shape.")
         return value
 
@@ -264,19 +270,23 @@ class Scalar(DataShape):
 class Time(DataShape):
     """An array of at least size T (the number of simulation days)."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (dim.T,)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
         if value.ndim == 1 and value.shape[0] >= dim.T:
             return True
-        if allow_broadcast and value.shape == tuple():
+        if value.shape == tuple():
             return True
         return False
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
         if value.ndim == 1 and value.shape[0] >= dim.T:
             return value[: dim.T]
-        if allow_broadcast and value.shape == tuple():
+        if value.shape == tuple():
             return np.broadcast_to(value, shape=(dim.T,))
         raise ValueError("Not able to adapt shape.")
 
@@ -288,19 +298,23 @@ class Time(DataShape):
 class Node(DataShape):
     """An array of size N (the number of simulation nodes)."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (dim.N,)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
         if value.ndim == 1 and value.shape[0] == dim.N:
             return True
-        if allow_broadcast and value.shape == tuple():
+        if value.shape == tuple():
             return True
         return False
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
         if value.ndim == 1 and value.shape[0] == dim.N:
             return value
-        if allow_broadcast and value.shape == tuple():
+        if value.shape == tuple():
             return np.broadcast_to(value, shape=(dim.N,))
         raise ValueError("Not able to adapt shape.")
 
@@ -312,21 +326,26 @@ class Node(DataShape):
 class NodeAndNode(DataShape):
     """An array of size NxN."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        if value.shape == (dim.N, dim.N):
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (dim.N, dim.N)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
+        shape = self.to_tuple(dim)
+        if value.shape == shape:
             return True
-        if allow_broadcast:
-            if value.shape == tuple():
-                return True
+        if value.shape == tuple():
+            return True
         return False
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
-        if value.shape == (dim.N, dim.N):
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
+        shape = self.to_tuple(dim)
+        if value.shape == shape:
             return value
-        if allow_broadcast and value.shape == tuple():
-            return np.broadcast_to(value, shape=(dim.N, dim.N))
+        if value.shape == tuple():
+            return np.broadcast_to(value, shape=shape)
         raise ValueError("Not able to adapt shape.")
 
     def __str__(self):
@@ -337,32 +356,34 @@ class NodeAndNode(DataShape):
 class NodeAndCompartment(DataShape):
     """An array of size NxC."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        N, C = dim.N, dim.C
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (dim.N, dim.C)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
+        N, C = self.to_tuple(dim)
         if value.shape == (N, C):
             return True
-        if allow_broadcast:
-            if value.shape == tuple():
-                return True
-            if value.shape == (N,):
-                return True
-            if value.shape == (C,):
-                return True
+        if value.shape == tuple():
+            return True
+        if value.shape == (N,):
+            return True
+        if value.shape == (C,):
+            return True
         return False
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
-        N, C = dim.N, dim.C
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
+        N, C = self.to_tuple(dim)
         if value.shape == (N, C):
             return value
-        if allow_broadcast:
-            if value.shape == tuple():
-                return np.broadcast_to(value, shape=(N, C))
-            if value.shape == (N,):
-                return np.broadcast_to(value[:, np.newaxis], shape=(N, C))
-            if value.shape == (C,):
-                return np.broadcast_to(value, shape=(N, C))
+        if value.shape == tuple():
+            return np.broadcast_to(value, shape=(N, C))
+        if value.shape == (N,):
+            return np.broadcast_to(value[:, np.newaxis], shape=(N, C))
+        if value.shape == (C,):
+            return np.broadcast_to(value, shape=(N, C))
         raise ValueError("Not able to adapt shape.")
 
     def __str__(self):
@@ -373,32 +394,34 @@ class NodeAndCompartment(DataShape):
 class TimeAndNode(DataShape):
     """An array of size at-least-T by exactly-N."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
-        T, N = dim.T, dim.N
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (dim.T, dim.N)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
+        T, N = self.to_tuple(dim)
         if value.ndim == 2 and value.shape[0] >= T and value.shape[1] == N:
             return True
-        if allow_broadcast:
-            if value.shape == tuple():
-                return True
-            if value.shape == (N,):
-                return True
-            if value.ndim == 1 and value.shape[0] >= T:
-                return True
+        if value.shape == tuple():
+            return True
+        if value.shape == (N,):
+            return True
+        if value.ndim == 1 and value.shape[0] >= T:
+            return True
         return False
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
-        T, N = dim.T, dim.N
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
+        T, N = self.to_tuple(dim)
         if value.ndim == 2 and value.shape[0] >= T and value.shape[1] == N:
             return value[:T, :]
-        if allow_broadcast:
-            if value.shape == tuple():
-                return np.broadcast_to(value, shape=(T, N))
-            if value.shape == (N,):
-                return np.broadcast_to(value, shape=(T, N))
-            if value.ndim == 1 and value.shape[0] >= T:
-                return np.broadcast_to(value[:T, np.newaxis], shape=(T, N))
+        if value.shape == tuple():
+            return np.broadcast_to(value, shape=(T, N))
+        if value.shape == (N,):
+            return np.broadcast_to(value, shape=(T, N))
+        if value.ndim == 1 and value.shape[0] >= T:
+            return np.broadcast_to(value[:T, np.newaxis], shape=(T, N))
         raise ValueError("Not able to adapt shape.")
 
     def __str__(self):
@@ -409,15 +432,19 @@ class TimeAndNode(DataShape):
 class NodeAndArbitrary(DataShape):
     """An array of size exactly-N by any dimension."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (dim.N, dim.N)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
         if value.ndim == 2 and value.shape[0] == dim.N:
             return True
         return False
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
-        if self.matches(dim, value, allow_broadcast):
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
+        if self.matches(dim, value):
             return value
         raise ValueError("Not able to adapt shape.")
 
@@ -429,15 +456,19 @@ class NodeAndArbitrary(DataShape):
 class ArbitraryAndNode(DataShape):
     """An array of size any dimension by exactly-N."""
 
-    def matches(self, dim: Dimensions, value: NDArray, allow_broadcast: bool) -> bool:
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (-1, dim.N)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
         if value.ndim == 2 and value.shape[1] == dim.N:
             return True
         return False
 
-    def adapt(
-        self, dim: Dimensions, value: NDArray[DataT], allow_broadcast: bool
-    ) -> NDArray[DataT]:
-        if self.matches(dim, value, allow_broadcast):
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
+        if self.matches(dim, value):
             return value
         raise ValueError("Not able to adapt shape.")
 
@@ -490,20 +521,22 @@ def parse_shape(shape: str) -> DataShape:
 
 
 class DataShapeMatcher(Matcher[NDArray]):
-    """Matches a DataShape, given the SimDimensions."""
+    """Matches an array as adaptable to `shape` under the given Dimensions (`dim`)."""
 
     _shape: DataShape
     _dim: Dimensions
-    _allow_broadcast: bool
+    _exact: bool
 
-    def __init__(self, shape: DataShape, dim: Dimensions, allow_broadcast: bool):
+    def __init__(self, shape: DataShape, dim: Dimensions, exact: bool = False):
         self._shape = shape
         self._dim = dim
-        self._allow_broadcast = allow_broadcast
+        self._exact = exact
 
     def expected(self) -> str:
         """Describes what the expected value is."""
         return str(self._shape)
 
     def __call__(self, value: NDArray) -> bool:
-        return self._shape.matches(self._dim, value, self._allow_broadcast)
+        if self._exact:
+            return value.shape == self._shape.to_tuple(self._dim)
+        return self._shape.matches(self._dim, value)

@@ -563,7 +563,7 @@ def assert_can_adapt(
     given dimensional information. Raises AttributeException if not."""
     if not np.can_cast(value, dtype_as_np(data_type)):
         raise AttributeException("Not a compatible type.")
-    if not data_shape.matches(dim, value, allow_broadcast=True):
+    if not data_shape.matches(dim, value):
         raise AttributeException("Not a compatible shape.")
 
 
@@ -583,7 +583,7 @@ def adapt(
             subok=False,
             copy=False,
         )
-        return data_shape.adapt(dim, typed, allow_broadcast=True)
+        return data_shape.adapt(dim, typed)
     except Exception as e:
         raise AttributeException("Failed to adapt value.") from e
 

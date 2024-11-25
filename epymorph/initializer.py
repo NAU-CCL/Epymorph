@@ -36,7 +36,7 @@ class Initializer(SimulationFunction[SimArray], ABC):
             check_ndarray(
                 result,
                 dtype=match.dtype(SimDType),
-                shape=DataShapeMatcher(Shapes.NxC, self.dim, allow_broadcast=False),
+                shape=DataShapeMatcher(Shapes.NxC, self.dim, exact=True),
             )
         except NumpyTypeError as e:
             msg = f"Invalid return type from '{self.__class__.__name__}'"
@@ -146,7 +146,7 @@ class Proportional(Initializer):
             check_ndarray(
                 self.ratios,
                 dtype=match.dtype(np.int64, np.float64),
-                shape=DataShapeMatcher(Shapes.NxC, self.dim, True),
+                shape=DataShapeMatcher(Shapes.NxC, self.dim),
             )
         except NumpyTypeError as e:
             raise InitException(
@@ -154,7 +154,7 @@ class Proportional(Initializer):
             ) from None
 
         try:
-            ratios = Shapes.NxC.adapt(self.dim, self.ratios, True)
+            ratios = Shapes.NxC.adapt(self.dim, self.ratios)
         except ValueError:
             raise InitException(
                 "Initializer argument 'ratios' is not properly specified."
