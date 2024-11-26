@@ -154,11 +154,13 @@ def _validate_scope(
         raise DataResourceException(msg)
 
     # check for any invalid values, handle error accordingly
-    if np.any(raster_data == -9999):
+    if np.any(raster_data == -9999) and error != "ignore":
+        # get the points where there are sentinel values
         indices = np.where(raster_data == -9999)[1]
         invalid_centroids = np.unique(centroids[indices])
         invalid_nodes = np.unique(scope.node_ids[indices])
 
+        # correlate the nodes and centroids to show where the error is occurring
         table_title = ["\nGEOID               Centroid"]
         for node, centroid in zip(invalid_nodes, invalid_centroids):
             table_title.append(f"{str(node).ljust(20)}{centroid}")
@@ -194,8 +196,6 @@ def _validate_scope(
             raise DataResourceException(error_msg)
         elif error == "warn":
             warn(error_msg)
-        elif error == "ignore":
-            pass
 
     return raster_data
 
