@@ -116,7 +116,6 @@ def _make_centroid_strategy_adrio(
 
     # read in each file
     for raster_file in raster_files:
-        values = []
         with rio.ZipMemoryFile(raster_file) as zip_contents:
             with zip_contents.open(raster_file.name) as dataset:
                 values = [x[0] for x in dataset.sample(centroids)]
@@ -139,7 +138,7 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
     return date_range
 
 
-def _validate_scope(
+def _validate_data(
     scope: GeoScope, raster_data: NDArray, centroids: NDArray, error: str
 ) -> NDArray[np.float64]:
     state_fips = list(STATE.truncate_unique(scope.node_ids))
@@ -292,7 +291,7 @@ class Precipitation(Adrio[np.float64]):
         raster_vals = _make_centroid_strategy_adrio(
             "ppt", self.date_range, centroids, self.progress
         )
-        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
+        raster_vals = _validate_data(scope, raster_vals, centroids, self.error)
         return raster_vals
 
 
@@ -344,7 +343,7 @@ class DewPoint(Adrio[np.float64]):
         raster_vals = _make_centroid_strategy_adrio(
             "tdmean", self.date_range, centroids, self.progress
         )
-        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
+        raster_vals = _validate_data(scope, raster_vals, centroids, self.error)
         return raster_vals
 
 
@@ -414,7 +413,7 @@ class Temperature(Adrio[np.float64]):
         raster_vals = _make_centroid_strategy_adrio(
             temp_var, self.date_range, centroids, self.progress
         )
-        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
+        raster_vals = _validate_data(scope, raster_vals, centroids, self.error)
         return raster_vals
 
 
@@ -479,5 +478,5 @@ class VaporPressureDeficit(Adrio[np.float64]):
         raster_vals = _make_centroid_strategy_adrio(
             vpd_var, self.date_range, centroids, self.progress
         )
-        raster_vals = _validate_scope(scope, raster_vals, centroids, self.error)
+        raster_vals = _validate_data(scope, raster_vals, centroids, self.error)
         return raster_vals
