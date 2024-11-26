@@ -277,6 +277,40 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
         return OrderedDict(generate_items())
 
+    def _params_database(
+        self,
+        override_params: Mapping[NamePattern, ParamValue]
+        | Mapping[str, ParamValue]
+        | None = None,
+    ) -> Database[ParamValue]:
+        label_name, _ = GEO_LABELS
+        params_db = DatabaseWithStrataFallback(
+            # RUME params are high priority,
+            data={**self.params},
+            # with fall back to strata params.
+            children={
+                **{
+                    gpm_strata(gpm.name): Database(
+                        {
+                            k.to_absolute(gpm_strata(gpm.name)): v
+                            for k, v in (gpm.params or {}).items()
+                        }
+                    )
+                    for gpm in self.strata
+                },
+                # And provide a low-priority default for node labels.
+                "meta": Database({label_name.to_pattern(): self.scope.labels}),
+            },
+        )
+        # If override_params is not empty, wrap in another layer
+        # where override_params have the highest priority.
+        if override_params is not None and len(override_params) > 0:
+            params_db = DatabaseWithFallback(
+                {NamePattern.of(k): v for k, v in override_params.items()},
+                params_db,
+            )
+        return params_db
+
     @cached_property
     def compartment_mask(self) -> Mapping[str, NDArray[np.bool_]]:
         """
@@ -430,38 +464,15 @@ class Rume(ABC, Generic[GeoScopeT_co]):
             the requirements tree
         """
         label_name, label_def = GEO_LABELS
-        requirements = {
-            **self.requirements,
-            # Artificially require the special geo labels attribute.
-            label_name: label_def,
-        }
-
-        params_db = DatabaseWithStrataFallback(
-            data={**self.params},
-            children={
-                **{
-                    # which falls back to GPM params, as scoped to that GPM
-                    gpm_strata(gpm.name): Database[ParamValue](
-                        {
-                            k.to_absolute(gpm_strata(gpm.name)): v
-                            for k, v in (gpm.params or {}).items()
-                        }
-                    )
-                    for gpm in self.strata
-                },
-                "meta": Database[ParamValue](
-                    {label_name.to_pattern(): self.scope.labels}
-                ),
+        return ReqTree.of(
+            requirements={
+                # Start with our top-level requirements.
+                **self.requirements,
+                # Artificially require the geo labels attribute.
+                label_name: label_def,
             },
+            params=self._params_database(override_params),
         )
-        # If override_params is not empty, wrap vals_db in another fallback layer.
-        if override_params is not None and len(override_params) > 0:
-            params_db = DatabaseWithFallback(
-                {NamePattern.of(k): v for k, v in override_params.items()},
-                params_db,
-            )
-
-        return ReqTree.of(requirements, params_db)
 
     def evaluate_params(
         self,
