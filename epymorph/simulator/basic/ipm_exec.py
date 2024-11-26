@@ -3,7 +3,7 @@ IPM executor classes handle the logic for processing the IPM step of the simulat
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, Generator, Iterable, NamedTuple
+from typing import ClassVar, Iterator, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -15,11 +15,9 @@ from epymorph.compartment_model import (
     TransitionDef,
     exogenous_states,
 )
-from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import AttributeValue, SimArray, SimDType
 from epymorph.database import DataResolver
 from epymorph.error import (
-    AttributeException,
     IpmSimInvalidProbsException,
     IpmSimLessThanZeroException,
     IpmSimNaNException,
@@ -110,8 +108,6 @@ class IpmExecutor:
     """the RUME"""
     _world: World
     """the world state"""
-    _data: DataResolver
-    """resolver for simulation data"""
     _rng: np.random.Generator
     """the simulation RNG"""
 
@@ -129,7 +125,7 @@ class IpmExecutor:
     """
     _source_compartment_for_event: list[int]
     """mapping from event index to the compartment index it sources from"""
-    _attribute_values_txn: Generator[Iterable[AttributeValue], None, None]
+    _attr_values: Iterator[list[AttributeValue]]
     """
     a generator for the list of arguments (from attributes) needed to evaluate
     transition functions
@@ -158,46 +154,16 @@ class IpmExecutor:
 
         self._rume = rume
         self._world = world
-        self._data = data
         self._rng = rng
 
         self._trxs = _compile_transitions(ipm)
         self._apply_matrix = _make_apply_matrix(ipm)
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
-        self._attribute_values_txn = self.resolve_txn_series(data, ipm, rume.dim)
-
-    def resolve_txn_series(
-        self,
-        data: DataResolver,
-        ipm: BaseCompartmentModel,
-        dim: SimDimensions,
-    ):
-        """
-        Generates the series of values for the given attributes.
-        Each item produced by the generator is a sequence of values,
-        one for each attribute (in the given order).
-        The sequence of items is generated in simulation order --
-        day=0, tau step=0, node=0; then day=0, tau_step=0; node=1; and so on.
-        """
-        days = dim.days
-        taus = dim.tau_steps
-        nodes = dim.nodes
-
-        attributes = ipm.requirements_dict
-        if any(ak.shape != Shapes.TxN for _, ak in attributes.items()):
-            msg = "Cannot generate a TxN series unless all attributes are TxN."
-            raise AttributeException(msg)
-
-        attr_values = [
-            data.resolve(name, definition) for name, definition in attributes.items()
-        ]
-
-        for t in range(days):
-            node_values = [[array[t, n] for array in attr_values] for n in range(nodes)]
-            for _ in range(taus):
-                for vals in node_values:
-                    yield vals
+        self._attr_values = data.resolve_txn_series(
+            ipm.requirements_dict.items(),
+            rume.dim.tau_steps,
+        )
 
     def apply(self, tick: Tick) -> Result:
         """
@@ -230,7 +196,7 @@ class IpmExecutor:
         for the possibility of overruns.
         """
 
-        rate_args = [*effective_pop, *next(self._attribute_values_txn)]
+        rate_args = [*effective_pop, *next(self._attr_values)]
 
         # Evaluate the event rates and do random draws for all transition events.
         occur = np.zeros(self._rume.dim.events, dtype=SimDType)

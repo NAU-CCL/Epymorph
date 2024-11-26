@@ -13,6 +13,7 @@ data for a simulation -- if the outermost database has a matching value, that va
 used, otherwise the search for a match proceeds to the inner layers (recursively).
 """
 
+import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import singledispatch
@@ -20,6 +21,7 @@ from typing import (
     Callable,
     Generic,
     Iterable,
+    Iterator,
     Literal,
     Mapping,
     NamedTuple,
@@ -34,7 +36,16 @@ from typing import (
 import numpy as np
 from typing_extensions import override
 
-from epymorph.data_shape import DataShape, Dimensions, SimDimensions
+from epymorph.data_shape import (
+    DataShape,
+    Dimensions,
+    Node,
+    Scalar,
+    Shapes,
+    SimDimensions,
+    Time,
+    TimeAndNode,
+)
 from epymorph.data_type import (
     AttributeArray,
     AttributeType,
@@ -693,6 +704,57 @@ class DataResolver:
         adapted_value = adapt(definition.type, definition.shape, self._dim, value)
         self._adapted_values[key] = adapted_value
         return adapted_value
+
+    def resolve_txn_series(
+        self,
+        requirements: Iterable[tuple[AbsoluteName, AttributeDef]],
+        tau_steps: int,
+    ) -> Iterator[list[AttributeValue]]:
+        """
+        Generates a series of values for the given requirements.
+        Each item produced by the generator is a sequence of scalar values,
+        one for each attribute (in the given order).
+
+        The sequence of items is generated in simulation order --
+        - day=0, tau step=0, node=0 => [beta, gamma, xi]
+        - day=0, tau_step=0; node=1 => [beta, gamma, xi]
+        - day=0, tau_step=1; node=0 => [beta, gamma, xi]
+        - day=0, tau_step=1; node=1 => [beta, gamma, xi]
+        - and so on.
+
+        This is a convenient alternative to resolving all of the TxN arrays separately,
+        and managing the iteration yourself.
+
+        Parameters
+        ----------
+        requirements : Iterable[tuple[AbsoluteName, AttributeDef]]
+            The name-definition pairs for all of the attributes to include.
+        tau_steps : int
+            The number of tau steps per day; since T in a TxN array is simulation days,
+            this simply repeats values such that all of a day's tau steps
+            see the same value.
+        """
+
+        def as_txn(attr_name: AbsoluteName, attr_def: AttributeDef) -> AttributeDef:
+            # We want to resolve every attribute as TxN, however it's defined.
+            # But we should check that this is possible first.
+            if not isinstance(attr_def.shape, Scalar | Time | Node | TimeAndNode):
+                err = (
+                    "Cannot generate a TxN series unless all attributes "
+                    f"broadcast to TxN. {attr_name} is {attr_def.shape}"
+                )
+                raise AttributeException(err)
+            return dataclasses.replace(attr_def, shape=Shapes.TxN)
+
+        resolved = [self.resolve(n, as_txn(n, d)) for n, d in requirements]
+
+        T, N = (self._dim.T, self._dim.N)
+        for t in range(T):
+            # values-per-node repeats if tau_steps > 1, so compute it outside that loop.
+            vals_by_node = [[v[t, n] for v in resolved] for n in range(N)]
+            for _ in range(tau_steps):
+                for vals in vals_by_node:  # implicitly: range(N)
+                    yield vals
 
     @overload
     def to_dict(
