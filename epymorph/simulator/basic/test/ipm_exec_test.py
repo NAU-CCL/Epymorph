@@ -8,8 +8,8 @@ import numpy.testing as npt
 
 from epymorph.compartment_model import BIRTH, DEATH, CompartmentModel, compartment, edge
 from epymorph.data_shape import Shapes, SimDimensions
-from epymorph.data_type import AttributeArray, SimDType
-from epymorph.database import Database
+from epymorph.data_type import SimDType
+from epymorph.database import DataResolver
 from epymorph.rume import Rume
 from epymorph.simulation import AttributeDef
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
@@ -67,10 +67,7 @@ class Sirbd(CompartmentModel):
 class StandardIpmExecutorTest(unittest.TestCase):
     def test_init_01(self):
         ipm = Sir()
-
-        rume = MagicMock(spec=Rume)
-        rume.ipm = ipm
-        rume.dim = SimDimensions.build(
+        dim = SimDimensions.build(
             tau_step_lengths=[1.0],
             start_date=date(2021, 1, 1),
             days=100,
@@ -79,11 +76,12 @@ class StandardIpmExecutorTest(unittest.TestCase):
             events=ipm.num_events,
         )
 
-        world = MagicMock(spec=ListWorld)
-        data = MagicMock(spec=Database[AttributeArray])
-        rng = np.random.default_rng()
-
-        exe = IpmExecutor(rume, world, data, rng)
+        exe = IpmExecutor(
+            rume=MagicMock(spec=Rume, ipm=ipm, dim=dim),
+            world=MagicMock(spec=ListWorld),
+            data=MagicMock(spec=DataResolver),
+            rng=np.random.default_rng(),
+        )
 
         self.assertEqual(exe._events_leaving_compartment, [[0], [1], []])
         self.assertEqual(exe._source_compartment_for_event, [0, 1])
@@ -100,10 +98,7 @@ class StandardIpmExecutorTest(unittest.TestCase):
 
     def test_init_02(self):
         ipm = Sirbd()
-
-        rume = MagicMock(spec=Rume)
-        rume.ipm = ipm
-        rume.dim = SimDimensions.build(
+        dim = SimDimensions.build(
             tau_step_lengths=[1.0],
             start_date=date(2021, 1, 1),
             days=100,
@@ -112,11 +107,12 @@ class StandardIpmExecutorTest(unittest.TestCase):
             events=ipm.num_events,
         )
 
-        world = MagicMock(spec=ListWorld)
-        data = MagicMock(spec=Database[AttributeArray])
-        rng = np.random.default_rng()
-
-        exe = IpmExecutor(rume, world, data, rng)
+        exe = IpmExecutor(
+            rume=MagicMock(spec=Rume, ipm=ipm, dim=dim),
+            world=MagicMock(spec=ListWorld),
+            data=MagicMock(spec=DataResolver),
+            rng=np.random.default_rng(),
+        )
 
         self.assertEqual(exe._source_compartment_for_event, [0, -1, 1, 0, 1, 2])
         npt.assert_array_equal(

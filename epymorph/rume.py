@@ -486,7 +486,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         -------
         DataResolver
             the resolver containing the evaluated values
-        """
+        """  # noqa: E501
         ps = None
         if override_params is not None and len(override_params) > 0:
             ps = {NamePattern.of(k): v for k, v in override_params.items()}
