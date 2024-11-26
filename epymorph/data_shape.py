@@ -18,6 +18,11 @@ from epymorph.util import Matcher
 
 
 class Dimensions(Protocol):
+    """A class to store the lengths of dimensions which are supported by DataShapes.
+    It is possible to create Dimensions instances which contain a subset of the
+    available dimensions, for cases where the other dimensions aren't known and
+    aren't needed."""
+
     @property
     @abstractmethod
     def T(self) -> int:
@@ -52,6 +57,9 @@ class Dimensions(Protocol):
 
 
 class PartialDimensions(Dimensions):
+    """A Dimensions instance where some dimensions are unknown.
+    If code accesses an unknown dimension, a DimensionError is raised."""
+
     _T: int | None
     _N: int | None
     _C: int | None
@@ -100,6 +108,8 @@ class PartialDimensions(Dimensions):
 
 
 class CompleteDimensions(Dimensions):
+    """A Dimensions instance where all dimensions are known."""
+
     _T: int
     _N: int
     _C: int
