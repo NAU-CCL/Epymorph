@@ -14,6 +14,10 @@ class GeographyError(Exception):
     # US Census delineations.
 
 
+class DimensionError(Exception):
+    """Raised when epymorph needed dimensional information that was not provided."""
+
+
 class UnknownModel(Exception):
     """Exception for the inability to load a model as specified."""
 

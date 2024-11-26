@@ -313,14 +313,6 @@ class ModuleNamePattern:
 AttributeT = TypeVar("AttributeT", bound=AttributeType)
 """The data type of an attribute; maps to the numpy type of the attribute array."""
 
-# NOTE: I had AttributeT as covariant originally but that seems to cause pyright
-# some headache interpreting typed method overloads (which is practically the
-# whole point of making AttributeDef generic).
-# So for now this must be invariant, but I think that's okay.
-# Rather than being able to say things like:
-# `AttributeDef[type[int] | type[float]]`
-# you have to say `AttributeDef[type[int]] | AttributeDef[type[float]]`.
-
 
 @dataclass(frozen=True)
 class AttributeDef(Generic[AttributeT]):
@@ -897,6 +889,10 @@ class ReqTree(Generic[V]):
     """
 
     children: "tuple[ReqNode, ...]"
+
+    def __str__(self) -> str:
+        # Built-in stringify is just to_string() with default args.
+        return self.to_string()
 
     @abstractmethod
     def to_string(

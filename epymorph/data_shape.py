@@ -13,11 +13,8 @@ import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
+from epymorph.error import DimensionError
 from epymorph.util import Matcher
-
-
-class DimensionError(Exception):
-    """Raised when epymorph needed dimensional information that was not provided."""
 
 
 class Dimensions(Protocol):

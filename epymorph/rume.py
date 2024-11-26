@@ -490,8 +490,6 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         ps = None
         if override_params is not None and len(override_params) > 0:
             ps = {NamePattern.of(k): v for k, v in override_params.items()}
-        if rng is None:
-            rng = np.random.default_rng()
 
         reqs = self.requirements_tree(ps)
         return reqs.evaluate(self.dim, self.scope, rng)
