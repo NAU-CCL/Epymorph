@@ -540,9 +540,9 @@ class SimulationTickFunction(BaseSimulationFunction[ResultT]):
         return self.defer_context(other).evaluate(tick)
 
 
-########################
-# Parameter Resolution #
-########################
+##############
+# Parameters #
+##############
 
 
 ListValue = Sequence[Union[ScalarValue, StructValue, "ListValue"]]
@@ -555,61 +555,6 @@ ParamValue = Union[
     NDArray[ScalarDType | StructDType],
 ]
 """All acceptable input forms for parameter values."""
-
-
-# def evaluate_param(
-#     node: ReqNode[ParamValue],
-#     data: DataResolver,
-#     dim: SimDimensions | None,
-#     scope: GeoScope | None,
-#     rng: np.random.Generator | None,
-# ) -> AttributeArray:
-#     if isinstance(node.resolution, DefaultValue | ParameterValue):
-#         raw_value = node.value
-#     else:
-#         # MissingValue case should have already raised an error
-#         err = f"Unsupported resolution type ({type(node.resolution)})"
-#         raise AttributeException(err)
-
-#     if raw_value is None:
-#         # This shouldn't happen -- when a node's resolution is
-#         # Default/ParameterValue, it should always have a value.
-#         # So this error indicates a bug in the construction of the ReqTree.
-#         err = "Internal error: unable to resolve value for requirement."
-#         raise AttributeException(err)
-
-#     # Raw value conversions:
-#     if isinstance(raw_value, Expr):
-#         # Automatically convert sympy expressions into a ParamFunction instance.
-#         try:
-#             raw_value = ParamExpressionTimeAndNode(raw_value)
-#         except ValueError as e:
-#             raise AttributeException(str(e)) from None
-
-#     # Otherwise, evaluate and store the parameter based on its type.
-#     if isinstance(raw_value, SimulationFunction):
-#         # SimFunc: depth-first evaluation guarantees `resolved`
-#         # contains all of the data that we will need.
-#         namespace = node.name.to_namespace()
-#         sim_func = raw_value.with_context_internal(namespace, data, dim, scope, rng)
-#         return np.asarray(sim_func.evaluate())
-#     elif isinstance(raw_value, np.ndarray):
-#         # numpy array: make a copy so we don't risk unexpected mutations
-#         return raw_value.copy()
-#     elif isinstance(raw_value, int | float | str | tuple | Sequence):
-#         # scalar value or python collection: re-pack it as a numpy array
-#         return np.asarray(raw_value, dtype=None)
-#     elif (
-#         isinstance(raw_value, type)  #
-#         and issubclass(raw_value, SimulationFunction)
-#     ):
-#         # forgot to instantiate: a common error worth checking for
-#         err = "ParamFunction/Adrio was given as a class instead of an instance."
-#         raise AttributeException(err)
-#     else:
-#         # unsupported value!
-#         err = f"Parameter not a supported type (found: {type(raw_value)})"
-#         raise AttributeException(err)
 
 
 ###############

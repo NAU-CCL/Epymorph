@@ -58,10 +58,6 @@ from epymorph.util import (
 ########################
 
 
-STRATA_PLACEHOLDER = "(unspecified)"
-MODULE_PLACEHOLDER = "(unspecified)"
-
-
 def _validate_name_segments(*names: str) -> None:
     for n in names:
         if len(n) == 0:
@@ -106,7 +102,10 @@ class ModuleNamespace:
         return AbsoluteName(self.strata, self.module, attrib_id)
 
 
+STRATA_PLACEHOLDER = "(unspecified)"
+MODULE_PLACEHOLDER = "(unspecified)"
 NAMESPACE_PLACEHOLDER = ModuleNamespace(STRATA_PLACEHOLDER, MODULE_PLACEHOLDER)
+"""A namespace to use when we don't need to be specific about strata or module names."""
 
 
 @dataclass(frozen=True)
@@ -127,27 +126,6 @@ class AbsoluteName:
         if len(parts) != 3:
             raise ValueError("Invalid number of parts for absolute name.")
         return cls(*parts)
-
-    @classmethod
-    def parse_with_defaults(cls, name: str, strata: str, module: str) -> Self:
-        """
-        Parse a module name from a ::-delimited string, where strata and module
-        can be omitted to be filled from defaults.
-        """
-
-        def replace_star(string: str, default_value: str) -> str:
-            return default_value if string == "*" else string
-
-        parts = name.split("::")
-        match parts:
-            case [i]:
-                return cls(strata, module, i)
-            case [m, i]:
-                return cls(strata, replace_star(m, module), i)
-            case [s, m, i]:
-                return cls(replace_star(s, strata), replace_star(m, module), i)
-            case _:
-                raise ValueError("Invalid number of parts for absolute name.")
 
     def __str__(self) -> str:
         return f"{self.strata}::{self.module}::{self.id}"
@@ -357,6 +335,7 @@ class AttributeDef(Generic[AttributeT]):
                 "See documentation for appropriate type designations."
             )
             raise ValueError(msg) from e
+
         if (
             self.default_value is not None  #
             and not dtype_check(self.type, self.default_value)
@@ -366,30 +345,6 @@ class AttributeDef(Generic[AttributeT]):
                 f"('{self.name}')."
             )
             raise ValueError(msg)
-
-    @overload
-    def dtype(self: "AttributeDef[type[int]]") -> np.dtype[np.int64]: ...
-    @overload
-    def dtype(self: "AttributeDef[type[float]]") -> np.dtype[np.float64]: ...
-    @overload
-    def dtype(self: "AttributeDef[type[str]]") -> np.dtype[np.str_]: ...
-    @overload
-    def dtype(self: "AttributeDef") -> np.dtype: ...
-
-    # providing overloads for structured types is basically impossible
-    # without mapped types, so callers are on their own for that.
-    # Normally I'd make dtype a property, but pylance seems to have a hard time
-    # with overloads on properties.
-
-    def dtype(self) -> np.dtype:
-        """Return the dtype of this attribute in a numpy-equivalent type."""
-        return dtype_as_np(self.type)
-
-    def assert_can_adapt(self, dim: Dimensions, value: AttributeArray) -> None:
-        assert_can_adapt(self.type, self.shape, dim, value)
-
-    def adapt(self, dim: Dimensions, value: AttributeArray) -> AttributeArray:
-        return adapt(self.type, self.shape, dim, value)
 
 
 ############
@@ -415,11 +370,21 @@ class Database(Generic[T]):
     "b" is the module, and "c" is the attribute name.
     Values are permitted to be assigned with wildcards (specified by asterisks),
     so that key "*::b::c" matches queries for "a::b::c" as well as "z::b::c".
+
+    This is intended for tracking parameter values as given by the user,
+    in constrast to `DataResolver` which is for tracking fully-evaluated parameters.
     """
 
     _data: dict[NamePattern, T]
 
     def __init__(self, data: dict[NamePattern, T]):
+        """Constructor.
+
+        Parameters
+        ----------
+        data : dict[NamePattern, T]
+            the values in this database
+        """
         self._data = data
 
         # Check for key ambiguity:
@@ -438,7 +403,19 @@ class Database(Generic[T]):
             raise ValueError(msg)
 
     def query(self, key: str | AbsoluteName) -> Match[T] | None:
-        """Query this database for a key match."""
+        """Query this database for a key match.
+
+        Parameters
+        ----------
+        key : str | AbsoluteName
+            the name to find; if given as a string, we must be able to parse it as a
+            valid AbsoluteName
+
+        Returns
+        -------
+        Match[T] | None
+            the found value, if any, else None
+        """
         if not isinstance(key, AbsoluteName):
             key = AbsoluteName.parse(key)
         for pattern, value in self._data.items():
@@ -446,26 +423,8 @@ class Database(Generic[T]):
                 return Match(pattern, value)
         return None
 
-    def update(self, pattern: NamePattern, value: T) -> None:
-        """Update (or add) a database value."""
-        # If this is a new key, we need to check for conflicts:
-        if pattern not in self._data:
-            conflicts = [
-                existing_key
-                for existing_key, _ in self._data.items()
-                if existing_key != pattern and existing_key.match(pattern)
-            ]
-
-            if len(conflicts) > 0:
-                msg = (
-                    "Adding this key would make key resolution ambiguous; "
-                    f"conflicts:\n{', '.join(map(str, conflicts))}"
-                )
-                raise ValueError(msg)
-
-        self._data[pattern] = value
-
     def to_dict(self) -> dict[NamePattern, T]:
+        """Return a copy of this database's data."""
         return {**self._data}
 
 
@@ -478,9 +437,20 @@ class DatabaseWithFallback(Database[T]):
     _fallback: Database[T]
 
     def __init__(self, data: dict[NamePattern, T], fallback: Database[T]):
+        """Constructor.
+
+        Parameters
+        ----------
+        data : dict[NamePattern, T]
+            the highest priority values in the database
+        fallback : Database[T]
+            a database containing fallback values; if a match cannot be found
+            in `data`, this database will be checked
+        """
         super().__init__(data)
         self._fallback = fallback
 
+    @override
     def query(self, key: str | AbsoluteName) -> Match[T] | None:
         if not isinstance(key, AbsoluteName):
             key = AbsoluteName.parse(key)
@@ -519,9 +489,20 @@ class DatabaseWithStrataFallback(Database[T]):
     _children: dict[str, Database[T]]
 
     def __init__(self, data: dict[NamePattern, T], children: dict[str, Database[T]]):
+        """Constructor.
+
+        Parameters
+        ----------
+        data : dict[NamePattern, T]
+            the highest-priority values in the database
+        children : dict[str, Database[T]]
+            fallback databases by strata; if a match can't be found in `data`,
+            the database for the matching strata (if any) will be checked
+        """
         super().__init__(data)
         self._children = children
 
+    @override
     def query(self, key: str | AbsoluteName) -> Match[T] | None:
         if not isinstance(key, AbsoluteName):
             key = AbsoluteName.parse(key)
@@ -591,6 +572,34 @@ def adapt(
 
 
 class DataResolver:
+    """A sort of database for data attributes in the context of a simulation.
+    Data (typically parameter values) are provided by the user as a collection
+    of key-value pairs, with the values in several forms. These are evaluated
+    to turn them into our internal data representation which is most useful
+    for simulation execution (a numpy array, to be exact).
+
+    While the keys can be described using NamePatterns, when they are resolved
+    they are tracked by their full AbsoluteName to facilitate lookups by the
+    systems that use them. It is possible that different AbsoluteNames actually
+    resolve to the same value (which is done in a memory-efficient way).
+
+    Meanwhile the usage of values adds its own complexity. When a value is used
+    to fulfill the data requirements of a system, we want that value to be of
+    a known type and shape. If two requirements are fulfilled by the same value,
+    it it possible that the requirements will have different specifications for
+    type and shape. Rather than be over-strict, and enforce that this can never happen,
+    we allow this provided the given value can be successfully coerced to fit
+    both requirements independently. For example, a scalar integer value can be coerced
+    to both an N-shaped array of floats as well as a T-shaped array of integers.
+    DataResolver accomplishes this flexibility in an efficient way by storing
+    both the original values and all adapted values. If multiple requirements
+    specify the same type/shape adaptation for one value, the adaptation only needs
+    to happen once.
+
+    DataResolver is partially mutable -- new values can be added but values cannot
+    be overwritten or removed.
+    """
+
     Key = tuple[AbsoluteName, AttributeType, DataShape]
 
     _dim: Dimensions
@@ -602,14 +611,49 @@ class DataResolver:
         dim: Dimensions,
         values: dict[AbsoluteName, AttributeArray] | None = None,
     ):
+        """Constructs a resolver.
+
+        Parameters
+        ----------
+        dim: Dimensions
+            the critical dimensions of the context in which these values have
+            been evaluated; this is needed to perform shape adaptations
+        values : dict[AbsoluteName, AttributeArray], optional
+            a collection of values that should be in the resolver to begin with
+        """
         self._dim = dim
         self._raw_values = values or {}
         self._adapted_values = {}
 
     def has(self, name: AbsoluteName) -> bool:
+        """Tests whether or not a given name is in this resolver.
+
+        Parameters
+        ----------
+        name : AbsoluteName
+            the name to test
+
+        Returns
+        -------
+        bool
+            True if `name` is in this resolver"""
         return name in self._raw_values
 
     def add(self, name: AbsoluteName, value: AttributeArray) -> None:
+        """Adds a value to this resolver. You may not overwrite an existing name.
+
+        Parameters
+        ----------
+        name : AbsoluteName
+            the name for the value
+        value : AttributeArray
+            the value to add
+
+        Raises
+        ------
+        ValueError
+            if `name` is already in this resolver
+        """
         if name in self._raw_values:
             err = (
                 f"A value for '{name}' already exists in this resolver; "
@@ -619,6 +663,26 @@ class DataResolver:
         self._raw_values[name] = value
 
     def resolve(self, name: AbsoluteName, definition: AttributeDef) -> AttributeArray:
+        """Resolves a value known by `name` to fit the given requirement `definition`.
+
+        Parameters
+        ----------
+        name : AbsoluteName
+            the name of the value to resolve
+        definition : AttributeDef
+            the definition of the requirement being fulfilled (which is needed because
+            it contains the type and shape information)
+
+        Returns
+        -------
+        AttributeArray
+            the resolved value, adapted if necessary
+
+        Raises
+        ------
+        AttributeException
+            if the resolution fails
+        """
         key = (name, definition.type, definition.shape)
         if key in self._adapted_values:
             return self._adapted_values[key]
@@ -626,14 +690,9 @@ class DataResolver:
         if name not in self._raw_values:
             raise AttributeException(f"No value for name '{name}'")
         value = self._raw_values[name]
-        adapted_value = definition.adapt(self._dim, value)
+        adapted_value = adapt(definition.type, definition.shape, self._dim, value)
         self._adapted_values[key] = adapted_value
         return adapted_value
-
-    # def resolve_in(
-    #     self, namespace: ModuleNamespace, definition: DataDef
-    # ) -> AttributeArray:
-    #     return self.resolve(namespace.to_absolute(definition.name), definition)
 
     @overload
     def to_dict(
@@ -648,13 +707,28 @@ class DataResolver:
     def to_dict(
         self, *, simplify_names: bool = False
     ) -> dict[AbsoluteName, AttributeArray] | dict[str, AttributeArray]:
+        """Extract a dictionary from this DataResolver of all of its
+        (non-adapted) keys and values.
+
+        Parameters
+        ----------
+        simplify_names : bool, default=False
+            by default, names are returned as `AbsoluteName` objects; if True,
+            return stringified names as a convenience
+
+        Returns
+        -------
+        dict[AbsoluteName, AttributeArray] | dict[str, AttributeArray]
+            the dictionary of all values in this resolver, with names
+            either simplified or not according to `simplify_names`
+        """
         if simplify_names:
             return {str(k): v for k, v in self._raw_values.items()}
         return {**self._raw_values}
 
 
 class Requirement(NamedTuple):
-    """A RUME data requirement."""
+    """A RUME data requirement: a name and a definition."""
 
     name: AbsoluteName
     definition: AttributeDef
@@ -786,7 +860,7 @@ class ReqTree(Generic[V]):
         )
 
     def traverse(self) -> "Iterable[ReqNode]":
-        """Perform a depth-first traversal of this tree."""
+        """Perform a depth-first traversal of the nodes of this tree."""
         for x in self.children:
             yield from x.traverse()
         # NOTE: method overridden by ReqNode; yields children and then itself
@@ -805,6 +879,7 @@ class ReqTree(Generic[V]):
         scope: GeoScope | None,
         rng: np.random.Generator | None,
     ) -> DataResolver:
+        """Evaluate this tree. See: `evaluate_requirements()`."""
         return evaluate_requirements(self, dim, scope, rng)
 
     @staticmethod
@@ -812,6 +887,26 @@ class ReqTree(Generic[V]):
         requirements: Mapping[AbsoluteName, AttributeDef],
         params: Database[V],
     ) -> "ReqTree":
+        """Compute the requirements tree for the given set of requirements
+        and a database supplying values. Note that missing values do not
+        stop us from computing the tree -- these nodes will have `MissingValue`
+        as the resolution.
+
+        Parameters
+        ----------
+        requirements : Mapping[AbsoluteName, AttributeDef]
+            the top-level requirements of the tree
+        params : Database[V]
+            the database of values, where each value may be "recursive"
+            in the sense of having its own data requirements
+
+        Raises
+        ------
+        AttributeException
+            if the tree cannot be evaluated, for instance, due to containing
+            circular dependencies
+        """
+
         def recurse(
             name: AbsoluteName,
             definition: AttributeDef,
@@ -861,11 +956,19 @@ class ReqTree(Generic[V]):
 
 @dataclass(frozen=True)
 class ReqNode(ReqTree[V]):
+    """A non-root node of a requirements tree, identifying a requirement,
+    how (or if) it was resolved, and its value (if available)."""
+
     children: "tuple[ReqNode, ...]"
+    """The dependencies of this node (if any)."""
     name: AbsoluteName
+    """The name of this requirement."""
     definition: AttributeDef
+    """The definition of this requirement."""
     resolution: Resolution
+    """How this requirement was resolved (or not)."""
     value: V | None
+    """The value for this requirement if available."""
 
     @override
     def to_string(
@@ -930,6 +1033,37 @@ def evaluate_param(
     scope: GeoScope | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
+    """Evaluate a parameter, transforming acceptable input values (type: ParamValue) to
+    the form required internally by epymorph (AttributeArray). This handles different
+    types of parameters by single dispatch, so there should be a registered
+    implementation for every unique type. It is possible that the user is attempting to
+    evaluate parameters with a partial context (`dim`, `scope`, `rng`), and so one or
+    more of these may be missing. In that case, parameter evaluation is expected to
+    happen on a "best effort" basis -- if no parameter requires the missing scope
+    elements, parameter evaluation succeeds. Otherwise, this is expected to raise
+    an `AttributeException`.
+
+    Parameters
+    ----------
+    value : object
+        the value being evaluated
+    name : AbsoluteName
+        the full name given to the value in the simulation context
+    data : DataResolver
+        a DataResolver instance which should contain values for all of the data
+        requirements needed by this value (only `RecursiveValues` have requirements)
+    dim : SimDimensions, optional
+        the dimensional information of this simulation context, if available
+    scope : GeoScope, optional
+        the geographic scope information of this simulation context, if available
+    rng : np.random.Generator, optional
+        the random number generator to use, if available
+
+    Returns
+    -------
+    AttributeArray
+        the evaluated value
+    """
     err = f"Parameter not a supported type (found: {type(value)})"
     raise AttributeException(err)
 
@@ -983,6 +1117,29 @@ def evaluate_requirements(
     scope: GeoScope | None,
     rng: np.random.Generator | None,
 ) -> DataResolver:
+    """Evaluate all parameters in `req`, using the given simulation context
+    (`dim`, `scope`, `rng`). You may attempt to evaluate parameters with a partial
+    context, so one or more of these may be missing. In that case, parameter evaluation
+    is happens on a "best effort" basis -- if no parameter requires the missing scope
+    elements, parameter evaluation succeeds; otherwise raises an `AttributeException`.
+
+    Parameters
+    ----------
+    req : ReqTree
+        the requirements tree
+    dim : SimDimensions, optional
+        the dimensional information of this simulation context, if available
+    scope : GeoScope, optional
+        the geographic scope information of this simulation context, if available
+    rng : np.random.Generator, optional
+        the random number generator to use, if available
+
+    Returns
+    -------
+    DataResolver
+        the resolver containing all evaluated parameters
+    """
+
     # First make sure there are no missing values.
     missing = list(req.missing())
     if len(missing) > 0:
@@ -1021,7 +1178,8 @@ def evaluate_requirements(
             # Raise AttributeException if not.
             if dim is not None:
                 try:
-                    node.definition.assert_can_adapt(dim, value)
+                    d = node.definition
+                    assert_can_adapt(d.type, d.shape, dim, value)
                 except AttributeException as e:
                     err = (
                         f"Attribute '{node.name}' ({node.resolution}) is "
@@ -1051,21 +1209,3 @@ def evaluate_requirements(
         raise AttributeExceptionGroup("Errors found evaluating parameters.", errors)
 
     return resolved
-
-
-# __all__ = [
-#     "ModuleNamespace",
-#     "AbsoluteName",
-#     "ModuleName",
-#     "AttributeName",
-#     "NamePattern",
-#     "ModuleNamePattern",
-#     "Match",
-#     "Database",
-#     "DatabaseWithFallback",
-#     "DatabaseWithStrataFallback",
-#     "assert_can_adapt",
-#     "adapt",
-#     "AttributeDef",
-#     "DataResolver",
-# ]

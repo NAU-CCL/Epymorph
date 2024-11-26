@@ -119,6 +119,7 @@ class Explicit(Initializer):
 
     def __init__(self, initials: SimArray):
         self.initials = initials
+        # TODO: we should do validation of all Initializer parameters during init
 
     def evaluate(self) -> SimArray:
         return self.initials.copy()

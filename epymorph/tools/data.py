@@ -220,7 +220,9 @@ def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> Rum
     else:
         # Save to cache; evaluate parameters and store the resulting ndarrays
         with sim_messaging():
-            values = rume.evaluate_params().to_dict(simplify_names=True)
+            values = rume.evaluate_params(rng=np.random.default_rng()).to_dict(
+                simplify_names=True
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(path, **values)
         return rume

@@ -411,9 +411,24 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
     def requirements_tree(
         self,
-        override_params: Mapping[NamePattern, ParamValue] | None = None,
+        override_params: Mapping[NamePattern, ParamValue]
+        | Mapping[str, ParamValue]
+        | None = None,
     ) -> ReqTree:
-        """Compute the requirements tree for the given RUME."""
+        """Compute the requirements tree for the given RUME.
+
+        Parameters
+        ----------
+        override_params : Mapping[NamePattern, ParamValue], optional
+            when computing requirements, use these values to override
+            any that are provided by the RUME itself.  If keys are provided as strings,
+            they must be able to be parsed as `NamePattern`s.
+
+        Returns
+        -------
+        ReqTree
+            the requirements tree
+        """
         label_name, label_def = GEO_LABELS
         requirements = {
             **self.requirements,
@@ -441,19 +456,39 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         )
         # If override_params is not empty, wrap vals_db in another fallback layer.
         if override_params is not None and len(override_params) > 0:
-            params_db = DatabaseWithFallback({**override_params}, params_db)
+            params_db = DatabaseWithFallback(
+                {NamePattern.of(k): v for k, v in override_params.items()},
+                params_db,
+            )
 
         return ReqTree.of(requirements, params_db)
 
     def evaluate_params(
         self,
+        rng: np.random.Generator,
         override_params: Mapping[NamePattern, ParamValue]
         | Mapping[str, ParamValue]
         | None = None,
-        rng: np.random.Generator | None = None,
     ) -> DataResolver:
+        """
+        Evaluates the parameters of this RUME.
+
+        Parameters
+        ----------
+        rng : np.random.Generator, optional
+            The random number generator to use during evaluation
+        override_params : Mapping[NamePattern, ParamValue] | Mapping[str, ParamValue], optional
+            Use these values to override any that are provided by the RUME itself.
+            If keys are provided as strings, they must be able to be parsed as
+            `NamePattern`s.
+
+        Returns
+        -------
+        DataResolver
+            the resolver containing the evaluated values
+        """
         ps = None
-        if override_params is not None:
+        if override_params is not None and len(override_params) > 0:
             ps = {NamePattern.of(k): v for k, v in override_params.items()}
         if rng is None:
             rng = np.random.default_rng()
@@ -474,8 +509,26 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
     def initialize(self, data: DataResolver, rng: np.random.Generator) -> SimArray:
         """
-        Executes Initializers for a multi-strata simulation by running each strata's
-        Initializer and combining the results. Raises InitException on error.
+        Evaluates the Initializer(s) for this RUME.
+
+        Parameters
+        ----------
+        data : DataResolver
+            The resolved parameters for this RUME.
+        rng : np.random.Generator
+            The random number generator to use. Generally this should be the same
+            RNG used to evaluate parameters.
+
+        Returns
+        -------
+        SimArray
+            the initial values (a NxC array) for all geo scope nodes and
+            IPM compartments
+
+        Raises
+        ------
+        InitException
+            If initialization fails for any reason or produces invalid values.
         """
         try:
             return np.column_stack(

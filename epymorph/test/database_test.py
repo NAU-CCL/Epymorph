@@ -96,51 +96,6 @@ class AbsoluteNameTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AbsoluteName.parse("invalid_string")
 
-    def test_parse_with_defaults_one_part(self):
-        name = AbsoluteName.parse_with_defaults(
-            "id", "default_strata", "default_module"
-        )
-        self.assertEqual(name.strata, "default_strata")
-        self.assertEqual(name.module, "default_module")
-        self.assertEqual(name.id, "id")
-
-    def test_parse_with_defaults_two_parts(self):
-        name = AbsoluteName.parse_with_defaults(
-            "module::id", "default_strata", "default_module"
-        )
-        self.assertEqual(name.strata, "default_strata")
-        self.assertEqual(name.module, "module")
-        self.assertEqual(name.id, "id")
-
-    def test_parse_with_defaults_wildcards(self):
-        name = AbsoluteName.parse_with_defaults(
-            "gpm:alpha::*::id", "default_strata", "default_module"
-        )
-        self.assertEqual(name.strata, "gpm:alpha")
-        self.assertEqual(name.module, "default_module")
-        self.assertEqual(name.id, "id")
-
-        name = AbsoluteName.parse_with_defaults(
-            "*::mm::id", "default_strata", "default_module"
-        )
-        self.assertEqual(name.strata, "default_strata")
-        self.assertEqual(name.module, "mm")
-        self.assertEqual(name.id, "id")
-
-        name = AbsoluteName.parse_with_defaults(
-            "*::*::id", "default_strata", "default_module"
-        )
-        self.assertEqual(name.strata, "default_strata")
-        self.assertEqual(name.module, "default_module")
-        self.assertEqual(name.id, "id")
-
-        name = AbsoluteName.parse_with_defaults(
-            "*::id", "default_strata", "default_module"
-        )
-        self.assertEqual(name.strata, "default_strata")
-        self.assertEqual(name.module, "default_module")
-        self.assertEqual(name.id, "id")
-
     def test_str_representation(self):
         name = AbsoluteName("strata", "module", "id")
         self.assertEqual(str(name), "strata::module::id")
@@ -397,34 +352,6 @@ class DatabaseTest(_DatabaseTestCase):
         self.assert_match(3, db.query("gpm:1::mm::gamma"))
         self.assert_match(3, db.query("gpm:1::init::gamma"))
 
-    def test_update(self):
-        db = Database[int](
-            {
-                NamePattern("gpm:1", "ipm", "beta"): 1,
-                NamePattern("*", "ipm", "delta"): 2,
-                NamePattern("*", "*", "gamma"): 3,
-                NamePattern("gpm:2", "ipm", "beta"): 4,
-            }
-        )
-
-        self.assert_match(1, db.query(AbsoluteName("gpm:1", "ipm", "beta")))
-        self.assert_match(1, db.query("gpm:1::ipm::beta"))
-        self.assert_match(4, db.query("gpm:2::ipm::beta"))
-        self.assertIsNone(db.query("gpm:3::ipm::beta"))
-
-        db.update(NamePattern("gpm:1", "ipm", "beta"), 101)
-        db.update(NamePattern("*", "*", "gamma"), 303)
-
-        self.assert_match(101, db.query("gpm:1::ipm::beta"))
-        self.assert_match(303, db.query("gpm:1::ipm::gamma"))
-        self.assert_match(303, db.query("gpm:2::ipm::gamma"))
-        self.assert_match(4, db.query("gpm:2::ipm::beta"))
-        self.assertIsNone(db.query("gpm:3::ipm::beta"))
-
-        db.update(NamePattern("gpm:3", "*", "beta"), 505)
-
-        self.assert_match(505, db.query("gpm:3::ipm::beta"))
-
     def test_ambiguous_values(self):
         with self.assertRaises(ValueError) as e:
             Database[int](
@@ -434,20 +361,6 @@ class DatabaseTest(_DatabaseTestCase):
                     NamePattern("*", "ipm", "beta"): 3,
                 }
             )
-        self.assertIn("ambiguous", str(e.exception))
-
-    def test_update_ambiguous_values(self):
-        db = Database[int](
-            {
-                NamePattern("gpm:1", "ipm", "beta"): 1,
-                NamePattern("*", "ipm", "delta"): 2,
-                NamePattern("*", "*", "gamma"): 3,
-                NamePattern("gpm:2", "ipm", "beta"): 4,
-            }
-        )
-
-        with self.assertRaises(ValueError) as e:
-            db.update(NamePattern("gpm:1", "*", "beta"), 777)
         self.assertIn("ambiguous", str(e.exception))
 
 
