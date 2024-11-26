@@ -171,7 +171,9 @@ class IpmExecutor:
         Returns the location-specific events that happened this tick (an (N,E) array)
         and the new compartments resulting from these events (an (N,C) array).
         """
-        _, N, C, E = self._rume.dim.TNCE
+        N = self._rume.dim.nodes
+        C = self._rume.dim.compartments
+        E = self._rume.dim.events
         tick_events = np.zeros((N, E), dtype=SimDType)
         tick_compartments = np.zeros((N, C), dtype=SimDType)
 

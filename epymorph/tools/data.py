@@ -87,12 +87,13 @@ def munge(
     """
     _validate(output, geo, time, quantity)
 
-    T, N, _, _ = output.dim.TNCE
+    S = output.dim.ticks
+    N = output.dim.nodes
     taus = output.dim.tau_steps
 
     # Apply selections first so that aggregations operate on less data.
-    time_mask = np.repeat(mask(T, time.selection_ticks(taus)), N)
-    geo_mask = np.tile(geo.selection, T)
+    time_mask = np.repeat(mask(S, time.selection_ticks(taus)), N)
+    geo_mask = np.tile(geo.selection, S)
 
     # columns are: ["tick", "date", "node", *quantities]
     columns = np.concatenate(([True, True, True], quantity.selection))

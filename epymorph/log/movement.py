@@ -92,31 +92,41 @@ class _MovementDataBuilder(MovementData):
         return self.dim
 
     def requested_by(self, clause: str) -> NDArray[SimDType]:
-        T, N, _, _ = self._get_dim().TNCE
-        result = np.zeros((T, N, N), dtype=SimDType)
+        dim = self._get_dim()
+        S = dim.ticks
+        N = dim.nodes
+        result = np.zeros((S, N, N), dtype=SimDType)
         for name, tick, data in self.requested:
             if name == clause:
                 result[tick, :, :] = data
         return result
 
     def actual_by(self, clause: str) -> NDArray[SimDType]:
-        T, N, C, _ = self._get_dim().TNCE
-        result = np.zeros((T, N, N, C), dtype=SimDType)
+        dim = self._get_dim()
+        S = dim.ticks
+        N = dim.nodes
+        C = dim.compartments
+        result = np.zeros((S, N, N, C), dtype=SimDType)
         for name, tick, data in self.actual:
             if name == clause:
                 result[tick, :, :, :] = data
         return result
 
     def requested_all(self) -> NDArray[SimDType]:
-        T, N, _, _ = self._get_dim().TNCE
-        result = np.zeros((T, N, N), dtype=SimDType)
+        dim = self._get_dim()
+        S = dim.ticks
+        N = dim.nodes
+        result = np.zeros((S, N, N), dtype=SimDType)
         for _name, tick, data in self.requested:
             result[tick, :, :] += data
         return result
 
     def actual_all(self) -> NDArray[SimDType]:
-        T, N, C, _ = self._get_dim().TNCE
-        result = np.zeros((T, N, N, C), dtype=SimDType)
+        dim = self._get_dim()
+        S = dim.ticks
+        N = dim.nodes
+        C = dim.compartments
+        result = np.zeros((S, N, N, C), dtype=SimDType)
         for _name, tick, data in self.actual:
             result[tick, :, :, :] += data
         return result

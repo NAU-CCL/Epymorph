@@ -37,28 +37,31 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     initial: NDArray[SimDType]
     """
     Initial compartments by population and compartment.
-    Array of shape (N, C) where N is the number of populations,
+    Array of shape (N,C) where N is the number of populations,
     and C is the number of compartments
     """
 
     compartments: NDArray[SimDType] = field(init=False)
     """
     Compartment data by timestep, population, and compartment.
-    Array of shape (T,N,C) where T is the number of ticks in the simulation,
+    Array of shape (S,N,C) where S is the number of ticks in the simulation,
     N is the number of populations, and C is the number of compartments.
     """
 
     events: NDArray[SimDType] = field(init=False)
     """
     Event data by timestep, population, and event.
-    Array of shape (T,N,E) where T is the number of ticks in the simulation,
+    Array of shape (S,N,E) where S is the number of ticks in the simulation,
     N is the number of populations, and E is the number of events.
     """
 
     def __post_init__(self):
-        T, N, C, E = self.dim.TNCE
-        object.__setattr__(self, "compartments", np.zeros((T, N, C), dtype=SimDType))
-        object.__setattr__(self, "events", np.zeros((T, N, E), dtype=SimDType))
+        S = self.dim.ticks
+        N = self.dim.nodes
+        C = self.dim.compartments
+        E = self.dim.events
+        object.__setattr__(self, "compartments", np.zeros((S, N, C), dtype=SimDType))
+        object.__setattr__(self, "events", np.zeros((S, N, E), dtype=SimDType))
 
     @cached_property
     def compartment_labels(self) -> Sequence[str]:
@@ -72,12 +75,14 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     def events_per_day(self) -> NDArray[SimDType]:
         """
         Returns this output's `incidence` from a per-tick value to a per-day value.
-        Returns a shape (D,N,E) array, where D is the number of simulation days.
+        Returns a shape (T,N,E) array, where T is the number of simulation days.
         """
-        T, N, _, E = self.dim.TNCE
+        S = self.dim.ticks
+        N = self.dim.nodes
+        E = self.dim.events
         taus = self.dim.tau_steps
         return np.sum(
-            self.events.reshape((T // taus, taus, N, E)), axis=1, dtype=SimDType
+            self.events.reshape((S // taus, taus, N, E)), axis=1, dtype=SimDType
         )
 
     @property
@@ -86,7 +91,7 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
         Create a series with as many values as there are simulation ticks,
         but in the scale of fractional days. That is: the cumulative sum of
         the simulation's tau step lengths across the simulation duration.
-        Returns a shape (T,) array, where T is the number of simulation ticks.
+        Returns a shape (S,) array, where S is the number of simulation ticks.
         """
         return np.cumsum(
             np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64
@@ -95,9 +100,6 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     @property
     @override
     def dataframe(self) -> pd.DataFrame:
-        T, N, C, E = self.dim.TNCE
-        taus = self.dim.tau_steps
-
         # NOTE: reshape ordering is critical, because the index column creation
         # must assume ordering happens in a specific way.
         # C ordering causes the later index (node) to change fastest and the
@@ -108,7 +110,7 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
             (self.compartments, self.events),
             axis=2,
         ).reshape(
-            (-1, C + E),
+            (-1, self.dim.compartments + self.dim.events),
             order="C",
         )
 
@@ -119,9 +121,11 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
                 # A dataframe for the various indices
                 pd.DataFrame(
                     {
-                        "tick": np.arange(T).repeat(N),
-                        "date": self.time_frame.to_numpy().repeat(N * taus),
-                        "node": np.tile(self.scope.node_ids, T),
+                        "tick": np.arange(self.dim.ticks).repeat(self.dim.nodes),
+                        "date": self.time_frame.to_numpy().repeat(
+                            self.dim.nodes * self.dim.tau_steps
+                        ),
+                        "node": np.tile(self.scope.node_ids, self.dim.ticks),
                     }
                 ),
                 # A dataframe for the data columns

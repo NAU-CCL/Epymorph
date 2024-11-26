@@ -159,16 +159,6 @@ class SimDimensions(Dimensions):
     """How many disease compartments are in the IPM?"""
     events: int
     """How many transition events are in the IPM?"""
-    TNCE: tuple[int, int, int, int]
-    """
-    The critical dimensionalities of the simulation, for ease of unpacking.
-    T: number of ticks;
-    N: number of geo nodes;
-    C: number of IPM compartments;
-    E: number of IPM events (transitions)
-    """
-    # TODO: there is a possibly dangerous mismatch between T when called from TNCE and
-    # T when accessed as a property!
 
     @property
     def end_date(self) -> date:
@@ -217,7 +207,6 @@ class SimDimensions(Dimensions):
             nodes,
             compartments,
             events,
-            (ticks, nodes, compartments, events),
         )
 
 

@@ -495,15 +495,9 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         return reqs.evaluate(self.dim, self.scope, rng)
 
     def _strata_dim(self, gpm: Gpm) -> SimDimensions:
-        T, N, _, _ = self.dim.TNCE
         C = gpm.ipm.num_compartments
         E = gpm.ipm.num_events
-        return dataclasses.replace(
-            self.dim,
-            compartments=C,
-            events=E,
-            TNCE=(T, N, C, E),
-        )
+        return dataclasses.replace(self.dim, compartments=C, events=E)
 
     def initialize(self, data: DataResolver, rng: np.random.Generator) -> SimArray:
         """
