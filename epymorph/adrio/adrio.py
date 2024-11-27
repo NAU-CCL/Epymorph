@@ -167,10 +167,10 @@ class NodeId(Adrio[np.str_]):
 class Scale(Adrio[np.float64]):
     """Scales the result of another ADRIO by multiplying values by the given factor."""
 
-    _parent: Adrio[np.int64 | np.float64]
+    _parent: Adrio[np.float64]
     _factor: float
 
-    def __init__(self, parent: Adrio[np.int64 | np.float64], factor: float):
+    def __init__(self, parent: Adrio[np.float64], factor: float):
         """
         Initializes scaling with the ADRIO to be scaled and with the factor to multiply
         those resulting ADRIO values by.
