@@ -276,7 +276,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
     def test_eval_param_function_chained(self):
         class Gamma(ParamFunctionScalar):
-            BETA = AttributeDef("beta", float, Shapes.S)
+            BETA = AttributeDef("beta", float, Shapes.Scalar)
 
             requirements = [BETA]
 
@@ -286,8 +286,8 @@ class EvaluateParamsTest(unittest.TestCase):
                 return float(beta) / 4.0
 
         class Xi(ParamFunctionNumpy):
-            ALPHA = AttributeDef("alpha", float, Shapes.S)
-            GAMMA = AttributeDef("gamma", float, Shapes.S)
+            ALPHA = AttributeDef("alpha", float, Shapes.Scalar)
+            GAMMA = AttributeDef("gamma", float, Shapes.Scalar)
 
             requirements = [ALPHA, GAMMA]
 
@@ -315,7 +315,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
     def test_eval_param_function_circular(self):
         class Gamma(ParamFunctionNumpy):
-            XI = AttributeDef("xi", float, Shapes.S)
+            XI = AttributeDef("xi", float, Shapes.Scalar)
 
             requirements = [XI]
 
@@ -323,7 +323,7 @@ class EvaluateParamsTest(unittest.TestCase):
                 return np.array(0)
 
         class Xi(ParamFunctionNumpy):
-            GAMMA = AttributeDef("gamma", float, Shapes.S)
+            GAMMA = AttributeDef("gamma", float, Shapes.Scalar)
 
             requirements = [GAMMA]
 

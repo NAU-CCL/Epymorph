@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring
 import unittest
 from functools import reduce
 from typing import Any, TypeGuard, TypeVar
@@ -33,7 +32,7 @@ class DataShape(unittest.TestCase):
         return ttt, fff
 
     def test_scalar(self):
-        ttt, fff = self.as_bool_asserts(lambda x: Shapes.S.matches(_dim, x))
+        ttt, fff = self.as_bool_asserts(lambda x: Shapes.Scalar.matches(_dim, x))
 
         ttt(np.asarray(1))
         ttt(np.asarray(3.14159))
@@ -124,7 +123,7 @@ class DataShape(unittest.TestCase):
 
     def test_adapt_scalar(self):
         self.adapt_test_framework(
-            Shapes.S,
+            Shapes.Scalar,
             [
                 # Test S
                 (np.asarray(42.0), np.asarray(42.0)),
@@ -279,7 +278,7 @@ class DataShape(unittest.TestCase):
 class TestParseShape(unittest.TestCase):
     def test_successful(self):
         eq = self.assertEqual
-        eq(parse_shape("S"), Shapes.S)
+        eq(parse_shape("Scalar"), Shapes.Scalar)
         eq(parse_shape("T"), Shapes.T)
         eq(parse_shape("N"), Shapes.N)
         eq(parse_shape("NxN"), Shapes.NxN)

@@ -477,13 +477,13 @@ class Shapes:
     """Static instances for all available shapes."""
 
     # Data can be in any of these shapes, where:
-    # - S is a single scalar value
+    # - Scalar is a single scalar value
     # - T is the number of days
     # - N is the number of nodes
     # - C is the number of IPM compartments
     # - A is any length (arbitrary; this dimension is effectively unchecked)
 
-    S = Scalar()
+    Scalar = Scalar()
     T = Time()
     N = Node()
     NxC = NodeAndCompartment()
@@ -496,8 +496,8 @@ class Shapes:
 def parse_shape(shape: str) -> DataShape:
     """Attempt to parse an AttributeShape from a string."""
     match shape:
-        case "S":
-            return Shapes.S
+        case "Scalar":
+            return Shapes.Scalar
         case "T":
             return Shapes.T
         case "N":

@@ -828,7 +828,7 @@ class ParamEvalTest(unittest.TestCase):
 
         class G(ParamFunction):
             # G wants a scalar alpha
-            requirements = (AD("alpha", float, Shapes.S),)
+            requirements = (AD("alpha", float, Shapes.Scalar),)
 
             def evaluate(self):
                 alpha = self.data("alpha")

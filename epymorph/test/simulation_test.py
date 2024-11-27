@@ -57,7 +57,7 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_basic_usage(self):
         class Foo(SimulationFunction[NDArray[np.int64]]):
-            requirements = [AttributeDef("bar", int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.Scalar)]
 
             baz: int
 
@@ -82,7 +82,7 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_immutable_requirements(self):
         class Foo(SimulationFunction[NDArray[np.int64]]):
-            requirements = [AttributeDef("bar", int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.Scalar)]
 
             def evaluate(self):
                 return 7 * self.data("bar")
@@ -94,7 +94,7 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_undefined_requirement(self):
         class Foo(SimulationFunction[NDArray[np.int64]]):
-            requirements = [AttributeDef("bar", int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.Scalar)]
 
             def evaluate(self):
                 return 7 * self.data("quux")
@@ -128,8 +128,8 @@ class TestSimulationFunction(unittest.TestCase):
 
             class Foo3(SimulationFunction[NDArray[np.int64]]):
                 requirements = [
-                    AttributeDef("foo", int, Shapes.S),
-                    AttributeDef("foo", int, Shapes.S),
+                    AttributeDef("foo", int, Shapes.Scalar),
+                    AttributeDef("foo", int, Shapes.Scalar),
                 ]
 
                 def evaluate(self):
@@ -139,7 +139,7 @@ class TestSimulationFunction(unittest.TestCase):
 
     def test_cached_properties(self):
         class Foo(SimulationFunction[NDArray[np.int64]]):
-            requirements = [AttributeDef("bar", int, Shapes.S)]
+            requirements = [AttributeDef("bar", int, Shapes.Scalar)]
 
             @cached_property
             def baz(self):
