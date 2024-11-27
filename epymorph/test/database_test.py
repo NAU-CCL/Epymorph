@@ -1,9 +1,16 @@
-# pylint: disable=missing-docstring
+import math
 import unittest
-from typing import TypeVar
+from functools import wraps
+from typing import Callable, ParamSpec, TypeVar
+from unittest.mock import MagicMock
 
+import numpy as np
+from numpy.typing import NDArray
+
+from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.database import (
     AbsoluteName,
+    AttributeDef,
     AttributeName,
     Database,
     DatabaseWithFallback,
@@ -13,7 +20,10 @@ from epymorph.database import (
     ModuleNamePattern,
     ModuleNamespace,
     NamePattern,
+    ReqTree,
 )
+from epymorph.error import AttributeException, AttributeExceptionGroup
+from epymorph.params import ParamFunction, ParamFunctionTimeAndNode
 
 
 class ModuleNamespaceTest(unittest.TestCase):
@@ -444,3 +454,496 @@ class DatabaseWithStrataFallbackTest(_DatabaseTestCase):
         self.assert_match(55, db.query("gpm:3::ipm::delta"))
 
         self.assertIsNone(db.query("gpm1::init::population"))
+
+
+AD = AttributeDef
+AN = AbsoluteName.parse
+NP = NamePattern.parse
+
+ParamT = ParamSpec("ParamT")
+ReturnT = TypeVar("ReturnT")
+FunctionType = Callable[ParamT, ReturnT]
+
+
+def count_calls(f):
+    # NOTE: this is a count per class-method, not instance-method
+    # That's preferable here because epymorph clones the instances anyway
+    # so the func instance we pass in isn't exactly the one that's used.
+    n = 0
+
+    @wraps(f)
+    def g(*args, **kwargs):
+        nonlocal n
+        n += 1
+        return f(*args, **kwargs)
+
+    def get_calls():
+        nonlocal n
+        return n
+
+    setattr(g, "__calls__", get_calls)
+    return g
+
+
+def calls(f):
+    if (calls := getattr(f, "__calls__", None)) is not None:
+        return calls()
+    raise ValueError("This function was not wrapped with @count_calls")
+
+
+class ParamEvalTest(unittest.TestCase):
+    dim = MagicMock(spec=SimDimensions, T=3, days=3, N=2, nodes=2)
+
+    @property
+    def rng(self):
+        return np.random.default_rng(1)
+
+    def _to_txn(self, value: float) -> NDArray[np.float64]:
+        return np.broadcast_to(value, shape=(self.dim.days, self.dim.nodes))
+
+    def test_eval_01(self):
+        # Test that a function can be used for multiple strata
+        # but will only be evaluated once if all of its dependencies
+        # do not vary by strata.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+
+            @count_calls
+            def evaluate(self):
+                return 2.0 * self.data("gamma")
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    NP("*::ipm::gamma"): 0.7,
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+
+        # F evaluated once; beta is 1.4 for both strata
+        self.assertEqual(1, calls(F.evaluate))
+        exp = self._to_txn(1.4)
+        np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
+        np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
+
+    def test_eval_02(self):
+        # Test that a function declared "randomized" will be evaluated
+        # every time it's referenced, even if it otherwise wouldn't need to be.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+            randomized = True
+
+            @count_calls
+            def evaluate(self):
+                return 2.0 * self.data("gamma")
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    NP("*::ipm::gamma"): 0.7,
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+
+        # F evaluated twice, even though it produces the same value each time
+        # beta is 1.4 for both strata
+        self.assertEqual(2, calls(F.evaluate))
+        exp = self._to_txn(1.4)
+        np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
+        np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
+
+    def test_eval_03(self):
+        # Test a single function resolving to different values
+        # due to dependencies that differ between strata.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+
+            @count_calls
+            def evaluate(self):
+                return 2.0 * self.data("gamma")
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    NP("gpm:a::ipm::gamma"): 0.3,
+                    NP("gpm:b::ipm::gamma"): 0.7,
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+
+        # F evaluated twice
+        # beta is 0.6 for strata a
+        # and 1.4 for strata b
+        self.assertEqual(2, calls(F.evaluate))
+        np.testing.assert_array_equal(self._to_txn(0.6), values["gpm:a::ipm::beta"])
+        np.testing.assert_array_equal(self._to_txn(1.4), values["gpm:b::ipm::beta"])
+
+    def test_eval_04(self):
+        # Test a single shared random value when a single instance is used.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+
+            @count_calls
+            def evaluate(self):
+                return 2.0 * self.data("gamma") * self.rng.random()
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    NP("*::ipm::gamma"): 0.7,
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+        # F evaluated once
+        # beta is random, but the same value is shared between strata
+        self.assertEqual(1, calls(F.evaluate))
+        np.testing.assert_array_equal(
+            values["gpm:a::ipm::beta"],
+            values["gpm:b::ipm::beta"],
+        )
+
+    def test_eval_05(self):
+        # Test unique random values by virtue of providing different instances.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+
+            @count_calls
+            def evaluate(self):
+                return 2.0 * self.data("gamma") * self.rng.random()
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("gpm:a::ipm::beta"): F(),
+                    NP("gpm:b::ipm::beta"): F(),
+                    NP("*::ipm::gamma"): 0.7,
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+        # Fs evaluated once each
+        # beta is two unique random numbers
+        self.assertEqual(2, calls(F.evaluate))
+        self.assertFalse(
+            np.array_equal(
+                values["gpm:a::ipm::beta"],
+                values["gpm:b::ipm::beta"],
+            )
+        )
+
+    def test_eval_06(self):
+        # Test input broadcasting and TxN functions.
+        class Beta(ParamFunctionTimeAndNode):
+            GAMMA = AD("gamma", float, Shapes.TxN)
+
+            requirements = [GAMMA]
+
+            r_0: float
+
+            def __init__(self, r_0: float):
+                self.r_0 = r_0
+
+            def evaluate1(self, day: int, node_index: int) -> float:
+                T = self.dim.days
+                gamma = self.data(self.GAMMA)[day, node_index]
+                magnitude = self.r_0 * gamma
+                return (
+                    0.1 * magnitude * math.sin(8 * math.pi * day / T)
+                    + (0.85 * magnitude)
+                    + (0.05 * magnitude * node_index)
+                )
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:a::ipm::gamma"): AD("gamma", float, Shapes.TxN),
+                AN("gpm:b::ipm::gamma"): AD("gamma", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("beta"): Beta(4),
+                    NP("gamma"): 0.1,
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+        self.assertEqual(values["gpm:a::ipm::gamma"], 0.1)
+        self.assertEqual(values["gpm:b::ipm::gamma"], 0.1)
+        self.assertEqual(
+            values["gpm:a::ipm::beta"].shape, (self.dim.days, self.dim.nodes)
+        )
+        self.assertEqual(
+            values["gpm:b::ipm::beta"].shape, (self.dim.days, self.dim.nodes)
+        )
+
+    def test_eval_07(self):
+        # Test when a dependent function is not randomized,
+        # it and its parent will only be evaluated once.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+
+            @count_calls
+            def evaluate(self):
+                return 2.0 * self.data("gamma")
+
+        class G(ParamFunction):
+            randomized = False
+
+            @count_calls
+            def evaluate(self):
+                return np.asarray(3.0) * self.rng.random()
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    NP("*::ipm::gamma"): G(),
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+
+        # F and G(randomized=False) evaluated once
+        # same random values for both strata
+        self.assertEqual(1, calls(F.evaluate))
+        self.assertEqual(1, calls(G.evaluate))
+        np.testing.assert_array_equal(
+            values["gpm:a::ipm::beta"],
+            values["gpm:b::ipm::beta"],
+        )
+        np.testing.assert_array_equal(
+            values["gpm:a::ipm::gamma"],
+            values["gpm:b::ipm::gamma"],
+        )
+
+    def test_eval_08(self):
+        # Test when a dependent function is randomized,
+        # it and its parent will be evaluated every time.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+
+            @count_calls
+            def evaluate(self):
+                return 2.0 * self.data("gamma")
+
+        class G(ParamFunction):
+            randomized = True
+
+            @count_calls
+            def evaluate(self):
+                return np.asarray(3.0) * self.rng.random()
+
+        reqs = ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    NP("*::ipm::gamma"): G(),
+                }
+            ),
+        )
+
+        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+
+        # F and G(randomized=True) evaluated twice
+        # different random values for the strata
+        self.assertEqual(2, calls(F.evaluate))
+        self.assertEqual(2, calls(G.evaluate))
+        self.assertFalse(
+            np.array_equal(
+                values["gpm:a::ipm::beta"],
+                values["gpm:b::ipm::beta"],
+            )
+        )
+        self.assertFalse(
+            np.array_equal(
+                values["gpm:a::ipm::gamma"],
+                values["gpm:b::ipm::gamma"],
+            )
+        )
+
+    def test_eval_09(self):
+        # Test that different AttributeDefs can specify different shapes
+        # and resolve correctly, even when they use the same value,
+        # as long as that value can successfully broadcast to both shapes.
+        assert_equal = self.assertEqual
+
+        class F(ParamFunction):
+            # F wants a TxN alpha
+            requirements = (AD("alpha", float, Shapes.TxN),)
+
+            def evaluate(self):
+                # NOTE: it would also be possible to pull T and N from
+                # the shape of alpha, however this "hides" the dependency
+                # on the `dim` context; if dim is not given alpha will not
+                # be shape-adapted (it remains scalar), which causes this logic to fail.
+                t = self.dim.days
+                n = self.dim.nodes
+                alpha = self.data("alpha")
+                assert_equal((t, n), alpha.shape)
+                return np.arange(t * n).reshape((t, n)) * alpha
+
+        class G(ParamFunction):
+            # G wants a scalar alpha
+            requirements = (AD("alpha", float, Shapes.S),)
+
+            def evaluate(self):
+                alpha = self.data("alpha")
+                assert_equal((), alpha.shape)
+                return 3.0 * alpha
+
+        req_a = AN("gpm:a::ipm::beta"), AD("beta", float, Shapes.TxN)
+        req_b = AN("gpm:b::ipm::beta"), AD("beta", float, Shapes.TxN)
+
+        reqs = ReqTree.of(
+            requirements={
+                req_a[0]: req_a[1],
+                req_b[0]: req_b[1],
+            },
+            params=Database(
+                {
+                    NP("gpm:a::ipm::beta"): F(),
+                    NP("gpm:b::ipm::beta"): G(),
+                    NP("*::*::alpha"): 0.5,
+                }
+            ),
+        )
+
+        data = reqs.evaluate(self.dim, None, None)
+
+        # alpha should be interpreted differently for F and G:
+        beta_a = data.resolve(req_a[0], req_a[1])
+        beta_b = data.resolve(req_b[0], req_b[1])
+
+        # (gpm:a) F should get a TxN view of alpha,
+        # allowing it to produce a varying result
+        self.assertEqual((self.dim.days, self.dim.nodes), beta_a.shape)
+        self.assertTrue(np.unique(beta_a).size == self.dim.days * self.dim.nodes)
+
+        # (gpm:b) G should get a scalar view of alpha,
+        # producing a constant result over TxN
+        self.assertEqual((self.dim.days, self.dim.nodes), beta_b.shape)
+        self.assertTrue(np.all(beta_b == beta_b[0]))
+
+    def test_eval_err_01(self):
+        # Tests what happens when default values wind up conflicting
+        # due to different AttributeDefs managing to resolve to the same
+        # AbsoluteName. And test that this can be resolved by providing
+        # explicit values.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN, default_value=0.9),)
+
+            def evaluate(self):
+                return 2.0 * self.data("gamma")
+
+        requirements = {
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:a::ipm::gamma"): AD("gamma", float, Shapes.TxN, default_value=0.3),
+            AN("gpm:b::ipm::gamma"): AD("gamma", float, Shapes.TxN, default_value=0.7),
+        }
+
+        # detect conflicting defaults!
+        with self.assertRaises(AttributeExceptionGroup) as ctx:
+            ReqTree.of(
+                requirements=requirements,
+                params=Database({NP("*::ipm::beta"): F()}),
+            ).evaluate(self.dim, None, None)
+
+        err = "\n".join([str(e).lower() for e in ctx.exception.exceptions])
+        self.assertIn(
+            "conflicting resolutions for requirement 'gpm:a::ipm::gamma'",
+            err,
+        )
+        self.assertIn(
+            "conflicting resolutions for requirement 'gpm:b::ipm::gamma'",
+            err,
+        )
+
+        # Now test resolution:
+        ReqTree.of(
+            requirements=requirements,
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    # Providing these two values prevents the error.
+                    NP("gpm:a::ipm::gamma"): 0.4,
+                    NP("gpm:b::ipm::gamma"): 0.5,
+                }
+            ),
+        ).evaluate(self.dim, None, None)
+
+    def test_eval_err_02(self):
+        # Test circular dependency detection.
+        class F(ParamFunction):
+            requirements = (AD("gamma", float, Shapes.TxN),)
+
+            def evaluate(self):
+                return 2.0 * self.data("gamma")
+
+        class G(ParamFunction):
+            requirements = (AD("beta", float, Shapes.TxN),)
+
+            def evaluate(self):
+                return 3.0 * self.data("beta")
+
+        with self.assertRaises(AttributeException) as ctx:
+            ReqTree.of(
+                requirements={
+                    AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                    AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+                },
+                params=Database(
+                    {
+                        NP("*::ipm::beta"): F(),
+                        NP("*::ipm::gamma"): G(),
+                    }
+                ),
+            ).evaluate(self.dim, None, None)
+
+        err = str(ctx.exception).lower()
+        self.assertIn("circular dependency", err)
+        self.assertIn("gpm:a::ipm::beta", err)
