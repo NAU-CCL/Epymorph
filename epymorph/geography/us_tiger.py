@@ -401,7 +401,6 @@ def _get_counties_config(year: TigerYear) -> _DataConfig:
                 "CNTYIDFP00",
                 "NAME00",
                 "ALAND00",
-                "AWATER00",
                 "INTPTLAT00",
                 "INTPTLON00",
             ]
