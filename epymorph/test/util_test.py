@@ -96,12 +96,12 @@ class TestUtil(unittest.TestCase):
 
         # Doesn't raise...
         dim1 = Dimensions.of(T=3, N=4)
-        util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim1, True))
+        util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim1))
 
         # Does raise...
         with self.assertRaises(util.NumpyTypeError):
             dim2 = Dimensions.of(T=4, N=3)
-            util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim2, True))
+            util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim2))
         with self.assertRaises(util.NumpyTypeError):
             util.check_ndarray(arr, dtype=m.dtype(np.str_))
 

@@ -430,7 +430,7 @@ class NodeAndArbitrary(DataShape):
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
-        return (dim.N, dim.N)
+        return (dim.N, -1)
 
     @override
     def matches(self, dim: Dimensions, value: NDArray) -> bool:
@@ -523,7 +523,7 @@ class DataShapeMatcher(Matcher[NDArray]):
     _dim: Dimensions
     _exact: bool
 
-    def __init__(self, shape: DataShape, dim: Dimensions, exact: bool = False):
+    def __init__(self, shape: DataShape, dim: Dimensions, *, exact: bool = False):
         self._shape = shape
         self._dim = dim
         self._exact = exact
