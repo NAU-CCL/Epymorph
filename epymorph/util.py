@@ -264,6 +264,10 @@ def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
     return {k: f(v) for k, v in xs.items()}
 
 
+def dict_map(m: Mapping[A, B], xs: Iterable[A]) -> list[B]:
+    return [m[x] for x in xs]
+
+
 class MemoDict(dict[K, V]):
     """
     A dict implementation which will call a factory function when the user attempts to
