@@ -170,7 +170,11 @@ def remap_taus(
 
     def clause_remap_tau(clause: MovementClause, strata: str) -> MovementClause:
         leave_step = start_mapping[strata][clause.leaves.step]
-        return_step = stop_mapping[strata][clause.returns.step]
+        return_step = (
+            stop_mapping[strata][clause.returns.step]
+            if clause.returns.step >= 0
+            else -1  # "never"
+        )
 
         clone = deepcopy(clause)
         clone.leaves = TickIndex(leave_step)
