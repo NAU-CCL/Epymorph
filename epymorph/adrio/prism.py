@@ -201,7 +201,7 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
         ----------
         date_range : TimeFrame
             The range of dates to fetch precipitation data for.
-        error : {'raise', 'warn', 'ignore'}, optional
+        errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
             " No resulting matrices will be shown (default).
@@ -212,7 +212,7 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
         """
 
         self.date_range = _validate_dates(date_range)
-        self.error = errors
+        self.errors = errors
 
     def _validate_scope(self) -> GeoScope:
         """
@@ -248,9 +248,9 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
         specification.
         """
         scope = self.scope
-        error = self.error
+        errors = self.errors
         # check for any invalid values, handle error accordingly
-        if error != "ignore":
+        if errors != "ignore":
             (indices,) = np.nonzero(np.any(raster_data == -9999, axis=0))
             if len(indices) > 0:
                 # get the points where there are sentinel values
@@ -281,16 +281,16 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
                     "\n  - By default, PRISM ADRIOs will default to raise an error when"
                     " a centroid does not return valid data. "
                     "\n  - This setting can be changed by "
-                    "setting the error parameter at the end of the PRISM ADRIO calls to"
-                    " any of the following: "
-                    "\n\t- `error='raise'`"
-                    "\n\t- `error='warn'`"
-                    "\n\t- `error='ignore'`"
+                    "setting the errors parameter at the end of the PRISM ADRIO calls "
+                    "to any of the following: "
+                    "\n\t- `errors='raise'`"
+                    "\n\t- `errors='warn'`"
+                    "\n\t- `errors='ignore'`"
                 )
 
-                if error == "raise":
+                if errors == "raise":
                     raise DataResourceException(error_msg)
-                elif error == "warn":
+                elif errors == "warn":
                     warn(error_msg)
 
         return raster_data
@@ -329,7 +329,7 @@ class Precipitation(_PRISMAdrio):
         ----------
         date_range : TimeFrame
             The range of dates to fetch precipitation data for.
-        error : {'raise', 'warn', 'ignore'}, optional
+        errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
             " No resulting matrices will be shown (default).
@@ -380,7 +380,7 @@ class DewPoint(_PRISMAdrio):
         ----------
         date_range : TimeFrame
             The range of dates to fetch dew point temperature data for.
-        error : {'raise', 'warn', 'ignore'}, optional
+        errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
             " No resulting matrices will be shown (default).
@@ -451,7 +451,7 @@ class Temperature(_PRISMAdrio):
         temp_var : TemperatureType
             The measure of the temperature for a single date (options: 'Minimum',
             'Mean', 'Maximum').
-        error : {'raise', 'warn', 'ignore'}, optional
+        errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
             " No resulting matrices will be shown (default).
@@ -521,7 +521,7 @@ class VaporPressureDeficit(_PRISMAdrio):
         vpd_var : VPDType
             The measure of the vapor pressure deficit for a single date
             (options: 'Minimum', 'Maximum').
-        error : {'raise', 'warn', 'ignore'}, optional
+        errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
             " No resulting matrices will be shown (default).
