@@ -10,7 +10,6 @@ import numpy as np
 import rasterio.io as rio
 from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
-from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
@@ -216,6 +215,10 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
         self.error = errors
 
     def _validate_scope(self) -> GeoScope:
+        """
+        When a scope is a CensusScope, check if there is a given location in Hawaii,
+        Alaska, or Puerto Rico.
+        """
         scope = self.scope
         if isinstance(scope, CensusScope):
             state_fips = list(STATE.truncate_unique(scope.node_ids))
@@ -230,7 +233,7 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
         return scope
 
     @abstractmethod
-    def retrieve_data(self) -> NDArray[np.float64]:
+    def retrieve_prism(self) -> NDArray[np.float64]:
         """
         Allow for the PRISM ADRIOs to retrieve their raster data for their climate
         attribute type.
@@ -239,6 +242,11 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
     def _validate_data(
         self, raster_data: NDArray, centroids: NDArray
     ) -> NDArray[np.float64]:
+        """
+        Check the fetched data for sentinel values. By default, raise an error on the
+        instance of an invalid value. Otherwise, refer to the user parameter
+        specification.
+        """
         scope = self.scope
         error = self.error
         # check for any invalid values, handle error accordingly
@@ -256,11 +264,12 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
 
                 node_table = "\n".join(table_title)
 
+                __cls = self.__class__.__name__
+
                 error_msg = (
                     "\nOne or more of the centroids provided are outside of the "
-                    # add the prism class
-                    "geographic bounds defined by PRISM. PRISM !! has not returned "
-                    "data for the following nodes and centroids:"
+                    f"geographic bounds defined by PRISM. PRISM {__cls} has not "
+                    "returned data for the following nodes and centroids:"
                     f"\n{node_table}"
                     "\n\nThis issue may occur if a centroid is placed in a body of "
                     "water or is located outside of the 48 contiguous United States. "
@@ -288,7 +297,7 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
 
     def evaluate_adrio(self) -> NDArray[np.float64]:
         self._validate_scope()
-        raster_vals = self.retrieve_data()
+        raster_vals = self.retrieve_prism()
         raster_vals = self._validate_data(raster_vals, self.data("centroid"))
         return raster_vals
 
@@ -336,8 +345,7 @@ class Precipitation(_PRISMAdrio):
         est = _estimate_prism(self, file_size, self.date_range, "ppt")
         return est
 
-    @override
-    def retrieve_data(self) -> NDArray[np.float64]:
+    def retrieve_prism(self) -> NDArray[np.float64]:
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             "ppt", self.date_range, centroids, self.progress
@@ -393,8 +401,7 @@ class DewPoint(_PRISMAdrio):
             file_size = 1_400_000  # average to 1.4MB 2020 and before
         return _estimate_prism(self, file_size, self.date_range, "tdmean")
 
-    @override
-    def retrieve_data(self) -> NDArray[np.float64]:
+    def retrieve_prism(self) -> NDArray[np.float64]:
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
             "tdmean", self.date_range, centroids, self.progress
@@ -467,8 +474,7 @@ class Temperature(_PRISMAdrio):
             file_size = 1_400_000  # average to 1.4MB 2020 and before
         return _estimate_prism(self, file_size, self.date_range, temp_var)
 
-    @override
-    def retrieve_data(self) -> NDArray[np.float64]:
+    def retrieve_prism(self) -> NDArray[np.float64]:
         temp_var = self.temp_variables[self.temp_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
@@ -537,8 +543,7 @@ class VaporPressureDeficit(_PRISMAdrio):
             file_size = 1_300_000  # average to 1.3MB 2020 and before
         return _estimate_prism(self, file_size, self.date_range, self.vpd_var)
 
-    @override
-    def retrieve_data(self) -> NDArray[np.float64]:
+    def retrieve_prism(self) -> NDArray[np.float64]:
         vpd_var = self.vpd_variables[self.vpd_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
