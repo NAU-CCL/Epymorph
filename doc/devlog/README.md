@@ -66,13 +66,14 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-07-16.ipynb | Meaghan | | Testing the space and runtime for downloading and interpreting PRISM data |
 | 2024-07-18.ipynb | Tyler | | A simple demo of ADRIOs "version 2". |
 | 2024-08-13.ipynb | Tyler | | Demo @adrio_cache. |
-| 2024-08-26-prism-adrio-demo.ipynb | Meaghan | | Demo and usage manual for PRISM ADRIO. |
-| 2024-08-28.ipynb | Trevor | | Demo of numpy ADRIOs. |
+| 2024-08-26-prism-adrio-demo.ipynb | Meaghan | ✓ | Demo and usage manual for PRISM ADRIO. |
+| 2024-08-28.ipynb | Trevor | ✓ | Demo of numpy ADRIOs. |
 | 2024-08-30.ipynb | Tyler | | Testing non-returner movement support. |
 | 2024-09-24.ipynb | Tyler | | Demonstrating ADRIO with simulated download activity. |
-| 2024-09-25.ipynb | Meaghan | | Demo of humidity ADRIO. |
+| 2024-09-25.ipynb | Meaghan | ✓ | Demo of humidity ADRIO. |
 | 2024-10-09.ipynb | Tyler | | Comparing methods for group-and-aggregate on time-series data. |
 | 2024-10-11.ipynb | Tyler | | Comparing methods for group-and-aggregate on geo-series data. |
+| 2024-12-03-v0.7.ipynb | Tyler | | Comparing v0.6 to v0.7 via example. (See others in this series.) |
 
 ## Contributing
 
