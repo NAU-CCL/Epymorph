@@ -27,7 +27,7 @@ class SparsemodClause(MovementClause):
         AttributeDef(
             "phi",
             float,
-            Shapes.S,
+            Shapes.Scalar,
             default_value=40.0,
             comment="Influences the distance that movers tend to travel.",
         ),

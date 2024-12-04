@@ -396,14 +396,14 @@ class RumeTest(EpymorphTestCase):
                 AbsoluteName("gpm:aaa", "mm", "phi"): AttributeDef(
                     "phi",
                     float,
-                    Shapes.S,
+                    Shapes.Scalar,
                     comment="Influences the distance that movers tend to travel.",
                     default_value=40.0,
                 ),
                 AbsoluteName("gpm:aaa", "mm", "commuter_proportion"): AttributeDef(
                     "commuter_proportion",
                     float,
-                    Shapes.S,
+                    Shapes.Scalar,
                     default_value=0.1,
                     comment="The proportion of the total population that commutes.",
                 ),

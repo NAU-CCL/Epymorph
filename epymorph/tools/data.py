@@ -10,7 +10,6 @@ from typing import Protocol, TypeVar
 import numpy as np
 import pandas as pd
 
-from epymorph.adrio.adrio import Adrio
 from epymorph.compartment_model import (
     BaseCompartmentModel,
     CompartmentDef,
@@ -22,7 +21,6 @@ from epymorph.database import NamePattern
 from epymorph.geography.scope import GeoAggregation, GeoScope, GeoSelection
 from epymorph.log.messaging import sim_messaging
 from epymorph.rume import Rume
-from epymorph.simulator.data import evaluate_param
 from epymorph.time import Dim, TimeAggregation, TimeFrame, TimeSelection
 from epymorph.util import mask
 
@@ -89,12 +87,13 @@ def munge(
     """
     _validate(output, geo, time, quantity)
 
-    T, N, _, _ = output.dim.TNCE
+    S = output.dim.ticks
+    N = output.dim.nodes
     taus = output.dim.tau_steps
 
     # Apply selections first so that aggregations operate on less data.
-    time_mask = np.repeat(mask(T, time.selection_ticks(taus)), N)
-    geo_mask = np.tile(geo.selection, T)
+    time_mask = np.repeat(mask(S, time.selection_ticks(taus)), N)
+    geo_mask = np.tile(geo.selection, S)
 
     # columns are: ["tick", "date", "node", *quantities]
     columns = np.concatenate(([True, True, True], quantity.selection))
@@ -220,13 +219,11 @@ def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> Rum
             },
         )
     else:
-        # Save to cache; evaluate ADRIOs and store the ndarray results
+        # Save to cache; evaluate parameters and store the resulting ndarrays
         with sim_messaging():
-            values = {
-                str(name): evaluate_param(rume, str(name))
-                for name, value in rume.params.items()
-                if isinstance(value, Adrio)
-            }
+            values = rume.evaluate_params(rng=np.random.default_rng()).to_dict(
+                simplify_names=True
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(path, **values)
         return rume

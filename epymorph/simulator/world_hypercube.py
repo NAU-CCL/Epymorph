@@ -21,14 +21,16 @@ def to_gib(n_bytes: int) -> float:
 
 def _mem_check(dim: SimDimensions) -> None:
     """Will this simulation fit in memory?"""
-    T, N, C, _ = dim.TNCE
-    required = np.dtype(SimDType).itemsize * ((T * N * N * C) + (2 * N * C))
+    S = dim.ticks
+    N = dim.nodes
+    C = dim.compartments
+    required = np.dtype(SimDType).itemsize * ((S * N * N * C) + (2 * N * C))
     available = psutil.virtual_memory().available
 
     if available < required:
         msg = f"""\
 Insufficient memory: the simulation is too large (using HypercubeEngine).
-T:{T}, N:{N}, C:{C} requires {to_gib(required):.1f} GiB;
+S:{S}, N:{N}, C:{C} requires {to_gib(required):.1f} GiB;
 available memory is {to_gib(available):.1f} GiB"""
         raise InitException(msg)
 
@@ -53,7 +55,7 @@ class HypercubeWorld(World):
 
     ledger: NDArray[SimDType]
     """
-    All travelers, shape (T,N,N,C):
+    All travelers, shape (S,N,N,C):
     - axis 0: when they return home,
     - axis 1: where they came from,
     - axis 2: where they're visiting,
@@ -89,15 +91,18 @@ class HypercubeWorld(World):
 
     def __init__(self, dim: SimDimensions, home: NDArray[SimDType]):
         self.dim = dim
-        T, N, C, _ = dim.TNCE
-        self.ledger = np.zeros((T + 1, N, N, C), dtype=SimDType)
+        S = dim.ticks
+        N = dim.nodes
+        C = dim.compartments
+        self.ledger = np.zeros((S + 1, N, N, C), dtype=SimDType)
         self.time_offset = 0
         self.time_frontier = 1
         self._ident = np.identity(N, dtype=SimDType).reshape((N, N, 1))
         self.ledger[0, :, :, :] = home * self._ident
 
     def get_cohort_array(self, location_idx: int) -> NDArray[SimDType]:
-        _, N, C, _ = self.dim.TNCE
+        N = self.dim.nodes
+        C = self.dim.compartments
         ti, tf = self.time_offset, self.time_frontier
         return self.ledger[ti:tf, :, location_idx, :].reshape((N * (tf - ti), C)).copy()
 
@@ -105,7 +110,8 @@ class HypercubeWorld(World):
         return self.ledger[self.time_offset, :, :, :].sum(axis=1, dtype=SimDType)
 
     def apply_cohort_delta(self, location_idx: int, delta: NDArray[SimDType]) -> None:
-        _, N, C, _ = self.dim.TNCE
+        N = self.dim.nodes
+        C = self.dim.compartments
         ti, tf = self.time_offset, self.time_frontier
         visitors_delta = delta.reshape((tf - ti, N, C))
         self.ledger[ti:tf, :, location_idx, :] += visitors_delta

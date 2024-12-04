@@ -23,7 +23,7 @@ class Commuters(MovementClause):
         AttributeDef(
             "move_control",
             float,
-            Shapes.S,
+            Shapes.Scalar,
             default_value=0.9,
             comment=(
                 "A factor which modulates the number of commuters "
@@ -66,7 +66,7 @@ class Dispersers(MovementClause):
         AttributeDef(
             "theta",
             float,
-            Shapes.S,
+            Shapes.Scalar,
             default_value=0.1,
             comment=(
                 "A factor which allows for randomized movement "

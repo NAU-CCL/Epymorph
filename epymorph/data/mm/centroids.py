@@ -27,14 +27,14 @@ class CentroidsClause(MovementClause):
         AttributeDef(
             "phi",
             float,
-            Shapes.S,
+            Shapes.Scalar,
             default_value=40.0,
             comment="Influences the distance that movers tend to travel.",
         ),
         AttributeDef(
             "commuter_proportion",
             float,
-            Shapes.S,
+            Shapes.Scalar,
             default_value=0.1,
             comment="The proportion of the total population which commutes.",
         ),

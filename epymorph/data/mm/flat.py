@@ -21,7 +21,7 @@ class FlatClause(MovementClause):
         AttributeDef(
             "commuter_proportion",
             float,
-            Shapes.S,
+            Shapes.Scalar,
             default_value=0.1,
             comment="The proportion of the total population which commutes.",
         ),

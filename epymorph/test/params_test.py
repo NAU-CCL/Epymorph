@@ -9,10 +9,9 @@ import sympy
 from numpy.typing import NDArray
 
 from epymorph.data_shape import SimDimensions
-from epymorph.data_type import AttributeArray, AttributeValue
-from epymorph.database import Database, ModuleNamespace
+from epymorph.data_type import AttributeValue
+from epymorph.database import ModuleNamespace
 from epymorph.geography.custom import CustomScope
-from epymorph.geography.scope import GeoScope
 from epymorph.params import (
     ParamExpressionTimeAndNode,
     ParamFunctionNode,
@@ -24,13 +23,10 @@ from epymorph.params import (
     ParamFunctionTimeAndNode,
     simulation_symbols,
 )
-from epymorph.simulation import NamespacedAttributeResolver
 
 
 class ParamFunctionsTest(unittest.TestCase):
-    def _dim_data_scope(
-        self,
-    ) -> tuple[SimDimensions, NamespacedAttributeResolver, GeoScope]:
+    def _eval_context(self):
         dim = SimDimensions.build(
             tau_step_lengths=[1 / 3, 2 / 3],
             start_date=date(2021, 1, 1),
@@ -39,17 +35,16 @@ class ParamFunctionsTest(unittest.TestCase):
             compartments=3,
             events=2,
         )
-        data = NamespacedAttributeResolver(
-            data=Database[AttributeArray]({}),
-            dim=dim,
-            namespace=ModuleNamespace("gpm:all", "ipm"),
-        )
         scope = CustomScope(["a", "b", "c", "d"])
-        return dim, data, scope
+        return (
+            ModuleNamespace("gpm:all", "ipm"),
+            {},
+            dim,
+            scope,
+            np.random.default_rng(1),
+        )
 
     def test_numpy_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         class TestFunc(ParamFunctionNumpy):
             def evaluate(self) -> NDArray[np.int64]:
                 return np.arange(400).reshape((4, 100))
@@ -57,13 +52,11 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             np.arange(400).reshape((4, 100)),
         )
 
     def test_scalar_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         class TestFunc(ParamFunctionScalar):
             dtype = np.float64
 
@@ -73,13 +66,11 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             np.array(42.0, dtype=np.float64),
         )
 
     def test_time_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         class TestFunc(ParamFunctionTime):
             dtype = np.float64
 
@@ -89,13 +80,11 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             2 * np.arange(100, dtype=np.float64),
         )
 
     def test_node_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         class TestFunc(ParamFunctionNode):
             dtype = np.float64
 
@@ -105,13 +94,11 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             3 * np.arange(4, dtype=np.float64),
         )
 
     def test_node_and_node_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         class TestFunc(ParamFunctionNodeAndNode):
             dtype = np.int64
 
@@ -121,7 +108,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             np.array(
                 [
                     [0, 1, 2, 3],
@@ -134,8 +121,6 @@ class ParamFunctionsTest(unittest.TestCase):
         )
 
     def test_node_and_compartment_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         class TestFunc(ParamFunctionNodeAndCompartment):
             dtype = np.int64
 
@@ -147,7 +132,7 @@ class ParamFunctionsTest(unittest.TestCase):
         f = TestFunc()
 
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             np.array(
                 [
                     [0, 1, 2],
@@ -160,8 +145,6 @@ class ParamFunctionsTest(unittest.TestCase):
         )
 
     def test_time_and_node_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         class TestFunc(ParamFunctionTimeAndNode):
             dtype = np.float64
 
@@ -172,7 +155,7 @@ class ParamFunctionsTest(unittest.TestCase):
 
         cosine = np.cos(np.arange(100) / 100, dtype=np.float64)
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             np.stack(
                 [
                     1.0 * cosine,
@@ -186,14 +169,12 @@ class ParamFunctionsTest(unittest.TestCase):
         )
 
     def test_expr_time_and_node_1(self):
-        dim, data, scope = self._dim_data_scope()
-
         d, n, days = simulation_symbols("day", "node_index", "duration_days")
         f = ParamExpressionTimeAndNode((1.0 + n) * sympy.cos(d / days))
 
         cosine = np.cos(np.arange(100) / 100, dtype=np.float64)
         npt.assert_array_equal(
-            f.evaluate_in_context(data, dim, scope, np.random.default_rng(1)),
+            f.with_context(*self._eval_context()).evaluate(),
             np.stack(
                 [
                     1.0 * cosine,

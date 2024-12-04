@@ -11,14 +11,13 @@ from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
 from epymorph.data_type import SimArray, SimDType
 from epymorph.error import InitException
-from epymorph.geography.scope import GeoScope
 from epymorph.simulation import (
     AttributeDef,
-    NamespacedAttributeResolver,
     SimulationFunction,
 )
 from epymorph.util import NumpyTypeError, check_ndarray, match
@@ -30,22 +29,14 @@ class Initializer(SimulationFunction[SimArray], ABC):
     of populations by IPM compartment for every simulation node.
     """
 
-    def evaluate_in_context(
-        self,
-        data: NamespacedAttributeResolver,
-        dim: SimDimensions,
-        scope: GeoScope,
-        rng: np.random.Generator,
-    ) -> SimArray:
-        result = super().evaluate_in_context(data, dim, scope, rng)
-
-        # Result validation: it must be an NxC array of integers
-        # where no value is less than zero.
+    @override
+    def validate(self, result) -> None:
+        # Must be an NxC array of integers, none less than zero.
         try:
             check_ndarray(
                 result,
                 dtype=match.dtype(SimDType),
-                shape=DataShapeMatcher(Shapes.NxC, dim, allow_broadcast=False),
+                shape=DataShapeMatcher(Shapes.NxC, self.dim, exact=True),
             )
         except NumpyTypeError as e:
             msg = f"Invalid return type from '{self.__class__.__name__}'"
@@ -54,11 +45,9 @@ class Initializer(SimulationFunction[SimArray], ABC):
         if np.min(result) < 0:
             msg = (
                 f"Initializer '{self.__class__.__name__}' returned "
-                "values less than zero"
+                "values less than zero."
             )
             raise InitException(msg)
-
-        return result
 
 
 # Initializer utility functions
@@ -130,6 +119,7 @@ class Explicit(Initializer):
 
     def __init__(self, initials: SimArray):
         self.initials = initials
+        # TODO: we should do validation of all Initializer parameters during init
 
     def evaluate(self) -> SimArray:
         return self.initials.copy()
@@ -157,15 +147,16 @@ class Proportional(Initializer):
             check_ndarray(
                 self.ratios,
                 dtype=match.dtype(np.int64, np.float64),
-                shape=DataShapeMatcher(Shapes.NxC, self.dim, True),
+                shape=DataShapeMatcher(Shapes.NxC, self.dim),
             )
         except NumpyTypeError as e:
             raise InitException(
                 f"Initializer argument 'ratios' is not properly specified. {e}"
             ) from None
 
-        ratios = Shapes.NxC.adapt(self.dim, self.ratios, True)
-        if ratios is None:
+        try:
+            ratios = Shapes.NxC.adapt(self.dim, self.ratios)
+        except ValueError:
             raise InitException(
                 "Initializer argument 'ratios' is not properly specified."
             )
@@ -292,7 +283,10 @@ class IndexedLocations(SeededInfection):
             raise InitException(msg)
 
         # Randomly select individuals from each of the selected locations.
-        infected = self.rng.multivariate_hypergeometric(selected, self.seed_size)
+        if len(selected) == 1:
+            infected = np.array([self.seed_size], dtype=SimDType)
+        else:
+            infected = self.rng.multivariate_hypergeometric(selected, self.seed_size)
 
         result = _pop_array(self.dim, pop, self.initial_compartment)
 
