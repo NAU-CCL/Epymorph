@@ -20,10 +20,21 @@ _events = EventBus()
 
 
 @contextmanager
-def sim_messaging(adrio=True) -> Generator[None, None, None]:
+def sim_messaging(
+    adrio: bool = True,
+    live: bool = True,
+) -> Generator[None, None, None]:
     """
-    Produce console messaging during simulation runs, like a progress bar.
-    If `adrio` is True: display when ADRIOs are fetching data.
+    Produce console messaging during simulation runs to demonstrate progress.
+
+    Parameters
+    ----------
+    adrio : bool, default=True
+        True to display ADRIO progress updates
+    live : bool, default=True
+        True if this is being used in an interactive environment like
+        a Jupyter Notebook; presentation may look better in
+        some environments by setting this to False (e.g., Quarto)
     """
 
     start_time: float | None = None
@@ -36,7 +47,8 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         print(f"Running simulation ({e.simulator}):")
         print(f"• {start_date} to {end_date} ({duration_days} days)")
         print(f"• {e.dim.nodes} geo nodes")
-        print(progress(0.0), end="\r")
+        if live:
+            print(progress(0.0), end="\r")
 
         nonlocal start_time
         start_time = perf_counter()
@@ -47,6 +59,7 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
     last_progress_length = 0
 
     def on_tick(tick: OnTick) -> None:
+        # NOTE: tick updates will be skipped entirely if `live=False`
         nonlocal last_progress_length
         ticks_complete = tick.tick_index + 1
         total_process_time = perf_counter() - start_time
@@ -88,9 +101,10 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
                 spd = "?" if speed is None else ff(speed)
                 dl = f" {dwn}/{tot} ({spd}/s)"
 
-            line = f"  {progress(e.ratio_complete)}{dl}"
-            print(line.ljust(last_progress_length), end="\r")
-            last_progress_length = len(line)
+            if live:
+                line = f"  {progress(e.ratio_complete)}{dl}"
+                print(line.ljust(last_progress_length), end="\r")
+                last_progress_length = len(line)
         else:
             if e.duration is None:
                 dur = ""
@@ -104,7 +118,8 @@ def sim_messaging(adrio=True) -> Generator[None, None, None]:
         # Set up a subscriptions context, subscribe our handlers,
         # then yield to the outer context (ostensibly where the sim will be run).
         subs.subscribe(_events.on_start, on_start)
-        subs.subscribe(_events.on_tick, on_tick)
+        if live:
+            subs.subscribe(_events.on_tick, on_tick)
         subs.subscribe(_events.on_finish, on_finish)
         if adrio:
             subs.subscribe(_events.on_adrio_progress, on_adrio_progress)
