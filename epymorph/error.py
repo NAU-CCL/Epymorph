@@ -129,12 +129,8 @@ class IpmSimExceptionWithFields(IpmSimException):
 
     display_fields: list[tuple[str, dict]]
 
-    def __init__(
-        self, message: str, display_fields: tuple[str, dict] | list[tuple[str, dict]]
-    ):
+    def __init__(self, message: str, display_fields: list[tuple[str, dict]]):
         super().__init__(message)
-        if isinstance(display_fields, tuple):
-            display_fields = [display_fields]
         self.display_fields = display_fields
 
     def __str__(self):
@@ -151,7 +147,7 @@ class IpmSimExceptionWithFields(IpmSimException):
 class IpmSimNaNException(IpmSimExceptionWithFields):
     """Exception for handling NaN (not a number) rate values"""
 
-    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+    def __init__(self, display_fields: list[tuple[str, dict]]):
         msg = (
             "NaN (not a number) rate detected. This is often the result of a "
             "divide by zero error.\n"
@@ -171,7 +167,7 @@ class IpmSimNaNException(IpmSimExceptionWithFields):
 class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
     """Exception for handling less than 0 rate values"""
 
-    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+    def __init__(self, display_fields: list[tuple[str, dict]]):
         msg = (
             "Less than zero rate detected. When providing or defining ipm parameters, "
             "ensure that they will not result in a negative rate.\n"
@@ -185,7 +181,7 @@ class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
 class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
     """Exception for handling invalid probability values"""
 
-    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+    def __init__(self, display_fields: list[tuple[str, dict]]):
         msg = """
               Invalid probabilities for fork definition detected. Probabilities for a
               given tick should always be nonnegative and sum to 1

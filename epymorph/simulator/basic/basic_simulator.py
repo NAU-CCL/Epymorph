@@ -4,6 +4,7 @@ from typing import Callable, Mapping
 
 import numpy as np
 
+from epymorph.data_type import SimDType
 from epymorph.error import (
     AttributeException,
     CompilationException,
@@ -74,22 +75,6 @@ class BasicSimulator:
 
         with error_gate("initializing the simulation", InitException):
             initial_values = rume.initialize(data, rng)
-
-            # Should always match because `evaluate_params` includes a default.
-            if (labels_value := data.resolve(GEO_LABELS.key, GEO_LABELS.value)) is None:
-                geo_labels = rume.scope.labels.tolist()
-            else:
-                geo_labels = labels_value.tolist()
-
-            out = Output(
-                dim=dim,
-                scope=rume.scope,
-                geo_labels=geo_labels,
-                ipm=rume.ipm,
-                time_frame=rume.time_frame,
-                initial=initial_values,
-            )
-
             world = ListWorld.from_initials(initial_values)
 
         with error_gate("compiling the simulation", CompilationException):
@@ -98,23 +83,49 @@ class BasicSimulator:
 
         _events.on_start.publish(OnStart(self.__class__.__name__, dim, rume.time_frame))
 
+        S, N, C, E = dim.ticks, dim.nodes, dim.compartments, dim.events
+        visit_compartments = np.zeros((S, N, C), dtype=SimDType)
+        visit_events = np.zeros((S, N, E), dtype=SimDType)
+        home_compartments = np.zeros((S, N, C), dtype=SimDType)
+        home_events = np.zeros((S, N, E), dtype=SimDType)
+
         # Run the simulation!
         for tick in simulation_clock(dim):
+            t = tick.sim_index
+
             # First do movement
-            with error_gate(
-                "executing the movement model", MmSimException, AttributeException
-            ):
+            with error_gate("executing movement", MmSimException, AttributeException):
                 movement_exec.apply(tick)
 
             # Then do IPM
             with error_gate("executing the IPM", IpmSimException, AttributeException):
-                tick_events, tick_compartments = ipm_exec.apply(tick)
-                out.events[tick.sim_index] = tick_events
-                out.compartments[tick.sim_index] = tick_compartments
+                vcs, ves, hcs, hes = ipm_exec.apply(tick)
+                visit_compartments[t] = vcs
+                visit_events[t] = ves
+                home_compartments[t] = hcs
+                home_events[t] = hes
 
-            t = tick.sim_index
             _events.on_tick.publish(OnTick(t, (t + 1) / dim.ticks, dim))
 
         _events.on_finish.publish(None)
 
-        return out
+        # Assemble output.
+
+        # This should always match because `evaluate_params` includes a default.
+        if (labels_value := data.resolve(GEO_LABELS.key, GEO_LABELS.value)) is not None:
+            geo_labels = labels_value.tolist()
+        else:
+            geo_labels = rume.scope.labels.tolist()
+
+        return Output(
+            dim=dim,
+            scope=rume.scope,
+            geo_labels=geo_labels,
+            time_frame=rume.time_frame,
+            ipm=rume.ipm,
+            initial=initial_values,
+            visit_compartments=visit_compartments,
+            visit_events=visit_events,
+            home_compartments=home_compartments,
+            home_events=home_events,
+        )

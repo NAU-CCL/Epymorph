@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring
 import unittest
 from math import inf
 from typing import Mapping
@@ -252,7 +251,7 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("S: 0", err_msg)
         self.assertIn("I: 0", err_msg)
         self.assertIn("R: 0", err_msg)
-        self.assertIn("S->I: I*S*beta/(I + R + S)", err_msg)
+        self.assertIn("S → I: I*S*beta/(I + R + S)", err_msg)
 
     def test_negative_probs_error(self):
         """Test for handling negative probability error"""
@@ -280,7 +279,7 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("Invalid probabilities for fork definition detected.", err_msg)
         self.assertIn("hospitalization_prob: -0.2", err_msg)
         self.assertIn("hospitalization_duration: 15", err_msg)
-        self.assertIn("I->(H, R): I*gamma", err_msg)
+        self.assertIn("I → (H,R): I*gamma", err_msg)
         self.assertIn(
             "Probabilities: hospitalization_prob, 1 - hospitalization_prob", err_msg
         )
