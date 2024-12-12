@@ -198,6 +198,11 @@ class ForkDef:
     edges: list[EdgeDef]
     probs: list[Expr]
 
+    def __str__(self) -> str:
+        lhs = str(self.edges[0].compartment_from)
+        rhs = ",".join([str(edge.compartment_to) for edge in self.edges])
+        return f"{lhs} → ({rhs})"
+
 
 def fork(*edges: EdgeDef) -> ForkDef:
     """

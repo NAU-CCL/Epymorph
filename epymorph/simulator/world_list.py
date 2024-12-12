@@ -1,7 +1,7 @@
 """World implementation: ListWorld."""
 
 from operator import attrgetter
-from typing import Any, Iterable, Literal, Self, overload
+from typing import Any, Iterable, Literal, Self, Sequence, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -115,6 +115,9 @@ class ListWorld(World):
                     del cohorts[j]
                 else:
                     j += 1
+
+    def get_cohorts(self, location_idx: int) -> Sequence[Cohort]:
+        return self.locations[location_idx]
 
     def get_cohort_array(self, location_idx: int) -> NDArray[SimDType]:
         return np.array(

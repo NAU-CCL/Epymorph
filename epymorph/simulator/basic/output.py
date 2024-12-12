@@ -2,9 +2,10 @@
 Classes for representing simulation results.
 """
 
+import dataclasses
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Sequence
+from typing import Literal, Sequence
 
 import numpy as np
 import pandas as pd
@@ -29,10 +30,15 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     """
 
     dim: SimDimensions
+    """The dimensions of the simulation that generated this output."""
     scope: GeoScope
+    """The geo scope of the simulation that generated this output."""
     geo_labels: Sequence[str]
+    """Labels for the geo nodes."""
     time_frame: TimeFrame
+    """The time frame of the simulation that generated this output."""
     ipm: BaseCompartmentModel
+    """The IPM used in the simulation that generated this output."""
 
     initial: NDArray[SimDType]
     """
@@ -41,27 +47,70 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     and C is the number of compartments
     """
 
-    compartments: NDArray[SimDType] = field(init=False)
-    """
-    Compartment data by timestep, population, and compartment.
-    Array of shape (S,N,C) where S is the number of ticks in the simulation,
-    N is the number of populations, and C is the number of compartments.
+    visit_compartments: NDArray[SimDType]
+    """Compartment data collected in the node where individuals are visiting.
+    See `compartments` for more information."""
+    visit_events: NDArray[SimDType]
+    """Event data collected in the node where individuals are visiting.
+    See `events` for more information."""
+    home_compartments: NDArray[SimDType]
+    """Compartment data collected in the node where individuals reside.
+    See `compartments` for more information."""
+    home_events: NDArray[SimDType]
+    """Event data collected in the node where individuals reside.
+    See `events` for more information."""
+
+    data_mode: Literal["visit", "home"] = field(default="visit")
+    """Controls which data is returned by the `compartments` and `events` properties.
+    Although you can access both data sets, it's helpful to have a default for things
+    like our plotting and mapping tools. Defaults to "visit".
+
+    See `data_by_visit` and `data_by_home`
+    to obtain an Output object that uses a different data mode.
     """
 
-    events: NDArray[SimDType] = field(init=False)
-    """
-    Event data by timestep, population, and event.
-    Array of shape (S,N,E) where S is the number of ticks in the simulation,
-    N is the number of populations, and E is the number of events.
-    """
+    def _with_data_mode(self, data_mode: Literal["visit", "home"]) -> "Output":
+        return (
+            self
+            if self.data_mode == data_mode
+            else dataclasses.replace(self, data_mode=data_mode)
+        )
 
-    def __post_init__(self):
-        S = self.dim.ticks
-        N = self.dim.nodes
-        C = self.dim.compartments
-        E = self.dim.events
-        object.__setattr__(self, "compartments", np.zeros((S, N, C), dtype=SimDType))
-        object.__setattr__(self, "events", np.zeros((S, N, E), dtype=SimDType))
+    @cached_property
+    def data_by_visit(self) -> "Output":
+        """Returns an Output object that contains the same set of data, but uses
+        'visit' as the default data mode."""
+        return self._with_data_mode("visit")
+
+    @cached_property
+    def data_by_home(self) -> "Output":
+        """Returns an Output object that contains the same set of data, but uses
+        'home' as the default data mode."""
+        return self._with_data_mode("home")
+
+    @property
+    def compartments(self) -> NDArray[SimDType]:
+        """
+        Compartment data by timestep, population, and compartment.
+        Array of shape (S,N,C) where S is the number of ticks in the simulation,
+        N is the number of populations, and C is the number of compartments.
+        """
+        if self.data_mode == "visit":
+            return self.visit_compartments
+        else:
+            return self.home_compartments
+
+    @property
+    def events(self) -> NDArray[SimDType]:
+        """
+        Event data by timestep, population, and event.
+        Array of shape (S,N,E) where S is the number of ticks in the simulation,
+        N is the number of populations, and E is the number of events.
+        """
+        if self.data_mode == "visit":
+            return self.visit_events
+        else:
+            return self.home_events
 
     @cached_property
     def compartment_labels(self) -> Sequence[str]:
@@ -100,6 +149,7 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     @property
     @override
     def dataframe(self) -> pd.DataFrame:
+        """Returns the output data in DataFrame form, using the current data mode."""
         # NOTE: reshape ordering is critical, because the index column creation
         # must assume ordering happens in a specific way.
         # C ordering causes the later index (node) to change fastest and the
