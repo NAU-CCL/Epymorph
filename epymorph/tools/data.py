@@ -213,10 +213,7 @@ def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> Rum
         cached = dict(np.load(path))
         return dataclasses.replace(
             rume,
-            params={
-                **rume.params,
-                **{NamePattern.parse(key): value for key, value in cached.items()},
-            },
+            params={NamePattern.parse(key): value for key, value in cached.items()},
         )
     else:
         # Save to cache; evaluate parameters and store the resulting ndarrays
