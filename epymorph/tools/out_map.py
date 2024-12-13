@@ -33,23 +33,27 @@ from epymorph.tools.data import Output, munge
 
 @lru_cache(16)
 def _get_geo(scope: GeoScope) -> gpd.GeoDataFrame:
-    if isinstance(scope, CensusScope) and is_tiger_year(scope.year):
-        match scope.granularity:
-            case "state":
-                gdf = get_states_geo(scope.year)
-            case "county":
-                gdf = get_counties_geo(scope.year)
-            case "tract":
-                states = list({STATE.extract(x) for x in scope.node_ids})
-                gdf = get_tracts_geo(scope.year, states)
-            case "block group":
-                states = list({STATE.extract(x) for x in scope.node_ids})
-                gdf = get_block_groups_geo(scope.year, states)
-            case _:
-                raise GeographyError("Unsupported Census granularity.")
-        return gpd.GeoDataFrame(gdf[gdf["GEOID"].isin(scope.node_ids)])
+    if not isinstance(scope, CensusScope):
+        err = "Cannot draw choropleth maps for the given scope."
+        raise GeographyError(err)
+    if not is_tiger_year(scope.year):
+        err = "Cannot draw choropleth map: that year is not supported by TIGER."
+        raise GeographyError(err)
 
-    raise GeographyError("Cannot draw choropleth maps for the given scope.")
+    match scope.granularity:
+        case "state":
+            gdf = get_states_geo(scope.year)
+        case "county":
+            gdf = get_counties_geo(scope.year)
+        case "tract":
+            states = list({STATE.extract(x) for x in scope.node_ids})
+            gdf = get_tracts_geo(scope.year, states)
+        case "block group":
+            states = list({STATE.extract(x) for x in scope.node_ids})
+            gdf = get_block_groups_geo(scope.year, states)
+        case _:
+            raise GeographyError("Unsupported Census granularity.")
+    return gpd.GeoDataFrame(gdf[gdf["GEOID"].isin(scope.node_ids)])
 
 
 class NodeLabelRenderer:

@@ -466,8 +466,39 @@ class TimeSelection(_CanAggregate, TimeStrategy):
     def group_format(self) -> Literal["tick"]:
         return "tick"
 
-    def group(self, grouping: TimeGrouping) -> "TimeGroup":
-        """Groups the time series using the specified grouping."""
+    def group(
+        self,
+        grouping: Literal["day", "week", "epiweek", "month"] | TimeGrouping,
+    ) -> "TimeGroup":
+        """
+        Groups the time series using the specified grouping.
+
+        Parameters
+        ----------
+        grouping : Literal["day", "week", "epiweek", "month"] | TimeGrouping
+            The grouping to use. You can specify a supported string value --
+            all of which act as shortcuts for common TimeGrouping instances --
+            or you can provide a TimeGrouping instance to perform custom grouping.
+
+            The shortcut values are:
+            - "day": equivalent to epymorph.time.ByDate()
+            - "week": equivalent to epymorph.time.ByWeek()
+            - "epiweek": equivalent to epymorph.time.ByEpiWeek()
+            - "month": equivalent to epymorph.time.ByMonth()
+        """
+        match grouping:
+            # String-based short-cuts:
+            case "day":
+                grouping = ByDate()
+            case "week":
+                grouping = ByWeek()
+            case "epiweek":
+                grouping = ByEpiWeek()
+            case "month":
+                grouping = ByMonth()
+            # Otherwise grouping is a TimeGrouping instance
+            case _:
+                pass
         return TimeGroup(self.time_frame, self.selection, grouping)
 
 
