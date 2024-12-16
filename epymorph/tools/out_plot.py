@@ -19,7 +19,7 @@ from epymorph.compartment_model import (
     QuantitySelection,
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
-from epymorph.time import ByDate, TimeAggregation, TimeSelection
+from epymorph.time import TimeAggregation, TimeSelection
 from epymorph.tools.data import Output, munge
 from epymorph.util import identity
 
@@ -74,13 +74,26 @@ class PlotRenderer:
 
         dim = self.output.dim
         match (time.group_format, requested_time_format):
-            case (actual, "auto"):
-                # Auto means just use what the grouping says.
-                return actual, identity
+            case ("tick", "auto" | "day"):
+                # Convert ticks to simulation-day scale:
+                # e.g.: [0.333, 1.0, 1.333, ...]
+                # NOTE: each tick is represented as the end of its timespan
+                def ticks_to_days(time_groups: pd.Series) -> pd.Series:
+                    deltas = np.array(dim.tau_step_lengths).cumsum()
+                    days = (
+                        np.arange(dim.days).repeat(dim.tau_steps)  #
+                        + np.tile(deltas, dim.days)
+                    )
+                    ticks = np.arange(dim.days * dim.tau_steps)
+                    time_map = dict(zip(ticks, days))
+                    return time_groups.apply(lambda x: time_map[x])
+
+                return "day", ticks_to_days
 
             case ("tick", "date"):
                 # Convert ticks to date scale:
                 # e.g.: [2020-01-01T08:00, 2020-01-02T00:00, 2020-01-02T08:00, ...]
+                # NOTE: each tick is represented as the end of its timespan
                 def ticks_to_dates(time_groups: pd.Series) -> pd.Series:
                     deltas = np.array(
                         [timedelta(days=x) for x in dim.tau_step_lengths],
@@ -97,27 +110,6 @@ class PlotRenderer:
                     return time_groups.apply(lambda x: time_map[x])
 
                 return "date", ticks_to_dates
-
-            case ("tick", "day"):
-                # Convert ticks to simulation-day scale:
-                # e.g.: [0.0, 0.333, 1.0, 1.333, ...]
-                # NOTE: each tick is represented as the start of its timespan,
-                # even though to be perfectly accurate the data value is recorded
-                # at the *end* of that timespan -- the result of the tick happening.
-                # This is to align with how this is handled with date values, which
-                # are also recorded at the end of the date but get represented as the
-                # start of the date in the time scale.
-                def ticks_to_days(time_groups: pd.Series) -> pd.Series:
-                    deltas = np.array([0, *dim.tau_step_lengths]).cumsum()[:-1]
-                    days = (
-                        np.arange(dim.days).repeat(dim.tau_steps)  #
-                        + np.tile(deltas, dim.days)
-                    )
-                    ticks = np.arange(dim.days * dim.tau_steps)
-                    time_map = dict(zip(ticks, days))
-                    return time_groups.apply(lambda x: time_map[x])
-
-                return "day", ticks_to_days
 
             case ("date", "day"):
                 # Convert dates to simulation-day scale:
@@ -195,12 +187,6 @@ class PlotRenderer:
         title : str, optional
             a title to draw on the plot
         """
-
-        if isinstance(time, TimeSelection):
-            # If the user doesn't specify a time aggregation,
-            # use ByDate() by default. Plots look funky otherwise.
-            # User can plot ticks if desired by specifying `.group(ByTick()).agg()`
-            time = time.group(ByDate()).agg()
 
         # Adjust figsize to make room for an outside legend, if needed
         # By default, the layout engine would "steal" area from the plot
@@ -327,12 +313,6 @@ class PlotRenderer:
         """
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
-
-        if isinstance(time, TimeSelection):
-            # If the user doesn't specify a time aggregation,
-            # use ByDate() by default. Plots look funky otherwise.
-            # User can plot ticks if desired by specifying `.group(ByTick()).agg()`
-            time = time.group(ByDate()).agg()
 
         data_df = munge(self.output, geo, time, quantity)
 
