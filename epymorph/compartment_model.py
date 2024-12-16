@@ -1043,9 +1043,13 @@ class QuantityGroup(QuantityStrategy):
         groups, _ = self.grouping.map(self.selected)
         return [g.name.full for g in groups]
 
+    def agg(self, agg: Literal["sum"]) -> "QuantityAggregation":
+        """Combine grouped quantities using the named aggregation."""
+        return QuantityAggregation(self.ipm, self.selection, self.grouping, agg)
+
     def sum(self) -> "QuantityAggregation":
         """Combine grouped quantities by adding their values."""
-        return QuantityAggregation(self.ipm, self.selection, self.grouping, "sum")
+        return self.agg("sum")
 
 
 @dataclass(frozen=True)
