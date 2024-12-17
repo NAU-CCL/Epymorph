@@ -3,12 +3,10 @@
 from sympy import Max
 
 from epymorph.compartment_model import CompartmentModel, compartment, edge, fork
-from epymorph.data import registry
 from epymorph.data_shape import Shapes
 from epymorph.simulation import AttributeDef
 
 
-@registry.ipm("sparsemod")
 class Sparsemod(CompartmentModel):
     """A model similar to one used in sparsemod."""
 

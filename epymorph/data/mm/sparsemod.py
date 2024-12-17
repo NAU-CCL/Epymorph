@@ -3,7 +3,6 @@ from functools import cached_property
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data import registry
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType, SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
@@ -62,7 +61,6 @@ class SparsemodClause(MovementClause):
         return self.rng.multinomial(self.commuters_by_node, self.dispersal_kernel)
 
 
-@registry.mm("sparsemod")
 class Sparsemod(MovementModel):
     """
     Modeled after the SPARSEMOD COVID-19 paper, this model simulates

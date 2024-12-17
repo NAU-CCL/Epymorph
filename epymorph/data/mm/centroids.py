@@ -3,7 +3,6 @@ from functools import cached_property
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data import registry
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType, SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
@@ -64,7 +63,6 @@ class CentroidsClause(MovementClause):
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
 
 
-@registry.mm("centroids")
 class Centroids(MovementModel):
     """
     The centroids MM describes a basic commuter movement where a fixed proportion

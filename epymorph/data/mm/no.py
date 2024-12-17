@@ -1,7 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data import registry
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
 from epymorph.simulation import Tick, TickDelta, TickIndex
@@ -20,7 +19,6 @@ class NoClause(MovementClause):
         return np.zeros((N, N), dtype=SimDType)
 
 
-@registry.mm("no")
 class No(MovementModel):
     """
     No movement at all. This is handy for cases when you want to disable movement

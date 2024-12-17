@@ -1,19 +1,20 @@
 """
-This is data drawn from Pei's data files.
-We're including it as a temporary measure, since we don't have
-an ADRIO for humidity yet, and because the ADRIOs we do have
-produce data values that differ from these.
-It would also be feasible to use CSV ADRIOs to load this data
-directly. But since a lot of epymorph uses Pei as an example
-this is a convenience, and expected to be temporary.
+Data for the Pei 2018 flu model, copied from their data files.
+https://doi.org/10.1073/pnas.1708856115
+We're including it to use as a canonical example: a self-contained
+simulation that can be run without loading external data except TIGER state geography,
+which is modest in size.
 """
 
 import numpy as np
 
 from epymorph.data_type import CentroidDType
 from epymorph.geography.us_census import StateScope
+from epymorph.time import TimeFrame
 
 pei_scope = StateScope.in_states(states=["FL", "GA", "MD", "NC", "SC", "VA"], year=2015)
+
+pei_time_frame = TimeFrame.of("2015-01-01", 365)
 
 pei_centroids = np.array(
     [
@@ -414,3 +415,10 @@ pei_humidity = np.array(
     ],
     dtype=np.float64,
 )
+
+pei_params = {
+    "centroid": pei_centroids,
+    "population": pei_population,
+    "commuters": pei_commuters,
+    "humidity": pei_humidity,
+}

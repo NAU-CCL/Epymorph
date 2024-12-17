@@ -35,5 +35,8 @@ jobs:
       - name: Check imports and formatting
         run: uv run ruff check --no-fix --exclude doc/devlog --output-format=github .
 
+      - name: Check data package exports
+        run: uv run scripts/data_exports.py --check
+
       - name: Run unit tests
         run: uv run python -m unittest discover -v -s "./epymorph" -p "*_test.py"
