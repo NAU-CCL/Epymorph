@@ -3,7 +3,6 @@ from functools import cached_property
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data import registry
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
@@ -92,7 +91,6 @@ class Dispersers(MovementClause):
         return self.rng.poisson(theta * self.commuters_average)
 
 
-@registry.mm("pei")
 class Pei(MovementModel):
     """
     Modeled after the Pei influenza paper, this model simulates

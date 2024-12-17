@@ -3,7 +3,7 @@ import unittest
 from sympy import Max, symbols
 
 import epymorph.draw
-from epymorph import ipm_library
+from epymorph.data.ipm.sirs import Sirs
 
 
 class DrawTest(unittest.TestCase):
@@ -12,7 +12,7 @@ class DrawTest(unittest.TestCase):
         Tests the conversion between ipm edges and an edge tracker object
         WARNING: Will stop working if SIRS model changes and/or is deleted!
         """
-        test_ipm = ipm_library["sirs"]()
+        test_ipm = Sirs()
         test_edge_set = epymorph.draw.build_ipm_edge_set(test_ipm)
 
         S, I, R, beta, gamma, xi = symbols("S I R beta gamma xi")

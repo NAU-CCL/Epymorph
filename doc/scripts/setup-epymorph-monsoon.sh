@@ -159,27 +159,23 @@ import os
 
 import numpy as np
 
-from epymorph import *
+from epymorph.kit import *
+from epymorph.data.pei import pei_scope, pei_time_frame, pei_params
 
 
 def main():
-    geo = geo_library['pei']()
-    rume = Rume.single_strata(
-        ipm=ipm_library['pei'](),
-        mm=mm_library['pei'](),
-        scope=geo.spec.scope,
+    rume = SingleStrataRume.build(
+        ipm=ipm.Pei(),
+        mm=mm.Pei(),
+        scope=pei_scope,
         init=init.SingleLocation(location=0, seed_size=1_000),
-        time_frame=TimeFrame.of("2015-01-01", 365),
+        time_frame=pei_time_frame,
         params={
-            'theta': 0.1,
-            'move_control': 0.9,
-            'infection_duration': 4,
-            'immunity_duration': 90,
-            'centroid': geo['centroid'],
-            'population': geo['population'],
-            'commuters': geo['commuters'],
-            'humidity': geo['humidity'],
-            'meta::geo::label': geo['label'],
+            "theta": 0.1,
+            "move_control": 0.9,
+            "infection_duration": 4,
+            "immunity_duration": 90,
+            **pei_params,
         },
     )
 

@@ -3,7 +3,6 @@ from functools import cached_property
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data import registry
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
@@ -50,7 +49,6 @@ class FlatClause(MovementClause):
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
 
 
-@registry.mm("flat")
 class Flat(MovementModel):
     """
     This model evenly weights the probability of movement to all other nodes.

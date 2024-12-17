@@ -565,17 +565,3 @@ class BottomLocations(SeededInfection):
             infection_compartment=self.infection_compartment,
         )
         return self.defer(sub)
-
-
-initializer_library: dict[str, type[Initializer]] = {
-    "no_infection": NoInfection,
-    "explicit": Explicit,
-    "proportional": Proportional,
-    "indexed_locations": IndexedLocations,
-    "single_location": SingleLocation,
-    "labeled_locations": LabeledLocations,
-    "random_locations": RandomLocations,
-    "top_locations": TopLocations,
-    "bottom_locations": BottomLocations,
-}
-"""A library for the built-in initializer functions."""

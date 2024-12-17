@@ -3,10 +3,13 @@ import numpy as np
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 
-from epymorph import AttributeDef, Shapes, init, mm_library
 from epymorph.compartment_model import CompartmentModel, compartment, edge
-from epymorph.database import AbsoluteName
+from epymorph.data.mm.centroids import Centroids
+from epymorph.data.mm.no import No
+from epymorph.data_shape import Shapes
+from epymorph.database import AbsoluteName, AttributeDef
 from epymorph.geography.us_census import StateScope
+from epymorph.initializer import NoInfection, SingleLocation
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
 from epymorph.rume import (
     DEFAULT_STRATA,
@@ -221,14 +224,14 @@ class RumeTest(EpymorphTestCase):
     def test_create_monostrata_1(self):
         # A single-strata RUME uses the IPM without modification.
         sir = Sir()
-        centroids = mm_library["centroids"]()
+        centroids = Centroids()
         # Make sure centroids has the tau steps we will expect later...
         self.assertListAlmostEqual(centroids.steps, [1 / 3, 2 / 3])
 
         rume = SingleStrataRume.build(
             ipm=sir,
             mm=centroids,
-            init=init.NoInfection(),
+            init=NoInfection(),
             scope=StateScope.in_states(["04", "35"], year=2020),
             time_frame=TimeFrame.of("2021-01-01", 180),
             params={},
@@ -255,7 +258,7 @@ class RumeTest(EpymorphTestCase):
         # Test a multi-strata model.
 
         sir = Sir()
-        no = mm_library["no"]()
+        no = No()
         # Make sure 'no' has the tau steps we will expect later...
         self.assertListAlmostEqual(no.steps, [1.0])
 
@@ -265,13 +268,13 @@ class RumeTest(EpymorphTestCase):
                     name="aaa",
                     ipm=sir,
                     mm=no,
-                    init=init.SingleLocation(location=0, seed_size=100),
+                    init=SingleLocation(location=0, seed_size=100),
                 ),
                 Gpm(
                     name="bbb",
                     ipm=sir,
                     mm=no,
-                    init=init.SingleLocation(location=0, seed_size=100),
+                    init=SingleLocation(location=0, seed_size=100),
                 ),
             ],
             meta_requirements=[],
@@ -341,7 +344,7 @@ class RumeTest(EpymorphTestCase):
         # Test special case: a multi-strata model but with only one strata.
 
         sir = Sir()
-        centroids = mm_library["centroids"]()
+        centroids = Centroids()
         # Make sure centroids has the tau steps we will expect later...
         self.assertListAlmostEqual(centroids.steps, [1 / 3, 2 / 3])
 
@@ -351,7 +354,7 @@ class RumeTest(EpymorphTestCase):
                     name="aaa",
                     ipm=sir,
                     mm=centroids,
-                    init=init.NoInfection(),
+                    init=NoInfection(),
                 ),
             ],
             meta_requirements=[],
