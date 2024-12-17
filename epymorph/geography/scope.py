@@ -97,25 +97,21 @@ class GeoGrouping(ABC):
 
 
 class _CanGeoAggregate(GeoStrategy[GeoScopeT_co]):
-    def _agg(self, agg: GeoAggMethod) -> "GeoAggregation[GeoScopeT_co]":
-        return GeoAggregation(
-            self.scope,
-            self.selection,
-            self.grouping,
-            agg,
-        )
+    def agg(self, agg: Literal["sum", "min", "max"]) -> "GeoAggregation[GeoScopeT_co]":
+        """Apply the named aggregation for each geo node group."""
+        return GeoAggregation(self.scope, self.selection, self.grouping, agg)
 
     def sum(self) -> "GeoAggregation[GeoScopeT_co]":
-        """Perform a sum for each geo node groups."""
-        return self._agg("sum")
+        """Perform a sum for each geo node group."""
+        return self.agg("sum")
 
     def min(self) -> "GeoAggregation[GeoScopeT_co]":
         """Take the min value for each geo node group."""
-        return self._agg("min")
+        return self.agg("min")
 
     def max(self) -> "GeoAggregation[GeoScopeT_co]":
         """Take the max value for each geo node group."""
-        return self._agg("max")
+        return self.agg("max")
 
 
 @dataclass(frozen=True)

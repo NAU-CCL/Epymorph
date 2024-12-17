@@ -794,10 +794,17 @@ _N = TypeVar("_N", bound=CompartmentName | EdgeName)
 
 
 class QuantityGrouping(NamedTuple):
+    """Describes how to group simulation output quantities (events and compartments).
+    The default combines any quantity whose names match exactly. This is common in
+    multistrata models where events from several strata impact one transition.
+    You can also choose to group across strata and subscript differences.
+    Setting `strata` or `subscript` to True means those elements of quantity names
+    (if they exist) are ignored for the purposes of matching."""
+
     strata: bool
     """True to combine quantities across strata."""
     subscript: bool
-    """The to combine quantities across subscript."""
+    """True to combine quantities across subscript."""
 
     def _strip(self, name: _N) -> _N:
         if self.strata:
@@ -1036,9 +1043,13 @@ class QuantityGroup(QuantityStrategy):
         groups, _ = self.grouping.map(self.selected)
         return [g.name.full for g in groups]
 
+    def agg(self, agg: Literal["sum"]) -> "QuantityAggregation":
+        """Combine grouped quantities using the named aggregation."""
+        return QuantityAggregation(self.ipm, self.selection, self.grouping, agg)
+
     def sum(self) -> "QuantityAggregation":
         """Combine grouped quantities by adding their values."""
-        return QuantityAggregation(self.ipm, self.selection, self.grouping, "sum")
+        return self.agg("sum")
 
 
 @dataclass(frozen=True)

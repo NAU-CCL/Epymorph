@@ -430,49 +430,98 @@ class StateSelection(GeoSelection[CensusScope]):
 
 
 @dataclass(frozen=True)
-class CountySelection(GeoSelection[CensusScope]):
-    def group_by(self, grouping: Literal["state"]) -> GeoGroup[CensusScope]:
-        return GeoGroup(
-            self.scope,
-            self.selection,
-            CensusGrouping(grouping),
-        )
-
-
-@dataclass(frozen=True)
-class TractSelection(GeoSelection[CensusScope]):
-    def group_by(self, grouping: Literal["state", "county"]) -> GeoGroup[CensusScope]:
-        return GeoGroup(
-            self.scope,
-            self.selection,
-            CensusGrouping(grouping),
-        )
-
-
-@dataclass(frozen=True)
-class BlockGroupSelection(GeoSelection[CensusScope]):
-    def group_by(
-        self, grouping: Literal["state", "county", "tract"]
-    ) -> GeoGroup[CensusScope]:
-        return GeoGroup(
-            self.scope,
-            self.selection,
-            CensusGrouping(grouping),
-        )
-
-
-@dataclass(frozen=True)
 class CensusGrouping(GeoGrouping):
     granularity: CensusGranularityName
 
     @override
-    def map(
-        self,
-        node_ids: NDArray[np.str_],
-    ) -> NDArray[np.str_]:
+    def map(self, node_ids: NDArray[np.str_]) -> NDArray[np.str_]:
         gran = CensusGranularity.of(self.granularity)
-        # return gran.truncate_array(node_ids)
         return np.array([gran.truncate(g) for g in node_ids], dtype=np.str_)
+
+
+@dataclass(frozen=True)
+class CountySelection(GeoSelection[CensusScope]):
+    def group(self, grouping: Literal["state"] | GeoGrouping) -> GeoGroup[CensusScope]:
+        """
+        Groups the geo series using the specified grouping.
+
+        Parameters
+        ----------
+        grouping : Literal["state"] | GeoGrouping
+            The grouping to use. You can specify a supported string value --
+            all of which act as shortcuts for common GeoGrouping instances --
+            or you can provide a GeoGrouping instance to perform custom grouping.
+
+            The shortcut values are:
+            - "state": equivalent to epymorph.geography.us_census.CensusGrouping("state")
+        """  # noqa: E501
+        match grouping:
+            case "state":
+                grouping = CensusGrouping(grouping)
+            case _:
+                pass
+        return GeoGroup(self.scope, self.selection, grouping)
+
+
+@dataclass(frozen=True)
+class TractSelection(GeoSelection[CensusScope]):
+    def group(
+        self, grouping: Literal["state", "county"] | GeoGrouping
+    ) -> GeoGroup[CensusScope]:
+        """
+        Groups the geo series using the specified grouping.
+
+        Parameters
+        ----------
+        grouping : Literal["state", "county"] | GeoGrouping
+            The grouping to use. You can specify a supported string value --
+            all of which act as shortcuts for common GeoGrouping instances --
+            or you can provide a GeoGrouping instance to perform custom grouping.
+
+            The shortcut values are:
+            - "state": equivalent to epymorph.geography.us_census.CensusGrouping("state")
+            - "county": equivalent to epymorph.geography.us_census.CensusGrouping("county")
+        """  # noqa: E501
+        match grouping:
+            case "state":
+                grouping = CensusGrouping(grouping)
+            case "county":
+                grouping = CensusGrouping(grouping)
+            case _:
+                pass
+        return GeoGroup(self.scope, self.selection, grouping)
+
+
+@dataclass(frozen=True)
+class BlockGroupSelection(GeoSelection[CensusScope]):
+    def group(
+        self, grouping: Literal["state", "county", "tract"] | GeoGrouping
+    ) -> GeoGroup[CensusScope]:
+        """
+        Groups the geo series using the specified grouping.
+
+        Parameters
+        ----------
+        grouping : Literal["state", "county", "tract"] | GeoGrouping
+            The grouping to use. You can specify a supported string value --
+            all of which act as shortcuts for common GeoGrouping instances --
+            or you can provide a GeoGrouping instance to perform custom grouping.
+
+            The shortcut values are:
+            - "state": equivalent to epymorph.geography.us_census.CensusGrouping("state")
+            - "county": equivalent to epymorph.geography.us_census.CensusGrouping("county")
+            - "tract": equivalent to epymorph.geography.us_census.CensusGrouping("tract")
+        """  # noqa: E501
+        match grouping:
+            case "state":
+                grouping = CensusGrouping(grouping)
+            case "county":
+                grouping = CensusGrouping(grouping)
+            case "tract":
+                grouping = CensusGrouping(grouping)
+            case _:
+                pass
+        return GeoGroup(self.scope, self.selection, grouping)
 
 
 # NOTE: these Selector classes form a hierarchy of shared functionality.
