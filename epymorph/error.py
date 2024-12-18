@@ -6,6 +6,17 @@ from contextlib import contextmanager
 from textwrap import dedent
 
 
+class ExternalDependencyError(Exception):
+    """Exception when a native program is required but not found."""
+
+    missing: list[str]
+    """Which programs are missing?"""
+
+    def __init__(self, msg: str, missing: list[str]):
+        super().__init__(msg)
+        self.missing = missing
+
+
 class GeographyError(Exception):
     """Exception working with geographic system representations."""
 
@@ -16,30 +27,6 @@ class GeographyError(Exception):
 
 class DimensionError(Exception):
     """Raised when epymorph needed dimensional information that was not provided."""
-
-
-class UnknownModel(Exception):
-    """Exception for the inability to load a model as specified."""
-
-    model_type: str
-    name_or_path: str
-
-    def __init__(self, model_type: str, name_or_path: str):
-        super().__init__(f"Unable to load {model_type} model '{name_or_path}'")
-        self.model_type = model_type
-        self.name_or_path = name_or_path
-
-
-class ModelRegistryException(Exception):
-    """Exception during model library initialization."""
-
-
-class ParseException(Exception):
-    """Superclass for exceptions which happen while parsing a model."""
-
-
-class MmParseException(ParseException):
-    """Exception parsing a Movement Model."""
 
 
 class ValidationException(Exception):
