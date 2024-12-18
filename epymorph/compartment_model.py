@@ -8,6 +8,7 @@ import dataclasses
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -32,6 +33,7 @@ from epymorph.database import AbsoluteName, AttributeDef
 from epymorph.error import IpmValidationException
 from epymorph.simulation import DEFAULT_STRATA, META_STRATA, gpm_strata
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
+from epymorph.tools.ipm_diagram import render_diagram
 from epymorph.util import (
     acceptable_name,
     are_instances,
@@ -408,6 +410,26 @@ class BaseCompartmentModel(ABC):
     @property
     def select(self) -> "QuantitySelector":
         return QuantitySelector(self)
+
+    def diagram(
+        self,
+        *,
+        file: str | Path | None = None,
+        figsize: tuple[float, float] | None = None,
+    ) -> None:
+        """Render a diagram of this IPM, either by showing it with matplotlib (default)
+        or by saving it to `file` as a png image.
+
+        Parameters
+        ----------
+        file : str | Path, optional
+            Provide a file path to save a png image of the diagram to this path.
+            If `file` is None, we will instead use matplotlib to show the diagram.
+        figsize : tuple[float, float], optional
+            The matplotlib figure size to use when displaying the diagram.
+            Only used if `file` is not provided.
+        """
+        render_diagram(ipm=self, file=file, figsize=figsize)
 
 
 def validate_compartment_model(model: BaseCompartmentModel) -> None:

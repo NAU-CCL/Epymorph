@@ -16,7 +16,6 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_shape import Shapes, SimDimensions
 from epymorph.data_type import CentroidDType, CentroidType, SimDType
-from epymorph.draw import render, render_and_save
 from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -54,8 +53,6 @@ __all__ = [
     "fork",
     "BIRTH",
     "DEATH",
-    "render",  # TODO: refactor this to methods like the output tools?
-    "render_and_save",
     # Single Strata RUME
     "SingleStrataRume",
     # Multistrata RUME
