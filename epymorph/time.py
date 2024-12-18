@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from functools import cached_property
 from typing import Generic, Iterator, Literal, NamedTuple, Self, TypeVar
 
 import numpy as np
@@ -84,6 +83,8 @@ class TimeFrame:
     """The first date in the simulation."""
     duration_days: int
     """The number of days for which to run the simulation."""
+    end_date: date = field(init=False)
+    """The last date included in the simulation."""
 
     def __post_init__(self):
         if self.duration_days < 1:
@@ -92,11 +93,8 @@ class TimeFrame:
                 "(Its duration in days must be at least 1.)"
             )
             raise ValueError(err)
-
-    @cached_property
-    def end_date(self) -> date:
-        """The last date included in the simulation."""
-        return self.start_date + timedelta(days=self.duration_days - 1)
+        end_date = self.start_date + timedelta(days=self.duration_days - 1)
+        object.__setattr__(self, "end_date", end_date)
 
     def is_subset(self, other: "TimeFrame") -> bool:
         """Is the given TimeFrame a subset of this one?"""

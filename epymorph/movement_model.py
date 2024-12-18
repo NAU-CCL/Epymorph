@@ -10,7 +10,6 @@ between geospatial nodes at a particular time step of the simulation.
 
 import re
 from abc import ABC, ABCMeta, abstractmethod
-from functools import cached_property
 from math import isclose
 from typing import Any, Literal, Sequence, Type, TypeVar, cast
 
@@ -265,7 +264,7 @@ class MovementModel(ABC, metaclass=MovementModelClass):
     steps: Sequence[float]
     clauses: Sequence[MovementClause]
 
-    @cached_property
+    @property
     def requirements(self) -> Sequence[AttributeDef]:
         """The combined requirements of all of the clauses in this model."""
         return [req for clause in self.clauses for req in clause.requirements]
