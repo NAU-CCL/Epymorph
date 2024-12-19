@@ -357,25 +357,73 @@ def mask(length: int, selection: slice | list[int]) -> NDArray[np.bool_]:
     return mask
 
 
-RADIUS_MI = 3959.87433  # radius of earth in mi
+# values from: https://www.themathdoctors.org/distances-on-earth-2-the-haversine-formula
+_EARTH_RADIUS = {
+    "miles": 3963.1906,
+    "kilometers": 6378.1370,
+}
 
 
 def pairwise_haversine(
-    longitudes: NDArray[np.float64], latitudes: NDArray[np.float64]
+    coordinates: NDArray | tuple[NDArray[np.float64], NDArray[np.float64]],
+    *,
+    units: Literal["miles", "kilometers"] = "miles",
+    radius: float | None = None,
 ) -> NDArray[np.float64]:
-    """Compute the distances in miles between all pairs of coordinates."""
+    """Compute the distances between all pairs of coordinates.
+
+    Parameters
+    ----------
+    coordinates : NDArray | tuple[NDArray, NDArray]
+        The coordinates, given in one of two forms: either a structured numpy array
+        with dtype `[("longitude", np.float64), ("latitude", np.float64)]` or a tuple
+        of two numpy arrays, the first containing longitudes and the second latitudes.
+        The coordinates must be given in degrees.
+    units : Literal["miles", "kilometers"] = "miles",
+        The units of distance to use for the result, unless radius is given.
+    radius : float, optional
+        The radius of the Earth to use in calculating the results. If not given,
+        we will use an appropriate value for the given `units`.
+        Since the value of radius implies the distance units being used, if you
+        specify `radius` the value of `units` is ignored.
+
+    Returns
+    -------
+    NDArray[np.float64] :
+        An NxN array of distances where N is the number of coordinates given,
+        representing the distance between each pair of coordinates. The output
+        maintains the same ordering of coordinates as the input.
+
+    Raises
+    ------
+    ValueError :
+        if coordinates are not given in an expected format
+    """
     # https://www.themathdoctors.org/distances-on-earth-2-the-haversine-formula
-    lng = np.radians(longitudes)
-    lat = np.radians(latitudes)
-    dlng = lng[:, np.newaxis] - lng[np.newaxis, :]
-    dlat = lat[:, np.newaxis] - lat[np.newaxis, :]
-    cos_lat = np.cos(lat)
+    if isinstance(coordinates, np.ndarray) and coordinates.dtype == np.dtype(
+        [("longitude", np.float64), ("latitude", np.float64)]
+    ):
+        lng = coordinates["longitude"]
+        lat = coordinates["latitude"]
+    elif isinstance(coordinates, tuple) and len(coordinates) == 2:
+        lng = coordinates[0]
+        lat = coordinates[1]
+    else:
+        err = "Unable to interpret the given `coordinates`."
+        raise ValueError(err)
+
+    lngrad = np.radians(lng)
+    latrad = np.radians(lat)
+    dlng = lngrad[:, np.newaxis] - lngrad[np.newaxis, :]
+    dlat = latrad[:, np.newaxis] - latrad[np.newaxis, :]
+    cos_lat = np.cos(latrad)
 
     a = (
         np.sin(dlat / 2.0) ** 2
         + (cos_lat[:, np.newaxis] * cos_lat[np.newaxis, :]) * np.sin(dlng / 2.0) ** 2
     )
-    return 2 * RADIUS_MI * np.arcsin(np.sqrt(a))
+    r = radius if radius is not None else _EARTH_RADIUS[units]
+    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 def top(size: int, arr: NDArray) -> NDIndices:
