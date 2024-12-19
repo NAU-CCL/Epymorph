@@ -54,7 +54,7 @@ class SparsemodClause(MovementClause):
         """
         centroid = self.data("centroid")
         phi = self.data("phi")
-        distance = pairwise_haversine(centroid["longitude"], centroid["latitude"])
+        distance = pairwise_haversine(centroid)
         return row_normalize(1 / np.exp(distance / phi))
 
     def evaluate(self, tick: Tick) -> NDArray[np.int64]:
