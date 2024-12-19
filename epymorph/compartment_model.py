@@ -23,6 +23,7 @@ from typing import (
     TypeVar,
     final,
 )
+from warnings import warn
 
 import numpy as np
 from numpy.typing import NDArray
@@ -477,6 +478,17 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
         )
         raise IpmValidationException(err)
 
+    # declared compartments minus used compartments is ideally empty,
+    # otherwise raise a warning
+    extra_comps = set(model.symbols.all_compartments).difference(trx_comps)
+    if len(extra_comps) > 0:
+        msg = (
+            f"Possible issue in {name}: "
+            "not all declared compartments are being used in transitions.\n"
+            f"Extra compartments: {', '.join(map(str, extra_comps))}"
+        )
+        warn(msg)
+
     # transition requirements minus declared requirements should be empty
     missing_reqs = trx_reqs.difference(model.symbols.all_requirements)
     if len(missing_reqs) > 0:
@@ -486,6 +498,17 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
             f"Missing requirements: {', '.join(map(str, missing_reqs))}"
         )
         raise IpmValidationException(err)
+
+    # declared requirements minus used requirements is ideally empty,
+    # otherwise raise a warning
+    extra_reqs = set(model.symbols.all_requirements).difference(trx_reqs)
+    if len(extra_reqs) > 0:
+        msg = (
+            f"Possible issue in {name}: "
+            "not all declared requirements are being used in transitions.\n"
+            f"Extra requirements: {', '.join(map(str, extra_reqs))}"
+        )
+        warn(msg)
 
 
 ####################################
