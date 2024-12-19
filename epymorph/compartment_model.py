@@ -436,6 +436,9 @@ class BaseCompartmentModel(ABC):
 def validate_compartment_model(model: BaseCompartmentModel) -> None:
     name = model.__class__.__name__
 
+    # we need a sneaky way to suppress IPM validation warnings sometimes
+    suppress_warnings = getattr(model, "_suppress_ipm_validation_warnings", False)
+
     # transitions cannot have the source and destination both be exogenous;
     # this would be madness.
     if any(
@@ -480,14 +483,15 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
 
     # declared compartments minus used compartments is ideally empty,
     # otherwise raise a warning
-    extra_comps = set(model.symbols.all_compartments).difference(trx_comps)
-    if len(extra_comps) > 0:
-        msg = (
-            f"Possible issue in {name}: "
-            "not all declared compartments are being used in transitions.\n"
-            f"Extra compartments: {', '.join(map(str, extra_comps))}"
-        )
-        warn(msg)
+    if not suppress_warnings:
+        extra_comps = set(model.symbols.all_compartments).difference(trx_comps)
+        if len(extra_comps) > 0:
+            msg = (
+                f"Possible issue in {name}: "
+                "not all declared compartments are being used in transitions.\n"
+                f"Extra compartments: {', '.join(map(str, extra_comps))}"
+            )
+            warn(msg)
 
     # transition requirements minus declared requirements should be empty
     missing_reqs = trx_reqs.difference(model.symbols.all_requirements)
@@ -501,14 +505,15 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
 
     # declared requirements minus used requirements is ideally empty,
     # otherwise raise a warning
-    extra_reqs = set(model.symbols.all_requirements).difference(trx_reqs)
-    if len(extra_reqs) > 0:
-        msg = (
-            f"Possible issue in {name}: "
-            "not all declared requirements are being used in transitions.\n"
-            f"Extra requirements: {', '.join(map(str, extra_reqs))}"
-        )
-        warn(msg)
+    if not suppress_warnings:
+        extra_reqs = set(model.symbols.all_requirements).difference(trx_reqs)
+        if len(extra_reqs) > 0:
+            msg = (
+                f"Possible issue in {name}: "
+                "not all declared requirements are being used in transitions.\n"
+                f"Extra requirements: {', '.join(map(str, extra_reqs))}"
+            )
+            warn(msg)
 
 
 ####################################
