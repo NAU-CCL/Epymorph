@@ -1,6 +1,4 @@
-"""
-Implements the `cache` subcommands executed from __main__.
-"""
+"""Implements the `cache` CLI subcommands."""
 
 from argparse import _SubParsersAction
 
@@ -17,19 +15,26 @@ from epymorph.cache import (
 def define_argparser(command_parser: _SubParsersAction):
     """Define `cache` subcommand."""
     p = command_parser.add_parser("cache", help="manage epymorph's file cache")
+    cmd = p.add_subparsers(title="cache_commands", dest="cache_commands", required=True)
 
-    sp = p.add_subparsers(title="cache_commands", dest="cache_commands", required=True)
+    list_cmd = cmd.add_parser("list", help="list the contents of the cache")
+    list_cmd.set_defaults(handler=lambda args: handle_list())
 
-    list_command = sp.add_parser("list", help="list the contents of the cache")
-    list_command.set_defaults(handler=lambda args: handle_list())
-
-    remove_command = sp.add_parser(
-        "remove", help="remove a file or folder from the cache"
+    remove_cmd = cmd.add_parser("remove", help="remove a file or folder from the cache")
+    remove_cmd.add_argument(
+        "path",
+        type=str,
+        help=(
+            "the relative path to a file or folder in the cache, "
+            "or omit to purge the cache entirely"
+        ),
+        nargs="?",
+        default=".",
     )
-    remove_command.add_argument(
-        "path", type=str, help="the relative path to a file or folder in the cache"
-    )
-    remove_command.set_defaults(handler=lambda args: handle_remove(path=args.path))
+    remove_cmd.set_defaults(handler=lambda args: handle_remove(path=args.path))
+
+    dir_cmd = cmd.add_parser("dir", help="output the absolute path of the cache folder")
+    dir_cmd.set_defaults(handler=lambda args: handle_dir())
 
 
 def handle_list() -> int:
@@ -51,7 +56,9 @@ def handle_remove(path: str) -> int:
     """CLI command handler: remove a file or folder from the cache."""
     try:
         to_remove, confirm_remove = cache_remove_confirmation(path)
-        if to_remove.is_dir():
+        if path == ".":
+            print("This will delete all cache entries")
+        elif to_remove.is_dir():
             print(f"This will delete all cache entries at {to_remove}")
         else:
             print(f"This will delete the cached file {to_remove}")
@@ -62,3 +69,8 @@ def handle_remove(path: str) -> int:
     except FileError as e:
         print(f"Error: {e}")
         return 1  # exit code: failed
+
+
+def handle_dir() -> int:
+    print(CACHE_PATH)
+    return 0
