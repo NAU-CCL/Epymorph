@@ -10,17 +10,17 @@ from abc import ABC
 from typing import cast
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 from typing_extensions import override
 
-from epymorph.data_shape import DataShapeMatcher, Shapes, SimDimensions
+from epymorph.data_shape import DataShape, DataShapeMatcher, Shapes, SimDimensions
 from epymorph.data_type import SimArray, SimDType
 from epymorph.error import InitException
 from epymorph.simulation import (
     AttributeDef,
     SimulationFunction,
 )
-from epymorph.util import NumpyTypeError, check_ndarray, match
+from epymorph.util import Matcher, NumpyTypeError, check_ndarray, dtype_name, match
 
 
 class Initializer(SimulationFunction[SimArray], ABC):
@@ -39,15 +39,52 @@ class Initializer(SimulationFunction[SimArray], ABC):
                 shape=DataShapeMatcher(Shapes.NxC, self.dim, exact=True),
             )
         except NumpyTypeError as e:
-            msg = f"Invalid return type from '{self.__class__.__name__}'"
-            raise InitException(msg) from e
+            err = f"Invalid return type from Initializer '{self.__class__.__name__}'"
+            raise InitException(err) from e
 
         if np.min(result) < 0:
-            msg = (
+            err = (
                 f"Initializer '{self.__class__.__name__}' returned "
                 "values less than zero."
             )
-            raise InitException(msg)
+            raise InitException(err)
+
+    def _condition_input_array(
+        self,
+        value: NDArray | list,
+        arg_name: str,
+        *,
+        dtype: DTypeLike,
+        shape: DataShape | Matcher,
+        exact: bool = True,
+    ) -> NDArray:
+        try:
+            shape_match = (
+                DataShapeMatcher(shape, self.dim, exact=exact)
+                if isinstance(shape, DataShape)
+                else shape
+            )
+            result = np.array(value).astype(
+                dtype=dtype,
+                copy=True,
+                casting="safe",
+            )
+            check_ndarray(
+                result,
+                dtype=match.dtype(dtype),
+                shape=shape_match,
+            )
+            if isinstance(shape, DataShape) and not exact:
+                result = shape.adapt(self.dim, result)
+            return result
+        except (ValueError, TypeError, NumpyTypeError):
+            err = (
+                f"Initializer {self.__class__.__name__} `{arg_name}` is not valid, "
+                "check that you have provided the expected number and type of values "
+                "for this simulation.\n"
+                f"Expected: {shape}-shaped array of {dtype_name(np.dtype(SimDType))}"
+            )
+            raise InitException(err)
 
 
 # Initializer utility functions
@@ -114,15 +151,20 @@ class Explicit(Initializer):
     You provide the (N,C) array and we use a copy of it.
     """
 
-    initials: SimArray
+    initials: NDArray | list[list[int]]
     """The initial compartment values to use."""
 
-    def __init__(self, initials: SimArray):
+    def __init__(self, initials: NDArray | list[list[int]]):
         self.initials = initials
-        # TODO: we should do validation of all Initializer parameters during init
 
     def evaluate(self) -> SimArray:
-        return self.initials.copy()
+        return self._condition_input_array(
+            self.initials,
+            "initials",
+            dtype=SimDType,
+            shape=Shapes.NxC,
+            exact=True,
+        )
 
 
 class Proportional(Initializer):
@@ -136,40 +178,42 @@ class Proportional(Initializer):
 
     requirements = (_POPULATION_ATTR,)
 
-    ratios: NDArray[np.int64 | np.float64]
+    ratios: (
+        NDArray[np.int64 | np.float64]
+        | list[int]
+        | list[float]
+        | list[list[int]]
+        | list[list[float]]
+    )
     """The initialization ratios to use."""
 
-    def __init__(self, ratios: NDArray[np.int64 | np.float64]):
+    def __init__(
+        self,
+        ratios: NDArray[np.int64 | np.float64]
+        | list[int]
+        | list[float]
+        | list[list[int]]
+        | list[list[float]],
+    ):
         self.ratios = ratios
 
     def evaluate(self) -> SimArray:
-        try:
-            check_ndarray(
-                self.ratios,
-                dtype=match.dtype(np.int64, np.float64),
-                shape=DataShapeMatcher(Shapes.NxC, self.dim),
-            )
-        except NumpyTypeError as e:
-            raise InitException(
-                f"Initializer argument 'ratios' is not properly specified. {e}"
-            ) from None
+        ratios = self._condition_input_array(
+            self.ratios,
+            "ratios",
+            dtype=np.float64,
+            shape=Shapes.NxC,
+            exact=False,
+        )
 
-        try:
-            ratios = Shapes.NxC.adapt(self.dim, self.ratios)
-        except ValueError:
-            raise InitException(
-                "Initializer argument 'ratios' is not properly specified."
-            )
-        ratios = ratios.astype(np.float64, copy=False)
         row_sums = cast(NDArray[np.float64], np.sum(ratios, axis=1, dtype=np.float64))
-
         if np.any(row_sums <= 0):
-            msg = "One or more rows sum to zero or less."
-            raise InitException(msg)
+            err = "One or more rows sum to zero or less."
+            raise InitException(err)
 
         pop = self.data(_POPULATION_ATTR)
         result = pop[:, np.newaxis] * (ratios / row_sums[:, np.newaxis])
-        return result.round().astype(SimDType, copy=True)
+        return result.round().astype(SimDType)
 
 
 class SeededInfection(Initializer, ABC):
@@ -208,17 +252,17 @@ class SeededInfection(Initializer, ABC):
         """
         C = self.dim.compartments
         if not 0 <= self.initial_compartment < C:
-            msg = (
+            err = (
                 "Initializer argument `initial_compartment` must be an index "
                 f"of the IPM compartments (0 to {C-1}, inclusive)."
             )
-            raise InitException(msg)
+            raise InitException(err)
         if not 0 <= self.infection_compartment < C:
-            msg = (
+            err = (
                 "Initializer argument `infection_compartment` must be an index "
                 f"of the IPM compartments (0 to {C-1}, inclusive)."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
 
 class IndexedLocations(SeededInfection):
@@ -233,42 +277,43 @@ class IndexedLocations(SeededInfection):
 
     requirements = (_POPULATION_ATTR,)
 
-    selection: NDArray[np.intp]
+    selection: NDArray[np.intp] | list[int]
     """Which locations to infect."""
     seed_size: int
     """How many individuals to infect, randomly distributed to selected locations."""
 
     def __init__(
         self,
-        selection: NDArray[np.intp],
+        selection: NDArray[np.intp] | list[int],
         seed_size: int,
         initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
         infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
     ):
         super().__init__(initial_compartment, infection_compartment)
-
-        if len(selection.shape) != 1:
-            msg = "Initializer argument 'selection' must be a 1-dimensional array."
-            raise InitException(msg)
         if seed_size < 0:
-            msg = (
+            err = (
                 "Initializer argument 'seed_size' must be a non-negative integer value."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         self.selection = selection
         self.seed_size = seed_size
 
     def evaluate(self) -> SimArray:
-        N = self.dim.nodes
-        sel = self.selection
+        sel = self._condition_input_array(
+            self.selection,
+            "selection",
+            dtype=np.intp,
+            shape=match.dimensions(1),
+        )
 
+        N = self.dim.nodes
         if not np.all((-N < sel) & (sel < N)):
-            msg = (
+            err = (
                 "Initializer argument 'selection' invalid: "
                 f"some indices are out of range ({-N}, {N})."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         self.validate_compartments()
 
@@ -276,11 +321,11 @@ class IndexedLocations(SeededInfection):
         selected = pop[sel]
         available = selected.sum()
         if available < self.seed_size:
-            msg = (
+            err = (
                 f"Attempted to infect {self.seed_size} individuals "
                 f"but only had {available} available."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         # Randomly select individuals from each of the selected locations.
         if len(selected) == 1:
@@ -329,11 +374,11 @@ class SingleLocation(IndexedLocations):
     def evaluate(self) -> SimArray:
         N = self.dim.nodes
         if not -N < self.selection[0] < N:
-            msg = (
+            err = (
                 "Initializer argument 'location' must be a valid index "
                 f"to an array of {N} populations."
             )
-            raise InitException(msg)
+            raise InitException(err)
         return super().evaluate()
 
 
@@ -347,14 +392,14 @@ class LabeledLocations(SeededInfection):
 
     requirements = (_POPULATION_ATTR, _LABEL_ATTR)
 
-    labels: NDArray[np.str_]
+    labels: NDArray[np.str_] | list[str]
     """Which locations to infect."""
     seed_size: int
     """How many individuals to infect, randomly distributed to selected locations."""
 
     def __init__(
         self,
-        labels: NDArray[np.str_],
+        labels: NDArray[np.str_] | list[str],
         seed_size: int,
         initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
         infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
@@ -365,13 +410,19 @@ class LabeledLocations(SeededInfection):
 
     def evaluate(self) -> SimArray:
         geo_labels = self.data(_LABEL_ATTR)
+        labels = self._condition_input_array(
+            self.labels,
+            "labels",
+            dtype=np.str_,
+            shape=match.dimensions(1),
+        )
 
-        if not np.all(np.isin(self.labels, geo_labels)):
-            msg = (
+        if not np.all(np.isin(labels, geo_labels)):
+            err = (
                 "Initializer argument 'labels' invalid: "
                 "some labels are not in the geography."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         (selection,) = np.isin(geo_labels, self.labels).nonzero()
         sub = IndexedLocations(
@@ -412,11 +463,11 @@ class RandomLocations(SeededInfection):
         N = self.dim.nodes
 
         if not 0 < self.num_locations <= N:
-            msg = (
+            err = (
                 "Initializer argument 'num_locations' must be "
                 f"a value from 1 up to the number of locations ({N})."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         indices = np.arange(N, dtype=np.intp)
         selection = self.rng.choice(indices, self.num_locations)
@@ -460,8 +511,8 @@ class TopLocations(SeededInfection):
         super().__init__(initial_compartment, infection_compartment)
 
         if not top_attribute.shape == Shapes.N:
-            msg = "Initializer argument `top_locations` must be an N-shaped attribute."
-            raise InitException(msg)
+            err = "Initializer argument `top_locations` must be an N-shaped attribute."
+            raise InitException(err)
 
         self.top_attribute = top_attribute
         self.requirements = (_POPULATION_ATTR, top_attribute)
@@ -472,11 +523,11 @@ class TopLocations(SeededInfection):
         N = self.dim.nodes
 
         if not 0 < self.num_locations <= N:
-            msg = (
+            err = (
                 "Initializer argument 'num_locations' must be "
                 f"a value from 1 up to the number of locations ({N})."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         # `argpartition` chops an array in two halves
         # (yielding indices of the original array):
@@ -528,10 +579,10 @@ class BottomLocations(SeededInfection):
         super().__init__(initial_compartment, infection_compartment)
 
         if not bottom_attribute.shape == Shapes.N:
-            msg = (
+            err = (
                 "Initializer argument `bottom_locations` must be an N-shaped attribute."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         self.bottom_attribute = bottom_attribute
         self.requirements = (_POPULATION_ATTR, bottom_attribute)
@@ -542,11 +593,11 @@ class BottomLocations(SeededInfection):
         N = self.dim.nodes
 
         if not 0 < self.num_locations <= N:
-            msg = (
+            err = (
                 "Initializer argument 'num_locations' must be "
                 f"a value from 1 up to the number of locations ({N})."
             )
-            raise InitException(msg)
+            raise InitException(err)
 
         # `argpartition` chops an array in two halves
         # (yielding indices of the original array):

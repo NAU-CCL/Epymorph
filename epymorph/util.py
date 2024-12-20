@@ -600,6 +600,27 @@ class MatchShapeLiteral(Matcher[NDArray]):
         return self._acceptable == value.shape
 
 
+class MatchDimensions(Matcher[NDArray]):
+    """
+    Matches a numpy array purely on the number of dimensions.
+    """
+
+    _acceptable: int
+
+    def __init__(self, acceptable: int):
+        if acceptable < 0:
+            err = "Dimensions must be greater than or equal to zero."
+            raise ValueError(err)
+        self._acceptable = acceptable
+
+    def expected(self) -> str:
+        """Describes what the expected value is."""
+        return f"{self._acceptable}-dimensional array"
+
+    def __call__(self, value: NDArray) -> bool:
+        return self._acceptable == value.ndim
+
+
 @dataclass(frozen=True)
 class _Matchers:
     """Convenience constructors for various matchers."""
@@ -626,6 +647,10 @@ class _Matchers:
     def shape_literal(self, shape: tuple[int, ...]) -> Matcher[NDArray]:
         """Creates a MatchShapeLiteral instance."""
         return MatchShapeLiteral(shape)
+
+    def dimensions(self, dimensions: int) -> Matcher[NDArray]:
+        """Creates a MatchDimensions instance."""
+        return MatchDimensions(dimensions)
 
 
 match = _Matchers()

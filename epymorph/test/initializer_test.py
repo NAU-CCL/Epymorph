@@ -38,7 +38,7 @@ _FOOSBALL_CHAMPIONSHIPS = AttributeDef("foosball_championships", int, Shapes.N)
 
 
 class TestExplicitInitializer(unittest.TestCase):
-    def test_explicit(self):
+    def test_explicit_01(self):
         initials = np.array(
             [
                 [50, 20, 30],
@@ -48,9 +48,60 @@ class TestExplicitInitializer(unittest.TestCase):
                 [0, 0, 500],
             ]
         )
-        exp = initials.copy()
-        act = init.Explicit(initials).with_context(*_eval_context()).evaluate()
-        np.testing.assert_array_equal(act, exp)
+        actual = init.Explicit(initials).with_context(*_eval_context()).evaluate()
+        np.testing.assert_array_equal(actual, initials)
+        self.assertIsNot(actual, initials)  # returns a copy
+
+    def test_explicit_01b(self):
+        initials = np.array(
+            [
+                [50, 20, 30],
+                [50, 120, 30],
+                [100, 100, 100],
+                [300, 100, 0],
+                [0, 0, 500],
+            ],
+            dtype=np.int32,  # test with wrong but compatible data type
+        )
+        actual = init.Explicit(initials).with_context(*_eval_context()).evaluate()
+        np.testing.assert_array_equal(actual, initials)
+
+    def test_explicit_02(self):
+        initials = [
+            [50, 20, 30],
+            [50, 120, 30],
+            [100, 100, 100],
+            [300, 100, 0],
+            [0, 0, 500],
+        ]
+        actual = init.Explicit(initials).with_context(*_eval_context()).evaluate()
+        np.testing.assert_array_equal(actual, np.array(initials, SimDType))
+
+    def test_explicit_03(self):
+        # test wrong shape
+        initials = [
+            [50, 20],
+            [50, 120],
+            [100, 100],
+            [300, 100],
+            [0, 0],
+        ]
+        ini = init.Explicit(initials).with_context(*_eval_context())
+        with self.assertRaises(InitException):
+            ini.evaluate()
+
+    def test_explicit_04(self):
+        # test wrong type
+        initials = [
+            [50, 20, 99.99],
+            [50, 120, 30],
+            [100, 100, 100],
+            [300, 100, 0],
+            [0, 0, 500],
+        ]
+        ini = init.Explicit(initials).with_context(*_eval_context())
+        with self.assertRaises(InitException):
+            ini.evaluate()
 
 
 class TestProportionalInitializer(unittest.TestCase):
@@ -87,10 +138,21 @@ class TestProportionalInitializer(unittest.TestCase):
             ]
         )
 
-        exp = ratios1.copy()
+        expected = ratios1.copy()
         for ratios in [ratios1, ratios2, ratios3]:
-            act = init.Proportional(ratios).with_context(*_eval_context()).evaluate()
-            np.testing.assert_array_equal(act, exp)
+            actual = init.Proportional(ratios).with_context(*_eval_context()).evaluate()
+            np.testing.assert_array_equal(actual, expected)
+
+    def test_shape_adapt(self):
+        ratios = [1, 2, 3]
+        pop = np.array([100, 200, 300, 400, 500])
+        expected = (
+            (pop[:, np.newaxis] * np.array([1 / 6, 1 / 3, 1 / 2]))
+            .round()
+            .astype(SimDType)
+        )
+        actual = init.Proportional(ratios).with_context(*_eval_context()).evaluate()
+        np.testing.assert_array_equal(actual, expected)
 
     def test_bad_args(self):
         with self.assertRaises(InitException):
@@ -119,6 +181,19 @@ class TestProportionalInitializer(unittest.TestCase):
             )
             init.Proportional(ratios).with_context(*_eval_context()).evaluate()
 
+        with self.assertRaises(InitException):
+            # bad type
+            ratios = np.array(
+                [
+                    [50, 20, True],
+                    [50, 120, 30],
+                    [0, 0, 0],
+                    [300, 100, 0],
+                    [0, 0, 500],
+                ]
+            )
+            init.Proportional(ratios).with_context(*_eval_context()).evaluate()
+
 
 class TestIndexedInitializer(unittest.TestCase):
     def test_indexed_locations(self):
@@ -133,9 +208,22 @@ class TestIndexedInitializer(unittest.TestCase):
             .evaluate()
         )
         # Make sure only the selected locations get infected.
-        act = out[:, 1] > 0
-        exp = np.array([False, True, False, True, False])
-        np.testing.assert_array_equal(act, exp)
+        actual = out[:, 1] > 0
+        expected = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(actual, expected)
+        # And check for 100 infected in total.
+        self.assertEqual(out[:, 1].sum(), 100)
+
+        # Repeat test with list of ints
+        out = (
+            init.IndexedLocations(selection=[1, -2], seed_size=100)
+            .with_context(*_eval_context())
+            .evaluate()
+        )
+        # Make sure only the selected locations get infected.
+        actual = out[:, 1] > 0
+        expected = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(actual, expected)
         # And check for 100 infected in total.
         self.assertEqual(out[:, 1].sum(), 100)
 
@@ -171,9 +259,22 @@ class TestLabeledInitializer(unittest.TestCase):
             .evaluate()
         )
         # Make sure only the selected locations get infected.
-        act = out[:, 1] > 0
-        exp = np.array([False, True, False, True, False])
-        np.testing.assert_array_equal(act, exp)
+        actual = out[:, 1] > 0
+        expected = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(actual, expected)
+        # And check for 100 infected in total.
+        self.assertEqual(out[:, 1].sum(), 100)
+
+        # repeat test with list
+        out = (
+            init.LabeledLocations(["B", "D"], seed_size=100)
+            .with_context(*_eval_context())
+            .evaluate()
+        )
+        # Make sure only the selected locations get infected.
+        actual = out[:, 1] > 0
+        expected = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(actual, expected)
         # And check for 100 infected in total.
         self.assertEqual(out[:, 1].sum(), 100)
 
