@@ -139,6 +139,7 @@ class PlotRenderer:
         ordering: Literal["location", "quantity"] = "location",
         time_format: Literal["auto", "date", "day"] = "auto",
         title: str | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
         Renders a line plot using matplotlib showing the given selections.
@@ -186,6 +187,21 @@ class PlotRenderer:
             may be ignored.
         title : str, optional
             a title to draw on the plot
+        transform : Callable[[pd.DataFrame], pd.DataFrame], optional
+            allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per geo/quantity group -- one per line,
+            essentially -- with a dataframe that contains just the data for that group.
+            The dataframe given as the argument is the result of applying
+            all selections and the projection if specified.
+            You should return a dataframe with the same format, where the
+            values of the data column have been modified for your purposes.
+
+            Dataframe columns:
+            - "time": the time series column
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
+            - "value": the data column
         """
 
         # Adjust figsize to make room for an outside legend, if needed
@@ -210,6 +226,7 @@ class PlotRenderer:
                 label_format=label_format,
                 ordering=ordering,
                 time_format=time_format,
+                transform=transform,
             )
             # Make sure the plot does not grow if we widened the figure.
             x, y, w, h = ax.get_position(original=True).bounds
@@ -264,6 +281,7 @@ class PlotRenderer:
         line_kwargs: list[dict] | None = None,
         ordering: Literal["location", "quantity"] = "location",
         time_format: Literal["auto", "date", "day"] = "auto",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
         """
         Draws lines onto the given matplotlib Axes to show the given selections.
@@ -304,6 +322,21 @@ class PlotRenderer:
             simulation with the first day being 0.
             If the system cannot convert to the requested time format, this argument
             may be ignored.
+        transform : Callable[[pd.DataFrame], pd.DataFrame], optional
+            allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per geo/quantity group -- one per line,
+            essentially -- with a dataframe that contains just the data for that group.
+            The dataframe given as the argument is the result of applying
+            all selections and the projection if specified.
+            You should return a dataframe with the same format, where the
+            values of the data column have been modified for your purposes.
+
+            Dataframe columns:
+            - "time": the time series column
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
+            - "value": the data column
 
         Returns
         -------
@@ -313,6 +346,8 @@ class PlotRenderer:
         """
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
+        if transform is None:
+            transform = identity
 
         data_df = munge(self.output, geo, time, quantity)
 
@@ -346,6 +381,7 @@ class PlotRenderer:
             q_label = q_mapping[q_label_dis]
             label = label_format.format(n=n_label, q=q_label)
             curr_kwargs = {"label": label, **kwargs}
+            data = transform(data.assign(quantity=q_label))
             ls = ax.plot(data["time"], data["value"], **curr_kwargs)
             lines.extend(ls)
         return lines

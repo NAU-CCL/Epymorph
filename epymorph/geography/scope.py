@@ -21,6 +21,14 @@ class GeoScope(Protocol):
         """The number of nodes in this scope."""
         return len(self.node_ids)
 
+    def index_of(self, node_id: str) -> int:
+        """Returns the index of a given node by its ID string.
+        Raises ValueError if the given ID isn't in the scope."""
+        idxs, *_ = np.where(self.node_ids == node_id)
+        if len(idxs) == 0:
+            raise ValueError(f"'{node_id}' not present in geo scope.")
+        return idxs[0]
+
     @property
     def labels_option(self) -> NDArray[np.str_] | None:
         """An optional text label for each node. If this returns None,

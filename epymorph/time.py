@@ -560,6 +560,27 @@ class TimeSelector:
         to_index = (other.end_date - self.time_frame.start_date).days + 1
         return TimeSelection(self.time_frame, (slice(from_index, to_index), step))
 
+    def days(
+        self,
+        from_day: int,
+        to_day: int,
+        step: int | None = None,
+    ) -> TimeSelection:
+        """Subset the time frame by providing a start and end simulation day
+        (inclusive).
+
+        Parameters
+        ----------
+        from_day : int
+            the starting simulation day of the range, as an index
+        to_day : int
+            the last included simulation day of the range, as an index
+        step : int, optional
+            if given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps
+        """
+        return TimeSelection(self.time_frame, (slice(from_day, to_day), step))
+
     def range(
         self,
         from_date: date | str,
