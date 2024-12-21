@@ -13,11 +13,11 @@ import numpy as np
 from numpy.typing import DTypeLike, NDArray
 from typing_extensions import override
 
-from epymorph.data_shape import DataShape, DataShapeMatcher, Shapes, SimDimensions
+from epymorph.attribute import AttributeDef
+from epymorph.data_shape import DataShape, DataShapeMatcher, Shapes
 from epymorph.data_type import SimArray, SimDType
 from epymorph.error import InitException
 from epymorph.simulation import (
-    AttributeDef,
     SimulationFunction,
 )
 from epymorph.util import Matcher, NumpyTypeError, check_ndarray, dtype_name, match
@@ -48,6 +48,10 @@ class Initializer(SimulationFunction[SimArray], ABC):
                 "values less than zero."
             )
             raise InitException(err)
+
+    @property
+    def _NxC(self) -> tuple[int, int]:
+        return (self.scope.nodes, self.ipm.num_compartments)
 
     def _condition_input_array(
         self,
@@ -87,33 +91,6 @@ class Initializer(SimulationFunction[SimArray], ABC):
             raise InitException(err)
 
 
-# Initializer utility functions
-
-
-def _empty_array(dim: SimDimensions) -> SimArray:
-    return np.zeros((dim.nodes, dim.compartments), dtype=SimDType)
-
-
-def _pop_array(dim: SimDimensions, pop: SimArray, initial_compartment: int) -> SimArray:
-    array = _empty_array(dim)
-    array[:, initial_compartment] = pop
-    return array
-
-
-def _transition_1(
-    array: SimArray, from_compartment: int, to_compartment: int, row: int, count: int
-) -> None:
-    array[row, from_compartment] -= count
-    array[row, to_compartment] += count
-
-
-def _transition_N(
-    array: SimArray, from_compartment: int, to_compartment: int, count: SimArray
-) -> None:
-    array[:, from_compartment] -= count
-    array[:, to_compartment] += count
-
-
 # Pre-baked initializer implementations
 
 
@@ -134,15 +111,17 @@ class NoInfection(Initializer):
 
     requirements = (_POPULATION_ATTR,)
 
-    initial_compartment: int
-    """The IPM compartment index where people should start."""
+    initial_compartment: int | str
+    """The IPM compartment where people should start, as either a name or index."""
 
-    def __init__(self, initial_compartment: int = 0):
+    def __init__(self, initial_compartment: int | str = 0):
         self.initial_compartment = initial_compartment
 
     def evaluate(self) -> SimArray:
         pop = self.data(_POPULATION_ATTR)
-        return _pop_array(self.dim, pop, self.initial_compartment)
+        result = np.zeros(self._NxC, dtype=SimDType)
+        result[:, self.initial_compartment] = pop
+        return result
 
 
 class Explicit(Initializer):
@@ -250,7 +229,7 @@ class SeededInfection(Initializer, ABC):
         Child classes should call this during `initialize` to check that the given
         compartment indices are valid.
         """
-        C = self.dim.compartments
+        C = self.ipm.num_compartments
         if not 0 <= self.initial_compartment < C:
             err = (
                 "Initializer argument `initial_compartment` must be an index "
@@ -307,7 +286,7 @@ class IndexedLocations(SeededInfection):
             shape=match.dimensions(1),
         )
 
-        N = self.dim.nodes
+        N = self.scope.nodes
         if not np.all((-N < sel) & (sel < N)):
             err = (
                 "Initializer argument 'selection' invalid: "
@@ -333,18 +312,18 @@ class IndexedLocations(SeededInfection):
         else:
             infected = self.rng.multivariate_hypergeometric(selected, self.seed_size)
 
-        result = _pop_array(self.dim, pop, self.initial_compartment)
+        result = np.zeros(self._NxC, dtype=SimDType)
+        result[:, self.initial_compartment] = pop
 
         # Special case: the "no" IPM has only one compartment!
         # Technically it would be more "correct" to choose a different initializer,
         # but it's convenient to allow this special case for ease of testing.
-        if self.dim.compartments == 1:
+        if self.ipm.num_compartments == 1:
             return result
 
         for i, n in zip(sel, infected):
-            _transition_1(
-                result, self.initial_compartment, self.infection_compartment, i, n
-            )
+            result[i, self.initial_compartment] -= n
+            result[i, self.infection_compartment] += n
         return result
 
 
@@ -372,7 +351,7 @@ class SingleLocation(IndexedLocations):
         )
 
     def evaluate(self) -> SimArray:
-        N = self.dim.nodes
+        N = self.scope.nodes
         if not -N < self.selection[0] < N:
             err = (
                 "Initializer argument 'location' must be a valid index "
@@ -460,8 +439,7 @@ class RandomLocations(SeededInfection):
         self.seed_size = seed_size
 
     def evaluate(self) -> SimArray:
-        N = self.dim.nodes
-
+        N = self.scope.nodes
         if not 0 < self.num_locations <= N:
             err = (
                 "Initializer argument 'num_locations' must be "
@@ -520,8 +498,7 @@ class TopLocations(SeededInfection):
         self.seed_size = seed_size
 
     def evaluate(self) -> SimArray:
-        N = self.dim.nodes
-
+        N = self.scope.nodes
         if not 0 < self.num_locations <= N:
             err = (
                 "Initializer argument 'num_locations' must be "
@@ -590,8 +567,7 @@ class BottomLocations(SeededInfection):
         self.seed_size = seed_size
 
     def evaluate(self) -> SimArray:
-        N = self.dim.nodes
-
+        N = self.scope.nodes
         if not 0 < self.num_locations <= N:
             err = (
                 "Initializer argument 'num_locations' must be "

@@ -6,12 +6,12 @@ import numpy.testing as npt
 import sympy
 from numpy.typing import NDArray
 
+from epymorph.attribute import AbsoluteName, AttributeDef, ModuleNamePattern
 from epymorph.compartment_model import MultistrataModelSymbols, edge
 from epymorph.data.ipm.sirs import Sirs
 from epymorph.data.mm.centroids import Centroids
 from epymorph.data_shape import Shapes
 from epymorph.data_type import AttributeArray, CentroidDType
-from epymorph.database import AbsoluteName, AttributeDef, ModuleNamePattern
 from epymorph.error import AttributeException
 from epymorph.geography.us_census import StateScope
 from epymorph.initializer import SingleLocation
@@ -226,7 +226,7 @@ class EvaluateParamsTest(unittest.TestCase):
                 self.r_0 = r_0
 
             def evaluate1(self, day: int, node_index: int) -> float:
-                T = self.dim.days
+                T = self.time_frame.days
                 gamma = self.data(self.GAMMA)[day, node_index]
                 magnitude = self.r_0 * gamma
                 return (

@@ -5,18 +5,15 @@ Classes for representing simulation results.
 import dataclasses
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Literal, Sequence
+from typing import Literal
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from typing_extensions import deprecated, override
 
-from epymorph.compartment_model import BaseCompartmentModel
-from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.geography.scope import GeoScope
-from epymorph.time import TimeFrame
+from epymorph.rume import Rume
 from epymorph.tools.out_map import MapRendererMixin
 from epymorph.tools.out_plot import PlotRendererMixin
 from epymorph.tools.out_table import TableRendererMixin
@@ -29,16 +26,8 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
     all IPM compartments and event data for all populations and all IPM events.
     """
 
-    dim: SimDimensions
-    """The dimensions of the simulation that generated this output."""
-    scope: GeoScope
-    """The geo scope of the simulation that generated this output."""
-    geo_labels: Sequence[str]
-    """Labels for the geo nodes."""
-    time_frame: TimeFrame
-    """The time frame of the simulation that generated this output."""
-    ipm: BaseCompartmentModel
-    """The IPM used in the simulation that generated this output."""
+    rume: Rume
+    """The Rume used in the simulation that generated this output."""
 
     initial: NDArray[SimDType]
     """
@@ -112,24 +101,16 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
         else:
             return self.home_events
 
-    @cached_property
-    def compartment_labels(self) -> Sequence[str]:
-        return [c.name.full for c in self.ipm.compartments]
-
-    @cached_property
-    def event_labels(self) -> Sequence[str]:
-        return [e.name.full for e in self.ipm.events]
-
     @property
     def events_per_day(self) -> NDArray[SimDType]:
         """
         Returns this output's `incidence` from a per-tick value to a per-day value.
         Returns a shape (T,N,E) array, where T is the number of simulation days.
         """
-        S = self.dim.ticks
-        N = self.dim.nodes
-        E = self.dim.events
-        taus = self.dim.tau_steps
+        S = self.rume.num_ticks
+        N = self.rume.scope.nodes
+        E = self.rume.ipm.num_events
+        taus = self.rume.num_tau_steps
         return np.sum(
             self.events.reshape((S // taus, taus, N, E)), axis=1, dtype=SimDType
         )
@@ -143,7 +124,8 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
         Returns a shape (S,) array, where S is the number of simulation ticks.
         """
         return np.cumsum(
-            np.tile(self.dim.tau_step_lengths, self.dim.days), dtype=np.float64
+            np.tile(self.rume.tau_step_lengths, self.rume.time_frame.days),
+            dtype=np.float64,
         )
 
     @property
@@ -156,13 +138,15 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
         # earlier index (time) to change slowest. (The quantity index is left as-is.)
         # Thus "tick" goes 0,0,0,...,1,1,1,... (similar situation with "date")
         # and "node" goes 1,2,3,...,1,2,3,...
+        C = self.rume.ipm.num_compartments
+        E = self.rume.ipm.num_events
+        N = self.rume.scope.nodes
+        S = self.rume.num_ticks
+        tau_steps = self.rume.num_tau_steps
         data_np = np.concatenate(
             (self.compartments, self.events),
             axis=2,
-        ).reshape(
-            (-1, self.dim.compartments + self.dim.events),
-            order="C",
-        )
+        ).reshape((-1, C + E), order="C")
 
         # Here I'm concatting two DFs sideways so that the index columns come first.
         # Could use insert, but this is nicer.
@@ -171,17 +155,18 @@ class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
                 # A dataframe for the various indices
                 pd.DataFrame(
                     {
-                        "tick": np.arange(self.dim.ticks).repeat(self.dim.nodes),
-                        "date": self.time_frame.to_numpy().repeat(
-                            self.dim.nodes * self.dim.tau_steps
-                        ),
-                        "node": np.tile(self.scope.node_ids, self.dim.ticks),
+                        "tick": np.arange(S).repeat(N),
+                        "date": self.rume.time_frame.to_numpy().repeat(N * tau_steps),
+                        "node": np.tile(self.rume.scope.node_ids, S),
                     }
                 ),
                 # A dataframe for the data columns
                 pd.DataFrame(
                     data=data_np,
-                    columns=[*self.compartment_labels, *self.event_labels],
+                    columns=[
+                        *(c.name.full for c in self.rume.ipm.compartments),
+                        *(e.name.full for e in self.rume.ipm.events),
+                    ],
                 ),
             ),
             axis=1,  # stick them together side-by-side

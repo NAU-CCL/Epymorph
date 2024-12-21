@@ -5,6 +5,7 @@ from typing import Mapping
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.data.ipm.pei import Pei as PeiIPM
 from epymorph.data.ipm.sirh import Sirh
@@ -22,7 +23,7 @@ from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import StateScope
 from epymorph.initializer import SingleLocation
 from epymorph.rume import SingleStrataRume
-from epymorph.simulation import AttributeDef, default_rng
+from epymorph.simulation import default_rng
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
 

@@ -100,6 +100,11 @@ class TimeFrame:
         """Is the given TimeFrame a subset of this one?"""
         return self.start_date <= other.start_date and self.end_date >= other.end_date
 
+    @property
+    def days(self) -> int:
+        """Alias for `duration_days`"""
+        return self.duration_days
+
     def __iter__(self) -> Iterator[date]:
         """Iterates over the sequence of dates which are part of this time frame."""
         stop_date = self.start_date + timedelta(days=self.duration_days)

@@ -43,13 +43,13 @@ def file_log(
     start_time: float | None = None
 
     def on_start(e: OnStart) -> None:
-        start_date = e.dim.start_date
-        end_date = e.dim.end_date
-        duration_days = e.dim.days
+        start_date = e.rume.time_frame.start_date
+        end_date = e.rume.time_frame.end_date
+        duration_days = e.rume.time_frame.days
 
         sim_log.info(f"Running simulation ({e.simulator}):")
         sim_log.info(f"- {start_date} to {end_date} ({duration_days} days)")
-        sim_log.info(f"- {e.dim.nodes} geo nodes")
+        sim_log.info(f"- {e.rume.scope.nodes} geo nodes")
 
         nonlocal start_time
         start_time = perf_counter()

@@ -2,9 +2,9 @@
 
 from sympy import Max
 
+from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import CompartmentModel, compartment, edge, fork
 from epymorph.data_shape import Shapes
-from epymorph.simulation import AttributeDef
 
 
 class Sirh(CompartmentModel):

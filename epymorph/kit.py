@@ -3,6 +3,7 @@
 import epymorph.data.ipm as ipm
 import epymorph.data.mm as mm
 import epymorph.initializer as init
+from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import (
     BIRTH,
     DEATH,
@@ -35,7 +36,7 @@ from epymorph.params import (
     ParamFunctionTimeAndNode,
 )
 from epymorph.rume import Gpm, MultistrataRume, MultistrataRumeBuilder, SingleStrataRume
-from epymorph.simulation import AttributeDef, default_rng
+from epymorph.simulation import default_rng
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
 

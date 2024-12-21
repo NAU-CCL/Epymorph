@@ -3,10 +3,11 @@ from functools import cached_property
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
-from epymorph.simulation import AttributeDef, Tick, TickDelta, TickIndex
+from epymorph.simulation import Tick, TickDelta, TickIndex
 from epymorph.util import row_normalize
 
 _COMMUTERS_ATTRIB = AttributeDef(

@@ -1,16 +1,16 @@
 # pylint: disable=missing-docstring
 import unittest
-from datetime import date
 from math import cos
+from unittest.mock import MagicMock
 
 import numpy as np
 import numpy.testing as npt
 import sympy
 from numpy.typing import NDArray
 
-from epymorph.data_shape import SimDimensions
+from epymorph.attribute import AbsoluteName
+from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_type import AttributeValue
-from epymorph.database import ModuleNamespace
 from epymorph.geography.custom import CustomScope
 from epymorph.params import (
     ParamExpressionTimeAndNode,
@@ -23,24 +23,29 @@ from epymorph.params import (
     ParamFunctionTimeAndNode,
     simulation_symbols,
 )
+from epymorph.time import TimeFrame
 
 
 class ParamFunctionsTest(unittest.TestCase):
     def _eval_context(self):
-        dim = SimDimensions.build(
-            tau_step_lengths=[1 / 3, 2 / 3],
-            start_date=date(2021, 1, 1),
-            days=100,
-            nodes=4,
-            compartments=3,
-            events=2,
-        )
+        # dim = SimDimensions.build(
+        #     tau_step_lengths=[1 / 3, 2 / 3],
+        #     start_date=date(2021, 1, 1),
+        #     days=100,
+        #     nodes=4,
+        #     compartments=3,
+        #     events=2,
+        # )
+        ipm = MagicMock(spec=BaseCompartmentModel)
+        ipm.num_compartments = 3
+        ipm.num_events = 2
         scope = CustomScope(["a", "b", "c", "d"])
         return (
-            ModuleNamespace("gpm:all", "ipm"),
+            AbsoluteName("gpm:all", "ipm", "test"),
             {},
-            dim,
             scope,
+            TimeFrame.of("2021-01-01", 100),
+            ipm,
             np.random.default_rng(1),
         )
 
@@ -149,7 +154,7 @@ class ParamFunctionsTest(unittest.TestCase):
             dtype = np.float64
 
             def evaluate1(self, day: int, node_index: int) -> AttributeValue:
-                return (1.0 + node_index) * cos(day / self.dim.days)
+                return (1.0 + node_index) * cos(day / self.time_frame.days)
 
         f = TestFunc()
 

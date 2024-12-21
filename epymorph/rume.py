@@ -28,7 +28,12 @@ import numpy as np
 from numpy.typing import NDArray
 from sympy import Symbol
 
-from epymorph.adrio.adrio import Adrio
+from epymorph.attribute import (
+    AbsoluteName,
+    AttributeDef,
+    ModuleNamePattern,
+    NamePattern,
+)
 from epymorph.cache import CACHE_PATH
 from epymorph.compartment_model import (
     BaseCompartmentModel,
@@ -38,18 +43,14 @@ from epymorph.compartment_model import (
     MultistrataModelSymbols,
     TransitionDef,
 )
-from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.data_shape import Shapes
 from epymorph.data_type import SimArray, dtype_str
 from epymorph.data_usage import estimate_report
 from epymorph.database import (
-    AbsoluteName,
     Database,
     DatabaseWithFallback,
     DatabaseWithStrataFallback,
     DataResolver,
-    ModuleNamePattern,
-    ModuleNamespace,
-    NamePattern,
     ReqTree,
 )
 from epymorph.error import InitException
@@ -58,14 +59,12 @@ from epymorph.initializer import Initializer
 from epymorph.movement_model import MovementClause, MovementModel
 from epymorph.params import ParamSymbol, simulation_symbols
 from epymorph.simulation import (
-    DEFAULT_STRATA,
-    META_STRATA,
-    AttributeDef,
     ParamValue,
+    SimulationFunction,
     TickDelta,
     TickIndex,
-    gpm_strata,
 )
+from epymorph.strata import DEFAULT_STRATA, META_STRATA, gpm_strata
 from epymorph.time import TimeFrame
 from epymorph.util import (
     KeyValue,
@@ -240,7 +239,9 @@ class Rume(ABC, Generic[GeoScopeT_co]):
     scope: GeoScopeT_co
     time_frame: TimeFrame
     params: Mapping[NamePattern, ParamValue]
-    dim: SimDimensions = field(init=False)
+    tau_step_lengths: list[float] = field(init=False)
+    num_tau_steps: int = field(init=False)
+    num_ticks: int = field(init=False)
 
     def __post_init__(self):
         if not are_unique(g.name for g in self.strata):
@@ -252,17 +253,10 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         # but they all have the same set of tau steps so it doesn't matter
         # which we use. (Using the first one is safe.)
         first_strata = self.strata[0].name
-        tau_step_lengths = self.mms[first_strata].steps
-
-        dim = SimDimensions.build(
-            tau_step_lengths=tau_step_lengths,
-            start_date=self.time_frame.start_date,
-            days=self.time_frame.duration_days,
-            nodes=len(self.scope.node_ids),
-            compartments=self.ipm.num_compartments,
-            events=self.ipm.num_events,
-        )
-        object.__setattr__(self, "dim", dim)
+        steps = self.mms[first_strata].steps
+        object.__setattr__(self, "tau_step_lengths", steps)
+        object.__setattr__(self, "num_tau_steps", len(steps))
+        object.__setattr__(self, "num_ticks", len(steps) * self.time_frame.days)
 
     @cached_property
     def requirements(self) -> Mapping[AbsoluteName, AttributeDef]:
@@ -432,9 +426,14 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         """
 
         estimates = [
-            p.with_context_internal(scope=self.scope, dim=self.dim).estimate_data()
+            p.with_context_internal(
+                scope=self.scope,
+                time_frame=self.time_frame,
+                ipm=self.ipm,
+            ).estimate_data()  # type: ignore
             for p in self.params.values()
-            if isinstance(p, Adrio)
+            if isinstance(p, SimulationFunction) and hasattr(p, "estimate_data")
+            # TODO: this is a bit of a hack to avoid importing Adrio here...
         ]
 
         lines = list[str]()
@@ -507,12 +506,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
             ps = {NamePattern.of(k): v for k, v in override_params.items()}
 
         reqs = self.requirements_tree(ps)
-        return reqs.evaluate(self.dim, self.scope, rng)
-
-    def _strata_dim(self, gpm: Gpm) -> SimDimensions:
-        C = gpm.ipm.num_compartments
-        E = gpm.ipm.num_events
-        return dataclasses.replace(self.dim, compartments=C, events=E)
+        return reqs.evaluate(self.scope, self.time_frame, self.ipm, rng)
 
     def initialize(self, data: DataResolver, rng: np.random.Generator) -> SimArray:
         """
@@ -541,10 +535,11 @@ class Rume(ABC, Generic[GeoScopeT_co]):
             return np.column_stack(
                 [
                     gpm.init.with_context_internal(
-                        namespace=ModuleNamespace(gpm_strata(gpm.name), "init"),
+                        name=AbsoluteName(gpm_strata(gpm.name), "init", "init"),
                         data=data,
-                        dim=self._strata_dim(gpm),
                         scope=self.scope,
+                        time_frame=self.time_frame,
+                        ipm=gpm.ipm,
                         rng=rng,
                     ).evaluate()
                     for gpm in self.strata

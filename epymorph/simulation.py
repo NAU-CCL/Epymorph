@@ -26,8 +26,17 @@ from jsonpickle.util import is_picklable
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
 from sympy import Expr
+from typing_extensions import override
 
-from epymorph.data_shape import SimDimensions
+from epymorph.attribute import (
+    NAME_PLACEHOLDER,
+    AbsoluteName,
+    AttributeDef,
+    AttributeName,
+    NamePattern,
+)
+from epymorph.compartment_model import BaseCompartmentModel
+from epymorph.data_shape import Dimensions
 from epymorph.data_type import (
     AttributeArray,
     ScalarDType,
@@ -36,18 +45,14 @@ from epymorph.data_type import (
     StructValue,
 )
 from epymorph.database import (
-    NAMESPACE_PLACEHOLDER,
-    AttributeDef,
-    AttributeName,
     Database,
     DataResolver,
-    ModuleNamespace,
-    NamePattern,
     RecursiveValue,
     ReqTree,
     is_recursive_value,
 )
 from epymorph.geography.scope import GeoScope
+from epymorph.time import TimeFrame
 from epymorph.util import are_instances, are_unique
 
 
@@ -111,22 +116,25 @@ Any Tick plus Never returns Never.
 """
 
 
-def resolve_tick_delta(dim: SimDimensions, tick: Tick, delta: TickDelta) -> int:
+def resolve_tick_delta(tau_steps_per_day: int, tick: Tick, delta: TickDelta) -> int:
     """Add a delta to a tick to get the index of the resulting tick."""
     return (
         -1
         if delta.days == -1
-        else tick.sim_index - tick.step + (dim.tau_steps * delta.days) + delta.step
+        else tick.sim_index - tick.step + (tau_steps_per_day * delta.days) + delta.step
     )
 
 
-def simulation_clock(dim: SimDimensions) -> Iterable[Tick]:
+def simulation_clock(
+    time_frame: TimeFrame,
+    tau_step_lengths: list[float],
+) -> Iterable[Tick]:
     """Generator for the sequence of ticks which makes up the simulation clock."""
     one_day = timedelta(days=1)
-    tau_steps = list(enumerate(dim.tau_step_lengths))
+    tau_steps = list(enumerate(tau_step_lengths))
     curr_index = 0
-    curr_date = dim.start_date
-    for day in range(dim.days):
+    curr_date = time_frame.start_date
+    for day in range(time_frame.days):
         for step, tau in tau_steps:
             yield Tick(curr_index, day, curr_date, step, tau)
             curr_index += 1
@@ -151,7 +159,7 @@ class _Context(ABC):
 
     def _invalid_context(
         self,
-        component: Literal["data", "dim", "scope", "rng"],
+        component: Literal["data", "scope", "time_frame", "ipm", "rng"],
     ) -> TypeError:
         err = (
             "Missing function context during evaluation.\n"
@@ -163,14 +171,14 @@ class _Context(ABC):
         )
         return TypeError(err)
 
+    @property
+    @abstractmethod
+    def name(self) -> AbsoluteName:
+        """The name under which this attribute is being evaluated."""
+
     @abstractmethod
     def data(self, attribute: AttributeDef) -> AttributeArray:
         """Retrieve the value of an attribute."""
-
-    @property
-    @abstractmethod
-    def dim(self) -> SimDimensions:
-        """The simulation dimensions."""
 
     @property
     @abstractmethod
@@ -179,114 +187,189 @@ class _Context(ABC):
 
     @property
     @abstractmethod
+    def time_frame(self) -> TimeFrame:
+        """The simulation time frame."""
+
+    @property
+    @abstractmethod
+    def ipm(self) -> BaseCompartmentModel:
+        """The simulation's IPM."""
+
+    @property
+    @abstractmethod
     def rng(self) -> np.random.Generator:
         """The simulation's random number generator."""
 
+    @property
+    @abstractmethod
+    def dim(self) -> Dimensions:
+        """Simulation dimensions."""
+
     @staticmethod
     def of(
-        namespace: ModuleNamespace,
+        name: AbsoluteName,
         data: DataResolver | None,
-        dim: SimDimensions | None,
         scope: GeoScope | None,
+        time_frame: TimeFrame | None,
+        ipm: BaseCompartmentModel | None,
         rng: np.random.Generator | None,
     ) -> "_PartialContext | _FullContext":
         if (
-            namespace is None
+            name is None
             or data is None
-            or dim is None
             or scope is None
+            or time_frame is None
+            or ipm is None
             or rng is None
         ):
-            return _PartialContext(namespace, data, dim, scope, rng)
+            return _PartialContext(name, data, scope, time_frame, ipm, rng)
         else:
-            return _FullContext(namespace, data, dim, scope, rng)
+            return _FullContext(name, data, scope, time_frame, ipm, rng)
 
 
 class _PartialContext(_Context):
-    _namespace: ModuleNamespace
+    _name: AbsoluteName
     _data: DataResolver | None
-    _dim: SimDimensions | None
     _scope: GeoScope | None
+    _time_frame: TimeFrame | None
+    _ipm: BaseCompartmentModel | None
     _rng: np.random.Generator | None
+    _dim: Dimensions
 
     def __init__(
         self,
-        namespace: ModuleNamespace,
+        name: AbsoluteName,
         data: DataResolver | None,
-        dim: SimDimensions | None,
         scope: GeoScope | None,
+        time_frame: TimeFrame | None,
+        ipm: BaseCompartmentModel | None,
         rng: np.random.Generator | None,
     ):
-        self._namespace = namespace
+        self._name = name
         self._data = data
-        self._dim = dim
         self._scope = scope
+        self._time_frame = time_frame
+        self._ipm = ipm
         self._rng = rng
+        self._dim = Dimensions.of(
+            T=time_frame.duration_days if time_frame is not None else None,
+            N=scope.nodes if scope is not None else None,
+            C=ipm.num_compartments if ipm is not None else None,
+            E=ipm.num_events if ipm is not None else None,
+        )
 
+    @property
+    def name(self) -> AbsoluteName:
+        return self._name
+
+    @override
     def data(self, attribute: AttributeDef) -> NDArray:
         if self._data is None:
             raise self._invalid_context("data")
-        name = self._namespace.to_absolute(attribute.name)
+        name = self._name.to_namespace().to_absolute(attribute.name)
         return self._data.resolve(name, attribute)
 
     @property
-    def dim(self) -> SimDimensions:
-        if self._dim is None:
-            raise self._invalid_context("dim")
-        return self._dim
+    @override
+    def time_frame(self) -> TimeFrame:
+        if self._time_frame is None:
+            raise self._invalid_context("time_frame")
+        return self._time_frame
 
     @property
+    @override
+    def ipm(self) -> BaseCompartmentModel:
+        if self._ipm is None:
+            raise self._invalid_context("ipm")
+        return self._ipm
+
+    @property
+    @override
     def scope(self) -> GeoScope:
         if self._scope is None:
             raise self._invalid_context("scope")
         return self._scope
 
     @property
+    @override
     def rng(self) -> np.random.Generator:
         if self._rng is None:
             raise self._invalid_context("rng")
         return self._rng
 
+    @property
+    @override
+    def dim(self) -> Dimensions:
+        return self._dim
 
-_EMPTY_CONTEXT = _PartialContext(NAMESPACE_PLACEHOLDER, None, None, None, None)
+
+_EMPTY_CONTEXT = _PartialContext(NAME_PLACEHOLDER, None, None, None, None, None)
 
 
 class _FullContext(_Context):
-    _namespace: ModuleNamespace
+    _name: AbsoluteName
     _data: DataResolver
-    _dim: SimDimensions
     _scope: GeoScope
+    _time_frame: TimeFrame
+    _ipm: BaseCompartmentModel
     _rng: np.random.Generator
+    _dim: Dimensions
 
     def __init__(
         self,
-        namespace: ModuleNamespace,
+        name: AbsoluteName,
         data: DataResolver,
-        dim: SimDimensions,
         scope: GeoScope,
+        time_frame: TimeFrame,
+        ipm: BaseCompartmentModel,
         rng: np.random.Generator,
     ):
-        self._namespace = namespace
+        self._name = name
         self._data = data
-        self._dim = dim
         self._scope = scope
+        self._time_frame = time_frame
+        self._ipm = ipm
         self._rng = rng
+        self._dim = Dimensions.of(
+            T=time_frame.duration_days,
+            N=scope.nodes,
+            C=ipm.num_compartments,
+            E=ipm.num_events,
+        )
 
+    @property
+    def name(self) -> AbsoluteName:
+        return self._name
+
+    @override
     def data(self, attribute: AttributeDef) -> NDArray:
-        name = self._namespace.to_absolute(attribute.name)
+        name = self._name.to_namespace().to_absolute(attribute.name)
         return self._data.resolve(name, attribute)
 
     @property
-    def dim(self) -> SimDimensions:
-        return self._dim
-
-    @property
+    @override
     def scope(self) -> GeoScope:
         return self._scope
 
     @property
+    @override
+    def time_frame(self) -> TimeFrame:
+        return self._time_frame
+
+    @property
+    @override
+    def ipm(self) -> BaseCompartmentModel:
+        return self._ipm
+
+    @property
+    @override
     def rng(self) -> np.random.Generator:
         return self._rng
+
+    @property
+    @override
+    def dim(self) -> Dimensions:
+        return self._dim
 
 
 _TypeT = TypeVar("_TypeT")
@@ -394,10 +477,11 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     @final
     def with_context(
         self,
-        namespace: ModuleNamespace = NAMESPACE_PLACEHOLDER,
+        name: AbsoluteName = NAME_PLACEHOLDER,
         params: "Mapping[str, ParamValue] | None" = None,
-        dim: SimDimensions | None = None,
         scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
+        ipm: BaseCompartmentModel | None = None,
         rng: np.random.Generator | None = None,
     ) -> Self:
         """Constructs a clone of this instance which has access to the given context."""
@@ -418,18 +502,19 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
             )
             raise ValueError(err)
         reqs = ReqTree.of(
-            {namespace.to_absolute(req.name): req for req in self.requirements},
+            {name.with_id(req.name): req for req in self.requirements},
             Database({NamePattern.parse(k): v for k, v in params.items()}),
         )
-        data = reqs.evaluate(dim, scope, rng)
-        return self.with_context_internal(namespace, data, dim, scope, rng)
+        data = reqs.evaluate(scope, time_frame, ipm, rng)
+        return self.with_context_internal(name, data, scope, time_frame, ipm, rng)
 
     def with_context_internal(
         self,
-        namespace: ModuleNamespace = NAMESPACE_PLACEHOLDER,
+        name: AbsoluteName = NAME_PLACEHOLDER,
         data: DataResolver | None = None,
-        dim: SimDimensions | None = None,
         scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
+        ipm: BaseCompartmentModel | None = None,
         rng: np.random.Generator | None = None,
     ) -> Self:
         """Constructs a clone of this instance which has access to the given context."""
@@ -437,7 +522,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         # 1. don't have to worry about cleaning up _ctx
         # 2. instances can use @cached_property without surprising results
         clone = deepcopy(self)
-        setattr(clone, "_ctx", _Context.of(namespace, data, dim, scope, rng))
+        setattr(clone, "_ctx", _Context.of(name, data, scope, time_frame, ipm, rng))
         return clone
 
     @final
@@ -447,10 +532,11 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     ) -> _DeferFunctionT:
         """Defer processing to another instance of a SimulationFunction."""
         return other.with_context_internal(
-            namespace=self._ctx._namespace,
+            name=self._ctx._name,
             data=self._ctx._data,
-            dim=self._ctx._dim,
             scope=self._ctx._scope,
+            time_frame=self._ctx._time_frame,
+            ipm=self._ctx._ipm,
             rng=self._ctx._rng,
         )
 
@@ -473,21 +559,32 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
 
     @final
     @property
-    def dim(self) -> SimDimensions:
-        """The simulation dimensions."""
-        return self._ctx.dim
-
-    @final
-    @property
     def scope(self) -> GeoScope:
         """The simulation GeoScope."""
         return self._ctx.scope
 
     @final
     @property
+    def time_frame(self) -> TimeFrame:
+        """The simulation TimeFrame."""
+        return self._ctx.time_frame
+
+    @final
+    @property
+    def ipm(self) -> BaseCompartmentModel:
+        """The simulation IPM."""
+        return self._ctx.ipm
+
+    @final
+    @property
     def rng(self) -> np.random.Generator:
         """The simulation's random number generator."""
         return self._ctx.rng
+
+    @final
+    @property
+    def dim(self) -> Dimensions:
+        return self._ctx.dim
 
 
 @is_recursive_value.register
@@ -555,19 +652,3 @@ ParamValue = Union[
     NDArray[ScalarDType | StructDType],
 ]
 """All acceptable input forms for parameter values."""
-
-
-###############
-# Multistrata #
-###############
-
-
-DEFAULT_STRATA = "all"
-"""The strata name used as the default, primarily for single-strata simulations."""
-META_STRATA = "meta"
-"""A strata for information that concerns the other strata."""
-
-
-def gpm_strata(strata_name: str) -> str:
-    """The strata name for a GPM in a multistrata RUME."""
-    return f"gpm:{strata_name}"

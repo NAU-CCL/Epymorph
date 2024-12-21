@@ -12,6 +12,7 @@ from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
 from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.attribute import AttributeDef
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType
@@ -21,7 +22,6 @@ from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE
 from epymorph.geography.us_tiger import CacheEstimate
-from epymorph.simulation import AttributeDef
 from epymorph.time import TimeFrame
 
 _PRISM_CACHE_PATH = module_cache_path(__name__)
