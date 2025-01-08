@@ -1,6 +1,7 @@
 """epymorph general utility functions and classes."""
 
 from abc import ABC, abstractmethod
+from collections.abc import ItemsView, KeysView, Mapping, ValuesView
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -14,10 +15,9 @@ from typing import (
     Generic,
     Iterable,
     Literal,
-    Mapping,
     NamedTuple,
-    OrderedDict,
     ParamSpec,
+    Protocol,
     Self,
     TypeGuard,
     TypeVar,
@@ -254,39 +254,36 @@ class KeyValue(Generic[K, V], NamedTuple):
     value: V
 
 
-def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
-    """Returns a sorted OrderedDict of the given dict."""
-    return OrderedDict(sorted(x.items()))
+K_co = TypeVar("K_co", covariant=True)
+V_co = TypeVar("V_co", covariant=True)
+
+
+class CovariantMapping(Protocol[K_co, V_co]):
+    """A type for covariant mappings, which restricts usage
+    to only those methods which are safe under covariance.
+    For many use-cases these limitations are acceptable and
+    wind up simplifying type expression."""
+
+    @abstractmethod
+    def keys(self) -> KeysView[K_co]: ...
+
+    @abstractmethod
+    def items(self) -> ItemsView[K_co, V_co]: ...
+
+    @abstractmethod
+    def values(self) -> ValuesView[V_co]: ...
+
+    @abstractmethod
+    def __len__(self) -> int: ...
+
+
+def as_dict(mapping: CovariantMapping[K, V]) -> dict[K, V]:
+    return {k: v for k, v in mapping.items()}
 
 
 def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
     """Maps the values of a Mapping into a dict by applying the given function."""
     return {k: f(v) for k, v in xs.items()}
-
-
-def dict_map(m: Mapping[A, B], xs: Iterable[A]) -> list[B]:
-    return [m[x] for x in xs]
-
-
-class MemoDict(dict[K, V]):
-    """
-    A dict implementation which will call a factory function when the user attempts to
-    access a key which is currently not in the dict.
-
-    This varies slightly from `defaultdict`, which uses a factory function without the
-    ability to pass the requested key.
-    """
-
-    _factory: Callable[[K], V]
-
-    def __init__(self, factory: Callable[[K], V]):
-        super().__init__()
-        self._factory = factory
-
-    def __missing__(self, key: K) -> V:
-        value = self._factory(key)
-        self[key] = value
-        return value
 
 
 # numpy utilities

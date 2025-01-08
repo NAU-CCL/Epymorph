@@ -1,9 +1,10 @@
 """Implements one epymorph simulation algorithm: the basic simulator."""
 
-from typing import Callable, Mapping
+from typing import Callable, Generic, TypeVar
 
 import numpy as np
 
+from epymorph.attribute import NamePattern
 from epymorph.data_type import SimDType
 from epymorph.error import (
     AttributeException,
@@ -16,7 +17,6 @@ from epymorph.error import (
     error_gate,
 )
 from epymorph.event import EventBus, OnStart, OnTick
-from epymorph.geography.scope import GeoScope
 from epymorph.rume import Rume
 from epymorph.simulation import ParamValue, simulation_clock
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
@@ -24,30 +24,33 @@ from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
 from epymorph.simulator.world_list import ListWorld
 from epymorph.time import TimeFrame
+from epymorph.util import CovariantMapping
 
 _events = EventBus()
 
+RumeT = TypeVar("RumeT", bound=Rume)
 
-class BasicSimulator:
+
+class BasicSimulator(Generic[RumeT]):
     """
     A simulator for running singular simulation passes and producing time-series output.
     The most basic simulator!
     """
 
-    rume: Rume[GeoScope]
+    rume: RumeT
     ipm_exec: IpmExecutor
     mm_exec: MovementExecutor
 
-    def __init__(self, rume: Rume[GeoScope]):
+    def __init__(self, rume: RumeT):
         self.rume = rume
 
     def run(
         self,
         /,
-        params: Mapping[str, ParamValue] | None = None,
+        params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
         time_frame: TimeFrame | None = None,
         rng_factory: Callable[[], np.random.Generator] | None = None,
-    ) -> Output:
+    ) -> Output[RumeT]:
         """Run a RUME with the given overrides."""
 
         rume = self.rume

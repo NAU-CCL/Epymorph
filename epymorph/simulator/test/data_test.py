@@ -6,7 +6,11 @@ import numpy.testing as npt
 import sympy
 from numpy.typing import NDArray
 
-from epymorph.attribute import AbsoluteName, AttributeDef, ModuleNamePattern
+from epymorph.attribute import (
+    AbsoluteName,
+    AttributeDef,
+    ModuleNamePattern,
+)
 from epymorph.compartment_model import MultistrataModelSymbols, edge
 from epymorph.data.ipm.sirs import Sirs
 from epymorph.data.mm.centroids import Centroids

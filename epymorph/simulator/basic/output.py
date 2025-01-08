@@ -5,7 +5,7 @@ Classes for representing simulation results.
 import dataclasses
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Literal
+from typing import Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -13,20 +13,28 @@ from numpy.typing import NDArray
 from typing_extensions import deprecated, override
 
 from epymorph.data_type import SimDType
+from epymorph.geography.scope import GeoScope
 from epymorph.rume import Rume
 from epymorph.tools.out_map import MapRendererMixin
 from epymorph.tools.out_plot import PlotRendererMixin
 from epymorph.tools.out_table import TableRendererMixin
 
+RumeT_co = TypeVar("RumeT_co", covariant=True, bound=Rume[GeoScope])
+
 
 @dataclass(frozen=True)
-class Output(TableRendererMixin, PlotRendererMixin, MapRendererMixin):
+class Output(
+    TableRendererMixin,
+    PlotRendererMixin,
+    MapRendererMixin,
+    Generic[RumeT_co],
+):
     """
     The output of a simulation run, including compartment data for all populations and
     all IPM compartments and event data for all populations and all IPM events.
     """
 
-    rume: Rume
+    rume: RumeT_co  # type: ignore (pylance can't tell that rume is immutable)
     """The Rume used in the simulation that generated this output."""
 
     initial: NDArray[SimDType]

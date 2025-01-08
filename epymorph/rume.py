@@ -67,6 +67,7 @@ from epymorph.simulation import (
 from epymorph.strata import DEFAULT_STRATA, META_STRATA, gpm_strata
 from epymorph.time import TimeFrame
 from epymorph.util import (
+    CovariantMapping,
     KeyValue,
     are_unique,
     map_values,
@@ -277,9 +278,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
     def _params_database(
         self,
-        override_params: Mapping[NamePattern, ParamValue]
-        | Mapping[str, ParamValue]
-        | None = None,
+        override_params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
     ) -> Database[ParamValue]:
         label_name, _ = GEO_LABELS
         params_db = DatabaseWithStrataFallback(
@@ -448,9 +447,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
     def requirements_tree(
         self,
-        override_params: Mapping[NamePattern, ParamValue]
-        | Mapping[str, ParamValue]
-        | None = None,
+        override_params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
     ) -> ReqTree:
         """Compute the requirements tree for the given RUME.
 
@@ -480,9 +477,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
     def evaluate_params(
         self,
         rng: np.random.Generator,
-        override_params: Mapping[NamePattern, ParamValue]
-        | Mapping[str, ParamValue]
-        | None = None,
+        override_params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
     ) -> DataResolver:
         """
         Evaluates the parameters of this RUME.
@@ -564,7 +559,7 @@ class SingleStrataRume(Rume[GeoScopeT_co]):
         init: Initializer,
         scope: GeoScopeT,
         time_frame: TimeFrame,
-        params: Mapping[str, ParamValue],
+        params: CovariantMapping[str | NamePattern, ParamValue],
     ) -> "SingleStrataRume[GeoScopeT]":
         """Create a RUME with only a single strata."""
         return SingleStrataRume(
@@ -573,7 +568,7 @@ class SingleStrataRume(Rume[GeoScopeT_co]):
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
             scope=scope,
             time_frame=time_frame,
-            params={NamePattern.parse(k): v for k, v in params.items()},
+            params={NamePattern.of(k): v for k, v in params.items()},
         )
 
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
@@ -594,7 +589,7 @@ class MultistrataRume(Rume[GeoScopeT_co]):
         meta_edges: MetaEdgeBuilder,
         scope: GeoScopeT,
         time_frame: TimeFrame,
-        params: Mapping[str, ParamValue],
+        params: CovariantMapping[str | NamePattern, ParamValue],
     ) -> "MultistrataRume[GeoScopeT]":
         """Create a multistrata RUME by combining one GPM per strata."""
         return MultistrataRume(
@@ -609,7 +604,7 @@ class MultistrataRume(Rume[GeoScopeT_co]):
             mms=remap_taus([(gpm.name, gpm.mm) for gpm in strata]),
             scope=scope,
             time_frame=time_frame,
-            params={NamePattern.parse(k): v for k, v in params.items()},
+            params={NamePattern.of(k): v for k, v in params.items()},
         )
 
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
@@ -643,7 +638,7 @@ class MultistrataRumeBuilder(ABC):
         self,
         scope: GeoScopeT,
         time_frame: TimeFrame,
-        params: Mapping[str, ParamValue],
+        params: CovariantMapping[str | NamePattern, ParamValue],
     ) -> MultistrataRume[GeoScopeT]:
         """Build the RUME."""
         return MultistrataRume[GeoScopeT].build(
