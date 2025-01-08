@@ -15,7 +15,7 @@ from epymorph.compartment_model import (
     edge,
     fork,
 )
-from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidDType, CentroidType, SimDType
 from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import (
@@ -81,7 +81,6 @@ __all__ = [
     "ParamFunctionNodeAndCompartment",
     "ParamFunctionTimeAndNode",
     # Utilities and Data Types
-    "SimDimensions",
     "TimeFrame",
     "AttributeDef",
     "Shapes",

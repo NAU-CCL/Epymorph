@@ -6,8 +6,7 @@ and to adapt equivalent shapes.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import date, timedelta
-from typing import Protocol, Sequence, TypeVar
+from typing import Protocol, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -147,77 +146,6 @@ class CompleteDimensions(Dimensions):
     @override
     def E(self):
         return self._E
-
-
-@dataclass(frozen=True)
-class SimDimensions(Dimensions):
-    """The dimensionality of a simulation."""
-
-    tau_step_lengths: tuple[float, ...]
-    """The lengths of each tau step in the MM."""
-    tau_steps: int
-    """How many tau steps are in the MM?"""
-    start_date: date
-    """On what calendar date did the simulation start?"""
-    days: int
-    """How many days are we going to run the simulation for?"""
-    ticks: int
-    """How many clock ticks are we going to run the simulation for?"""
-    nodes: int
-    """How many nodes are there in the GEO?"""
-    compartments: int
-    """How many disease compartments are in the IPM?"""
-    events: int
-    """How many transition events are in the IPM?"""
-
-    @property
-    def end_date(self) -> date:
-        """The end date (the first day not included in the simulation)."""
-        return self.start_date + timedelta(days=self.days)
-
-    @property
-    @override
-    def T(self):
-        return self.days
-
-    @property
-    @override
-    def N(self):
-        return self.nodes
-
-    @property
-    @override
-    def C(self):
-        return self.compartments
-
-    @property
-    @override
-    def E(self):
-        return self.events
-
-    @classmethod
-    def build(
-        cls,
-        tau_step_lengths: Sequence[float],
-        start_date: date,
-        days: int,
-        nodes: int,
-        compartments: int,
-        events: int,
-    ):
-        """Convenience constructor for SimDimensions."""
-        tau_steps = len(tau_step_lengths)
-        ticks = tau_steps * days
-        return cls(
-            tuple(tau_step_lengths),
-            tau_steps,
-            start_date,
-            days,
-            ticks,
-            nodes,
-            compartments,
-            events,
-        )
 
 
 DataT = TypeVar("DataT", bound=np.generic)

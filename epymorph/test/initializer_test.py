@@ -17,14 +17,6 @@ from epymorph.time import TimeFrame
 
 def _eval_context(additional_data: dict[str, NDArray] | None = None):
     scope = CustomScope(list("ABCDE"))
-    # dim = SimDimensions.build(
-    #     tau_step_lengths=[1 / 3, 2 / 3],
-    #     start_date=date(2020, 1, 1),
-    #     days=100,
-    #     nodes=scope.nodes,
-    #     compartments=3,
-    #     events=3,
-    # )
     ipm = MagicMock(spec=BaseCompartmentModel)
     ipm.num_compartments = 3
     ipm.num_events = 2

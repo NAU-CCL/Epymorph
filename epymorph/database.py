@@ -814,11 +814,11 @@ def evaluate_param(
     the form required internally by epymorph (AttributeArray). This handles different
     types of parameters by single dispatch, so there should be a registered
     implementation for every unique type. It is possible that the user is attempting to
-    evaluate parameters with a partial context (`dim`, `scope`, `rng`), and so one or
-    more of these may be missing. In that case, parameter evaluation is expected to
-    happen on a "best effort" basis -- if no parameter requires the missing scope
-    elements, parameter evaluation succeeds. Otherwise, this is expected to raise
-    an `AttributeException`.
+    evaluate parameters with a partial context (`scope`, `time_frame`, `ipm`, `rng`),
+    and so one or more of these may be missing. In that case, parameter evaluation
+    is expected to happen on a "best effort" basis -- if no parameter requires the
+    missing scope elements, parameter evaluation succeeds. Otherwise, this is expected
+    to raise an `AttributeException`.
 
     Parameters
     ----------
@@ -829,10 +829,12 @@ def evaluate_param(
     data : DataResolver
         a DataResolver instance which should contain values for all of the data
         requirements needed by this value (only `RecursiveValues` have requirements)
-    dim : SimDimensions, optional
-        the dimensional information of this simulation context, if available
     scope : GeoScope, optional
         the geographic scope information of this simulation context, if available
+    time_frame : TimeFrame, optional
+        the temporal scope information of this simulation context, if available
+    ipm : BaseCompartmentModel, optional
+        the disease model for this simulation context, if available
     rng : np.random.Generator, optional
         the random number generator to use, if available
 
@@ -899,19 +901,22 @@ def evaluate_requirements(
     rng: np.random.Generator | None,
 ) -> DataResolver:
     """Evaluate all parameters in `req`, using the given simulation context
-    (`dim`, `scope`, `rng`). You may attempt to evaluate parameters with a partial
-    context, so one or more of these may be missing. In that case, parameter evaluation
-    is happens on a "best effort" basis -- if no parameter requires the missing scope
-    elements, parameter evaluation succeeds; otherwise raises an `AttributeException`.
+    (`scope`, `time_frame`, `ipm`, `rng`). You may attempt to evaluate parameters with
+    a partial context, so one or more of these may be missing. In that case, parameter
+    evaluation happens on a "best effort" basis -- if no parameter requires the missing
+    scope elements, parameter evaluation succeeds; otherwise raises an
+    `AttributeException`.
 
     Parameters
     ----------
     req : ReqTree
         the requirements tree
-    dim : SimDimensions, optional
-        the dimensional information of this simulation context, if available
     scope : GeoScope, optional
         the geographic scope information of this simulation context, if available
+    time_frame : TimeFrame, optional
+        the temporal scope information of this simulation context, if available
+    ipm : BaseCompartmentModel, optional
+        the disease model for this simulation context, if available
     rng : np.random.Generator, optional
         the random number generator to use, if available
 

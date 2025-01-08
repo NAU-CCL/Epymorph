@@ -28,14 +28,6 @@ from epymorph.time import TimeFrame
 
 class ParamFunctionsTest(unittest.TestCase):
     def _eval_context(self):
-        # dim = SimDimensions.build(
-        #     tau_step_lengths=[1 / 3, 2 / 3],
-        #     start_date=date(2021, 1, 1),
-        #     days=100,
-        #     nodes=4,
-        #     compartments=3,
-        #     events=2,
-        # )
         ipm = MagicMock(spec=BaseCompartmentModel)
         ipm.num_compartments = 3
         ipm.num_events = 2

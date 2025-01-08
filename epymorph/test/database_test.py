@@ -496,7 +496,6 @@ def calls(f):
 
 
 class ParamEvalTest(unittest.TestCase):
-    # dim = MagicMock(spec=SimDimensions, T=3, days=3, N=2, nodes=2)
     time_frame = TimeFrame.of("2020-01-01", 3)
     scope = MagicMock(spec=GeoScope, nodes=2)
 
