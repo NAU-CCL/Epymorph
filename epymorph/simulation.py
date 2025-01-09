@@ -141,6 +141,23 @@ def simulation_clock(
         curr_date += one_day
 
 
+##############################
+# Simulation parameter types #
+##############################
+
+
+ListValue = Sequence[Union[ScalarValue, StructValue, "ListValue"]]
+ParamValue = Union[
+    ScalarValue,
+    StructValue,
+    ListValue,
+    "SimulationFunction",
+    Expr,
+    NDArray[ScalarDType | StructDType],
+]
+"""All acceptable input forms for parameter values."""
+
+
 ########################
 # Simulation functions #
 ########################
@@ -478,7 +495,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     def with_context(
         self,
         name: AbsoluteName = NAME_PLACEHOLDER,
-        params: "Mapping[str, ParamValue] | None" = None,
+        params: Mapping[str, ParamValue] | None = None,
         scope: GeoScope | None = None,
         time_frame: TimeFrame | None = None,
         ipm: BaseCompartmentModel | None = None,
@@ -635,20 +652,3 @@ class SimulationTickFunction(BaseSimulationFunction[ResultT]):
     ) -> _DeferResultT:
         """Defer processing to another instance of a SimulationTickFunction."""
         return self.defer_context(other).evaluate(tick)
-
-
-##############
-# Parameters #
-##############
-
-
-ListValue = Sequence[Union[ScalarValue, StructValue, "ListValue"]]
-ParamValue = Union[
-    ScalarValue,
-    StructValue,
-    ListValue,
-    SimulationFunction,
-    Expr,
-    NDArray[ScalarDType | StructDType],
-]
-"""All acceptable input forms for parameter values."""

@@ -189,30 +189,25 @@ def _estimate_prism(
 
 
 class _PRISMAdrio(Adrio[np.float64], ABC):
+    _override_time_frame: TimeFrame | None
+    """An override time frame for which to fetch data.
+    If None, the simulation time frame will be used."""
+
+    errors: Literal["raise", "warn", "ignore"]
+    """How to handle data errors."""
+
     def __init__(
         self,
-        date_range: TimeFrame,
+        time_frame: TimeFrame | None = None,
         errors: Literal["raise", "warn", "ignore"] = "raise",
     ):
-        """
-        Initializes the precipitation matrix with the date range.
-
-        Parameters
-        ----------
-        date_range : TimeFrame
-            The range of dates to fetch precipitation data for.
-        errors : {'raise', 'warn', 'ignore'}, optional
-            Error handling for potential out-of-bound centroids.
-            - `'raise'`: Raises an error when out-of-bound centroids are given."
-            " No resulting matrices will be shown (default).
-            - `'warn'`: Issues a warning about invalid centroids, "
-            "but displays the resulting matrices.
-            - `'ignore'`: Does not display any message concerning invalid centroids"
-            " and returns the resulting matrices.
-        """
-
-        self.date_range = _validate_dates(date_range)
+        self._override_time_frame = time_frame
         self.errors = errors
+
+    @property
+    def data_time_frame(self) -> TimeFrame:
+        """The time frame for which to fetch data."""
+        return self._override_time_frame or self.time_frame
 
     def _validate_scope(self) -> GeoScope:
         """
@@ -296,6 +291,7 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
         return raster_data
 
     def evaluate_adrio(self) -> NDArray[np.float64]:
+        _validate_dates(self.data_time_frame)
         self._validate_scope()
         raster_vals = self.retrieve_prism()
         raster_vals = self._validate_data(raster_vals, self.data("centroid"))
@@ -309,8 +305,6 @@ class Precipitation(_PRISMAdrio):
     represented in millimeters (mm).
     """
 
-    date_range: TimeFrame
-
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
     An array of centroids is required to fetch for a specific point of
@@ -319,16 +313,17 @@ class Precipitation(_PRISMAdrio):
 
     def __init__(
         self,
-        date_range: TimeFrame,
+        time_frame: TimeFrame | None = None,
         errors: Literal["raise", "warn", "ignore"] = "raise",
     ):
         """
-        Initializes the precipitation matrix with the date range.
+        Creates a precipitation ADRIO.
 
         Parameters
         ----------
-        date_range : TimeFrame
+        time_frame : TimeFrame, optional
             The range of dates to fetch precipitation data for.
+            Default: the simulation time frame.
         errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
@@ -338,17 +333,17 @@ class Precipitation(_PRISMAdrio):
             - `'ignore'`: Does not display any message concerning invalid centroids"
             " and returns the resulting matrices.
         """
-        super().__init__(date_range, errors)
+        super().__init__(time_frame, errors)
 
     def estimate_data(self) -> DataEstimate:
         file_size = 1_200_000  # no significant change in size, average to about 1.2MB
-        est = _estimate_prism(self, file_size, self.date_range, "ppt")
+        est = _estimate_prism(self, file_size, self.data_time_frame, "ppt")
         return est
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
-            "ppt", self.date_range, centroids, self.progress
+            "ppt", self.data_time_frame, centroids, self.progress
         )
         return raster_vals
 
@@ -360,8 +355,6 @@ class DewPoint(_PRISMAdrio):
     represented in degrees Celsius (°C).
     """
 
-    date_range: TimeFrame
-
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
     An array of centroids is required to fetch for a specific point of
@@ -370,16 +363,17 @@ class DewPoint(_PRISMAdrio):
 
     def __init__(
         self,
-        date_range: TimeFrame,
+        time_frame: TimeFrame | None = None,
         errors: Literal["raise", "warn", "ignore"] = "raise",
     ):
         """
-        Initializes the dew point temperature matrix with the date range.
+        Creates a dew point ADRIO.
 
         Parameters
         ----------
-        date_range : TimeFrame
+        time_frame : TimeFrame, optional
             The range of dates to fetch dew point temperature data for.
+            Default: the simulation time frame.
         errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
@@ -389,22 +383,22 @@ class DewPoint(_PRISMAdrio):
             - `'ignore'`: Does not display any message concerning invalid centroids"
             " and returns the resulting matrices.
         """
-        super().__init__(date_range, errors)
+        super().__init__(time_frame, errors)
 
     def estimate_data(self) -> DataEstimate:
-        year = self.date_range.end_date.year
+        year = self.data_time_frame.end_date.year
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_800_000  # average to 1.8MB after 2020
         else:
             file_size = 1_400_000  # average to 1.4MB 2020 and before
-        return _estimate_prism(self, file_size, self.date_range, "tdmean")
+        return _estimate_prism(self, file_size, self.data_time_frame, "tdmean")
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
-            "tdmean", self.date_range, centroids, self.progress
+            "tdmean", self.data_time_frame, centroids, self.progress
         )
         return raster_vals
 
@@ -415,8 +409,6 @@ class Temperature(_PRISMAdrio):
     Creates an TxN matrix of floats representing the temperature in an area, represented
     in degrees Celsius (°C).
     """
-
-    date_range: TimeFrame
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
@@ -436,21 +428,21 @@ class Temperature(_PRISMAdrio):
 
     def __init__(
         self,
-        date_range: TimeFrame,
         temp_var: TemperatureType,
+        time_frame: TimeFrame | None = None,
         errors: Literal["raise", "warn", "ignore"] = "raise",
     ):
         """
-        Initializes the temperature matrix with the date range and the statistical
-        measure for the temperature.
+        Creates a temperature ADRIO for the given statistical measure (min/max/mean).
 
         Parameters
         ----------
-        date_range : TimeFrame
-            The range of dates to fetch precipitation data for.
         temp_var : TemperatureType
             The measure of the temperature for a single date (options: 'Minimum',
             'Mean', 'Maximum').
+        time_frame : TimeFrame, optional
+            The range of dates to fetch precipitation data for.
+            Default: the simulation time frame.
         errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
@@ -460,11 +452,11 @@ class Temperature(_PRISMAdrio):
             - `'ignore'`: Does not display any message concerning invalid centroids"
             " and returns the resulting matrices.
         """
-        super().__init__(date_range, errors)
+        super().__init__(time_frame, errors)
         self.temp_var = temp_var
 
     def estimate_data(self) -> DataEstimate:
-        year = self.date_range.end_date.year
+        year = self.data_time_frame.end_date.year
         temp_var = self.temp_variables[self.temp_var]
 
         # file sizes are larger after the year 2020
@@ -472,13 +464,13 @@ class Temperature(_PRISMAdrio):
             file_size = 1_700_000  # average to 1.7MB after 2020
         else:
             file_size = 1_400_000  # average to 1.4MB 2020 and before
-        return _estimate_prism(self, file_size, self.date_range, temp_var)
+        return _estimate_prism(self, file_size, self.data_time_frame, temp_var)
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         temp_var = self.temp_variables[self.temp_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
-            temp_var, self.date_range, centroids, self.progress
+            temp_var, self.data_time_frame, centroids, self.progress
         )
         return raster_vals
 
@@ -489,8 +481,6 @@ class VaporPressureDeficit(_PRISMAdrio):
     Creates an TxN matrix of floats representing the vapor pressure deficit in an area,
     represented in hectopascals (hPa).
     """
-
-    date_range: TimeFrame
 
     requirements = [AttributeDef("centroid", type=CentroidType, shape=Shapes.N)]
     """
@@ -506,21 +496,22 @@ class VaporPressureDeficit(_PRISMAdrio):
 
     def __init__(
         self,
-        date_range: TimeFrame,
         vpd_var: VPDType,
+        time_frame: TimeFrame | None = None,
         errors: Literal["raise", "warn", "ignore"] = "raise",
     ):
         """
-        Initializes the vapor pressure deficit matrix with the date range and the
-        statistical measure for the vapor pressure deficit.
+        Creates a vapor pressure deficit ADRIO for the given statistical measure
+        (min/max).
 
         Parameters
         ----------
-        date_range : TimeFrame
-            The range of dates to fetch precipitation data for.
         vpd_var : VPDType
             The measure of the vapor pressure deficit for a single date
             (options: 'Minimum', 'Maximum').
+        time_frame : TimeFrame, optional
+            The range of dates to fetch precipitation data for.
+            Default: the simulation time frame.
         errors : {'raise', 'warn', 'ignore'}, optional
             Error handling for potential out-of-bound centroids.
             - `'raise'`: Raises an error when out-of-bound centroids are given."
@@ -530,23 +521,23 @@ class VaporPressureDeficit(_PRISMAdrio):
             - `'ignore'`: Does not display any message concerning invalid centroids"
             " and returns the resulting matrices.
         """
-        super().__init__(date_range, errors)
+        super().__init__(time_frame, errors)
         self.vpd_var = vpd_var
 
     def estimate_data(self) -> DataEstimate:
-        year = self.date_range.end_date.year
+        year = self.data_time_frame.end_date.year
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_700_000  # average to 1.7MB after 2020
         else:
             file_size = 1_300_000  # average to 1.3MB 2020 and before
-        return _estimate_prism(self, file_size, self.date_range, self.vpd_var)
+        return _estimate_prism(self, file_size, self.data_time_frame, self.vpd_var)
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         vpd_var = self.vpd_variables[self.vpd_var]
         centroids = self.data("centroid")
         raster_vals = _make_centroid_strategy_adrio(
-            vpd_var, self.date_range, centroids, self.progress
+            vpd_var, self.data_time_frame, centroids, self.progress
         )
         return raster_vals

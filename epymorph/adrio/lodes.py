@@ -1,5 +1,6 @@
 """ADRIOs that access the US Census LODES files for commuting data."""
 
+from abc import ABC
 from pathlib import Path
 from typing import Literal
 
@@ -379,40 +380,54 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     )
 
 
+class _LodesAdrio(Adrio[np.int64], ABC):
+    _override_year: int | None
+    """The year for the commuting data.
+    If None, defaults to the year in which the simulation time frame starts."""
+
+    def __init__(self, year: int | None = None):
+        self._override_year = year
+
+    @property
+    def data_year(self) -> int:
+        if self._override_year is not None:
+            return self._override_year
+        return self.time_frame.start_date.year
+
+
 @adrio_cache
-class Commuters(Adrio[np.int64]):
+class Commuters(_LodesAdrio):
     """
     Creates an NxN matrix of integers representing the number of workers moving
     from a home GEOID to a work GEOID.
     """
 
-    year: int
-    """The year the data encompasses."""
-
     job_type: JobType
 
-    def __init__(self, year: int, job_type: JobType = "All Jobs"):
+    def __init__(self, year: int | None = None, job_type: JobType = "All Jobs"):
         """
         Initializes the commuters matrix with the year and with the type of job, which
         defaults to "All Jobs".
 
         Parameters
         ----------
-        year : int
-            The year for all of the commuting data.
+        year : int, optional
+            The year for the commuting data.
+            Defaults to the year in which the simulation time frame starts.
+
         job_type : JobType
             The category of job all resulting commuters work under (options: "All Jobs",
             "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
             "All Federal Jobs", "Federal Primary Jobs").
         """
-        self.year = year
+        super().__init__(year)
         self.job_type = job_type
 
     def estimate_data(self) -> DataEstimate:
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.year)
+        est = _estimate_lodes(self, scope, job_var, self.data_year)
         return est
 
     @override
@@ -420,18 +435,15 @@ class Commuters(Adrio[np.int64]):
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = _JOB_VARIABLES[self.job_type]
-        return _fetch_lodes(scope, "S000", job_var, self.year, self.progress)
+        return _fetch_lodes(scope, "S000", job_var, self.data_year, self.progress)
 
 
 @adrio_cache
-class CommutersByAge(Adrio[np.int64]):
+class CommutersByAge(_LodesAdrio):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
     home GEOID to a work GEOID that fall under a certain age range.
     """
-
-    year: int
-    """The year the data encompasses."""
 
     job_type: JobType
 
@@ -445,24 +457,30 @@ class CommutersByAge(Adrio[np.int64]):
 
     age_range: AgeRange
 
-    def __init__(self, year: int, age_range: AgeRange, job_type: JobType = "All Jobs"):
+    def __init__(
+        self,
+        age_range: AgeRange,
+        year: int | None = None,
+        job_type: JobType = "All Jobs",
+    ):
         """
         Initializes the commuters by age matrix with the year, the age range, and the
         type of job, which defaults to "All Jobs".
 
         Parameters
         ----------
-        year : int
-            The year for all of the commuting data.
         age_range : AgeRange
             The defined age range that all commuters fall under
             (options: '29 and Under', '30_54', '55 and Over').
+        year : int, optional
+            The year for the commuting data.
+            Defaults to the year in which the simulation time frame starts.
         job_type : JobType
             The category of job all resulting commuters work under (options: "All Jobs",
             "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
             "All Federal Jobs", "Federal Primary Jobs").
         """
-        self.year = year
+        super().__init__(year)
         self.age_range = age_range
         self.job_type = job_type
 
@@ -470,7 +488,7 @@ class CommutersByAge(Adrio[np.int64]):
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.year)
+        est = _estimate_lodes(self, scope, job_var, self.data_year)
         return est
 
     @override
@@ -479,18 +497,15 @@ class CommutersByAge(Adrio[np.int64]):
         scope = _validate_scope(scope)
         age_var = self.age_variables[self.age_range]
         job_var = _JOB_VARIABLES[self.job_type]
-        return _fetch_lodes(scope, age_var, job_var, self.year, self.progress)
+        return _fetch_lodes(scope, age_var, job_var, self.data_year, self.progress)
 
 
 @adrio_cache
-class CommutersByEarnings(Adrio[np.int64]):
+class CommutersByEarnings(_LodesAdrio):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
     home GEOID to a work GEOID that earn a certain income range monthly.
     """
-
-    year: int
-    """The year the data encompasses."""
 
     job_type: JobType
 
@@ -505,7 +520,10 @@ class CommutersByEarnings(Adrio[np.int64]):
     earning_range: EarningRange
 
     def __init__(
-        self, year: int, earning_range: EarningRange, job_type: JobType = "All Jobs"
+        self,
+        earning_range: EarningRange,
+        year: int | None = None,
+        job_type: JobType = "All Jobs",
     ):
         """
         Initializes the commuters by monthly earnings matrix with the year, the earning
@@ -513,17 +531,18 @@ class CommutersByEarnings(Adrio[np.int64]):
 
         Parameters
         ----------
-        year : int
-            The year for all of the commuting data.
         earning_range : EarningRange
             The defined monthly earnings range that all commuters fall under
             (options: '$1250 and Under', '$1251_$3333', '$3333 and Over').
+        year : int, optional
+            The year for the commuting data.
+            Defaults to the year in which the simulation time frame starts.
         job_type : JobType
             The category of job all resulting commuters work under (options: "All Jobs",
             "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
             "All Federal Jobs", "Federal Primary Jobs").
         """
-        self.year = year
+        super().__init__(year)
         self.earning_range = earning_range
         self.job_type = job_type
 
@@ -531,7 +550,7 @@ class CommutersByEarnings(Adrio[np.int64]):
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.year)
+        est = _estimate_lodes(self, scope, job_var, self.data_year)
         return est
 
     @override
@@ -540,18 +559,15 @@ class CommutersByEarnings(Adrio[np.int64]):
         scope = _validate_scope(scope)
         earning_var = self.earnings_variables[self.earning_range]
         job_var = _JOB_VARIABLES[self.job_type]
-        return _fetch_lodes(scope, earning_var, job_var, self.year, self.progress)
+        return _fetch_lodes(scope, earning_var, job_var, self.data_year, self.progress)
 
 
 @adrio_cache
-class CommutersByIndustry(Adrio[np.int64]):
+class CommutersByIndustry(_LodesAdrio):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
     home GEOID to a work GEOID that work under specified industry sector.
     """
-
-    year: int
-    """The year the data encompasses."""
 
     job_type: JobType
 
@@ -565,24 +581,30 @@ class CommutersByIndustry(Adrio[np.int64]):
 
     industry: Industries
 
-    def __init__(self, year: int, industry: Industries, job_type: JobType = "All Jobs"):
+    def __init__(
+        self,
+        industry: Industries,
+        year: int | None = None,
+        job_type: JobType = "All Jobs",
+    ):
         """
         Initializes the commuters by industry matrix with the year, the industry type,
         and the type of job, which defaults to "All Jobs".
 
         Parameters
         ----------
-        year : int
-            The year for all of the commuting data.
         industry : Industries
             The defined industry that all commuters fall under
             (options: 'Goods Producing', 'Trade Transport Utility', 'Other').
+        year : int, optional
+            The year for the commuting data.
+            Defaults to the year in which the simulation time frame starts.
         job_type : JobType
             The category of job all resulting commuters work under (options: "All Jobs",
             "Primary Jobs", "All Private Jobs", "Private Primary Jobs",
             "All Federal Jobs", "Federal Primary Jobs").
         """
-        self.year = year
+        super().__init__(year)
         self.industry = industry
         self.job_type = job_type
 
@@ -590,7 +612,7 @@ class CommutersByIndustry(Adrio[np.int64]):
         scope = self.scope
         scope = _validate_scope(scope)
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.year)
+        est = _estimate_lodes(self, scope, job_var, self.data_year)
         return est
 
     @override
@@ -599,4 +621,4 @@ class CommutersByIndustry(Adrio[np.int64]):
         scope = _validate_scope(scope)
         industry_var = self.industry_variables[self.industry]
         job_var = _JOB_VARIABLES[self.job_type]
-        return _fetch_lodes(scope, industry_var, job_var, self.year, self.progress)
+        return _fetch_lodes(scope, industry_var, job_var, self.data_year, self.progress)
