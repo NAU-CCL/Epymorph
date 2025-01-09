@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring
 import unittest
 from unittest.mock import MagicMock
 
@@ -7,31 +6,73 @@ from numpy.typing import NDArray
 
 import epymorph.initializer as init
 from epymorph.attribute import AbsoluteName, AttributeDef
-from epymorph.compartment_model import BaseCompartmentModel
+from epymorph.compartment_model import (
+    BaseCompartmentModel,
+    QuantitySelector,
+    quick_compartments,
+)
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.error import AttributeException, InitException
 from epymorph.geography.custom import CustomScope
 from epymorph.time import TimeFrame
 
+_FOOSBALL_CHAMPIONSHIPS = AttributeDef("foosball_championships", int, Shapes.N)
+
+_POP = np.array([100, 200, 300, 400, 500], dtype=SimDType)
+_POP_5x3 = np.broadcast_to(_POP[:, np.newaxis], (5, 3))
+
 
 def _eval_context(additional_data: dict[str, NDArray] | None = None):
+    # Creates a basic evaluation context for splatting into .with_context();
+    # this should cover the needs of most test cases.
+    # - Scope with 5 locations
+    # - Time frame of 100 days
+    # - IPM with 3 compartments: S,I,R
+    # - population and foosball_championships as data attributes
+    # - optional additional data attributes
     scope = CustomScope(list("ABCDE"))
-    ipm = MagicMock(spec=BaseCompartmentModel)
-    ipm.num_compartments = 3
-    ipm.num_events = 2
-    time_frame = TimeFrame.of("2020-01-01", 100)
+    name = AbsoluteName("gpm:all", "init", "init")
     params = {
         "label": scope.node_ids,
-        "population": np.array([100, 200, 300, 400, 500], dtype=SimDType),
+        "population": _POP,
         "foosball_championships": np.array([2, 4, 1, 9, 6]),
         **(additional_data or {}),
     }
-    name = AbsoluteName("gpm:all", "init", "init")
+    time_frame = TimeFrame.of("2020-01-01", 100)
+    # mock just enough of the IPM for compartment selections to work
+    ipm = MagicMock(spec=BaseCompartmentModel)
+    ipm.num_compartments = 3
+    ipm.num_events = 2
+    ipm.compartments = quick_compartments("S I R")
+    ipm.select = QuantitySelector(ipm)
     return (name, params, scope, time_frame, ipm, np.random.default_rng(1))
 
 
-_FOOSBALL_CHAMPIONSHIPS = AttributeDef("foosball_championships", int, Shapes.N)
+class TestNoInfection(unittest.TestCase):
+    def test_no_01(self):
+        actual = init.NoInfection().with_context(*_eval_context()).evaluate()
+        expected = _POP_5x3 * np.array([1, 0, 0])
+        np.testing.assert_array_equal(expected, actual)
+
+    def test_no_02(self):
+        actual = init.NoInfection(1).with_context(*_eval_context()).evaluate()
+        expected = _POP_5x3 * np.array([0, 1, 0])
+        np.testing.assert_array_equal(expected, actual)
+
+    def test_no_03(self):
+        actual = init.NoInfection("S").with_context(*_eval_context()).evaluate()
+        expected = _POP_5x3 * np.array([1, 0, 0])
+        np.testing.assert_array_equal(expected, actual)
+
+    def test_no_04(self):
+        actual = init.NoInfection("R").with_context(*_eval_context()).evaluate()
+        expected = _POP_5x3 * np.array([0, 0, 1])
+        np.testing.assert_array_equal(expected, actual)
+
+    def test_no_05(self):
+        with self.assertRaises(InitException):
+            init.NoInfection("BAD_CMPARTMNT").with_context(*_eval_context()).evaluate()
 
 
 class TestExplicitInitializer(unittest.TestCase):
@@ -224,6 +265,29 @@ class TestIndexedInitializer(unittest.TestCase):
         # And check for 100 infected in total.
         self.assertEqual(out[:, 1].sum(), 100)
 
+    def test_indexed_locations_02(self):
+        # test with non-default compartment configuration
+        actual = (
+            init.IndexedLocations(
+                selection=[2],
+                seed_size=100,
+                initial_compartment=2,  # R
+                infection_compartment="S",
+            )
+            .with_context(*_eval_context())
+            .evaluate()
+        )
+        expected = np.array(
+            [
+                [0, 0, 100],
+                [0, 0, 200],
+                [100, 0, 200],
+                [0, 0, 400],
+                [0, 0, 500],
+            ]
+        )
+        np.testing.assert_array_equal(expected, actual)
+
     def test_indexed_locations_bad(self):
         with self.assertRaises(InitException):
             # indices must be one dimension
@@ -275,6 +339,29 @@ class TestLabeledInitializer(unittest.TestCase):
         # And check for 100 infected in total.
         self.assertEqual(out[:, 1].sum(), 100)
 
+    def test_labeled_locations_02(self):
+        # test with non-default compartment configuration
+        actual = (
+            init.LabeledLocations(
+                labels=["C"],
+                seed_size=100,
+                initial_compartment=2,  # R
+                infection_compartment="S",
+            )
+            .with_context(*_eval_context())
+            .evaluate()
+        )
+        expected = np.array(
+            [
+                [0, 0, 100],
+                [0, 0, 200],
+                [100, 0, 200],
+                [0, 0, 400],
+                [0, 0, 500],
+            ]
+        )
+        np.testing.assert_array_equal(expected, actual)
+
     def test_labeled_locations_bad(self):
         with self.assertRaises(InitException):
             init.LabeledLocations(
@@ -283,8 +370,8 @@ class TestLabeledInitializer(unittest.TestCase):
             ).with_context(*_eval_context()).evaluate()
 
 
-class TestSingleInitializer(unittest.TestCase):
-    def test_single_loc(self):
+class TestSingleLocationInitializer(unittest.TestCase):
+    def test_single_loc_01(self):
         exp = np.array(
             [
                 [100, 0, 0],
@@ -304,6 +391,28 @@ class TestSingleInitializer(unittest.TestCase):
         )
         np.testing.assert_array_equal(act, exp)
 
+    def test_single_loc_02(self):
+        expected = np.array(
+            [
+                [0, 100, 0],
+                [0, 200, 0],
+                [0, 201, 99],
+                [0, 400, 0],
+                [0, 500, 0],
+            ]
+        )
+        actual = (
+            init.SingleLocation(
+                location=2,
+                seed_size=99,
+                initial_compartment="I",
+                infection_compartment="R",
+            )
+            .with_context(*_eval_context())
+            .evaluate()
+        )
+        np.testing.assert_array_equal(actual, expected)
+
 
 class TestTopInitializer(unittest.TestCase):
     def test_top(self):
@@ -319,6 +428,29 @@ class TestTopInitializer(unittest.TestCase):
         act = out[:, 1] > 0
         exp = np.array([False, True, False, True, True])
         np.testing.assert_array_equal(act, exp)
+
+    def test_top_02(self):
+        actual = (
+            init.TopLocations(
+                top_attribute=_FOOSBALL_CHAMPIONSHIPS,
+                num_locations=1,
+                seed_size=99,
+                initial_compartment="I",
+                infection_compartment="R",
+            )
+            .with_context(*_eval_context())
+            .evaluate()
+        )
+        expected = np.array(
+            [
+                [0, 100, 0],
+                [0, 200, 0],
+                [0, 300, 0],
+                [0, 301, 99],
+                [0, 500, 0],
+            ]
+        )
+        np.testing.assert_array_equal(expected, actual)
 
     def test_missing_attribute(self):
         with self.assertRaises(AttributeException):
@@ -381,6 +513,29 @@ class TestBottomInitializer(unittest.TestCase):
         act = out[:, 1] > 0
         exp = np.array([True, True, True, False, False])
         np.testing.assert_array_equal(act, exp)
+
+    def test_bottom_02(self):
+        actual = (
+            init.BottomLocations(
+                bottom_attribute=_FOOSBALL_CHAMPIONSHIPS,
+                num_locations=1,
+                seed_size=99,
+                initial_compartment="I",
+                infection_compartment="R",
+            )
+            .with_context(*_eval_context())
+            .evaluate()
+        )
+        expected = np.array(
+            [
+                [0, 100, 0],
+                [0, 200, 0],
+                [0, 201, 99],
+                [0, 400, 0],
+                [0, 500, 0],
+            ]
+        )
+        np.testing.assert_array_equal(expected, actual)
 
     def test_missing_attribute(self):
         with self.assertRaises(AttributeException):

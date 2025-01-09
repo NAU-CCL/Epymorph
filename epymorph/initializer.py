@@ -29,6 +29,25 @@ class Initializer(SimulationFunction[SimArray], ABC):
     of populations by IPM compartment for every simulation node.
     """
 
+    def as_compartment(self, name_or_index: int | str) -> int:
+        """Convert a compartment identifier to a compartment index.
+        You can specify a string -- which will be interpreted as a compartment name --
+        or an integer -- which will be interpreted as an index.
+        Raises InitException if the compartment identifier is not valid.
+        """
+        try:
+            if isinstance(name_or_index, int):
+                if name_or_index < 0:
+                    raise ValueError()
+                if name_or_index >= self.ipm.num_compartments:
+                    raise ValueError()
+                return name_or_index
+            else:
+                return self.ipm.select.compartments(name_or_index).compartment_index
+        except ValueError:
+            err = f"Unknown compartment '{name_or_index}' specified in initializer."
+            raise InitException(err)
+
     @override
     def validate(self, result) -> None:
         # Must be an NxC array of integers, none less than zero.
@@ -120,7 +139,8 @@ class NoInfection(Initializer):
     def evaluate(self) -> SimArray:
         pop = self.data(_POPULATION_ATTR)
         result = np.zeros(self._NxC, dtype=SimDType)
-        result[:, self.initial_compartment] = pop
+        initial = self.as_compartment(self.initial_compartment)
+        result[:, initial] = pop
         return result
 
 
@@ -211,37 +231,18 @@ class SeededInfection(Initializer, ABC):
     DEFAULT_INITIAL = 0
     DEFAULT_INFECTION = 1
 
-    initial_compartment: int
-    """The IPM compartment index for non-infected individuals."""
-    infection_compartment: int
-    """The IPM compartment index for infected individuals."""
+    initial_compartment: int | str
+    """The IPM compartment for non-infected individuals."""
+    infection_compartment: int | str
+    """The IPM compartment for infected individuals."""
 
     def __init__(
         self,
-        initial_compartment: int = DEFAULT_INITIAL,
-        infection_compartment: int = DEFAULT_INFECTION,
+        initial_compartment: int | str = DEFAULT_INITIAL,
+        infection_compartment: int | str = DEFAULT_INFECTION,
     ):
         self.initial_compartment = initial_compartment
         self.infection_compartment = infection_compartment
-
-    def validate_compartments(self):
-        """
-        Child classes should call this during `initialize` to check that the given
-        compartment indices are valid.
-        """
-        C = self.ipm.num_compartments
-        if not 0 <= self.initial_compartment < C:
-            err = (
-                "Initializer argument `initial_compartment` must be an index "
-                f"of the IPM compartments (0 to {C-1}, inclusive)."
-            )
-            raise InitException(err)
-        if not 0 <= self.infection_compartment < C:
-            err = (
-                "Initializer argument `infection_compartment` must be an index "
-                f"of the IPM compartments (0 to {C-1}, inclusive)."
-            )
-            raise InitException(err)
 
 
 class IndexedLocations(SeededInfection):
@@ -265,8 +266,8 @@ class IndexedLocations(SeededInfection):
         self,
         selection: NDArray[np.intp] | list[int],
         seed_size: int,
-        initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
-        infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
+        initial_compartment: int | str = SeededInfection.DEFAULT_INITIAL,
+        infection_compartment: int | str = SeededInfection.DEFAULT_INFECTION,
     ):
         super().__init__(initial_compartment, infection_compartment)
         if seed_size < 0:
@@ -279,6 +280,9 @@ class IndexedLocations(SeededInfection):
         self.seed_size = seed_size
 
     def evaluate(self) -> SimArray:
+        initial = self.as_compartment(self.initial_compartment)
+        infection = self.as_compartment(self.infection_compartment)
+
         sel = self._condition_input_array(
             self.selection,
             "selection",
@@ -293,8 +297,6 @@ class IndexedLocations(SeededInfection):
                 f"some indices are out of range ({-N}, {N})."
             )
             raise InitException(err)
-
-        self.validate_compartments()
 
         pop = self.data(_POPULATION_ATTR)
         selected = pop[sel]
@@ -313,7 +315,7 @@ class IndexedLocations(SeededInfection):
             infected = self.rng.multivariate_hypergeometric(selected, self.seed_size)
 
         result = np.zeros(self._NxC, dtype=SimDType)
-        result[:, self.initial_compartment] = pop
+        result[:, initial] = pop
 
         # Special case: the "no" IPM has only one compartment!
         # Technically it would be more "correct" to choose a different initializer,
@@ -322,8 +324,8 @@ class IndexedLocations(SeededInfection):
             return result
 
         for i, n in zip(sel, infected):
-            result[i, self.initial_compartment] -= n
-            result[i, self.infection_compartment] += n
+            result[i, initial] -= n
+            result[i, infection] += n
         return result
 
 
@@ -340,8 +342,8 @@ class SingleLocation(IndexedLocations):
         self,
         location: int,
         seed_size: int,
-        initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
-        infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
+        initial_compartment: int | str = SeededInfection.DEFAULT_INITIAL,
+        infection_compartment: int | str = SeededInfection.DEFAULT_INFECTION,
     ):
         super().__init__(
             selection=np.array([location], dtype=np.intp),
@@ -380,8 +382,8 @@ class LabeledLocations(SeededInfection):
         self,
         labels: NDArray[np.str_] | list[str],
         seed_size: int,
-        initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
-        infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
+        initial_compartment: int | str = SeededInfection.DEFAULT_INITIAL,
+        infection_compartment: int | str = SeededInfection.DEFAULT_INFECTION,
     ):
         super().__init__(initial_compartment, infection_compartment)
         self.labels = labels
@@ -431,8 +433,8 @@ class RandomLocations(SeededInfection):
         self,
         num_locations: int,
         seed_size: int,
-        initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
-        infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
+        initial_compartment: int | str = SeededInfection.DEFAULT_INITIAL,
+        infection_compartment: int | str = SeededInfection.DEFAULT_INFECTION,
     ):
         super().__init__(initial_compartment, infection_compartment)
         self.num_locations = num_locations
@@ -483,8 +485,8 @@ class TopLocations(SeededInfection):
         top_attribute: AttributeDef[type[int]] | AttributeDef[type[float]],
         num_locations: int,
         seed_size: int,
-        initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
-        infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
+        initial_compartment: int | str = SeededInfection.DEFAULT_INITIAL,
+        infection_compartment: int | str = SeededInfection.DEFAULT_INFECTION,
     ):
         super().__init__(initial_compartment, infection_compartment)
 
@@ -550,8 +552,8 @@ class BottomLocations(SeededInfection):
         bottom_attribute: AttributeDef[type[int]] | AttributeDef[type[float]],
         num_locations: int,
         seed_size: int,
-        initial_compartment: int = SeededInfection.DEFAULT_INITIAL,
-        infection_compartment: int = SeededInfection.DEFAULT_INFECTION,
+        initial_compartment: int | str = SeededInfection.DEFAULT_INITIAL,
+        infection_compartment: int | str = SeededInfection.DEFAULT_INFECTION,
     ):
         super().__init__(initial_compartment, infection_compartment)
 
