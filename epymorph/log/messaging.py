@@ -90,7 +90,7 @@ def sim_messaging(
     def on_adrio_progress(e: AdrioProgress) -> None:
         nonlocal last_progress_length
         if e.ratio_complete == 0:
-            print(f"Loading {e.adrio_name}:")
+            print(f"Loading {e.attribute} ({e.adrio_name}):")
         if not e.final:
             if e.download is None:
                 dl = ""

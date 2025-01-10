@@ -170,7 +170,7 @@ class MovementClause(
         return self.leaves.step == tick.step and self.predicate.evaluate(tick)
 
     @property
-    def name(self) -> str:
+    def clause_name(self) -> str:
         return self.__class__.__name__
 
     @abstractmethod

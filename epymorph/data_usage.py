@@ -1,9 +1,10 @@
+from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
 from math import floor, inf
 from pathlib import Path
 from shutil import disk_usage
-from typing import Sequence
+from typing import Protocol, Sequence, runtime_checkable
 
 from humanize import naturaldelta, naturalsize
 
@@ -53,6 +54,14 @@ class AvailableDataEstimate:
 
 
 DataEstimate = EmptyDataEstimate | AvailableDataEstimate
+
+
+@runtime_checkable
+class CanEstimateData(Protocol):
+    @abstractmethod
+    def estimate_data(self) -> DataEstimate:
+        """Estimate the data usage for this entity.
+        If a reasonable estimate cannot be made, return EmptyDataEstimate."""
 
 
 @dataclass(frozen=True)
