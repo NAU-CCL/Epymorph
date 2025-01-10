@@ -15,6 +15,7 @@ from pandas import DataFrame
 from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.error import DataResourceException
@@ -33,7 +34,6 @@ from epymorph.geography.us_geography import (
     TRACT,
     CensusGranularity,
 )
-from epymorph.simulation import AttributeDef
 from epymorph.util import filter_with_mask
 
 _ACS5_CACHE_PATH = module_cache_path(__name__)

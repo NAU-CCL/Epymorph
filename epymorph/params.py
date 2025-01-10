@@ -11,16 +11,18 @@ import numpy as np
 from numpy.typing import NDArray
 from sympy import Expr, Symbol
 
-from epymorph.data_shape import SimDimensions
+from epymorph.attribute import AbsoluteName
+from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_type import (
     AttributeArray,
     AttributeValue,
 )
-from epymorph.database import AbsoluteName, DataResolver, evaluate_param
+from epymorph.database import DataResolver, evaluate_param
 from epymorph.error import AttributeException
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
+from epymorph.time import TimeFrame
 
 ResultDType = TypeVar("ResultDType", bound=np.generic)
 """The result type of a ParamFunction."""
@@ -38,13 +40,13 @@ def _(
     value: ParamFunction,
     name: AbsoluteName,
     data: DataResolver,
-    dim: SimDimensions | None,
     scope: GeoScope | None,
+    time_frame: TimeFrame | None,
+    ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
     # depth-first evaluation guarantees `data` has our dependencies.
-    namespace = name.to_namespace()
-    sim_func = value.with_context_internal(namespace, data, dim, scope, rng)
+    sim_func = value.with_context_internal(name, data, scope, time_frame, ipm, rng)
     return np.asarray(sim_func.evaluate())
 
 
@@ -87,7 +89,7 @@ class ParamFunctionTime(_ParamFunction1[ResultDType]):
 
     @final
     def evaluate(self) -> NDArray[ResultDType]:
-        result = [self.evaluate1(day) for day in range(self.dim.days)]
+        result = [self.evaluate1(day) for day in range(self.time_frame.days)]
         return np.array(result, dtype=self.dtype)
 
     @abstractmethod
@@ -103,7 +105,7 @@ class ParamFunctionNode(_ParamFunction1[ResultDType]):
 
     @final
     def evaluate(self) -> NDArray[ResultDType]:
-        result = [self.evaluate1(n) for n in range(self.dim.nodes)]
+        result = [self.evaluate1(n) for n in range(self.scope.nodes)]
         return np.array(result, dtype=self.dtype)
 
     @abstractmethod
@@ -123,8 +125,8 @@ class ParamFunctionNodeAndNode(_ParamFunction1[ResultDType]):
     @final
     def evaluate(self) -> NDArray[ResultDType]:
         result = [
-            [self.evaluate1(n1, n2) for n2 in range(self.dim.nodes)]
-            for n1 in range(self.dim.nodes)
+            [self.evaluate1(n1, n2) for n2 in range(self.scope.nodes)]
+            for n1 in range(self.scope.nodes)
         ]
         return np.array(result, dtype=self.dtype)
 
@@ -145,8 +147,8 @@ class ParamFunctionNodeAndCompartment(_ParamFunction1[ResultDType]):
     @final
     def evaluate(self) -> NDArray[ResultDType]:
         result = [
-            [self.evaluate1(n, c) for c in range(self.dim.compartments)]
-            for n in range(self.dim.nodes)
+            [self.evaluate1(n, c) for c in range(self.ipm.num_compartments)]
+            for n in range(self.scope.nodes)
         ]
         return np.array(result, dtype=self.dtype)
 
@@ -166,8 +168,8 @@ class ParamFunctionTimeAndNode(_ParamFunction1[ResultDType]):
     @final
     def evaluate(self) -> NDArray[ResultDType]:
         result = [
-            [self.evaluate1(day, n) for n in range(self.dim.nodes)]
-            for day in range(self.dim.days)
+            [self.evaluate1(day, n) for n in range(self.scope.nodes)]
+            for day in range(self.time_frame.days)
         ]
         return np.array(result, dtype=self.dtype)
 
@@ -241,8 +243,8 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
 
     @final
     def evaluate(self) -> NDArray[np.float64]:
-        D = self.dim.days
-        N = self.dim.nodes
+        D = self.time_frame.days
+        N = self.scope.nodes
         ds = np.broadcast_to(np.arange(D).reshape((D, 1)), (D, N))
         ns = np.broadcast_to(np.arange(N).reshape((1, N)), (D, N))
         fn = lambdify(_ALL_PARAM_SYMBOLS, self._expr)
@@ -257,8 +259,9 @@ def _(
     value: Expr,
     name: AbsoluteName,
     data: DataResolver,
-    dim: SimDimensions | None,
     scope: GeoScope | None,
+    time_frame: TimeFrame | None,
+    ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
     # Automatically convert sympy expressions into a ParamFunction instance.
@@ -266,4 +269,4 @@ def _(
         expr_func = ParamExpressionTimeAndNode(value)
     except ValueError as e:
         raise AttributeException(str(e)) from None
-    return evaluate_param(expr_func, name, data, dim, scope, rng)
+    return evaluate_param(expr_func, name, data, scope, time_frame, ipm, rng)

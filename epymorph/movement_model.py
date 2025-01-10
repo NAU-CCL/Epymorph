@@ -15,10 +15,10 @@ from typing import Any, Literal, Sequence, Type, TypeVar, cast
 
 from numpy.typing import NDArray
 
+from epymorph.attribute import AttributeDef
 from epymorph.data_type import SimDType
 from epymorph.simulation import (
     NEVER,
-    AttributeDef,
     SimulationFunctionClass,
     SimulationTickFunction,
     Tick,
@@ -168,6 +168,10 @@ class MovementClause(
     def is_active(self, tick: Tick) -> bool:
         """Should this movement clause be applied this tick?"""
         return self.leaves.step == tick.step and self.predicate.evaluate(tick)
+
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__
 
     @abstractmethod
     def evaluate(self, tick: Tick) -> NDArray[SimDType]:

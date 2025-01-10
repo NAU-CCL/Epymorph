@@ -6,12 +6,14 @@ from unittest.mock import MagicMock
 import numpy as np
 import numpy.testing as npt
 
+from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import BIRTH, DEATH, CompartmentModel, compartment, edge
-from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.database import DataResolver
+from epymorph.geography.scope import GeoScope
 from epymorph.rume import Rume
-from epymorph.simulation import AttributeDef, Tick
+from epymorph.simulation import Tick
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.world_list import ListWorld
 
@@ -66,18 +68,13 @@ class Sirbd(CompartmentModel):
 
 class StandardIpmExecutorTest(unittest.TestCase):
     def test_init_01(self):
-        ipm = Sir()
-        dim = SimDimensions.build(
-            tau_step_lengths=[1.0],
-            start_date=date(2021, 1, 1),
-            days=100,
-            nodes=1,
-            compartments=ipm.num_compartments,
-            events=ipm.num_events,
-        )
-
         exe = IpmExecutor(
-            rume=MagicMock(spec=Rume, ipm=ipm, dim=dim),
+            rume=MagicMock(
+                spec=Rume,
+                ipm=Sir(),
+                tau_step_lengths=[1.0],
+                num_tau_steps=1,
+            ),
             world=MagicMock(spec=ListWorld),
             data=MagicMock(spec=DataResolver),
             rng=np.random.default_rng(),
@@ -97,18 +94,13 @@ class StandardIpmExecutorTest(unittest.TestCase):
         )
 
     def test_init_02(self):
-        ipm = Sirbd()
-        dim = SimDimensions.build(
-            tau_step_lengths=[1.0],
-            start_date=date(2021, 1, 1),
-            days=100,
-            nodes=1,
-            compartments=ipm.num_compartments,
-            events=ipm.num_events,
-        )
-
         exe = IpmExecutor(
-            rume=MagicMock(spec=Rume, ipm=ipm, dim=dim),
+            rume=MagicMock(
+                spec=Rume,
+                ipm=Sirbd(),
+                tau_step_lengths=[1.0],
+                num_tau_steps=1,
+            ),
             world=MagicMock(spec=ListWorld),
             data=MagicMock(spec=DataResolver),
             rng=np.random.default_rng(),
@@ -151,8 +143,6 @@ class StandardIpmExecutorTest(unittest.TestCase):
                     edge(R, DEATH, rate=d * R),
                 ]
 
-        ipm = SIRBD2()
-
         # Create a simple world and have some folks move around.
         initials = np.array(
             [
@@ -172,17 +162,14 @@ class StandardIpmExecutorTest(unittest.TestCase):
         ], dtype=SimDType), return_tick=0)
         # fmt: on
 
-        dim = SimDimensions.build(
-            tau_step_lengths=[1.0],
-            start_date=date(2021, 1, 1),
-            days=100,
-            nodes=world.nodes,
-            compartments=ipm.num_compartments,
-            events=ipm.num_events,
-        )
-
         exe = IpmExecutor(
-            rume=MagicMock(spec=Rume, ipm=ipm, dim=dim),
+            rume=MagicMock(
+                spec=Rume,
+                ipm=SIRBD2(),
+                tau_step_lengths=[1.0],
+                num_tau_steps=1,
+                scope=MagicMock(spec=GeoScope, nodes=world.nodes),
+            ),
             world=world,
             data=MagicMock(spec=DataResolver),
             rng=np.random.default_rng(),

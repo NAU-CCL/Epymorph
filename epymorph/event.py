@@ -8,9 +8,8 @@ from typing import NamedTuple
 
 from numpy.typing import NDArray
 
-from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
-from epymorph.time import TimeFrame
+from epymorph.rume import Rume
 from epymorph.util import Event, Singleton
 
 #####################
@@ -23,18 +22,17 @@ class OnStart(NamedTuple):
 
     simulator: str
     """Name of the simulator class."""
-    dim: SimDimensions
-    """The dimensions of the simulation."""
-    time_frame: TimeFrame
-    """The timeframe for the simulation."""
+    rume: Rume
+    """The RUME for the simulation."""
 
 
 class OnTick(NamedTuple):
     """The payload of a Simulation tick event."""
 
     tick_index: int
-    percent_complete: float
-    dim: SimDimensions
+    """The index of the just-completed tick."""
+    ticks: int
+    """The total number of ticks for the simulation."""
 
 
 ###################

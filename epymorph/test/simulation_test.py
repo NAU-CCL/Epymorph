@@ -1,33 +1,26 @@
 import unittest
 from datetime import date
 from functools import cached_property
+from typing import Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.attribute import AbsoluteName, AttributeDef
 from epymorph.data_shape import Shapes
-from epymorph.database import ModuleNamespace
 from epymorph.simulation import (
-    AttributeDef,
-    SimDimensions,
     SimulationFunction,
     Tick,
     simulation_clock,
 )
+from epymorph.time import TimeFrame
 
 
 class TestClock(unittest.TestCase):
     def test_clock(self):
-        dim = SimDimensions.build(
-            tau_step_lengths=[2 / 3, 1 / 3],
-            start_date=date(2023, 1, 1),
-            days=6,
-            # sim clock doesn't depend on GEO/IPM dimensions
-            nodes=99,
-            compartments=99,
-            events=99,
-        )
-        clock = simulation_clock(dim)
+        tau_step_lengths = [2 / 3, 1 / 3]
+        time_frame = TimeFrame.of("2023-01-01", 6)
+        clock = simulation_clock(time_frame, tau_step_lengths)
         act = list(clock)
         exp = [
             Tick(0, 0, date(2023, 1, 1), 0, 2 / 3),
@@ -48,12 +41,13 @@ class TestClock(unittest.TestCase):
 
 class TestSimulationFunction(unittest.TestCase):
     def _eval_context(self, bar: int):
-        namespace = ModuleNamespace("gpm:all", "foo")
+        name = AbsoluteName("gpm:all", "foo", "foo")
         data = {"bar": np.asarray(bar)}
-        dim = None
         scope = None
+        time_frame = None
+        ipm = None
         rng = None
-        return (namespace, data, dim, scope, rng)
+        return (name, data, scope, time_frame, ipm, rng)
 
     def test_basic_usage(self):
         class Foo(SimulationFunction[NDArray[np.int64]]):
@@ -91,6 +85,18 @@ class TestSimulationFunction(unittest.TestCase):
         self.assertEqual(Foo.requirements, f.requirements)
         self.assertIsInstance(Foo.requirements, tuple)
         self.assertIsInstance(f.requirements, tuple)
+
+    def test_dynamic_requirements(self):
+        class Foo(SimulationFunction[NDArray[np.int64]]):
+            @property
+            def requirements(self) -> Sequence[AttributeDef]:
+                return (AttributeDef("bar", int, Shapes.Scalar),)
+
+            def evaluate(self):
+                return 7 * self.data("bar")
+
+        f = Foo()
+        self.assertEqual(f.requirements, (AttributeDef("bar", int, Shapes.Scalar),))
 
     def test_undefined_requirement(self):
         class Foo(SimulationFunction[NDArray[np.int64]]):

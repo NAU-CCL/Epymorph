@@ -171,7 +171,7 @@ class IpmExecutor:
         self._source_compartment_for_event = source_compartment_for_event
         self._attr_values = data.resolve_txn_series(
             ipm.requirements_dict.items(),
-            rume.dim.tau_steps,
+            rume.num_tau_steps,
         )
 
     def apply(self, tick: Tick) -> Result:
@@ -180,9 +180,9 @@ class IpmExecutor:
         Returns the location-specific events that happened this tick (an (N,E) array)
         and the new compartments resulting from these events (an (N,C) array).
         """
-        N = self._rume.dim.nodes
-        C = self._rume.dim.compartments
-        E = self._rume.dim.events
+        N = self._rume.scope.nodes
+        C = self._rume.ipm.num_compartments
+        E = self._rume.ipm.num_events
 
         # (home_node, visit_node, :)
         events = np.zeros((N, N, E), dtype=SimDType)
@@ -231,7 +231,7 @@ class IpmExecutor:
         rate_args = [*effective_pop, *next(self._attr_values)]
 
         # Evaluate the event rates and do random draws for all transition events.
-        occur = np.zeros(self._rume.dim.events, dtype=SimDType)
+        occur = np.zeros(self._rume.ipm.num_events, dtype=SimDType)
         index = 0
         for t in self._trxs:
             try:
@@ -345,14 +345,14 @@ class IpmExecutor:
             name: value
             for name, value in zip(
                 [c.name.full for c in self._rume.ipm.compartments],
-                rate_attrs[: self._rume.dim.compartments],
+                rate_attrs[: self._rume.ipm.num_compartments],
             )
         }
         pvals = {
             attribute.name: value
             for attribute, value in zip(
                 self._rume.ipm.requirements,
-                rate_attrs[self._rume.dim.compartments :],
+                rate_attrs[self._rume.ipm.num_compartments :],
             )
         }
         return [

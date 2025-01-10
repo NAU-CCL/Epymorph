@@ -72,19 +72,23 @@ class PlotRenderer:
         applying time selection/aggregation (if any) and the time format
         requested."""
 
-        dim = self.output.dim
+        tau_step_lengths = self.output.rume.tau_step_lengths
+        num_tau_steps = self.output.rume.num_tau_steps
+        start_date = self.output.rume.time_frame.start_date
+        S = self.output.rume.num_ticks
+        T = self.output.rume.time_frame.days
         match (time.group_format, requested_time_format):
             case ("tick", "auto" | "day"):
                 # Convert ticks to simulation-day scale:
                 # e.g.: [0.333, 1.0, 1.333, ...]
                 # NOTE: each tick is represented as the end of its timespan
                 def ticks_to_days(time_groups: pd.Series) -> pd.Series:
-                    deltas = np.array(dim.tau_step_lengths).cumsum()
+                    deltas = np.array(tau_step_lengths).cumsum()
                     days = (
-                        np.arange(dim.days).repeat(dim.tau_steps)  #
-                        + np.tile(deltas, dim.days)
+                        np.arange(T).repeat(num_tau_steps)  #
+                        + np.tile(deltas, T)
                     )
-                    ticks = np.arange(dim.days * dim.tau_steps)
+                    ticks = np.arange(S)
                     time_map = dict(zip(ticks, days))
                     return time_groups.apply(lambda x: time_map[x])
 
@@ -96,16 +100,16 @@ class PlotRenderer:
                 # NOTE: each tick is represented as the end of its timespan
                 def ticks_to_dates(time_groups: pd.Series) -> pd.Series:
                     deltas = np.array(
-                        [timedelta(days=x) for x in dim.tau_step_lengths],
+                        [timedelta(days=x) for x in tau_step_lengths],
                         dtype=np.timedelta64,
                     ).cumsum()
                     dates = (
-                        pd.date_range(start=dim.start_date, periods=dim.days).repeat(
-                            dim.tau_steps
+                        pd.date_range(start=start_date, periods=T).repeat(
+                            num_tau_steps
                         )  #
-                        + np.tile(deltas, dim.days)  #
+                        + np.tile(deltas, T)  #
                     )
-                    ticks = np.arange(dim.days * dim.tau_steps)
+                    ticks = np.arange(S)
                     time_map = dict(zip(ticks, dates))
                     return time_groups.apply(lambda x: time_map[x])
 
@@ -118,7 +122,7 @@ class PlotRenderer:
                 # e.g., if you group by week but the first day of the week is Monday
                 # and you start the sim on a Tuesday.
                 def dates_to_days(time_groups: pd.Series) -> pd.Series:
-                    start = pd.Timestamp(dim.start_date)
+                    start = pd.Timestamp(start_date)
                     return time_groups.apply(lambda x: (x - start).days)
 
                 return "day", dates_to_days

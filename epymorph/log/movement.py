@@ -7,9 +7,9 @@ from typing import Generator, NamedTuple, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data_shape import SimDimensions
 from epymorph.data_type import SimDType
 from epymorph.event import EventBus, OnMovementClause, OnStart
+from epymorph.rume import Rume
 from epymorph.util import subscriptions
 
 _events = EventBus()
@@ -69,32 +69,34 @@ class _MovementDataBuilder(MovementData):
     """
 
     ready: bool
-    dim: SimDimensions | None
+    rume: Rume | None
     requested: list[_Entry]
     actual: list[_Entry]
 
     def __init__(self):
         self.ready = False
-        self.dim = None
         self.requested = []
         self.actual = []
 
-    def _get_dim(self) -> SimDimensions:
+    def _get_dim(self) -> tuple[int, int, int]:
         """
-        Checks that the class is in a valid state and, if so, returns SimDimensions.
+        Checks that the class is in a valid state and, if so, returns dimensions info.
         """
-        if not self.ready or self.dim is None:
+        if not self.ready or self.rume is None:
             msg = (
                 "Invalid state: MovementData cannot be accessed until the simulation "
                 "is complete."
             )
             raise RuntimeError(msg)
-        return self.dim
+
+        return (
+            self.rume.num_ticks,
+            self.rume.scope.nodes,
+            self.rume.ipm.num_compartments,
+        )
 
     def requested_by(self, clause: str) -> NDArray[SimDType]:
-        dim = self._get_dim()
-        S = dim.ticks
-        N = dim.nodes
+        S, N, _ = self._get_dim()
         result = np.zeros((S, N, N), dtype=SimDType)
         for name, tick, data in self.requested:
             if name == clause:
@@ -102,10 +104,7 @@ class _MovementDataBuilder(MovementData):
         return result
 
     def actual_by(self, clause: str) -> NDArray[SimDType]:
-        dim = self._get_dim()
-        S = dim.ticks
-        N = dim.nodes
-        C = dim.compartments
+        S, N, C = self._get_dim()
         result = np.zeros((S, N, N, C), dtype=SimDType)
         for name, tick, data in self.actual:
             if name == clause:
@@ -113,19 +112,14 @@ class _MovementDataBuilder(MovementData):
         return result
 
     def requested_all(self) -> NDArray[SimDType]:
-        dim = self._get_dim()
-        S = dim.ticks
-        N = dim.nodes
+        S, N, _ = self._get_dim()
         result = np.zeros((S, N, N), dtype=SimDType)
         for _name, tick, data in self.requested:
             result[tick, :, :] += data
         return result
 
     def actual_all(self) -> NDArray[SimDType]:
-        dim = self._get_dim()
-        S = dim.ticks
-        N = dim.nodes
-        C = dim.compartments
+        S, N, C = self._get_dim()
         result = np.zeros((S, N, N, C), dtype=SimDType)
         for _name, tick, data in self.actual:
             result[tick, :, :, :] += data
@@ -143,7 +137,7 @@ def movement_data() -> Generator[MovementData, None, None]:
 
     def on_start(e: OnStart):
         nonlocal md
-        md.dim = e.dim
+        md.rume = e.rume
 
     def on_clause(e: OnMovementClause):
         nonlocal md

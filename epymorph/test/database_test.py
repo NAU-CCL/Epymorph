@@ -7,23 +7,27 @@ from unittest.mock import MagicMock
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data_shape import Shapes, SimDimensions
-from epymorph.database import (
+from epymorph.attribute import (
     AbsoluteName,
     AttributeDef,
     AttributeName,
-    Database,
-    DatabaseWithFallback,
-    DatabaseWithStrataFallback,
-    Match,
     ModuleName,
     ModuleNamePattern,
     ModuleNamespace,
     NamePattern,
+)
+from epymorph.data_shape import Shapes
+from epymorph.database import (
+    Database,
+    DatabaseWithFallback,
+    DatabaseWithStrataFallback,
+    Match,
     ReqTree,
 )
 from epymorph.error import AttributeException, AttributeExceptionGroup
+from epymorph.geography.scope import GeoScope
 from epymorph.params import ParamFunction, ParamFunctionTimeAndNode
+from epymorph.time import TimeFrame
 
 
 class ModuleNamespaceTest(unittest.TestCase):
@@ -492,14 +496,15 @@ def calls(f):
 
 
 class ParamEvalTest(unittest.TestCase):
-    dim = MagicMock(spec=SimDimensions, T=3, days=3, N=2, nodes=2)
+    time_frame = TimeFrame.of("2020-01-01", 3)
+    scope = MagicMock(spec=GeoScope, nodes=2)
 
     @property
     def rng(self):
         return np.random.default_rng(1)
 
     def _to_txn(self, value: float) -> NDArray[np.float64]:
-        return np.broadcast_to(value, shape=(self.dim.days, self.dim.nodes))
+        return np.broadcast_to(value, shape=(self.time_frame.days, self.scope.nodes))
 
     def test_eval_01(self):
         # Test that a function can be used for multiple strata
@@ -525,7 +530,9 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
+            simplify_names=True
+        )
 
         # F evaluated once; beta is 1.4 for both strata
         self.assertEqual(1, calls(F.evaluate))
@@ -557,7 +564,9 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
+            simplify_names=True
+        )
 
         # F evaluated twice, even though it produces the same value each time
         # beta is 1.4 for both strata
@@ -590,7 +599,9 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
+            simplify_names=True
+        )
 
         # F evaluated twice
         # beta is 0.6 for strata a
@@ -621,7 +632,10 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
+            simplify_names=True
+        )
+
         # F evaluated once
         # beta is random, but the same value is shared between strata
         self.assertEqual(1, calls(F.evaluate))
@@ -653,7 +667,10 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
+            simplify_names=True
+        )
+
         # Fs evaluated once each
         # beta is two unique random numbers
         self.assertEqual(2, calls(F.evaluate))
@@ -677,7 +694,7 @@ class ParamEvalTest(unittest.TestCase):
                 self.r_0 = r_0
 
             def evaluate1(self, day: int, node_index: int) -> float:
-                T = self.dim.days
+                T = self.time_frame.days
                 gamma = self.data(self.GAMMA)[day, node_index]
                 magnitude = self.r_0 * gamma
                 return (
@@ -701,15 +718,16 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, None).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
+            simplify_names=True
+        )
+
+        T = self.time_frame.days
+        N = self.scope.nodes
         self.assertEqual(values["gpm:a::ipm::gamma"], 0.1)
         self.assertEqual(values["gpm:b::ipm::gamma"], 0.1)
-        self.assertEqual(
-            values["gpm:a::ipm::beta"].shape, (self.dim.days, self.dim.nodes)
-        )
-        self.assertEqual(
-            values["gpm:b::ipm::beta"].shape, (self.dim.days, self.dim.nodes)
-        )
+        self.assertEqual(values["gpm:a::ipm::beta"].shape, (T, N))
+        self.assertEqual(values["gpm:b::ipm::beta"].shape, (T, N))
 
     def test_eval_07(self):
         # Test when a dependent function is not randomized,
@@ -741,7 +759,9 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
+            simplify_names=True
+        )
 
         # F and G(randomized=False) evaluated once
         # same random values for both strata
@@ -786,7 +806,9 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        values = reqs.evaluate(self.dim, None, self.rng).to_dict(simplify_names=True)
+        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
+            simplify_names=True
+        )
 
         # F and G(randomized=True) evaluated twice
         # different random values for the strata
@@ -820,8 +842,8 @@ class ParamEvalTest(unittest.TestCase):
                 # the shape of alpha, however this "hides" the dependency
                 # on the `dim` context; if dim is not given alpha will not
                 # be shape-adapted (it remains scalar), which causes this logic to fail.
-                t = self.dim.days
-                n = self.dim.nodes
+                t = self.time_frame.days
+                n = self.scope.nodes
                 alpha = self.data("alpha")
                 assert_equal((t, n), alpha.shape)
                 return np.arange(t * n).reshape((t, n)) * alpha
@@ -852,20 +874,22 @@ class ParamEvalTest(unittest.TestCase):
             ),
         )
 
-        data = reqs.evaluate(self.dim, None, None)
+        data = reqs.evaluate(self.scope, self.time_frame, None, None)
 
         # alpha should be interpreted differently for F and G:
         beta_a = data.resolve(req_a[0], req_a[1])
         beta_b = data.resolve(req_b[0], req_b[1])
 
+        T = self.time_frame.days
+        N = self.scope.nodes
         # (gpm:a) F should get a TxN view of alpha,
         # allowing it to produce a varying result
-        self.assertEqual((self.dim.days, self.dim.nodes), beta_a.shape)
-        self.assertTrue(np.unique(beta_a).size == self.dim.days * self.dim.nodes)
+        self.assertEqual((T, N), beta_a.shape)
+        self.assertTrue(np.unique(beta_a).size == T * N)
 
         # (gpm:b) G should get a scalar view of alpha,
         # producing a constant result over TxN
-        self.assertEqual((self.dim.days, self.dim.nodes), beta_b.shape)
+        self.assertEqual((T, N), beta_b.shape)
         self.assertTrue(np.all(beta_b == beta_b[0]))
 
     def test_eval_err_01(self):
@@ -891,7 +915,7 @@ class ParamEvalTest(unittest.TestCase):
             ReqTree.of(
                 requirements=requirements,
                 params=Database({NP("*::ipm::beta"): F()}),
-            ).evaluate(self.dim, None, None)
+            ).evaluate(self.scope, self.time_frame, None, None)
 
         err = "\n".join([str(e).lower() for e in ctx.exception.exceptions])
         self.assertIn(
@@ -914,7 +938,7 @@ class ParamEvalTest(unittest.TestCase):
                     NP("gpm:b::ipm::gamma"): 0.5,
                 }
             ),
-        ).evaluate(self.dim, None, None)
+        ).evaluate(self.scope, self.time_frame, None, None)
 
     def test_eval_err_02(self):
         # Test circular dependency detection.
@@ -942,7 +966,7 @@ class ParamEvalTest(unittest.TestCase):
                         NP("*::ipm::gamma"): G(),
                     }
                 ),
-            ).evaluate(self.dim, None, None)
+            ).evaluate(self.scope, self.time_frame, None, None)
 
         err = str(ctx.exception).lower()
         self.assertIn("circular dependency", err)

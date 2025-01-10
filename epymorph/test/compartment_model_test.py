@@ -4,6 +4,7 @@ from typing import Sequence
 from sympy import Max
 from sympy import symbols as sympy_symbols
 
+from epymorph.attribute import AbsoluteName, AttributeDef
 from epymorph.compartment_model import (
     BIRTH,
     DEATH,
@@ -18,9 +19,7 @@ from epymorph.compartment_model import (
     edge,
 )
 from epymorph.data_shape import Shapes
-from epymorph.database import AbsoluteName
 from epymorph.error import IpmValidationException
-from epymorph.simulation import AttributeDef
 from epymorph.sympy_shim import to_symbol
 from epymorph.util import are_instances
 

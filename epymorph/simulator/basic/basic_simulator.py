@@ -1,9 +1,10 @@
 """Implements one epymorph simulation algorithm: the basic simulator."""
 
-from typing import Callable, Mapping
+from typing import Callable, Generic, TypeVar
 
 import numpy as np
 
+from epymorph.attribute import NamePattern
 from epymorph.data_type import SimDType
 from epymorph.error import (
     AttributeException,
@@ -16,45 +17,46 @@ from epymorph.error import (
     error_gate,
 )
 from epymorph.event import EventBus, OnStart, OnTick
-from epymorph.geography.scope import GeoScope
-from epymorph.rume import GEO_LABELS, Rume
+from epymorph.rume import Rume
 from epymorph.simulation import ParamValue, simulation_clock
 from epymorph.simulator.basic.ipm_exec import IpmExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
 from epymorph.simulator.world_list import ListWorld
 from epymorph.time import TimeFrame
+from epymorph.util import CovariantMapping
 
 _events = EventBus()
 
+RumeT = TypeVar("RumeT", bound=Rume)
 
-class BasicSimulator:
+
+class BasicSimulator(Generic[RumeT]):
     """
     A simulator for running singular simulation passes and producing time-series output.
     The most basic simulator!
     """
 
-    rume: Rume[GeoScope]
+    rume: RumeT
     ipm_exec: IpmExecutor
     mm_exec: MovementExecutor
 
-    def __init__(self, rume: Rume[GeoScope]):
+    def __init__(self, rume: RumeT):
         self.rume = rume
 
     def run(
         self,
         /,
-        params: Mapping[str, ParamValue] | None = None,
+        params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
         time_frame: TimeFrame | None = None,
         rng_factory: Callable[[], np.random.Generator] | None = None,
-    ) -> Output:
+    ) -> Output[RumeT]:
         """Run a RUME with the given overrides."""
 
         rume = self.rume
         if time_frame is not None:
             rume = rume.with_time_frame(time_frame)
 
-        dim = rume.dim
         rng = (rng_factory or np.random.default_rng)()
 
         with error_gate(
@@ -81,16 +83,22 @@ class BasicSimulator:
             ipm_exec = IpmExecutor(rume, world, data, rng)
             movement_exec = MovementExecutor(rume, world, data, rng)
 
-        _events.on_start.publish(OnStart(self.__class__.__name__, dim, rume.time_frame))
+        name = self.__class__.__name__
+        _events.on_start.publish(OnStart(name, rume))
 
-        S, N, C, E = dim.ticks, dim.nodes, dim.compartments, dim.events
+        days = rume.time_frame.days
+        taus = rume.num_tau_steps
+        S = days * taus
+        N = rume.scope.nodes
+        C = rume.ipm.num_compartments
+        E = rume.ipm.num_events
         visit_compartments = np.zeros((S, N, C), dtype=SimDType)
         visit_events = np.zeros((S, N, E), dtype=SimDType)
         home_compartments = np.zeros((S, N, C), dtype=SimDType)
         home_events = np.zeros((S, N, E), dtype=SimDType)
 
         # Run the simulation!
-        for tick in simulation_clock(dim):
+        for tick in simulation_clock(rume.time_frame, rume.tau_step_lengths):
             t = tick.sim_index
 
             # First do movement
@@ -105,24 +113,13 @@ class BasicSimulator:
                 home_compartments[t] = hcs
                 home_events[t] = hes
 
-            _events.on_tick.publish(OnTick(t, (t + 1) / dim.ticks, dim))
+            _events.on_tick.publish(OnTick(t, S))
 
         _events.on_finish.publish(None)
 
         # Assemble output.
-
-        # This should always match because `evaluate_params` includes a default.
-        if (labels_value := data.resolve(GEO_LABELS.key, GEO_LABELS.value)) is not None:
-            geo_labels = labels_value.tolist()
-        else:
-            geo_labels = rume.scope.labels.tolist()
-
         return Output(
-            dim=dim,
-            scope=rume.scope,
-            geo_labels=geo_labels,
-            time_frame=rume.time_frame,
-            ipm=rume.ipm,
+            rume=rume,
             initial=initial_values,
             visit_compartments=visit_compartments,
             visit_events=visit_events,

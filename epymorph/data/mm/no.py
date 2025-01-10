@@ -15,7 +15,7 @@ class NoClause(MovementClause):
     returns = TickDelta(step=0, days=0)
 
     def evaluate(self, tick: Tick) -> NDArray[np.int64]:
-        N = self.dim.nodes
+        N = self.scope.nodes
         return np.zeros((N, N), dtype=SimDType)
 
 

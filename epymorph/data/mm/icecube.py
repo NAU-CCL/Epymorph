@@ -1,10 +1,11 @@
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
-from epymorph.simulation import AttributeDef, Tick, TickDelta, TickIndex
+from epymorph.simulation import Tick, TickDelta, TickIndex
 
 
 class IcecubeClause(MovementClause):
@@ -28,7 +29,7 @@ class IcecubeClause(MovementClause):
     returns = TickDelta(step=1, days=0)
 
     def evaluate(self, tick: Tick) -> NDArray[np.int64]:
-        N = self.dim.nodes
+        N = self.scope.nodes
         pop = self.data("population")
         comm_prop = self.data("commuter_proportion")
         commuters = np.zeros((N, N), dtype=SimDType)

@@ -1,18 +1,19 @@
 import numpy as np
 from numpy.typing import NDArray
 
+from epymorph.attribute import ModuleNamespace
 from epymorph.data_type import SimDType
-from epymorph.database import DataResolver, ModuleNamespace
+from epymorph.database import DataResolver
 from epymorph.error import MmSimException
 from epymorph.event import EventBus, OnMovementClause, OnMovementFinish, OnMovementStart
 from epymorph.movement_model import MovementClause
 from epymorph.rume import Rume
 from epymorph.simulation import (
     Tick,
-    gpm_strata,
     resolve_tick_delta,
 )
 from epymorph.simulator.world import World
+from epymorph.strata import gpm_strata
 from epymorph.util import row_normalize
 
 
@@ -117,10 +118,11 @@ class MovementExecutor:
             namespace = ModuleNamespace(gpm_strata(strata), "mm")
             for clause in model.clauses:
                 c = clause.with_context_internal(
-                    namespace,
+                    namespace.to_absolute(clause.name),
                     data,
-                    rume.dim,
                     rume.scope,
+                    rume.time_frame,
+                    rume.ipm,
                     rng,
                 )
                 self._clauses.append((strata, c))
@@ -153,7 +155,7 @@ class MovementExecutor:
 
             available_movers = self._world.get_local_array()
             clause_event = calculate_travelers(
-                clause.__class__.__name__,
+                clause.name,
                 self._rume.compartment_mobility[strata],
                 requested_movers,
                 available_movers,
@@ -163,7 +165,11 @@ class MovementExecutor:
             _events.on_movement_clause.publish(clause_event)
             travelers = clause_event.actual
 
-            return_tick = resolve_tick_delta(self._rume.dim, tick, clause.returns)
+            return_tick = resolve_tick_delta(
+                self._rume.num_tau_steps,
+                tick,
+                clause.returns,
+            )
             self._world.apply_travel(travelers, return_tick)
             total += travelers.sum()
 
