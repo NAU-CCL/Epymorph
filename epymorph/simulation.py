@@ -407,23 +407,27 @@ class SimulationFunctionClass(ABCMeta):
         # Check requirements if this class overrides it.
         # (Otherwise class will inherit from parent.)
         if (reqs := dct.get("requirements")) is not None:
-            if not isinstance(reqs, (list, tuple)):
-                raise TypeError(
-                    f"Invalid requirements in {name}: "
-                    "please specify as a list or tuple."
-                )
-            if not are_instances(reqs, AttributeDef):
-                raise TypeError(
-                    f"Invalid requirements in {name}: "
-                    "must be instances of AttributeDef."
-                )
-            if not are_unique(r.name for r in reqs):
-                raise TypeError(
-                    f"Invalid requirements in {name}: "
-                    "requirement names must be unique."
-                )
-            # Make requirements list immutable
-            dct["requirements"] = tuple(reqs)
+            # The user may specify requirements as a property, in which case we
+            # can't validate much about the implementation.
+            if not isinstance(reqs, property):
+                # But if it's a static value, check types:
+                if not isinstance(reqs, (list, tuple)):
+                    raise TypeError(
+                        f"Invalid requirements in {name}: "
+                        "please specify as a list or tuple."
+                    )
+                if not are_instances(reqs, AttributeDef):
+                    raise TypeError(
+                        f"Invalid requirements in {name}: "
+                        "must be instances of AttributeDef."
+                    )
+                if not are_unique(r.name for r in reqs):
+                    raise TypeError(
+                        f"Invalid requirements in {name}: "
+                        "requirement names must be unique."
+                    )
+                # Make requirements list immutable
+                dct["requirements"] = tuple(reqs)
 
         # Check serializable
         if not is_picklable(name, mcs):
@@ -475,8 +479,12 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     limiting the function signature of evaluate().
     """
 
-    requirements: Sequence[AttributeDef] = ()
-    """The attribute definitions describing the data requirements for this function."""
+    requirements: Sequence[AttributeDef] | property = ()
+    """The attribute definitions describing the data requirements for this function.
+
+    For advanced use-cases, you may specify requirements as a property if you need it
+    to be dynamically computed.
+    """
 
     randomized: bool = False
     """Should this function be re-evaluated every time it's referenced in a RUME?
@@ -546,13 +554,15 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     def defer_context(
         self,
         other: _DeferFunctionT,
+        scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
     ) -> _DeferFunctionT:
         """Defer processing to another instance of a SimulationFunction."""
         return other.with_context_internal(
             name=self._ctx._name,
             data=self._ctx._data,
-            scope=self._ctx._scope,
-            time_frame=self._ctx._time_frame,
+            scope=scope or self._ctx._scope,
+            time_frame=time_frame or self._ctx._time_frame,
             ipm=self._ctx._ipm,
             rng=self._ctx._rng,
         )
@@ -621,14 +631,30 @@ class SimulationFunction(BaseSimulationFunction[ResultT]):
     def evaluate(self) -> ResultT:
         """
         Implement this method to provide logic for the function.
-        Your implementation is free to use `data`, `dim`, and `rng`.
-        You can also use `defer` to utilize another SimulationFunction instance.
+        Use self methods and properties to access the simulation context or defer
+        processing to another function.
         """
 
     @final
-    def defer(self, other: "SimulationFunction[_DeferResultT]") -> _DeferResultT:
-        """Defer processing to another instance of a SimulationFunction."""
-        return self.defer_context(other).evaluate()
+    def defer(
+        self,
+        other: "SimulationFunction[_DeferResultT]",
+        scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
+    ) -> _DeferResultT:
+        """Defer processing to another instance of a SimulationFunction, returning
+        the result of evaluation.
+
+        Parameters
+        ----------
+        other : SimulationFunction
+            the other function to defer to
+        scope : GeoScope, optional
+            override the geo scope for evaluation; if None, use the same scope
+        time_frame : TimeFrame, optional
+            override the time frame for evaluation; if None, use the same time frame
+        """
+        return self.defer_context(other, scope, time_frame).evaluate()
 
 
 class SimulationTickFunction(BaseSimulationFunction[ResultT]):
@@ -642,13 +668,28 @@ class SimulationTickFunction(BaseSimulationFunction[ResultT]):
     def evaluate(self, tick: Tick) -> ResultT:
         """
         Implement this method to provide logic for the function.
-        Your implementation is free to use `data`, `dim`, and `rng`.
-        You can also use `defer` to utilize another SimulationTickFunction instance.
+        Use self methods and properties to access the simulation context or defer
+        processing to another function.
         """
 
     @final
     def defer(
-        self, other: "SimulationTickFunction[_DeferResultT]", tick: Tick
+        self,
+        other: "SimulationTickFunction[_DeferResultT]",
+        tick: Tick,
+        scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
     ) -> _DeferResultT:
-        """Defer processing to another instance of a SimulationTickFunction."""
-        return self.defer_context(other).evaluate(tick)
+        """Defer processing to another instance of a SimulationTickFunction, returning
+        the result of evaluation.
+
+        Parameters
+        ----------
+        other : SimulationFunction
+            the other function to defer to
+        scope : GeoScope, optional
+            override the geo scope for evaluation; if None, use the same scope
+        time_frame : TimeFrame, optional
+            override the time frame for evaluation; if None, use the same time frame
+        """
+        return self.defer_context(other, scope, time_frame).evaluate(tick)

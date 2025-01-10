@@ -1,6 +1,7 @@
 import unittest
 from datetime import date
 from functools import cached_property
+from typing import Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -84,6 +85,18 @@ class TestSimulationFunction(unittest.TestCase):
         self.assertEqual(Foo.requirements, f.requirements)
         self.assertIsInstance(Foo.requirements, tuple)
         self.assertIsInstance(f.requirements, tuple)
+
+    def test_dynamic_requirements(self):
+        class Foo(SimulationFunction[NDArray[np.int64]]):
+            @property
+            def requirements(self) -> Sequence[AttributeDef]:
+                return (AttributeDef("bar", int, Shapes.Scalar),)
+
+            def evaluate(self):
+                return 7 * self.data("bar")
+
+        f = Foo()
+        self.assertEqual(f.requirements, (AttributeDef("bar", int, Shapes.Scalar),))
 
     def test_undefined_requirement(self):
         class Foo(SimulationFunction[NDArray[np.int64]]):
