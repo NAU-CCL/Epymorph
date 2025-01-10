@@ -41,21 +41,16 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
     web APIs, local files or database, or anything imaginable.
     """
 
-    @property
-    def full_name(self) -> str:
-        return f"{self.__class__.__module__}.{self.__class__.__qualname__}"
-
     def estimate_data(self) -> DataEstimate:
-        """Estimate the data usage of this ADRIO in a RUME.
-        If a reasonable estimate cannot be made, None is returned."""
-        return EmptyDataEstimate(self.full_name)
+        """Estimate the data usage for this ADRIO in a RUME.
+        If a reasonable estimate cannot be made, return EmptyDataEstimate."""
+        return EmptyDataEstimate(self.class_name)
 
     @abstractmethod
     def evaluate_adrio(self) -> NDArray[ResultDType]:
-        """
-        Implement this method to provide logic for the function.
-        Your implementation is free to use `data`, `dim`, and `rng`.
-        You can also use `defer` to utilize another SimulationFunction instance.
+        """Implement this method to provide logic for the function.
+        Use self methods and properties to access the simulation context or defer
+        processing to another function.
         """
 
     @override
@@ -65,7 +60,8 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         functionality. ADRIO implementations should override `evaluate_adrio`."""
         _events.on_adrio_progress.publish(
             AdrioProgress(
-                adrio_name=self.full_name,
+                adrio_name=self.class_name,
+                attribute=self.name,
                 final=False,
                 ratio_complete=0,
                 download=None,
@@ -77,7 +73,8 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         t1 = perf_counter()
         _events.on_adrio_progress.publish(
             AdrioProgress(
-                adrio_name=self.full_name,
+                adrio_name=self.class_name,
+                attribute=self.name,
                 final=True,
                 ratio_complete=1,
                 download=None,
@@ -95,7 +92,8 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         """Emit a progress event."""
         _events.on_adrio_progress.publish(
             AdrioProgress(
-                adrio_name=self.full_name,
+                adrio_name=self.class_name,
+                attribute=self.name,
                 final=False,
                 ratio_complete=ratio_complete,
                 download=download,

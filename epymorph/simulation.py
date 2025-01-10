@@ -494,6 +494,11 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
 
     _ctx: _FullContext | _PartialContext = _EMPTY_CONTEXT
 
+    @property
+    def class_name(self) -> str:
+        """The class name of the SimulationFunction."""
+        return f"{self.__class__.__module__}.{self.__class__.__qualname__}"
+
     def validate(self, result: ResultT) -> None:
         """Override this method to validate the evaluation result.
         Implementations should raise an appropriate error if results
@@ -566,6 +571,12 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
             ipm=self._ctx._ipm,
             rng=self._ctx._rng,
         )
+
+    @final
+    @property
+    def name(self) -> AbsoluteName:
+        """The name under which this attribute is being evaluated."""
+        return self._ctx.name
 
     @final
     def data(self, attribute: AttributeDef | str) -> NDArray:

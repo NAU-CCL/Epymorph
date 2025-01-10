@@ -8,6 +8,7 @@ from typing import NamedTuple
 
 from numpy.typing import NDArray
 
+from epymorph.attribute import AbsoluteName
 from epymorph.data_type import SimDType
 from epymorph.rume import Rume
 from epymorph.util import Event, Singleton
@@ -125,9 +126,9 @@ class AdrioProgress(NamedTuple):
     to report as many intermediate progress events as they like."""
 
     adrio_name: str
-    """The name of the ADRIO."""
-    # attribute: AbsoluteName # TODO: see if we can get AbsoluteName here...
-    # """The name of the attribute."""
+    """The full name of the ADRIO class."""
+    attribute: AbsoluteName
+    """The name of the attribute being evaluated."""
     final: bool
     """Is this the last progress update for this ADRIO?"""
     ratio_complete: float

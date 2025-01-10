@@ -45,7 +45,7 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimArray, dtype_str
-from epymorph.data_usage import estimate_report
+from epymorph.data_usage import CanEstimateData, estimate_report
 from epymorph.database import (
     Database,
     DatabaseWithFallback,
@@ -429,10 +429,9 @@ class Rume(ABC, Generic[GeoScopeT_co]):
                 scope=self.scope,
                 time_frame=self.time_frame,
                 ipm=self.ipm,
-            ).estimate_data()  # type: ignore
+            ).estimate_data()
             for p in self.params.values()
-            if isinstance(p, SimulationFunction) and hasattr(p, "estimate_data")
-            # TODO: this is a bit of a hack to avoid importing Adrio here...
+            if isinstance(p, SimulationFunction) and isinstance(p, CanEstimateData)
         ]
 
         lines = list[str]()

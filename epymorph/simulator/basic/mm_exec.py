@@ -118,7 +118,7 @@ class MovementExecutor:
             namespace = ModuleNamespace(gpm_strata(strata), "mm")
             for clause in model.clauses:
                 c = clause.with_context_internal(
-                    namespace.to_absolute(clause.name),
+                    namespace.to_absolute(clause.clause_name),
                     data,
                     rume.scope,
                     rume.time_frame,
@@ -155,7 +155,7 @@ class MovementExecutor:
 
             available_movers = self._world.get_local_array()
             clause_event = calculate_travelers(
-                clause.name,
+                clause.clause_name,
                 self._rume.compartment_mobility[strata],
                 requested_movers,
                 available_movers,
