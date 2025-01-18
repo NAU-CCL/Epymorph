@@ -144,7 +144,18 @@ def _process_output(
 
 
 class TableRenderer:
-    """Provides a number of methods for rendering an output in tabular form."""
+    """Provides a number of methods for rendering an output in tabular form.
+
+    Examples
+    --------
+    Most commonly, you will use TableRenderer starting from a simulation output object
+    that supports it:
+
+    ```python
+    out = BasicSimulation(rume).run()
+    out.table.quantiles(...)
+    ```
+    """
 
     output: Output
 
@@ -396,6 +407,7 @@ class TableRenderer:
     ) -> pd.DataFrame | str | None:
         """
         Renders a table showing summed values over time for the given selections.
+
         Because it is not valid to sum compartment values over time -- this would be
         double-counting individuals in a way that has no physical meaning --
         compartment quantities are automatically omitted even if they are part of the
@@ -499,7 +511,9 @@ class TableRenderer:
     ) -> pd.DataFrame | str | None:
         """
         Renders a table showing a rough time series bar chart for the given selections
-        using ASCII characters. It is of course limited by the fact that this is a
+        using ASCII characters.
+
+        It is of course limited by the fact that this is a
         relatively coarse display method. The y-axis of each chart is on its own scale,
         and thus is not comparable to others. However the x-axis is on a shared scale,
         so this can give you an idea of the time-series behavior of your simulation

@@ -28,7 +28,18 @@ TimeFormatOption = Literal["auto", "date", "day"]
 
 
 class PlotRenderer:
-    """Provides a number of methods for rendering an output in plot form."""
+    """Provides methods for rendering an output in plot form.
+
+    Examples
+    --------
+    Most commonly, you will use PlotRenderer starting from a simulation output object
+    that supports it:
+
+    ```python
+    out = BasicSimulation(rume).run()
+    out.plot.line(...)
+    ```
+    """
 
     output: Output
 
@@ -145,8 +156,8 @@ class PlotRenderer:
         title: str | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
-        """
-        Renders a line plot using matplotlib showing the given selections.
+        """Renders a line plot using matplotlib showing the given selections.
+
         The plot will be immediately rendered by this function by calling `plt.show()`.
         This is intended as a quick plotting method to cover most casual use-cases.
         If you want more control over how the plot is drawn, see method `line_plt()`.
@@ -166,6 +177,7 @@ class PlotRenderer:
             and `{q}` for the name of the quantity
         legend : {"auto", "on", "off", "outside"}
             whether and how to draw the plot legend.
+
             - "auto" will draw the legend unless it would be too large
             - "on" forces the legend to be drawn
             - "off" forces the legend to not be drawn
@@ -177,7 +189,7 @@ class PlotRenderer:
             we will cycle through the list as many times as needed. Lines are drawn
             in the order defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
-        ordering : {"location", "quantity}
+        ordering : {"location", "quantity"}
             controls the order in which lines will be drawn;
             both location and quantity are used to sort the resulting rows,
             this just decides which gets priority
@@ -194,7 +206,7 @@ class PlotRenderer:
         transform : Callable[[pd.DataFrame], pd.DataFrame], optional
             allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- one per line,
+            The function will be called once per geo/quantity group -- once per line,
             essentially -- with a dataframe that contains just the data for that group.
             The dataframe given as the argument is the result of applying
             all selections and the projection if specified.
@@ -202,6 +214,7 @@ class PlotRenderer:
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
+
             - "time": the time series column
             - "geo": the node ID (same value per group)
             - "quantity": the label of the quantity (same value per group)
@@ -287,8 +300,7 @@ class PlotRenderer:
         time_format: Literal["auto", "date", "day"] = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
-        """
-        Draws lines onto the given matplotlib Axes to show the given selections.
+        """Draws lines onto the given matplotlib Axes to show the given selections.
         This is a variant of the method `line()` that gives you more control over
         the rendering of a plot by letting you do most of the work with
         matplotlib's API.
