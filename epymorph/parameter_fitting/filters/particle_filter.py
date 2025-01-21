@@ -4,7 +4,10 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
-from epymorph.parameter_fitting.dynamics.dynamics import GeometricBrownianMotion
+from epymorph.parameter_fitting.dynamics.dynamics import (
+    Calvetti,
+    GeometricBrownianMotion,
+)
 from epymorph.parameter_fitting.filters.base_filters import BaseFilter
 from epymorph.parameter_fitting.filters.particle import Particle
 from epymorph.parameter_fitting.likelihoods.base_likelihood import Likelihood
@@ -178,6 +181,7 @@ class ParticleFilter(BaseFilter):
             else:
                 duration = 1
 
+            print(t)
             # Propagate particles and update their states
             propagated_particles, expected_observations = self.propagate_particles(
                 particles,
@@ -213,6 +217,26 @@ class ParticleFilter(BaseFilter):
                 particles = weights_resampling.resample_particles(
                     propagated_particles, new_weights
                 )
+
+            for param in particles[0].parameters.keys():
+                dynamics = params_space[param].dynamics
+                if isinstance(dynamics, Calvetti):
+                    param_vals = np.array(
+                        [particle.parameters[param] for particle in particles]
+                    )
+                    param_mean = np.mean(np.log(param_vals), axis=0)
+                    param_cov = np.cov(np.log(param_vals), rowvar=False)
+                    a = dynamics.a
+                    h = np.sqrt(1 - a**2)
+                    if len(param_cov.shape) < 2:
+                        param_cov = np.broadcast_to(param_cov, shape=(1, 1))
+                    rvs = np.random.multivariate_normal(
+                        (1 - a) * param_mean, h**2 * param_cov, size=len(particles)
+                    )
+                    for i in range(len(particles)):
+                        particles[i].parameters[param] = np.exp(
+                            a * np.log(particles[i].parameters[param]) + rvs[i, ...]
+                        )
 
             # Collect parameter values for quantiles and means
             key_values = {key: [] for key in self.param_quantiles.keys()}

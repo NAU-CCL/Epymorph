@@ -9,7 +9,6 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-from epymorph.database import NamePattern
 from epymorph.parameter_fitting.filters.particle import Particle
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
 from epymorph.simulator.data import evaluate_params, initialize_rume
@@ -61,11 +60,11 @@ class ParticleInitializer:
             contains the initial state and the observations for a particle.
         """
 
-        for _ in self.dynamic_params.keys():
-            new_param = NamePattern(strata="*", module="*", id=_)
+        # for _ in self.dynamic_params.keys():
+        #     new_param = NamePattern(strata="*", module="*", id=_)
 
-            self.rume.params[new_param] = 100
-            self.rume.params
+        # self.rume.params[new_param] = 100
+        # self.rume.params
 
         rng = np.random.default_rng()
         data = evaluate_params(self.rume, {}, rng)

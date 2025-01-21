@@ -10,8 +10,6 @@ Dependencies:
     - pandas: For data manipulation and file I/O.
 """
 
-from typing import Literal
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -19,10 +17,13 @@ from epymorph.parameter_fitting.output import ParticleFilterOutput
 
 
 def params_plot(
-    output: ParticleFilterOutput, parameter: Literal["infection rate"], node_index=0
+    output: ParticleFilterOutput,
+    key,
+    node_index=0,
+    truth=None,
 ):
-    if parameter == "infection rate":
-        key = "beta"
+    # if parameter == "infection rate":
+    # key = "beta"
 
     # Get quantiles directly from the output object
     key_quantiles = np.array(
@@ -36,7 +37,7 @@ def params_plot(
     #     print("Error: Quantiles data should be 2D (e.g., for different time points).")
     #     return
 
-    plt.title(f"{parameter} Quantiles Over Time")
+    plt.title(f"{key} Quantiles Over Time")
 
     # Plot the quantiles (for example: 25th, 50th, 75th percentiles)
     plt.fill_between(
@@ -75,9 +76,13 @@ def params_plot(
 
     # Add labels and legend
     plt.xlabel("Time")
-    plt.ylabel(f"{parameter} Quantiles")
+    plt.ylabel(f"{key} Quantiles")
     plt.legend(loc="upper left")
     plt.grid(True)
+
+    obs = np.arange(0, len(key_quantiles))
+    if truth is not None:
+        plt.plot(obs, np.broadcast_to(truth, shape=obs.shape), "k--")
 
     plt.show()
 

@@ -2,8 +2,6 @@ from typing import Literal
 
 import numpy as np
 
-from epymorph.parameter_fitting.dynamics.dynamics import GeometricBrownianMotion
-
 
 class Distribution:
     def __init__(self, name: str, *ranges):
@@ -26,7 +24,7 @@ class EstimateParameters:
         return cls(distribution, dynamics=dynamics)
 
     @classmethod
-    def Static(cls, distribution: object, dynamics: GeometricBrownianMotion):
+    def Static(cls, distribution: object, dynamics: object):
         return cls(distribution, dynamics=dynamics)
 
 
