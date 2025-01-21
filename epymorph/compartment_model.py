@@ -28,9 +28,9 @@ from numpy.typing import NDArray
 from sympy import Add, Expr, Float, Integer, Symbol
 from typing_extensions import override
 
-from epymorph.database import AbsoluteName
+from epymorph.database import AbsoluteName, AttributeDef
 from epymorph.error import IpmValidationException
-from epymorph.simulation import DEFAULT_STRATA, META_STRATA, AttributeDef, gpm_strata
+from epymorph.simulation import DEFAULT_STRATA, META_STRATA, gpm_strata
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
 from epymorph.util import (
     acceptable_name,

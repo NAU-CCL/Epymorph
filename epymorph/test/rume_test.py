@@ -16,7 +16,7 @@ from epymorph.rume import (
     combine_tau_steps,
     remap_taus,
 )
-from epymorph.simulation import Tick, TickDelta, TickIndex
+from epymorph.simulation import NEVER, Tick, TickDelta, TickIndex
 from epymorph.test import EpymorphTestCase
 from epymorph.time import TimeFrame
 
@@ -176,6 +176,45 @@ class CombineMmTest(EpymorphTestCase):
         new_mm2 = new_mms["b"]
         self.assertEqual(new_mm2.clauses[0].leaves.step, 2)
         self.assertEqual(new_mm2.clauses[0].returns.step, 2)
+
+    def test_remap_taus_2(self):
+        class Clause1(MovementClause):
+            leaves = TickIndex(0)
+            returns = TickDelta(days=0, step=1)
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+                return np.array([])
+
+        class Model1(MovementModel):
+            steps = (1 / 3, 2 / 3)
+            clauses = (Clause1(),)
+
+        class Clause2(MovementClause):
+            leaves = TickIndex(1)
+            returns = NEVER
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+                return np.array([])
+
+        class Model2(MovementModel):
+            steps = (1 / 2, 1 / 2)
+            clauses = (Clause2(),)
+
+        new_mms = remap_taus([("a", Model1()), ("b", Model2())])
+
+        new_taus = new_mms["a"].steps
+        self.assertListAlmostEqual(new_taus, [1 / 3, 1 / 6, 1 / 2])
+        self.assertEqual(len(new_mms), 2)
+
+        new_mm1 = new_mms["a"]
+        self.assertEqual(new_mm1.clauses[0].leaves.step, 0)
+        self.assertEqual(new_mm1.clauses[0].returns.step, 2)
+
+        new_mm2 = new_mms["b"]
+        self.assertEqual(new_mm2.clauses[0].leaves.step, 2)
+        self.assertEqual(new_mm2.clauses[0].returns.step, -1)
 
 
 class RumeTest(EpymorphTestCase):
@@ -357,14 +396,14 @@ class RumeTest(EpymorphTestCase):
                 AbsoluteName("gpm:aaa", "mm", "phi"): AttributeDef(
                     "phi",
                     float,
-                    Shapes.S,
+                    Shapes.Scalar,
                     comment="Influences the distance that movers tend to travel.",
                     default_value=40.0,
                 ),
                 AbsoluteName("gpm:aaa", "mm", "commuter_proportion"): AttributeDef(
                     "commuter_proportion",
                     float,
-                    Shapes.S,
+                    Shapes.Scalar,
                     default_value=0.1,
                     comment="The proportion of the total population that commutes.",
                 ),

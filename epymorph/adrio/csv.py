@@ -13,7 +13,7 @@ from epymorph.adrio.adrio import Adrio
 from epymorph.error import DataResourceException, GeoValidationException
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
-from epymorph.geography.us_geography import STATE, CensusGranularity
+from epymorph.geography.us_geography import CensusGranularity
 from epymorph.geography.us_tiger import get_counties, get_states
 from epymorph.time import TimeFrame
 
@@ -90,46 +90,19 @@ def _parse_county_state(
         msg = "County scope is required to use county, state key format."
         raise DataResourceException(msg)
 
-    # make counties info dataframe
-    counties_info = get_counties(scope.year)
-    counties_info_df = DataFrame(
-        {"geoid": counties_info.geoid, "name": counties_info.name}
-    )
+    node_ids = scope.node_ids
+    geoid_to_name = get_counties(scope.year).county_fips_to_name
+    name_to_geoid = {v: k for k, v in geoid_to_name.items() if k in node_ids}
 
-    # make states info dataframe
-    states_info = get_states(scope.year)
-    states_info_df = DataFrame(
-        {"state_geoid": states_info.geoid, "state_name": states_info.name}
-    )
-
-    # merge dataframes on state geoid
-    counties_info_df["state_geoid"] = counties_info_df["geoid"].apply(STATE.truncate)
-    counties_info_df = counties_info_df.merge(
-        states_info_df, how="left", on="state_geoid"
-    )
-
-    # concatenate county, state names
-    counties_info_df["name"] = (
-        counties_info_df["name"] + ", " + counties_info_df["state_name"]
-    )
-
-    # merge with csv dataframe and set key column to geoid
-    result_df = df.copy().merge(
-        counties_info_df,
-        how="left",
-        left_on=key_col,
-        right_on="name",
-    )
-    result_df[key_col] = result_df["geoid"]
-
+    # filter to scope
+    result_df = df[df[key_col].isin(name_to_geoid.keys())]
     if key_col2 is not None:
-        result_df = result_df.merge(
-            counties_info_df,
-            how="left",
-            left_on=key_col2,
-            right_on="name",
-        )
-        result_df[key_col2] = result_df["geoid_y"]
+        result_df = df[df[key_col2].isin(name_to_geoid.keys())]
+
+    # convert keys to geoid
+    result_df[key_col] = result_df[key_col].map(name_to_geoid)
+    if key_col2 is not None:
+        result_df[key_col2] = result_df[key_col2].map(name_to_geoid)
 
     return result_df
 

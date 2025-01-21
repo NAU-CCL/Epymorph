@@ -3,7 +3,7 @@ IPM executor classes handle the logic for processing the IPM step of the simulat
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, Generator, Iterable, NamedTuple
+from typing import ClassVar, Iterator, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -15,15 +15,15 @@ from epymorph.compartment_model import (
     TransitionDef,
     exogenous_states,
 )
-from epymorph.data_type import AttributeArray, AttributeValue, SimArray, SimDType
-from epymorph.database import Database
+from epymorph.data_type import AttributeValue, SimArray, SimDType
+from epymorph.database import DataResolver
 from epymorph.error import (
     IpmSimInvalidProbsException,
     IpmSimLessThanZeroException,
     IpmSimNaNException,
 )
 from epymorph.rume import Rume
-from epymorph.simulation import AttributeResolver, Tick
+from epymorph.simulation import Tick
 from epymorph.simulator.world import World
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
@@ -108,8 +108,6 @@ class IpmExecutor:
     """the RUME"""
     _world: World
     """the world state"""
-    _data: Database[AttributeArray]
-    """resolver for simulation data"""
     _rng: np.random.Generator
     """the simulation RNG"""
 
@@ -127,7 +125,7 @@ class IpmExecutor:
     """
     _source_compartment_for_event: list[int]
     """mapping from event index to the compartment index it sources from"""
-    _attribute_values_txn: Generator[Iterable[AttributeValue], None, None]
+    _attr_values: Iterator[list[AttributeValue]]
     """
     a generator for the list of arguments (from attributes) needed to evaluate
     transition functions
@@ -137,7 +135,7 @@ class IpmExecutor:
         self,
         rume: Rume,
         world: World,
-        data: Database[AttributeArray],
+        data: DataResolver,
         rng: np.random.Generator,
     ):
         ipm = rume.ipm
@@ -156,16 +154,16 @@ class IpmExecutor:
 
         self._rume = rume
         self._world = world
-        self._data = data
         self._rng = rng
 
         self._trxs = _compile_transitions(ipm)
         self._apply_matrix = _make_apply_matrix(ipm)
         self._events_leaving_compartment = events_leaving_compartment
         self._source_compartment_for_event = source_compartment_for_event
-        self._attribute_values_txn = AttributeResolver(
-            data, rume.dim
-        ).resolve_txn_series(list(ipm.requirements_dict.items()))
+        self._attr_values = data.resolve_txn_series(
+            ipm.requirements_dict.items(),
+            rume.dim.tau_steps,
+        )
 
     def apply(self, tick: Tick) -> Result:
         """
@@ -173,7 +171,9 @@ class IpmExecutor:
         Returns the location-specific events that happened this tick (an (N,E) array)
         and the new compartments resulting from these events (an (N,C) array).
         """
-        _, N, C, E = self._rume.dim.TNCE
+        N = self._rume.dim.nodes
+        C = self._rume.dim.compartments
+        E = self._rume.dim.events
         tick_events = np.zeros((N, E), dtype=SimDType)
         tick_compartments = np.zeros((N, C), dtype=SimDType)
 
@@ -198,7 +198,7 @@ class IpmExecutor:
         for the possibility of overruns.
         """
 
-        rate_args = [*effective_pop, *next(self._attribute_values_txn)]
+        rate_args = [*effective_pop, *next(self._attr_values)]
 
         # Evaluate the event rates and do random draws for all transition events.
         occur = np.zeros(self._rume.dim.events, dtype=SimDType)

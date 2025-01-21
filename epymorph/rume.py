@@ -38,24 +38,40 @@ from epymorph.compartment_model import (
     MultistrataModelSymbols,
     TransitionDef,
 )
-from epymorph.data_shape import SimDimensions
-from epymorph.data_type import dtype_str
+from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.data_type import SimArray, dtype_str
 from epymorph.data_usage import estimate_report
-from epymorph.database import AbsoluteName, ModuleNamePattern, NamePattern
+from epymorph.database import (
+    AbsoluteName,
+    Database,
+    DatabaseWithFallback,
+    DatabaseWithStrataFallback,
+    DataResolver,
+    ModuleNamePattern,
+    ModuleNamespace,
+    NamePattern,
+    ReqTree,
+)
+from epymorph.error import InitException
 from epymorph.geography.scope import GeoScope
 from epymorph.initializer import Initializer
 from epymorph.movement_model import MovementClause, MovementModel
-from epymorph.params import ParamSymbol, ParamValue, simulation_symbols
+from epymorph.params import ParamSymbol, simulation_symbols
 from epymorph.simulation import (
     DEFAULT_STRATA,
     META_STRATA,
     AttributeDef,
+    ParamValue,
     TickDelta,
     TickIndex,
     gpm_strata,
 )
 from epymorph.time import TimeFrame
-from epymorph.util import are_unique, map_values
+from epymorph.util import (
+    KeyValue,
+    are_unique,
+    map_values,
+)
 
 #######
 # GPM #
@@ -90,7 +106,15 @@ class Gpm:
 ########
 
 
-GEO_LABELS = AbsoluteName(META_STRATA, "geo", "label")
+GEO_LABELS = KeyValue(
+    AbsoluteName(META_STRATA, "geo", "label"),
+    AttributeDef(
+        "label",
+        str,
+        Shapes.N,
+        comment="Labels to use for each geo node.",
+    ),
+)
 """
 If this attribute is provided to a RUME, it will be used as labels for the geo node.
 Otherwise we'll use the labels from the geo scope.
@@ -170,7 +194,11 @@ def remap_taus(
 
     def clause_remap_tau(clause: MovementClause, strata: str) -> MovementClause:
         leave_step = start_mapping[strata][clause.leaves.step]
-        return_step = stop_mapping[strata][clause.returns.step]
+        return_step = (
+            stop_mapping[strata][clause.returns.step]
+            if clause.returns.step >= 0
+            else -1  # "never"
+        )
 
         clone = deepcopy(clause)
         clone.leaves = TickIndex(leave_step)
@@ -252,6 +280,40 @@ class Rume(ABC, Generic[GeoScopeT_co]):
                     yield AbsoluteName(strata_name, "init", a.name), a
 
         return OrderedDict(generate_items())
+
+    def _params_database(
+        self,
+        override_params: Mapping[NamePattern, ParamValue]
+        | Mapping[str, ParamValue]
+        | None = None,
+    ) -> Database[ParamValue]:
+        label_name, _ = GEO_LABELS
+        params_db = DatabaseWithStrataFallback(
+            # RUME params are high priority,
+            data={**self.params},
+            # with fall back to strata params.
+            children={
+                **{
+                    gpm_strata(gpm.name): Database(
+                        {
+                            k.to_absolute(gpm_strata(gpm.name)): v
+                            for k, v in (gpm.params or {}).items()
+                        }
+                    )
+                    for gpm in self.strata
+                },
+                # And provide a low-priority default for node labels.
+                "meta": Database({label_name.to_pattern(): self.scope.labels}),
+            },
+        )
+        # If override_params is not empty, wrap in another layer
+        # where override_params have the highest priority.
+        if override_params is not None and len(override_params) > 0:
+            params_db = DatabaseWithFallback(
+                {NamePattern.of(k): v for k, v in override_params.items()},
+                params_db,
+            )
+        return params_db
 
     @cached_property
     def compartment_mask(self) -> Mapping[str, NDArray[np.bool_]]:
@@ -370,7 +432,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
         """
 
         estimates = [
-            p.with_context(scope=self.scope, dim=self.dim).estimate_data()
+            p.with_context_internal(scope=self.scope, dim=self.dim).estimate_data()
             for p in self.params.values()
             if isinstance(p, Adrio)
         ]
@@ -384,6 +446,114 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
         for l in lines:
             print(l)
+
+    def requirements_tree(
+        self,
+        override_params: Mapping[NamePattern, ParamValue]
+        | Mapping[str, ParamValue]
+        | None = None,
+    ) -> ReqTree:
+        """Compute the requirements tree for the given RUME.
+
+        Parameters
+        ----------
+        override_params : Mapping[NamePattern, ParamValue], optional
+            when computing requirements, use these values to override
+            any that are provided by the RUME itself.  If keys are provided as strings,
+            they must be able to be parsed as `NamePattern`s.
+
+        Returns
+        -------
+        ReqTree
+            the requirements tree
+        """
+        label_name, label_def = GEO_LABELS
+        return ReqTree.of(
+            requirements={
+                # Start with our top-level requirements.
+                **self.requirements,
+                # Artificially require the geo labels attribute.
+                label_name: label_def,
+            },
+            params=self._params_database(override_params),
+        )
+
+    def evaluate_params(
+        self,
+        rng: np.random.Generator,
+        override_params: Mapping[NamePattern, ParamValue]
+        | Mapping[str, ParamValue]
+        | None = None,
+    ) -> DataResolver:
+        """
+        Evaluates the parameters of this RUME.
+
+        Parameters
+        ----------
+        rng : np.random.Generator, optional
+            The random number generator to use during evaluation
+        override_params : Mapping[NamePattern, ParamValue] | Mapping[str, ParamValue], optional
+            Use these values to override any that are provided by the RUME itself.
+            If keys are provided as strings, they must be able to be parsed as
+            `NamePattern`s.
+
+        Returns
+        -------
+        DataResolver
+            the resolver containing the evaluated values
+        """  # noqa: E501
+        ps = None
+        if override_params is not None and len(override_params) > 0:
+            ps = {NamePattern.of(k): v for k, v in override_params.items()}
+
+        reqs = self.requirements_tree(ps)
+        return reqs.evaluate(self.dim, self.scope, rng)
+
+    def _strata_dim(self, gpm: Gpm) -> SimDimensions:
+        C = gpm.ipm.num_compartments
+        E = gpm.ipm.num_events
+        return dataclasses.replace(self.dim, compartments=C, events=E)
+
+    def initialize(self, data: DataResolver, rng: np.random.Generator) -> SimArray:
+        """
+        Evaluates the Initializer(s) for this RUME.
+
+        Parameters
+        ----------
+        data : DataResolver
+            The resolved parameters for this RUME.
+        rng : np.random.Generator
+            The random number generator to use. Generally this should be the same
+            RNG used to evaluate parameters.
+
+        Returns
+        -------
+        SimArray
+            the initial values (a NxC array) for all geo scope nodes and
+            IPM compartments
+
+        Raises
+        ------
+        InitException
+            If initialization fails for any reason or produces invalid values.
+        """
+        try:
+            return np.column_stack(
+                [
+                    gpm.init.with_context_internal(
+                        namespace=ModuleNamespace(gpm_strata(gpm.name), "init"),
+                        data=data,
+                        dim=self._strata_dim(gpm),
+                        scope=self.scope,
+                        rng=rng,
+                    ).evaluate()
+                    for gpm in self.strata
+                ]
+            )
+        except InitException as e:
+            raise e
+        except Exception as e:
+            raise InitException("Initializer failed during evaluation.") from e
 
 
 @dataclass(frozen=True)
