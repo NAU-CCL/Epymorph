@@ -11,8 +11,10 @@ from typing import Any, Tuple
 
 import numpy as np
 
-from epymorph import BasicSimulator, TimeFrame, init
+from epymorph import initializer
 from epymorph.parameter_fitting.utils.observations import ModelLink
+from epymorph.simulator.basic.basic_simulator import BasicSimulator
+from epymorph.time import TimeFrame
 from epymorph.tools.data import munge  # noqa: F403
 
 
@@ -72,7 +74,7 @@ class EpymorphSimulation:
             time_frame=TimeFrame.of(date, duration),  # Set simulation duration
             strata=[
                 dataclasses.replace(
-                    g, init=init.Explicit(initials=state)
+                    g, init=initializer.Explicit(initials=state)
                 )  # Initialize with state values
                 for g in rume.strata  # For each stratum, set the initial state
             ],
@@ -93,7 +95,7 @@ class EpymorphSimulation:
             quantity=model_link.quantity,
         )
 
-        expected_observation = data_df.iloc[-rume.dim.nodes :, -1].to_numpy()
+        expected_observation = data_df.iloc[-rume.scope.nodes :, -1].to_numpy()
 
         # Return the final propagated state as an integer array
         propagated_x = np.array(output.compartments[-1, ...], dtype=np.int64)

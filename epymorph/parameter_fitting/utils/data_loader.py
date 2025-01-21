@@ -51,7 +51,6 @@ class DataLoader:
 
         rng = np.random.default_rng()
         data = self.rume.evaluate_params(rng)
-        dim = self.rume.dim
 
         flu_sum = observations.source
 
@@ -59,7 +58,7 @@ class DataLoader:
         # context.
         if isinstance(flu_sum, SimulationFunctionClass):
             cases = flu_sum.with_context_internal(
-                data=data, dim=self.rume.dim, scope=self.rume.scope, rng=rng
+                data=data, scope=self.rume.scope, rng=rng
             ).evaluate()  # type: ignore
 
             # Flatten the multi-dimensional array to extract tuples (date, data)
@@ -80,7 +79,7 @@ class DataLoader:
             # )
 
             cases = flu_sum.with_context_internal(
-                data=data, dim=self.rume.dim, scope=self.rume.scope, rng=rng
+                data=data, scope=self.rume.scope, rng=rng
             ).evaluate()
 
             dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
