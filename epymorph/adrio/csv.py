@@ -230,7 +230,7 @@ class CSVTimeSeries(Adrio[Any]):
     """The type of geographic identifier in the key column."""
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
-    time_frame: TimeFrame
+    file_time_frame: TimeFrame
     """The time period encompassed by data in the file."""
     time_col: int
     """The numerical index of the column containing time information."""
@@ -252,7 +252,7 @@ class CSVTimeSeries(Adrio[Any]):
         self.data_type = data_type
         self.key_type = key_type
         self.skiprows = skiprows
-        self.time_frame = time_frame
+        self.file_time_frame = time_frame
         self.time_col = time_col
 
     @override
@@ -288,8 +288,8 @@ class CSVTimeSeries(Adrio[Any]):
                 date.fromisoformat
             )
 
-            is_before = parsed_df[self.time_col] < self.time_frame.start_date
-            is_after = parsed_df[self.time_col] > self.time_frame.end_date
+            is_before = parsed_df[self.time_col] < self.file_time_frame.start_date
+            is_after = parsed_df[self.time_col] > self.file_time_frame.end_date
             if any(is_before | is_after):
                 msg = "Found time column value(s) outside of provided date range."
                 raise DataResourceException(msg)

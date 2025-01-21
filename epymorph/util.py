@@ -1,6 +1,7 @@
 """epymorph general utility functions and classes."""
 
 from abc import ABC, abstractmethod
+from collections.abc import ItemsView, KeysView, Mapping, ValuesView
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -14,10 +15,9 @@ from typing import (
     Generic,
     Iterable,
     Literal,
-    Mapping,
     NamedTuple,
-    OrderedDict,
     ParamSpec,
+    Protocol,
     Self,
     TypeGuard,
     TypeVar,
@@ -254,39 +254,36 @@ class KeyValue(Generic[K, V], NamedTuple):
     value: V
 
 
-def as_sorted_dict(x: dict[K, V]) -> OrderedDict[K, V]:
-    """Returns a sorted OrderedDict of the given dict."""
-    return OrderedDict(sorted(x.items()))
+K_co = TypeVar("K_co", covariant=True)
+V_co = TypeVar("V_co", covariant=True)
+
+
+class CovariantMapping(Protocol[K_co, V_co]):
+    """A type for covariant mappings, which restricts usage
+    to only those methods which are safe under covariance.
+    For many use-cases these limitations are acceptable and
+    wind up simplifying type expression."""
+
+    @abstractmethod
+    def keys(self) -> KeysView[K_co]: ...
+
+    @abstractmethod
+    def items(self) -> ItemsView[K_co, V_co]: ...
+
+    @abstractmethod
+    def values(self) -> ValuesView[V_co]: ...
+
+    @abstractmethod
+    def __len__(self) -> int: ...
+
+
+def as_dict(mapping: CovariantMapping[K, V]) -> dict[K, V]:
+    return {k: v for k, v in mapping.items()}
 
 
 def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
     """Maps the values of a Mapping into a dict by applying the given function."""
     return {k: f(v) for k, v in xs.items()}
-
-
-def dict_map(m: Mapping[A, B], xs: Iterable[A]) -> list[B]:
-    return [m[x] for x in xs]
-
-
-class MemoDict(dict[K, V]):
-    """
-    A dict implementation which will call a factory function when the user attempts to
-    access a key which is currently not in the dict.
-
-    This varies slightly from `defaultdict`, which uses a factory function without the
-    ability to pass the requested key.
-    """
-
-    _factory: Callable[[K], V]
-
-    def __init__(self, factory: Callable[[K], V]):
-        super().__init__()
-        self._factory = factory
-
-    def __missing__(self, key: K) -> V:
-        value = self._factory(key)
-        self[key] = value
-        return value
 
 
 # numpy utilities
@@ -357,25 +354,73 @@ def mask(length: int, selection: slice | list[int]) -> NDArray[np.bool_]:
     return mask
 
 
-RADIUS_MI = 3959.87433  # radius of earth in mi
+# values from: https://www.themathdoctors.org/distances-on-earth-2-the-haversine-formula
+_EARTH_RADIUS = {
+    "miles": 3963.1906,
+    "kilometers": 6378.1370,
+}
 
 
 def pairwise_haversine(
-    longitudes: NDArray[np.float64], latitudes: NDArray[np.float64]
+    coordinates: NDArray | tuple[NDArray[np.float64], NDArray[np.float64]],
+    *,
+    units: Literal["miles", "kilometers"] = "miles",
+    radius: float | None = None,
 ) -> NDArray[np.float64]:
-    """Compute the distances in miles between all pairs of coordinates."""
+    """Compute the distances between all pairs of coordinates.
+
+    Parameters
+    ----------
+    coordinates : NDArray | tuple[NDArray, NDArray]
+        The coordinates, given in one of two forms: either a structured numpy array
+        with dtype `[("longitude", np.float64), ("latitude", np.float64)]` or a tuple
+        of two numpy arrays, the first containing longitudes and the second latitudes.
+        The coordinates must be given in degrees.
+    units : Literal["miles", "kilometers"] = "miles",
+        The units of distance to use for the result, unless radius is given.
+    radius : float, optional
+        The radius of the Earth to use in calculating the results. If not given,
+        we will use an appropriate value for the given `units`.
+        Since the value of radius implies the distance units being used, if you
+        specify `radius` the value of `units` is ignored.
+
+    Returns
+    -------
+    NDArray[np.float64] :
+        An NxN array of distances where N is the number of coordinates given,
+        representing the distance between each pair of coordinates. The output
+        maintains the same ordering of coordinates as the input.
+
+    Raises
+    ------
+    ValueError :
+        if coordinates are not given in an expected format
+    """
     # https://www.themathdoctors.org/distances-on-earth-2-the-haversine-formula
-    lng = np.radians(longitudes)
-    lat = np.radians(latitudes)
-    dlng = lng[:, np.newaxis] - lng[np.newaxis, :]
-    dlat = lat[:, np.newaxis] - lat[np.newaxis, :]
-    cos_lat = np.cos(lat)
+    if isinstance(coordinates, np.ndarray) and coordinates.dtype == np.dtype(
+        [("longitude", np.float64), ("latitude", np.float64)]
+    ):
+        lng = coordinates["longitude"]
+        lat = coordinates["latitude"]
+    elif isinstance(coordinates, tuple) and len(coordinates) == 2:
+        lng = coordinates[0]
+        lat = coordinates[1]
+    else:
+        err = "Unable to interpret the given `coordinates`."
+        raise ValueError(err)
+
+    lngrad = np.radians(lng)
+    latrad = np.radians(lat)
+    dlng = lngrad[:, np.newaxis] - lngrad[np.newaxis, :]
+    dlat = latrad[:, np.newaxis] - latrad[np.newaxis, :]
+    cos_lat = np.cos(latrad)
 
     a = (
         np.sin(dlat / 2.0) ** 2
         + (cos_lat[:, np.newaxis] * cos_lat[np.newaxis, :]) * np.sin(dlng / 2.0) ** 2
     )
-    return 2 * RADIUS_MI * np.arcsin(np.sqrt(a))
+    r = radius if radius is not None else _EARTH_RADIUS[units]
+    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 def top(size: int, arr: NDArray) -> NDIndices:
@@ -552,6 +597,27 @@ class MatchShapeLiteral(Matcher[NDArray]):
         return self._acceptable == value.shape
 
 
+class MatchDimensions(Matcher[NDArray]):
+    """
+    Matches a numpy array purely on the number of dimensions.
+    """
+
+    _acceptable: int
+
+    def __init__(self, acceptable: int):
+        if acceptable < 0:
+            err = "Dimensions must be greater than or equal to zero."
+            raise ValueError(err)
+        self._acceptable = acceptable
+
+    def expected(self) -> str:
+        """Describes what the expected value is."""
+        return f"{self._acceptable}-dimensional array"
+
+    def __call__(self, value: NDArray) -> bool:
+        return self._acceptable == value.ndim
+
+
 @dataclass(frozen=True)
 class _Matchers:
     """Convenience constructors for various matchers."""
@@ -578,6 +644,10 @@ class _Matchers:
     def shape_literal(self, shape: tuple[int, ...]) -> Matcher[NDArray]:
         """Creates a MatchShapeLiteral instance."""
         return MatchShapeLiteral(shape)
+
+    def dimensions(self, dimensions: int) -> Matcher[NDArray]:
+        """Creates a MatchDimensions instance."""
+        return MatchDimensions(dimensions)
 
 
 match = _Matchers()

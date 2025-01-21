@@ -2,13 +2,11 @@
 
 from sympy import Max, exp, log
 
+from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import CompartmentModel, compartment, edge
-from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.simulation import AttributeDef
 
 
-@registry.ipm("pei")
 class Pei(CompartmentModel):
     """The 'pei' IPM: an SIRS model driven by humidity."""
 

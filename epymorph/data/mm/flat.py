@@ -3,11 +3,11 @@ from functools import cached_property
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.data import registry
+from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
-from epymorph.simulation import AttributeDef, Tick, TickDelta, TickIndex
+from epymorph.simulation import Tick, TickDelta, TickIndex
 from epymorph.util import row_normalize
 
 
@@ -39,7 +39,7 @@ class FlatClause(MovementClause):
         except for 0s on the diagonal, which is then row-normalized.
         Effectively: every destination is equally likely.
         """
-        ones = np.ones((self.dim.nodes, self.dim.nodes))
+        ones = np.ones((self.scope.nodes, self.scope.nodes))
         np.fill_diagonal(ones, 0)
         return row_normalize(ones)
 
@@ -50,7 +50,6 @@ class FlatClause(MovementClause):
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
 
 
-@registry.mm("flat")
 class Flat(MovementModel):
     """
     This model evenly weights the probability of movement to all other nodes.

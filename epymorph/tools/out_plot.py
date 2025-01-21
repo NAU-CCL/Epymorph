@@ -19,7 +19,7 @@ from epymorph.compartment_model import (
     QuantitySelection,
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
-from epymorph.time import ByDate, TimeAggregation, TimeSelection
+from epymorph.time import TimeAggregation, TimeSelection
 from epymorph.tools.data import Output, munge
 from epymorph.util import identity
 
@@ -28,7 +28,18 @@ TimeFormatOption = Literal["auto", "date", "day"]
 
 
 class PlotRenderer:
-    """Provides a number of methods for rendering an output in plot form."""
+    """Provides methods for rendering an output in plot form.
+
+    Examples
+    --------
+    Most commonly, you will use PlotRenderer starting from a simulation output object
+    that supports it:
+
+    ```python
+    out = BasicSimulation(rume).run()
+    out.plot.line(...)
+    ```
+    """
 
     output: Output
 
@@ -72,52 +83,48 @@ class PlotRenderer:
         applying time selection/aggregation (if any) and the time format
         requested."""
 
-        dim = self.output.dim
+        tau_step_lengths = self.output.rume.tau_step_lengths
+        num_tau_steps = self.output.rume.num_tau_steps
+        start_date = self.output.rume.time_frame.start_date
+        S = self.output.rume.num_ticks
+        T = self.output.rume.time_frame.days
         match (time.group_format, requested_time_format):
-            case (actual, "auto"):
-                # Auto means just use what the grouping says.
-                return actual, identity
-
-            case ("tick", "date"):
-                # Convert ticks to date scale:
-                # e.g.: [2020-01-01T08:00, 2020-01-02T00:00, 2020-01-02T08:00, ...]
-                def ticks_to_dates(time_groups: pd.Series) -> pd.Series:
-                    deltas = np.array(
-                        [timedelta(days=x) for x in dim.tau_step_lengths],
-                        dtype=np.timedelta64,
-                    ).cumsum()
-                    dates = (
-                        pd.date_range(start=dim.start_date, periods=dim.days).repeat(
-                            dim.tau_steps
-                        )  #
-                        + np.tile(deltas, dim.days)  #
-                    )
-                    ticks = np.arange(dim.days * dim.tau_steps)
-                    time_map = dict(zip(ticks, dates))
-                    return time_groups.apply(lambda x: time_map[x])
-
-                return "date", ticks_to_dates
-
-            case ("tick", "day"):
+            case ("tick", "auto" | "day"):
                 # Convert ticks to simulation-day scale:
-                # e.g.: [0.0, 0.333, 1.0, 1.333, ...]
-                # NOTE: each tick is represented as the start of its timespan,
-                # even though to be perfectly accurate the data value is recorded
-                # at the *end* of that timespan -- the result of the tick happening.
-                # This is to align with how this is handled with date values, which
-                # are also recorded at the end of the date but get represented as the
-                # start of the date in the time scale.
+                # e.g.: [0.333, 1.0, 1.333, ...]
+                # NOTE: each tick is represented as the end of its timespan
                 def ticks_to_days(time_groups: pd.Series) -> pd.Series:
-                    deltas = np.array([0, *dim.tau_step_lengths]).cumsum()[:-1]
+                    deltas = np.array(tau_step_lengths).cumsum()
                     days = (
-                        np.arange(dim.days).repeat(dim.tau_steps)  #
-                        + np.tile(deltas, dim.days)
+                        np.arange(T).repeat(num_tau_steps)  #
+                        + np.tile(deltas, T)
                     )
-                    ticks = np.arange(dim.days * dim.tau_steps)
+                    ticks = np.arange(S)
                     time_map = dict(zip(ticks, days))
                     return time_groups.apply(lambda x: time_map[x])
 
                 return "day", ticks_to_days
+
+            case ("tick", "date"):
+                # Convert ticks to date scale:
+                # e.g.: [2020-01-01T08:00, 2020-01-02T00:00, 2020-01-02T08:00, ...]
+                # NOTE: each tick is represented as the end of its timespan
+                def ticks_to_dates(time_groups: pd.Series) -> pd.Series:
+                    deltas = np.array(
+                        [timedelta(days=x) for x in tau_step_lengths],
+                        dtype=np.timedelta64,
+                    ).cumsum()
+                    dates = (
+                        pd.date_range(start=start_date, periods=T).repeat(
+                            num_tau_steps
+                        )  #
+                        + np.tile(deltas, T)  #
+                    )
+                    ticks = np.arange(S)
+                    time_map = dict(zip(ticks, dates))
+                    return time_groups.apply(lambda x: time_map[x])
+
+                return "date", ticks_to_dates
 
             case ("date", "day"):
                 # Convert dates to simulation-day scale:
@@ -126,7 +133,7 @@ class PlotRenderer:
                 # e.g., if you group by week but the first day of the week is Monday
                 # and you start the sim on a Tuesday.
                 def dates_to_days(time_groups: pd.Series) -> pd.Series:
-                    start = pd.Timestamp(dim.start_date)
+                    start = pd.Timestamp(start_date)
                     return time_groups.apply(lambda x: (x - start).days)
 
                 return "day", dates_to_days
@@ -147,9 +154,10 @@ class PlotRenderer:
         ordering: Literal["location", "quantity"] = "location",
         time_format: Literal["auto", "date", "day"] = "auto",
         title: str | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
-        """
-        Renders a line plot using matplotlib showing the given selections.
+        """Renders a line plot using matplotlib showing the given selections.
+
         The plot will be immediately rendered by this function by calling `plt.show()`.
         This is intended as a quick plotting method to cover most casual use-cases.
         If you want more control over how the plot is drawn, see method `line_plt()`.
@@ -169,6 +177,7 @@ class PlotRenderer:
             and `{q}` for the name of the quantity
         legend : {"auto", "on", "off", "outside"}
             whether and how to draw the plot legend.
+
             - "auto" will draw the legend unless it would be too large
             - "on" forces the legend to be drawn
             - "off" forces the legend to not be drawn
@@ -180,7 +189,7 @@ class PlotRenderer:
             we will cycle through the list as many times as needed. Lines are drawn
             in the order defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
-        ordering : {"location", "quantity}
+        ordering : {"location", "quantity"}
             controls the order in which lines will be drawn;
             both location and quantity are used to sort the resulting rows,
             this just decides which gets priority
@@ -194,13 +203,23 @@ class PlotRenderer:
             may be ignored.
         title : str, optional
             a title to draw on the plot
-        """
+        transform : Callable[[pd.DataFrame], pd.DataFrame], optional
+            allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per geo/quantity group -- once per line,
+            essentially -- with a dataframe that contains just the data for that group.
+            The dataframe given as the argument is the result of applying
+            all selections and the projection if specified.
+            You should return a dataframe with the same format, where the
+            values of the data column have been modified for your purposes.
 
-        if isinstance(time, TimeSelection):
-            # If the user doesn't specify a time aggregation,
-            # use ByDate() by default. Plots look funky otherwise.
-            # User can plot ticks if desired by specifying `.group(ByTick()).agg()`
-            time = time.group(ByDate()).agg()
+            Dataframe columns:
+
+            - "time": the time series column
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
+            - "value": the data column
+        """
 
         # Adjust figsize to make room for an outside legend, if needed
         # By default, the layout engine would "steal" area from the plot
@@ -224,6 +243,7 @@ class PlotRenderer:
                 label_format=label_format,
                 ordering=ordering,
                 time_format=time_format,
+                transform=transform,
             )
             # Make sure the plot does not grow if we widened the figure.
             x, y, w, h = ax.get_position(original=True).bounds
@@ -278,9 +298,9 @@ class PlotRenderer:
         line_kwargs: list[dict] | None = None,
         ordering: Literal["location", "quantity"] = "location",
         time_format: Literal["auto", "date", "day"] = "auto",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
-        """
-        Draws lines onto the given matplotlib Axes to show the given selections.
+        """Draws lines onto the given matplotlib Axes to show the given selections.
         This is a variant of the method `line()` that gives you more control over
         the rendering of a plot by letting you do most of the work with
         matplotlib's API.
@@ -318,6 +338,21 @@ class PlotRenderer:
             simulation with the first day being 0.
             If the system cannot convert to the requested time format, this argument
             may be ignored.
+        transform : Callable[[pd.DataFrame], pd.DataFrame], optional
+            allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per geo/quantity group -- one per line,
+            essentially -- with a dataframe that contains just the data for that group.
+            The dataframe given as the argument is the result of applying
+            all selections and the projection if specified.
+            You should return a dataframe with the same format, where the
+            values of the data column have been modified for your purposes.
+
+            Dataframe columns:
+            - "time": the time series column
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
+            - "value": the data column
 
         Returns
         -------
@@ -327,12 +362,8 @@ class PlotRenderer:
         """
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
-
-        if isinstance(time, TimeSelection):
-            # If the user doesn't specify a time aggregation,
-            # use ByDate() by default. Plots look funky otherwise.
-            # User can plot ticks if desired by specifying `.group(ByTick()).agg()`
-            time = time.group(ByDate()).agg()
+        if transform is None:
+            transform = identity
 
         data_df = munge(self.output, geo, time, quantity)
 
@@ -366,6 +397,7 @@ class PlotRenderer:
             q_label = q_mapping[q_label_dis]
             label = label_format.format(n=n_label, q=q_label)
             curr_kwargs = {"label": label, **kwargs}
+            data = transform(data.assign(quantity=q_label))
             ls = ax.plot(data["time"], data["value"], **curr_kwargs)
             lines.extend(ls)
         return lines

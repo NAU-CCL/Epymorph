@@ -10,16 +10,15 @@ between geospatial nodes at a particular time step of the simulation.
 
 import re
 from abc import ABC, ABCMeta, abstractmethod
-from functools import cached_property
 from math import isclose
 from typing import Any, Literal, Sequence, Type, TypeVar, cast
 
 from numpy.typing import NDArray
 
+from epymorph.attribute import AttributeDef
 from epymorph.data_type import SimDType
 from epymorph.simulation import (
     NEVER,
-    AttributeDef,
     SimulationFunctionClass,
     SimulationTickFunction,
     Tick,
@@ -170,6 +169,10 @@ class MovementClause(
         """Should this movement clause be applied this tick?"""
         return self.leaves.step == tick.step and self.predicate.evaluate(tick)
 
+    @property
+    def clause_name(self) -> str:
+        return self.__class__.__name__
+
     @abstractmethod
     def evaluate(self, tick: Tick) -> NDArray[SimDType]:
         """
@@ -265,7 +268,7 @@ class MovementModel(ABC, metaclass=MovementModelClass):
     steps: Sequence[float]
     clauses: Sequence[MovementClause]
 
-    @cached_property
+    @property
     def requirements(self) -> Sequence[AttributeDef]:
         """The combined requirements of all of the clauses in this model."""
         return [req for clause in self.clauses for req in clause.requirements]

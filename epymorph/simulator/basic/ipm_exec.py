@@ -3,7 +3,8 @@ IPM executor classes handle the logic for processing the IPM step of the simulat
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, Iterator, NamedTuple
+from functools import reduce
+from typing import ClassVar, Iterator, NamedTuple, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -24,7 +25,7 @@ from epymorph.error import (
 )
 from epymorph.rume import Rume
 from epymorph.simulation import Tick
-from epymorph.simulator.world import World
+from epymorph.simulator.world import Cohort, World
 from epymorph.sympy_shim import SympyLambda, lambdify, lambdify_list
 from epymorph.util import index_of
 
@@ -32,10 +33,18 @@ from epymorph.util import index_of
 class Result(NamedTuple):
     """The result from executing a single IPM step."""
 
-    events: SimArray
-    """events that happened this tick (an (N,E) array)"""
-    compartments: SimArray
-    """updated compartments as a result of these events (an (N,C) array)."""
+    visit_compartments: SimArray
+    """updated compartments as a result of these events (an (N,C) array) tracked by the
+    location where the individuals currently are"""
+    visit_events: SimArray
+    """events that happened this tick (an (N,E) array) tracked by the location where
+    the event occurred"""
+    home_compartments: SimArray
+    """updated compartments as a result of these events (an (N,C) array) tracked by the
+    location that the individuals consider home"""
+    home_events: SimArray
+    """events that happened this tick (an (N,E) array) tracked by the home location
+    of the individuals effected"""
 
 
 ############################################################
@@ -162,7 +171,7 @@ class IpmExecutor:
         self._source_compartment_for_event = source_compartment_for_event
         self._attr_values = data.resolve_txn_series(
             ipm.requirements_dict.items(),
-            rume.dim.tau_steps,
+            rume.num_tau_steps,
         )
 
     def apply(self, tick: Tick) -> Result:
@@ -171,77 +180,87 @@ class IpmExecutor:
         Returns the location-specific events that happened this tick (an (N,E) array)
         and the new compartments resulting from these events (an (N,C) array).
         """
-        N = self._rume.dim.nodes
-        C = self._rume.dim.compartments
-        E = self._rume.dim.events
-        tick_events = np.zeros((N, E), dtype=SimDType)
-        tick_compartments = np.zeros((N, C), dtype=SimDType)
+        N = self._rume.scope.nodes
+        C = self._rume.ipm.num_compartments
+        E = self._rume.ipm.num_events
 
-        for node in range(N):
-            cohorts = self._world.get_cohort_array(node)
-            effective = cohorts.sum(axis=0, dtype=SimDType)
+        # (home_node, visit_node, :)
+        events = np.zeros((N, N, E), dtype=SimDType)
+        compartments = np.zeros((N, N, C), dtype=SimDType)
 
-            occurrences = self._events(tick, node, effective)
-            cohort_deltas = self._distribute(cohorts, occurrences)
-            self._world.apply_cohort_delta(node, cohort_deltas)
+        for visit_node in range(N):
+            # Sum all cohorts present in this node to get an effective total population.
+            cohorts = self._world.get_cohorts(visit_node)
+            effective = reduce(
+                lambda a, b: a + b,
+                map(lambda x: x.compartments, cohorts),
+            )
 
-            location_delta = cohort_deltas.sum(axis=0, dtype=SimDType)
+            # Determine how many events happen in this tick.
+            node_events = self._events(tick, visit_node, effective)  # (E,) array
 
-            tick_events[node] = occurrences
-            tick_compartments[node] = effective + location_delta
+            # Distribute events to the cohorts, proportional to their population.
+            cohort_events = self._distribute(cohorts, node_events)  # (X,E) array
 
-        return Result(tick_events, tick_compartments)
+            # Now that events are assigned to cohorts,
+            # convert to compartment deltas using apply matrix.
+            self._world.apply_cohort_delta(
+                visit_node,
+                np.matmul(cohort_events, self._apply_matrix, dtype=SimDType),  # (X,C)
+            )
+
+            # Collect compartment/event info.
+            for i, x in enumerate(cohorts):
+                home = x.return_location
+                events[home, visit_node, :] = cohort_events[i, :]
+                compartments[home, visit_node, :] = x.compartments
+
+        return Result(
+            visit_compartments=compartments.sum(axis=0),
+            visit_events=events.sum(axis=0),
+            home_compartments=compartments.sum(axis=1),
+            home_events=events.sum(axis=1),
+        )
 
     def _events(self, tick: Tick, node: int, effective_pop: SimArray) -> SimArray:
         """
         Calculate how many events will happen this tick, correcting
-        for the possibility of overruns.
+        for the possibility of overruns. An (E,) array.
         """
 
         rate_args = [*effective_pop, *next(self._attr_values)]
 
         # Evaluate the event rates and do random draws for all transition events.
-        occur = np.zeros(self._rume.dim.events, dtype=SimDType)
+        occur = np.zeros(self._rume.ipm.num_events, dtype=SimDType)
         index = 0
         for t in self._trxs:
-            match t:
-                case CompiledEdge(rate_lambda):
-                    # get rate from lambda expression, catch divide by zero error
-                    try:
+            try:
+                match t:
+                    case CompiledEdge(rate_lambda):
+                        # get rate from lambda expression, catch divide by zero error
                         rate = rate_lambda(rate_args)
-                    except (ZeroDivisionError, FloatingPointError):
-                        raise IpmSimNaNException(
-                            self._get_zero_division_args(rate_args, node, tick, t)
-                        ) from None
-                    # check for < 0 rate, throw error in this case
-                    if rate < 0:
-                        raise IpmSimLessThanZeroException(
-                            self._get_default_error_args(rate_args, node, tick)
-                        )
-                    occur[index] = self._rng.poisson(rate * tick.tau)
-                case CompiledFork(size, rate_lambda, prob_lambda):
-                    # get rate from lambda expression, catch divide by zero error
-                    try:
+                        if rate < 0:
+                            err = self._get_default_error_args(rate_args, node, tick)
+                            raise IpmSimLessThanZeroException(err)
+                        occur[index] = self._rng.poisson(rate * tick.tau)
+                    case CompiledFork(size, rate_lambda, prob_lambda):
+                        # get rate from lambda expression, catch divide by zero error
                         rate = rate_lambda(rate_args)
-                    except (ZeroDivisionError, FloatingPointError):
-                        raise IpmSimNaNException(
-                            self._get_zero_division_args(rate_args, node, tick, t)
-                        ) from None
-                    # check for < 0 base, throw error in this case
-                    if rate < 0:
-                        raise IpmSimLessThanZeroException(
-                            self._get_default_error_args(rate_args, node, tick)
+                        if rate < 0:
+                            err = self._get_default_error_args(rate_args, node, tick)
+                            raise IpmSimLessThanZeroException(err)
+                        prob = prob_lambda(rate_args)
+                        if any(n < 0 for n in prob):
+                            err = self._get_invalid_prob_args(rate_args, node, tick, t)
+                            raise IpmSimInvalidProbsException(err)
+                        occur[index : (index + size)] = self._rng.multinomial(
+                            n=self._rng.poisson(rate * tick.tau),
+                            pvals=prob,
                         )
-                    base = self._rng.poisson(rate * tick.tau)
-                    prob = prob_lambda(rate_args)
-                    # check for negative probs
-                    if any(n < 0 for n in prob):
-                        raise IpmSimInvalidProbsException(
-                            self._get_invalid_prob_args(rate_args, node, tick, t)
-                        )
-                    stop = index + size
-                    occur[index:stop] = self._rng.multinomial(base, prob)
-            index += t.size
+                index += t.size
+            except (ZeroDivisionError, FloatingPointError):
+                err = self._get_zero_division_args(rate_args, node, tick, t)
+                raise IpmSimNaNException(err) from None
 
         # Check for event overruns leaving each compartment and correct counts.
         for cidx, eidxs in enumerate(self._events_leaving_compartment):
@@ -272,60 +291,96 @@ class IpmExecutor:
                     )
         return occur
 
+    def _distribute(
+        self,
+        cohorts: Sequence[Cohort],
+        events: NDArray[SimDType],  # (E,) array
+    ) -> NDArray[SimDType]:
+        """
+        Distribute events across a location's cohorts. Returns an (X,E) result.
+        """
+        cohort_array = np.array(
+            [x.compartments for x in cohorts],
+            dtype=SimDType,
+        )  # (X,C) array
+
+        (X, _) = cohort_array.shape
+        (E,) = events.shape
+
+        # Each cohort is responsible for a proportion of the total population:
+        total = cohort_array.sum()
+        if total > 0:
+            cohort_proportion = cohort_array.sum(axis=1) / total
+        else:
+            # If total population is zero, weight each cohort equally.
+            cohort_proportion = np.ones(X) / X
+
+        occurrences = np.zeros((X, E), dtype=SimDType)
+
+        for eidx in range(E):
+            occur: int = events[eidx]  # type: ignore
+            cidx = self._source_compartment_for_event[eidx]
+            if cidx == -1:
+                # event is coming from an exogenous source
+                # randomly distribute to cohorts based on their share of the population
+                selected = self._rng.multinomial(
+                    occur,
+                    cohort_proportion,
+                ).astype(SimDType)
+            else:
+                # event is coming from a modeled compartment
+                selected = self._rng.multivariate_hypergeometric(
+                    cohort_array[:, cidx],
+                    occur,
+                ).astype(SimDType)
+                cohort_array[:, cidx] -= selected
+            occurrences[:, eidx] = selected
+
+        return occurrences
+
     def _get_default_error_args(
         self, rate_attrs: list, node: int, tick: Tick
     ) -> list[tuple[str, dict]]:
-        arg_list = []
-        arg_list.append(("Node : Timestep", {node: tick.step}))
-        arg_list.append(
-            (
-                "compartment values",
-                {
-                    name: value
-                    for name, value in zip(
-                        [c.name.full for c in self._rume.ipm.compartments],
-                        rate_attrs[: self._rume.dim.compartments],
-                    )
-                },
+        cvals = {
+            name: value
+            for name, value in zip(
+                [c.name.full for c in self._rume.ipm.compartments],
+                rate_attrs[: self._rume.ipm.num_compartments],
             )
-        )
-        arg_list.append(
-            (
-                "ipm params",
-                {
-                    attribute.name: value
-                    for attribute, value in zip(
-                        self._rume.ipm.requirements,
-                        rate_attrs[self._rume.dim.compartments :],
-                    )
-                },
+        }
+        pvals = {
+            attribute.name: value
+            for attribute, value in zip(
+                self._rume.ipm.requirements,
+                rate_attrs[self._rume.ipm.num_compartments :],
             )
-        )
-
-        return arg_list
+        }
+        return [
+            ("Node : Timestep", {node: tick.step}),
+            ("compartment values", cvals),
+            ("ipm params", pvals),
+        ]
 
     def _get_invalid_prob_args(
-        self, rate_attrs: list, node: int, tick: Tick, transition: CompiledFork
+        self,
+        rate_attrs: list,
+        node: int,
+        tick: Tick,
+        transition: CompiledFork,
     ) -> list[tuple[str, dict]]:
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
         corr_transition = self._rume.ipm.transitions[transition_index]
         if isinstance(corr_transition, ForkDef):
-            to_compartments = ", ".join(
-                [str(edge.compartment_to) for edge in corr_transition.edges]
-            )
-            from_compartment = corr_transition.edges[0].compartment_from
+            trx_vals = {
+                str(corr_transition): corr_transition.rate,
+                "Probabilities": ", ".join(
+                    [str(expr) for expr in corr_transition.probs]
+                ),
+            }
             arg_list.append(
-                (
-                    "corresponding fork transition and probabilities",
-                    {
-                        f"{from_compartment}->({to_compartments})": corr_transition.rate,  # noqa: E501
-                        "Probabilities": ", ".join(
-                            [str(expr) for expr in corr_transition.probs]
-                        ),
-                    },
-                )
+                ("corresponding fork transition and probabilities", trx_vals)
             )
 
         return arg_list
@@ -342,52 +397,10 @@ class IpmExecutor:
         transition_index = self._trxs.index(transition)
         corr_transition = self._rume.ipm.transitions[transition_index]
         if isinstance(corr_transition, EdgeDef):
-            arg_list.append(
-                (
-                    "corresponding transition",
-                    {
-                        f"{corr_transition.compartment_from}->{corr_transition.compartment_to}": corr_transition.rate  # noqa: E501
-                    },
-                )
-            )
-        if isinstance(corr_transition, ForkDef):
-            to_compartments = ", ".join(
-                [str(edge.compartment_to) for edge in corr_transition.edges]
-            )
-            from_compartment = corr_transition.edges[0].compartment_from
-            arg_list.append(
-                (
-                    "corresponding fork transition",
-                    {f"{from_compartment}->({to_compartments})": corr_transition.rate},
-                )
-            )
+            trx = {str(corr_transition.name): corr_transition.rate}
+            arg_list.append(("corresponding transition", trx))
+        elif isinstance(corr_transition, ForkDef):
+            trx = {str(corr_transition): corr_transition.rate}
+            arg_list.append(("corresponding fork transition", trx))
 
         return arg_list
-
-    def _distribute(
-        self, cohorts: NDArray[SimDType], events: NDArray[SimDType]
-    ) -> NDArray[SimDType]:
-        """
-        Distribute all events across a location's cohorts and return
-        the compartment deltas for each.
-        """
-        x = cohorts.shape[0]
-        e = self._rume.dim.events
-        occurrences = np.zeros((x, e), dtype=SimDType)
-        for eidx in range(e):
-            occur: int = events[eidx]  # type: ignore
-            cidx = self._source_compartment_for_event[eidx]
-            if cidx == -1:
-                # event is coming from an exogenous source
-                occurrences[:, eidx] = occur
-            else:
-                # event is coming from a modeled compartment
-                selected = self._rng.multivariate_hypergeometric(
-                    cohorts[:, cidx], occur
-                ).astype(SimDType)
-                occurrences[:, eidx] = selected
-                cohorts[:, cidx] -= selected
-
-        # Now that events are assigned to pops,
-        # convert to compartment deltas using apply matrix.
-        return np.matmul(occurrences, self._apply_matrix, dtype=SimDType)

@@ -7,7 +7,7 @@ and will eventually be returning or moving to another location.
 """
 
 from abc import ABC, abstractmethod
-from typing import Literal, overload
+from typing import Literal, Protocol, Sequence, overload
 
 from numpy.typing import NDArray
 
@@ -15,10 +15,22 @@ from epymorph.data_type import SimDType
 from epymorph.simulation import Tick
 
 
+class Cohort(Protocol):
+    compartments: NDArray[SimDType]
+    return_location: int
+    return_tick: int
+
+
 class World(ABC):
     """
     An abstract world model.
     """
+
+    @abstractmethod
+    def get_cohorts(self, location_idx: int) -> Sequence[Cohort]:
+        """
+        Iterate over the cohorts present in a single location.
+        """
 
     @abstractmethod
     def get_cohort_array(self, location_idx: int) -> NDArray[SimDType]:

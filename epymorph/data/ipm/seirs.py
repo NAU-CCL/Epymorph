@@ -1,12 +1,10 @@
 from sympy import Max
 
+from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import CompartmentModel, compartment, edge
-from epymorph.data import registry
 from epymorph.data_shape import Shapes
-from epymorph.simulation import AttributeDef
 
 
-@registry.ipm("seirs")
 class Seirs(CompartmentModel):
     """A basic SEIRS model."""
 

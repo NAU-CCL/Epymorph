@@ -128,7 +128,7 @@ class _UsTigerAdrio(Adrio[T_co], ABC):
                 )
         key = f"us_tiger:{scope.granularity}:{year}"
         return AvailableDataEstimate(
-            name=self.full_name,
+            name=self.class_name,
             cache_key=key,
             new_network_bytes=est.missing_cache_size,
             new_cache_bytes=est.missing_cache_size,

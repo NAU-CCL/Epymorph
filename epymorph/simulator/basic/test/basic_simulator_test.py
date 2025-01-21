@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring
 import unittest
 from math import inf
 from typing import Mapping
@@ -6,8 +5,14 @@ from typing import Mapping
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph import *
+from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import CompartmentModel, compartment, edge
+from epymorph.data.ipm.pei import Pei as PeiIPM
+from epymorph.data.ipm.sirh import Sirh
+from epymorph.data.mm.no import No as NoMM
+from epymorph.data.mm.pei import Pei as PeiMM
+from epymorph.data_shape import Shapes
+from epymorph.data_type import SimDType
 from epymorph.error import (
     IpmSimInvalidProbsException,
     IpmSimLessThanZeroException,
@@ -16,8 +21,10 @@ from epymorph.error import (
 )
 from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import StateScope
+from epymorph.initializer import SingleLocation
 from epymorph.rume import SingleStrataRume
-from epymorph.simulation import AttributeDef
+from epymorph.simulation import default_rng
+from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
 
 
@@ -56,9 +63,9 @@ class SimulateTest(unittest.TestCase):
 
     def test_pei(self):
         rume = SingleStrataRume.build(
-            ipm=ipm_library["pei"](),
-            mm=mm_library["pei"](),
-            init=init.SingleLocation(location=0, seed_size=10_000),
+            ipm=PeiIPM(),
+            mm=PeiMM(),
+            init=SingleLocation(location=0, seed_size=10_000),
             scope=self._pei_scope(),
             time_frame=TimeFrame.of("2015-01-01", 10),
             params={
@@ -139,9 +146,9 @@ class SimulateTest(unittest.TestCase):
 
     def test_override_params(self):
         rume = SingleStrataRume.build(
-            ipm=ipm_library["pei"](),
-            mm=mm_library["pei"](),
-            init=init.SingleLocation(location=0, seed_size=10_000),
+            ipm=PeiIPM(),
+            mm=PeiMM(),
+            init=SingleLocation(location=0, seed_size=10_000),
             scope=self._pei_scope(),
             time_frame=TimeFrame.of("2015-01-01", 10),
             params={
@@ -176,9 +183,9 @@ class SimulateTest(unittest.TestCase):
         Test exception handling for a negative rate value due to a negative parameter
         """
         rume = SingleStrataRume.build(
-            ipm=ipm_library["pei"](),
-            mm=mm_library["pei"](),
-            init=init.SingleLocation(location=0, seed_size=10_000),
+            ipm=PeiIPM(),
+            mm=PeiMM(),
+            init=SingleLocation(location=0, seed_size=10_000),
             scope=self._pei_scope(),
             time_frame=TimeFrame.of("2015-01-01", 10),
             params={
@@ -230,8 +237,8 @@ class SimulateTest(unittest.TestCase):
 
         rume = SingleStrataRume.build(
             ipm=Sirs(),
-            mm=mm_library["no"](),
-            init=init.SingleLocation(location=1, seed_size=5),
+            mm=NoMM(),
+            init=SingleLocation(location=1, seed_size=5),
             scope=CustomScope(np.array(["a", "b", "c"])),
             time_frame=TimeFrame.of("2015-01-01", 150),
             params={
@@ -252,14 +259,14 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("S: 0", err_msg)
         self.assertIn("I: 0", err_msg)
         self.assertIn("R: 0", err_msg)
-        self.assertIn("S->I: I*S*beta/(I + R + S)", err_msg)
+        self.assertIn("S → I: I*S*beta/(I + R + S)", err_msg)
 
     def test_negative_probs_error(self):
         """Test for handling negative probability error"""
         rume = SingleStrataRume.build(
-            ipm=ipm_library["sirh"](),
-            mm=mm_library["no"](),
-            init=init.SingleLocation(location=1, seed_size=5),
+            ipm=Sirh(),
+            mm=NoMM(),
+            init=SingleLocation(location=1, seed_size=5),
             scope=self._pei_scope(),
             time_frame=TimeFrame.of("2015-01-01", 150),
             params={
@@ -280,7 +287,7 @@ class SimulateTest(unittest.TestCase):
         self.assertIn("Invalid probabilities for fork definition detected.", err_msg)
         self.assertIn("hospitalization_prob: -0.2", err_msg)
         self.assertIn("hospitalization_duration: 15", err_msg)
-        self.assertIn("I->(H, R): I*gamma", err_msg)
+        self.assertIn("I → (H,R): I*gamma", err_msg)
         self.assertIn(
             "Probabilities: hospitalization_prob, 1 - hospitalization_prob", err_msg
         )
@@ -288,9 +295,9 @@ class SimulateTest(unittest.TestCase):
     def test_mm_clause_error(self):
         """Test for handling invalid movement model clause application"""
         rume = SingleStrataRume.build(
-            ipm=ipm_library["pei"](),
-            mm=mm_library["pei"](),
-            init=init.SingleLocation(location=1, seed_size=5),
+            ipm=PeiIPM(),
+            mm=PeiMM(),
+            init=SingleLocation(location=1, seed_size=5),
             scope=self._pei_scope(),
             time_frame=TimeFrame.of("2015-01-01", 150),
             params={

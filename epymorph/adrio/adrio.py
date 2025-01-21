@@ -12,19 +12,19 @@ import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.data_shape import Shapes, SimDimensions
+from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
+from epymorph.compartment_model import BaseCompartmentModel
+from epymorph.data_shape import Shapes
 from epymorph.data_type import AttributeArray
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
 from epymorph.database import (
-    NAMESPACE_PLACEHOLDER,
-    AbsoluteName,
     DataResolver,
-    ModuleNamespace,
     evaluate_param,
 )
 from epymorph.event import AdrioProgress, DownloadActivity, EventBus
 from epymorph.geography.scope import GeoScope
-from epymorph.simulation import AttributeDef, SimulationFunction
+from epymorph.simulation import SimulationFunction
+from epymorph.time import TimeFrame
 
 ResultDType = TypeVar("ResultDType", bound=np.generic)
 """The result type of an Adrio."""
@@ -41,21 +41,16 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
     web APIs, local files or database, or anything imaginable.
     """
 
-    @property
-    def full_name(self) -> str:
-        return f"{self.__class__.__module__}.{self.__class__.__qualname__}"
-
     def estimate_data(self) -> DataEstimate:
-        """Estimate the data usage of this ADRIO in a RUME.
-        If a reasonable estimate cannot be made, None is returned."""
-        return EmptyDataEstimate(self.full_name)
+        """Estimate the data usage for this ADRIO in a RUME.
+        If a reasonable estimate cannot be made, return EmptyDataEstimate."""
+        return EmptyDataEstimate(self.class_name)
 
     @abstractmethod
     def evaluate_adrio(self) -> NDArray[ResultDType]:
-        """
-        Implement this method to provide logic for the function.
-        Your implementation is free to use `data`, `dim`, and `rng`.
-        You can also use `defer` to utilize another SimulationFunction instance.
+        """Implement this method to provide logic for the function.
+        Use self methods and properties to access the simulation context or defer
+        processing to another function.
         """
 
     @override
@@ -65,7 +60,8 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         functionality. ADRIO implementations should override `evaluate_adrio`."""
         _events.on_adrio_progress.publish(
             AdrioProgress(
-                adrio_name=self.full_name,
+                adrio_name=self.class_name,
+                attribute=self.name,
                 final=False,
                 ratio_complete=0,
                 download=None,
@@ -77,7 +73,8 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         t1 = perf_counter()
         _events.on_adrio_progress.publish(
             AdrioProgress(
-                adrio_name=self.full_name,
+                adrio_name=self.class_name,
+                attribute=self.name,
                 final=True,
                 ratio_complete=1,
                 download=None,
@@ -95,7 +92,8 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         """Emit a progress event."""
         _events.on_adrio_progress.publish(
             AdrioProgress(
-                adrio_name=self.full_name,
+                adrio_name=self.class_name,
+                attribute=self.name,
                 final=False,
                 ratio_complete=ratio_complete,
                 download=download,
@@ -109,13 +107,13 @@ def _(
     value: Adrio,
     name: AbsoluteName,
     data: DataResolver,
-    dim: SimDimensions | None,
     scope: GeoScope | None,
+    time_frame: TimeFrame | None,
+    ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
     # depth-first evaluation guarantees `data` has our dependencies.
-    namespace = name.to_namespace()
-    sim_func = value.with_context_internal(namespace, data, dim, scope, rng)
+    sim_func = value.with_context_internal(name, data, scope, time_frame, ipm, rng)
     return np.asarray(sim_func.evaluate())
 
 
@@ -132,23 +130,31 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
     @functools.wraps(orig_with_context)
     def with_context_internal(
         self,
-        namespace: ModuleNamespace = NAMESPACE_PLACEHOLDER,
+        name: AbsoluteName = NAME_PLACEHOLDER,
         data: DataResolver | None = None,
-        dim: SimDimensions | None = None,
         scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
+        ipm: BaseCompartmentModel | None = None,
         rng: np.random.Generator | None = None,
     ):
         if data is None:
             req_hashes = ()
         else:
             req_hashes = (
-                data.resolve(namespace.to_absolute(r.name), r).tobytes()
+                data.resolve(name.with_id(r.name), r).tobytes()
                 for r in self.requirements
             )
-        curr_hash = hash(tuple([str(namespace), dim, scope, *req_hashes]))
+        ipm_hash = None
+        if ipm is not None:
+            C = ipm.num_compartments
+            E = ipm.num_events
+            ipm_hash = (ipm.__class__.__name__, C, E)
+        curr_hash = hash(tuple([str(name), scope, time_frame, ipm_hash, *req_hashes]))
         nonlocal cached_instance, cached_hash
         if cached_instance is None or cached_hash != curr_hash:
-            cached_instance = orig_with_context(self, namespace, data, dim, scope, rng)
+            cached_instance = orig_with_context(
+                self, name, data, scope, time_frame, ipm, rng
+            )
             cached_hash = curr_hash
         return cached_instance
 

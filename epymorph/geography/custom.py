@@ -5,6 +5,8 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.geography.scope import (
+    GeoGroup,
+    GeoGrouping,
     GeoScope,
     GeoSelection,
     GeoSelector,
@@ -40,6 +42,9 @@ class CustomScope(GeoScope):
 @dataclass(frozen=True)
 class CustomSelection(GeoSelection[CustomScope]):
     """A GeoSelection on a CustomScope."""
+
+    def group(self, grouping: GeoGrouping) -> GeoGroup[CustomScope]:
+        return GeoGroup(self.scope, self.selection, grouping)
 
 
 @dataclass(frozen=True)

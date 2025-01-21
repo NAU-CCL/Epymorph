@@ -6,14 +6,19 @@ import numpy.testing as npt
 import sympy
 from numpy.typing import NDArray
 
-from epymorph import *
+from epymorph.attribute import (
+    AbsoluteName,
+    AttributeDef,
+    ModuleNamePattern,
+)
 from epymorph.compartment_model import MultistrataModelSymbols, edge
 from epymorph.data.ipm.sirs import Sirs
 from epymorph.data.mm.centroids import Centroids
+from epymorph.data_shape import Shapes
 from epymorph.data_type import AttributeArray, CentroidDType
-from epymorph.database import AbsoluteName, ModuleNamePattern
 from epymorph.error import AttributeException
 from epymorph.geography.us_census import StateScope
+from epymorph.initializer import SingleLocation
 from epymorph.params import (
     ParamFunctionNode,
     ParamFunctionNumpy,
@@ -79,7 +84,7 @@ class EvaluateParamsTest(unittest.TestCase):
                     name="aaa",
                     ipm=Sirs(),
                     mm=Centroids(),
-                    init=init.SingleLocation(location=0, seed_size=100),
+                    init=SingleLocation(location=0, seed_size=100),
                     params={
                         # leave phi unspecified to test default value resolution
                     },
@@ -88,7 +93,7 @@ class EvaluateParamsTest(unittest.TestCase):
                     name="bbb",
                     ipm=Sirs(),
                     mm=Centroids(),
-                    init=init.SingleLocation(location=0, seed_size=100),
+                    init=SingleLocation(location=0, seed_size=100),
                     params={
                         ModuleNamePattern.parse(k): v
                         for k, v in {
@@ -225,7 +230,7 @@ class EvaluateParamsTest(unittest.TestCase):
                 self.r_0 = r_0
 
             def evaluate1(self, day: int, node_index: int) -> float:
-                T = self.dim.days
+                T = self.time_frame.days
                 gamma = self.data(self.GAMMA)[day, node_index]
                 magnitude = self.r_0 * gamma
                 return (

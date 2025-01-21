@@ -3,7 +3,7 @@ Tools for rendering tables from epymorph simulation output data.
 """
 
 import dataclasses
-from typing import Callable, Literal, Sequence
+from typing import Callable, Literal, Sequence, overload
 from warnings import warn
 
 import numpy as np
@@ -144,7 +144,18 @@ def _process_output(
 
 
 class TableRenderer:
-    """Provides a number of methods for rendering an output in tabular form."""
+    """Provides a number of methods for rendering an output in tabular form.
+
+    Examples
+    --------
+    Most commonly, you will use TableRenderer starting from a simulation output object
+    that supports it:
+
+    ```python
+    out = BasicSimulation(rume).run()
+    out.table.quantiles(...)
+    ```
+    """
 
     output: Output
 
@@ -164,11 +175,50 @@ class TableRenderer:
                 msg = f"Invalid result_format: {x}"
                 raise ValueError(msg)
 
+    @overload
     def quantiles(
         self,
         quantiles: Sequence[float],
         geo: GeoSelection | GeoAggregation,
-        time: TimeSelection,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["dataframe"] = "dataframe",
+        column_names: Sequence[str] | None = None,
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def quantiles(
+        self,
+        quantiles: Sequence[float],
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["string"],
+        column_names: Sequence[str] | None = None,
+    ) -> str: ...
+
+    @overload
+    def quantiles(
+        self,
+        quantiles: Sequence[float],
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["print"],
+        column_names: Sequence[str] | None = None,
+    ) -> None: ...
+
+    def quantiles(
+        self,
+        quantiles: Sequence[float],
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
         ordering: Literal["location", "quantity"] = "location",
@@ -184,7 +234,7 @@ class TableRenderer:
             the list of quantiles to calculate and display, in the range [0,1]
         geo : GeoSelection | GeoAggregation
             the geographic selection to make on the output data
-        time : TimeSelection
+        time : TimeSelection | TimeAggregation
             the time selection to make on the output data
         quantity : QuantitySelection | QuantityAggregation
             the quantity selection to make on the output data
@@ -234,10 +284,43 @@ class TableRenderer:
         )
         return self._format_output(result_df, result_format)
 
+    @overload
     def range(
         self,
         geo: GeoSelection | GeoAggregation,
-        time: TimeSelection,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["dataframe"] = "dataframe",
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def range(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["string"],
+    ) -> str: ...
+
+    @overload
+    def range(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["print"],
+    ) -> None: ...
+
+    def range(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
         ordering: Literal["location", "quantity"] = "location",
@@ -251,7 +334,7 @@ class TableRenderer:
         ----------
         geo : GeoSelection | GeoAggregation
             the geographic selection to make on the output data
-        time : TimeSelection
+        time : TimeSelection | TimeAggregation
             the time selection to make on the output data
         quantity : QuantitySelection | QuantityAggregation
             the quantity selection to make on the output data
@@ -280,10 +363,43 @@ class TableRenderer:
             column_names=("min", "max"),
         )
 
+    @overload
     def sum(
         self,
         geo: GeoSelection | GeoAggregation,
-        time: TimeSelection,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["dataframe"] = "dataframe",
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def sum(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["string"],
+    ) -> str: ...
+
+    @overload
+    def sum(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["print"],
+    ) -> None: ...
+
+    def sum(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
         ordering: Literal["location", "quantity"] = "location",
@@ -291,6 +407,7 @@ class TableRenderer:
     ) -> pd.DataFrame | str | None:
         """
         Renders a table showing summed values over time for the given selections.
+
         Because it is not valid to sum compartment values over time -- this would be
         double-counting individuals in a way that has no physical meaning --
         compartment quantities are automatically omitted even if they are part of the
@@ -300,7 +417,7 @@ class TableRenderer:
         ----------
         geo : GeoSelection | GeoAggregation
             the geographic selection to make on the output data
-        time : TimeSelection
+        time : TimeSelection | TimeAggregation
             the time selection to make on the output data
         quantity : QuantitySelection | QuantityAggregation
             the quantity selection to make on the output data
@@ -346,10 +463,46 @@ class TableRenderer:
         )
         return self._format_output(result_df, result_format)
 
+    @overload
     def chart(
         self,
         geo: GeoSelection | GeoAggregation,
-        time: TimeSelection,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        chart_length: int = 20,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["dataframe"] = "dataframe",
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def chart(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        chart_length: int = 20,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["string"],
+    ) -> str: ...
+
+    @overload
+    def chart(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        chart_length: int = 20,
+        ordering: Literal["location", "quantity"] = "location",
+        result_format: Literal["print"],
+    ) -> None: ...
+
+    def chart(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
         chart_length: int = 20,
@@ -358,7 +511,9 @@ class TableRenderer:
     ) -> pd.DataFrame | str | None:
         """
         Renders a table showing a rough time series bar chart for the given selections
-        using ASCII characters. It is of course limited by the fact that this is a
+        using ASCII characters.
+
+        It is of course limited by the fact that this is a
         relatively coarse display method. The y-axis of each chart is on its own scale,
         and thus is not comparable to others. However the x-axis is on a shared scale,
         so this can give you an idea of the time-series behavior of your simulation
@@ -368,7 +523,7 @@ class TableRenderer:
         ----------
         geo : GeoSelection | GeoAggregation
             the geographic selection to make on the output data
-        time : TimeSelection
+        time : TimeSelection | TimeAggregation
             the time selection to make on the output data
         quantity : QuantitySelection | QuantityAggregation
             the quantity selection to make on the output data
@@ -394,11 +549,15 @@ class TableRenderer:
         DataFrame | str | None
             according to the value of the `result_format` parameter
         """
+        if isinstance(time, TimeSelection):
+            # Unless the user supplies their own TimeAggregation,
+            # use NBins to condense the series.
+            time = time.group(NBins(chart_length)).agg()
+
         result_df = _process_output(
             self.output,
             geo,
-            # Use TimeAggregation to condense the series.
-            time.group(NBins(chart_length)).agg(),
+            time,
             quantity,
             ordering,
             ["chart"],

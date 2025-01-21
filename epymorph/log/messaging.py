@@ -40,13 +40,13 @@ def sim_messaging(
     start_time: float | None = None
 
     def on_start(e: OnStart) -> None:
-        start_date = e.dim.start_date
-        end_date = e.dim.end_date
-        duration_days = e.dim.days
+        start_date = e.rume.time_frame.start_date
+        end_date = e.rume.time_frame.end_date
+        duration_days = e.rume.time_frame.days
 
         print(f"Running simulation ({e.simulator}):")
         print(f"• {start_date} to {end_date} ({duration_days} days)")
-        print(f"• {e.dim.nodes} geo nodes")
+        print(f"• {e.rume.scope.nodes} geo nodes")
         if live:
             print(progress(0.0), end="\r")
 
@@ -58,21 +58,22 @@ def sim_messaging(
     # after the progress bar of varying width
     last_progress_length = 0
 
-    def on_tick(tick: OnTick) -> None:
+    def on_tick(e: OnTick) -> None:
         # NOTE: tick updates will be skipped entirely if `live=False`
         nonlocal last_progress_length
-        ticks_complete = tick.tick_index + 1
+        ticks_complete = e.tick_index + 1
         total_process_time = perf_counter() - start_time
         average_process_time = total_process_time / ticks_complete
 
-        ticks_left = tick.dim.ticks - ticks_complete
+        percent_complete = (e.tick_index + 1) / e.ticks
+        ticks_left = e.ticks - ticks_complete
 
         # multiply the remaining ticks by the average processing time
         estimate = ticks_left * average_process_time
 
         time_remaining = humanize.precisedelta(ceil(estimate), minimum_unit="seconds")
         formatted_time = f"({time_remaining} remaining)"
-        line = f"  {progress(tick.percent_complete)}"
+        line = f"  {progress(percent_complete)}"
         # if no time remaining, omit the time progress
         if estimate > 0:
             line += f"{formatted_time}"
@@ -89,7 +90,7 @@ def sim_messaging(
     def on_adrio_progress(e: AdrioProgress) -> None:
         nonlocal last_progress_length
         if e.ratio_complete == 0:
-            print(f"Loading {e.adrio_name}:")
+            print(f"Loading {e.attribute} ({e.adrio_name}):")
         if not e.final:
             if e.download is None:
                 dl = ""

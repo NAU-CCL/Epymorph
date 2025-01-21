@@ -367,11 +367,11 @@ class CovidCasesPer100k(Adrio[np.float64]):
     number of COVID-19 cases per 100k population.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -379,7 +379,7 @@ class CovidCasesPer100k(Adrio[np.float64]):
         return _fetch_cases(
             "covid_cases_per_100k",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -391,11 +391,11 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
     number of COVID-19 hospitalizations per 100k population.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -403,7 +403,7 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
         return _fetch_cases(
             "covid_hospital_admissions_per_100k",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -415,17 +415,17 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
     weekly averages of COVID-19 hospitalizations from the facility level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
     replace_sentinel: int
     """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
-        self.time_frame = time_frame
+    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -433,7 +433,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
         return _fetch_facility_hospitalization(
             "total_adult_patients_hospitalized_confirmed_covid_7_day_avg",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.replace_sentinel,
             self.progress,
         )
@@ -446,17 +446,17 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
     weekly sums of all COVID-19 hospitalizations from the facility level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
     replace_sentinel: int
     """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
-        self.time_frame = time_frame
+    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -464,7 +464,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
         return _fetch_facility_hospitalization(
             "total_adult_patients_hospitalized_confirmed_covid_7_day_sum",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.replace_sentinel,
             self.progress,
         )
@@ -477,17 +477,17 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
     weekly averages of influenza hospitalizations from the facility level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
     replace_sentinel: int
     """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
-        self.time_frame = time_frame
+    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -495,7 +495,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
         return _fetch_facility_hospitalization(
             "total_patients_hospitalized_confirmed_influenza_7_day_avg",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.replace_sentinel,
             self.progress,
         )
@@ -508,17 +508,17 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
     weekly sums of influenza hospitalizations from the facility level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
     replace_sentinel: int
     """The integer value in range 0-3 to replace sentinel values with."""
 
-    def __init__(self, time_frame: TimeFrame, replace_sentinel: int):
-        self.time_frame = time_frame
+    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
             raise DataResourceException(msg)
         self.replace_sentinel = replace_sentinel
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -526,7 +526,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
         return _fetch_facility_hospitalization(
             "total_patients_hospitalized_confirmed_influenza_7_day_sum",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.replace_sentinel,
             self.progress,
         )
@@ -539,11 +539,11 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
     weekly averages of COVID-19 hospitalizations from the state level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -551,7 +551,7 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
         return _fetch_state_hospitalization(
             "avg_admissions_all_covid_confirmed",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -563,11 +563,11 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
     weekly sums of COVID-19 hospitalizations from the state level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -575,7 +575,7 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
         return _fetch_state_hospitalization(
             "total_admissions_all_covid_confirmed",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -587,11 +587,11 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
     weekly averages of influenza hospitalizations from the state level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -599,7 +599,7 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
         return _fetch_state_hospitalization(
             "avg_admissions_all_influenza_confirmed",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -611,11 +611,11 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
     weekly sums of influenza hospitalizations from the state level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -623,7 +623,7 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
         return _fetch_state_hospitalization(
             "total_admissions_all_influenza_confirmed",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -635,11 +635,11 @@ class FullCovidVaccinations(Adrio[np.float64]):
     cumulative total number of individuals fully vaccinated for COVID-19.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -647,7 +647,7 @@ class FullCovidVaccinations(Adrio[np.float64]):
         return _fetch_vaccination(
             "series_complete_yes",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -660,11 +660,11 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
     vaccination.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -672,7 +672,7 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
         return _fetch_vaccination(
             "administered_dose1_recip",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -684,11 +684,11 @@ class CovidBoosterDoses(Adrio[np.float64]):
     cumulative total number of COVID-19 booster doses administered.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -696,7 +696,7 @@ class CovidBoosterDoses(Adrio[np.float64]):
         return _fetch_vaccination(
             "booster_doses",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -708,11 +708,11 @@ class CovidDeathsCounty(Adrio[np.float64]):
     weekly total of COVID-19 deaths from the county level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -720,7 +720,7 @@ class CovidDeathsCounty(Adrio[np.float64]):
         return _fetch_deaths_county(
             "covid_19_deaths",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -732,11 +732,11 @@ class CovidDeathsState(Adrio[np.float64]):
     weekly total of COVID-19 deaths from the state level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -744,7 +744,7 @@ class CovidDeathsState(Adrio[np.float64]):
         return _fetch_deaths_state(
             "covid_19_deaths",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )
 
@@ -756,11 +756,11 @@ class InfluenzaDeathsState(Adrio[np.float64]):
     weekly total of influenza deaths from the state level dataset.
     """
 
-    time_frame: TimeFrame
+    override_time_frame: TimeFrame | None
     """The time period the data encompasses."""
 
-    def __init__(self, time_frame: TimeFrame):
-        self.time_frame = time_frame
+    def __init__(self, time_frame: TimeFrame | None = None):
+        self.override_time_frame = time_frame
 
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
@@ -768,6 +768,6 @@ class InfluenzaDeathsState(Adrio[np.float64]):
         return _fetch_deaths_state(
             "influenza_deaths",
             scope,
-            self.time_frame,
+            self.override_time_frame or self.time_frame,
             self.progress,
         )

@@ -5,8 +5,8 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio, adrio_cache
+from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
-from epymorph.simulation import AttributeDef
 
 
 @adrio_cache

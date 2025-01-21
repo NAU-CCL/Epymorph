@@ -106,6 +106,76 @@ class TestUtil(unittest.TestCase):
             util.check_ndarray(arr, dtype=m.dtype(np.str_))
 
 
+class TestHaversine(unittest.TestCase):
+    test_coords = np.array(
+        [(0, 0), (1, 0), (0, 1)],
+        dtype=[("longitude", np.float64), ("latitude", np.float64)],
+    )
+
+    def test_01(self):
+        # Test miles
+        actual1 = util.pairwise_haversine(self.test_coords)
+        actual2 = util.pairwise_haversine(self.test_coords, units="miles")
+        actual3 = util.pairwise_haversine(self.test_coords, radius=3963.1906)
+        expected = np.array(
+            [
+                [0.0, 69.17, 69.17],
+                [69.17, 0.0, 97.82],
+                [69.17, 97.82, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        np.testing.assert_array_almost_equal(expected, actual1, decimal=2)
+        np.testing.assert_array_almost_equal(expected, actual2, decimal=2)
+        np.testing.assert_array_almost_equal(expected, actual3, decimal=2)
+
+    def test_02(self):
+        # Test kilometers
+        actual1 = util.pairwise_haversine(self.test_coords, units="kilometers")
+        actual2 = util.pairwise_haversine(self.test_coords, radius=6378.1370)
+        expected = np.array(
+            [
+                [0.0, 111.32, 111.32],
+                [111.32, 0.0, 157.43],
+                [111.32, 157.43, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        np.testing.assert_array_almost_equal(expected, actual1, decimal=2)
+        np.testing.assert_array_almost_equal(expected, actual2, decimal=2)
+
+    def test_03(self):
+        # Test custom radius
+        actual1 = util.pairwise_haversine(self.test_coords, radius=10)
+        expected = np.array(
+            [
+                [0.0, 0.17, 0.17],
+                [0.17, 0.0, 0.25],
+                [0.17, 0.25, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        np.testing.assert_array_almost_equal(expected, actual1, decimal=2)
+
+    def test_04(self):
+        # Test tuple input
+        actual1 = util.pairwise_haversine((np.array([0, 1, 0]), np.array([0, 0, 1])))
+        expected = np.array(
+            [
+                [0.0, 69.17, 69.17],
+                [69.17, 0.0, 97.82],
+                [69.17, 97.82, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        np.testing.assert_array_almost_equal(expected, actual1, decimal=2)
+
+    def test_05(self):
+        # Test bad input
+        with self.assertRaises(ValueError):
+            util.pairwise_haversine([1, 2, 3])  # type: ignore
+
+
 class TestProgress(unittest.TestCase):
     def test_zero_percent(self):
         self.assertEqual(progress(0), "|                    | 0% ")

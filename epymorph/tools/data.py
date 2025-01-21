@@ -10,32 +10,24 @@ from typing import Protocol, TypeVar
 import numpy as np
 import pandas as pd
 
+from epymorph.attribute import NamePattern
 from epymorph.compartment_model import (
-    BaseCompartmentModel,
     CompartmentDef,
     QuantityAggregation,
     QuantitySelection,
 )
-from epymorph.data_shape import SimDimensions
-from epymorph.database import NamePattern
-from epymorph.geography.scope import GeoAggregation, GeoScope, GeoSelection
+from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.log.messaging import sim_messaging
 from epymorph.rume import Rume
-from epymorph.time import Dim, TimeAggregation, TimeFrame, TimeSelection
+from epymorph.time import Dim, TimeAggregation, TimeSelection
 from epymorph.util import mask
 
 
 class Output(Protocol):
     """A generic output interface."""
 
-    dim: SimDimensions
-    """The simulation dimensions."""
-    scope: GeoScope
-    """The simulated scope."""
-    time_frame: TimeFrame
-    """The simulated time frame."""
-    ipm: BaseCompartmentModel
-    """The IPM used."""
+    rume: Rume
+    """The Rume used in the simulation that generated this output."""
 
     @property
     @abstractmethod
@@ -53,19 +45,19 @@ def _validate(
     # produced the output.
     # For example, it's an error to run a RUME with one scope, then
     # try to render a table using a selection on a completely different scope.
-    if geo.scope is not output.scope:
+    if geo.scope is not output.rume.scope:
         err = (
             "When applying a geo selection, please create that selection "
             "from the same scope you are applying it to."
         )
         raise ValueError(err)
-    if time.time_frame is not output.time_frame:
+    if time.time_frame is not output.rume.time_frame:
         err = (
             "When applying a time selection, please create that selection "
             "from the same time frame you are applying it to."
         )
         raise ValueError(err)
-    if quantity.ipm is not output.ipm:
+    if quantity.ipm is not output.rume.ipm:
         err = (
             "When applying an IPM quantity selection, please create that selection "
             "from the same IPM you are applying it to."
@@ -87,9 +79,9 @@ def munge(
     """
     _validate(output, geo, time, quantity)
 
-    S = output.dim.ticks
-    N = output.dim.nodes
-    taus = output.dim.tau_steps
+    N = output.rume.scope.nodes
+    S = output.rume.num_ticks
+    taus = output.rume.num_tau_steps
 
     # Apply selections first so that aggregations operate on less data.
     time_mask = np.repeat(mask(S, time.selection_ticks(taus)), N)
@@ -213,10 +205,7 @@ def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> Rum
         cached = dict(np.load(path))
         return dataclasses.replace(
             rume,
-            params={
-                **rume.params,
-                **{NamePattern.parse(key): value for key, value in cached.items()},
-            },
+            params={NamePattern.parse(key): value for key, value in cached.items()},
         )
     else:
         # Save to cache; evaluate parameters and store the resulting ndarrays

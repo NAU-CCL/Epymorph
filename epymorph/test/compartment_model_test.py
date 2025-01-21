@@ -1,10 +1,10 @@
-# pylint: disable=missing-docstring,unused-variable
 import unittest
 from typing import Sequence
 
 from sympy import Max
 from sympy import symbols as sympy_symbols
 
+from epymorph.attribute import AbsoluteName, AttributeDef
 from epymorph.compartment_model import (
     BIRTH,
     DEATH,
@@ -19,8 +19,7 @@ from epymorph.compartment_model import (
     edge,
 )
 from epymorph.data_shape import Shapes
-from epymorph.database import AbsoluteName
-from epymorph.simulation import AttributeDef
+from epymorph.error import IpmValidationException
 from epymorph.sympy_shim import to_symbol
 from epymorph.util import are_instances
 
@@ -118,7 +117,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_03(self):
         # Test for error: Reference an undeclared compartment in a transition.
-        with self.assertRaises(TypeError) as e:
+        with self.assertRaises(IpmValidationException) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -145,7 +144,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_04(self):
         # Test for error: Reference an undeclared requirement in a transition.
-        with self.assertRaises(TypeError) as e:
+        with self.assertRaises(IpmValidationException) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -172,7 +171,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_05(self):
         # Test for error: Source and destination are both exogenous!
-        with self.assertRaises(TypeError) as e:
+        with self.assertRaises(IpmValidationException) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -199,7 +198,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_06(self):
         # Test for error: model with no compartments.
-        with self.assertRaises(TypeError) as e:
+        with self.assertRaises(IpmValidationException) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = []
@@ -212,6 +211,58 @@ class CompartmentModelTest(unittest.TestCase):
                     return []
 
         self.assertIn("invalid compartments", str(e.exception).lower())
+
+    def test_create_07(self):
+        # Test for warning: unused requirements.
+        with self.assertWarns(Warning) as w:
+
+            class MyIpm(CompartmentModel):
+                compartments = [
+                    compartment("S", tags=["test_tag"]),
+                    compartment("I"),
+                    compartment("R"),
+                ]
+                requirements = [
+                    AttributeDef("beta", float, Shapes.N),
+                    AttributeDef("gamma", float, Shapes.N),
+                    AttributeDef("extraneous", float, Shapes.N),
+                ]
+
+                def edges(self, symbols):
+                    S, I, R = symbols.all_compartments
+                    beta, gamma, extraneous = symbols.all_requirements
+                    return [
+                        edge(S, I, rate=beta * S * I),
+                        edge(I, R, rate=gamma * I),
+                    ]
+
+        self.assertIn("extra requirements: extraneous", str(w.warning).lower())
+
+    def test_create_08(self):
+        # Test for warning: unused compartments.
+        with self.assertWarns(Warning) as w:
+
+            class MyIpm(CompartmentModel):
+                compartments = [
+                    compartment("S", tags=["test_tag"]),
+                    compartment("I"),
+                    compartment("R"),
+                    compartment("Q"),
+                ]
+                requirements = [
+                    AttributeDef("beta", float, Shapes.N),
+                    AttributeDef("gamma", float, Shapes.N),
+                ]
+
+                def edges(self, symbols):
+                    S, I, R, Q = symbols.all_compartments
+                    beta, gamma = symbols.all_requirements
+                    return [
+                        edge(S, I, rate=beta * S * I),
+                        edge(I, R, rate=gamma * I),
+                    ]
+
+        self.assertIn("extra compartments: q", str(w.warning).lower())
 
     def test_compartment_name(self):
         # Test for compartment names that include spaces.

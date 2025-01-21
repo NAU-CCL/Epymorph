@@ -6,6 +6,17 @@ from contextlib import contextmanager
 from textwrap import dedent
 
 
+class ExternalDependencyError(Exception):
+    """Exception when a native program is required but not found."""
+
+    missing: list[str]
+    """Which programs are missing?"""
+
+    def __init__(self, msg: str, missing: list[str]):
+        super().__init__(msg)
+        self.missing = missing
+
+
 class GeographyError(Exception):
     """Exception working with geographic system representations."""
 
@@ -16,30 +27,6 @@ class GeographyError(Exception):
 
 class DimensionError(Exception):
     """Raised when epymorph needed dimensional information that was not provided."""
-
-
-class UnknownModel(Exception):
-    """Exception for the inability to load a model as specified."""
-
-    model_type: str
-    name_or_path: str
-
-    def __init__(self, model_type: str, name_or_path: str):
-        super().__init__(f"Unable to load {model_type} model '{name_or_path}'")
-        self.model_type = model_type
-        self.name_or_path = name_or_path
-
-
-class ModelRegistryException(Exception):
-    """Exception during model library initialization."""
-
-
-class ParseException(Exception):
-    """Superclass for exceptions which happen while parsing a model."""
-
-
-class MmParseException(ParseException):
-    """Exception parsing a Movement Model."""
 
 
 class ValidationException(Exception):
@@ -129,12 +116,8 @@ class IpmSimExceptionWithFields(IpmSimException):
 
     display_fields: list[tuple[str, dict]]
 
-    def __init__(
-        self, message: str, display_fields: tuple[str, dict] | list[tuple[str, dict]]
-    ):
+    def __init__(self, message: str, display_fields: list[tuple[str, dict]]):
         super().__init__(message)
-        if isinstance(display_fields, tuple):
-            display_fields = [display_fields]
         self.display_fields = display_fields
 
     def __str__(self):
@@ -151,7 +134,7 @@ class IpmSimExceptionWithFields(IpmSimException):
 class IpmSimNaNException(IpmSimExceptionWithFields):
     """Exception for handling NaN (not a number) rate values"""
 
-    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+    def __init__(self, display_fields: list[tuple[str, dict]]):
         msg = (
             "NaN (not a number) rate detected. This is often the result of a "
             "divide by zero error.\n"
@@ -171,7 +154,7 @@ class IpmSimNaNException(IpmSimExceptionWithFields):
 class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
     """Exception for handling less than 0 rate values"""
 
-    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+    def __init__(self, display_fields: list[tuple[str, dict]]):
         msg = (
             "Less than zero rate detected. When providing or defining ipm parameters, "
             "ensure that they will not result in a negative rate.\n"
@@ -185,7 +168,7 @@ class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
 class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
     """Exception for handling invalid probability values"""
 
-    def __init__(self, display_fields: tuple[str, dict] | list[tuple[str, dict]]):
+    def __init__(self, display_fields: list[tuple[str, dict]]):
         msg = """
               Invalid probabilities for fork definition detected. Probabilities for a
               given tick should always be nonnegative and sum to 1

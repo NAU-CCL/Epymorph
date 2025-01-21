@@ -8,7 +8,7 @@ import dataclasses
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from dataclasses import dataclass, field
-from functools import cached_property
+from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -21,23 +21,25 @@ from typing import (
     Sequence,
     Type,
     TypeVar,
+    final,
 )
+from warnings import warn
 
 import numpy as np
 from numpy.typing import NDArray
 from sympy import Add, Expr, Float, Integer, Symbol
 from typing_extensions import override
 
-from epymorph.database import AbsoluteName, AttributeDef
+from epymorph.attribute import AbsoluteName, AttributeDef
 from epymorph.error import IpmValidationException
-from epymorph.simulation import DEFAULT_STRATA, META_STRATA, gpm_strata
+from epymorph.strata import DEFAULT_STRATA, META_STRATA, gpm_strata
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
+from epymorph.tools.ipm_diagram import render_diagram
 from epymorph.util import (
     acceptable_name,
     are_instances,
     are_unique,
     filter_unique,
-    iterator_length,
 )
 
 ######################
@@ -198,6 +200,11 @@ class ForkDef:
     edges: list[EdgeDef]
     probs: list[Expr]
 
+    def __str__(self) -> str:
+        lhs = str(self.edges[0].compartment_from)
+        rhs = ",".join([str(edge.compartment_to) for edge in self.edges])
+        return f"{lhs} → ({rhs})"
+
 
 def fork(*edges: EdgeDef) -> ForkDef:
     """
@@ -216,11 +223,11 @@ def fork(*edges: EdgeDef) -> ForkDef:
 
     # First verify that the edges all come from the same state.
     if len(set(e.compartment_from for e in edges)) > 1:
-        msg = (
+        err = (
             "In a Fork, all edges must share the same `state_from`.\n"
             f"  Problem in: {str(edges)}"
         )
-        raise IpmValidationException(msg)
+        raise IpmValidationException(err)
     # it is assumed the fork's edges are defined with complementary rate expressions
     edge_rates = [e.rate for e in edges]
     # the "base rate" -- how many individuals transition on any of these edges --
@@ -339,55 +346,57 @@ class ModelSymbols:
 class BaseCompartmentModel(ABC):
     """Shared base-class for compartment models."""
 
-    _abstract_model = True  # marking this abstract skips metaclass validation
-
     compartments: Sequence[CompartmentDef] = ()
     """The compartments of the model."""
 
     requirements: Sequence[AttributeDef] = ()
     """The attributes required by the model."""
 
-    # NOTE: these two attributes are coded as such so that overriding
+    # NOTE: these two (above) attributes are coded as such so that overriding
     # this class is simpler for users. Normally I'd make them properties,
     # -- since they really should not be modified after creation --
     # but this would increase the implementation complexity.
     # And to avoid requiring users to call the initializer, the rest
     # of the attributes are cached_properties which initialize lazily.
 
-    @cached_property
-    @abstractmethod
-    def symbols(self) -> ModelSymbols:
-        """The symbols which represent parts of this model."""
-
-    @cached_property
-    @abstractmethod
-    def transitions(self) -> Sequence[TransitionDef]:
-        """The transitions in the model."""
+    # These private attributes will be computed during instance initialization
+    # by the metaclass. It's better to do eager evaluation of these things
+    # so that issues in model construction pop up sooner than later.
 
     @property
     def quantities(self) -> Iterator[CompartmentDef | EdgeDef]:
         yield from self.compartments
         yield from self.events
 
-    @cached_property
+    @property
+    @abstractmethod
+    def symbols(self) -> ModelSymbols:
+        """The symbols which represent parts of this model."""
+
+    @property
+    @abstractmethod
+    def transitions(self) -> Sequence[TransitionDef]:
+        """The transitions in the model."""
+
+    @property
+    @abstractmethod
+    def events(self) -> Sequence[EdgeDef]:
+        """Iterate over all events in order."""
+
+    @property
     @abstractmethod
     def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
         """The attributes required by this model."""
 
-    @cached_property
+    @property
     def num_compartments(self) -> int:
         """The number of compartments in this model."""
         return len(self.compartments)
 
-    @cached_property
-    def events(self) -> Sequence[EdgeDef]:
-        """Iterate over all events in order."""
-        return list(_as_events(self.transitions))
-
-    @cached_property
+    @property
     def num_events(self) -> int:
         """The number of distinct events (transitions) in this model."""
-        return iterator_length(self.events)
+        return len(self.events)
 
     @property
     @abstractmethod
@@ -402,6 +411,109 @@ class BaseCompartmentModel(ABC):
     @property
     def select(self) -> "QuantitySelector":
         return QuantitySelector(self)
+
+    def diagram(
+        self,
+        *,
+        file: str | Path | None = None,
+        figsize: tuple[float, float] | None = None,
+    ) -> None:
+        """Render a diagram of this IPM, either by showing it with matplotlib (default)
+        or by saving it to `file` as a png image.
+
+        Parameters
+        ----------
+        file : str | Path, optional
+            Provide a file path to save a png image of the diagram to this path.
+            If `file` is None, we will instead use matplotlib to show the diagram.
+        figsize : tuple[float, float], optional
+            The matplotlib figure size to use when displaying the diagram.
+            Only used if `file` is not provided.
+        """
+        render_diagram(ipm=self, file=file, figsize=figsize)
+
+
+def validate_compartment_model(model: BaseCompartmentModel) -> None:
+    name = model.__class__.__name__
+
+    # we need a sneaky way to suppress IPM validation warnings sometimes
+    suppress_warnings = getattr(model, "_suppress_ipm_validation_warnings", False)
+
+    # transitions cannot have the source and destination both be exogenous;
+    # this would be madness.
+    if any(
+        edge.compartment_from in exogenous_states
+        and edge.compartment_to in exogenous_states
+        for edge in model.events
+    ):
+        err = (
+            f"Invalid transitions in {name}: "
+            "transitions cannot use exogenous states (BIRTH/DEATH) "
+            "as both source and destination."
+        )
+        raise IpmValidationException(err)
+
+    # Extract the set of compartments used by transitions.
+    trx_comps = set(
+        compartment
+        for e in model.events
+        for compartment in [e.compartment_from, e.compartment_to]
+        # don't include exogenous states in the compartment set
+        if compartment not in exogenous_states
+    )
+
+    # Extract the set of requirements used by transition rate expressions
+    # by taking all used symbols and subtracting compartment symbols.
+    trx_reqs = set(
+        symbol
+        for e in model.events
+        for symbol in e.rate.free_symbols
+        if isinstance(symbol, Symbol)
+    ).difference(trx_comps)
+
+    # transition compartments minus declared compartments should be empty
+    missing_comps = trx_comps.difference(model.symbols.all_compartments)
+    if len(missing_comps) > 0:
+        err = (
+            f"Invalid transitions in {name}: "
+            "transitions reference compartments which were not declared.\n"
+            f"Missing compartments: {', '.join(map(str, missing_comps))}"
+        )
+        raise IpmValidationException(err)
+
+    # declared compartments minus used compartments is ideally empty,
+    # otherwise raise a warning
+    if not suppress_warnings:
+        extra_comps = set(model.symbols.all_compartments).difference(trx_comps)
+        if len(extra_comps) > 0:
+            msg = (
+                f"Possible issue in {name}: "
+                "not all declared compartments are being used in transitions.\n"
+                f"Extra compartments: {', '.join(map(str, extra_comps))}"
+            )
+            warn(msg)
+
+    # transition requirements minus declared requirements should be empty
+    missing_reqs = trx_reqs.difference(model.symbols.all_requirements)
+    if len(missing_reqs) > 0:
+        err = (
+            f"Invalid transitions in {name}: "
+            "transitions reference requirements which were not declared.\n"
+            f"Missing requirements: {', '.join(map(str, missing_reqs))}"
+        )
+        raise IpmValidationException(err)
+
+    # declared requirements minus used requirements is ideally empty,
+    # otherwise raise a warning
+    if not suppress_warnings:
+        extra_reqs = set(model.symbols.all_requirements).difference(trx_reqs)
+        if len(extra_reqs) > 0:
+            msg = (
+                f"Possible issue in {name}: "
+                "not all declared requirements are being used in transitions.\n"
+                f"Extra requirements: {', '.join(map(str, extra_reqs))}"
+            )
+            warn(msg)
 
 
 ####################################
@@ -421,88 +533,47 @@ class CompartmentModelClass(ABCMeta):
         bases: tuple[type, ...],
         dct: dict[str, Any],
     ) -> "CompartmentModelClass":
-        # Skip these checks for classes we want to treat as abstract:
-        if dct.get("_abstract_model", False):
-            return super().__new__(mcs, name, bases, dct)
+        # Skip these checks for abstract classes:
+        cls0 = super().__new__(mcs, name, bases, dct)
+        if getattr(cls0, "__abstractmethods__", False):
+            return cls0
 
         # Check model compartments.
         cmps = dct.get("compartments")
         if cmps is None or not isinstance(cmps, (list, tuple)):
-            raise TypeError(
-                f"Invalid compartments in {name}: please specify as a list or tuple."
-            )
+            err = f"Invalid compartments in {name}: please specify as a list or tuple."
+            raise IpmValidationException(err)
         if len(cmps) == 0:
-            raise TypeError(
+            err = (
                 f"Invalid compartments in {name}: "
                 "please specify at least one compartment."
             )
+            raise IpmValidationException(err)
         if not are_instances(cmps, CompartmentDef):
-            raise TypeError(
+            err = (
                 f"Invalid compartments in {name}: must be instances of CompartmentDef."
             )
+            raise IpmValidationException(err)
         if not are_unique(c.name for c in cmps):
-            raise TypeError(
-                f"Invalid compartments in {name}: compartment names must be unique."
-            )
+            err = f"Invalid compartments in {name}: compartment names must be unique."
+            raise IpmValidationException(err)
         # Make compartments immutable.
         dct["compartments"] = tuple(cmps)
 
         # Check transitions... we have to instantiate the class.
         cls = super().__new__(mcs, name, bases, dct)
         instance = cls()
-
-        trxs = instance.transitions
-
-        # transitions cannot have the source and destination both be exogenous;
-        # this would be madness.
-        if any(
-            edge.compartment_from in exogenous_states
-            and edge.compartment_to in exogenous_states
-            for edge in _as_events(trxs)
-        ):
-            raise TypeError(
-                f"Invalid transitions in {name}: "
-                "transitions cannot use exogenous states (BIRTH/DEATH) "
-                "as both source and destination."
-            )
-
-        # Extract the set of compartments used by transitions.
-        trx_comps = set(
-            compartment
-            for e in _as_events(trxs)
-            for compartment in [e.compartment_from, e.compartment_to]
-            # don't include exogenous states in the compartment set
-            if compartment not in exogenous_states
-        )
-
-        # Extract the set of requirements used by transition rate expressions
-        # by taking all used symbols and subtracting compartment symbols.
-        trx_reqs = set(
-            symbol
-            for e in _as_events(trxs)
-            for symbol in e.rate.free_symbols
-            if isinstance(symbol, Symbol)
-        ).difference(trx_comps)
-
-        # transition compartments minus declared compartments should be empty
-        missing_comps = trx_comps.difference(instance.symbols.all_compartments)
-        if len(missing_comps) > 0:
-            raise TypeError(
-                f"Invalid transitions in {name}: "
-                "transitions reference compartments which were not declared.\n"
-                f"Missing compartments: {', '.join(map(str, missing_comps))}"
-            )
-
-        # transition requirements minus declared requirements should be empty
-        missing_reqs = trx_reqs.difference(instance.symbols.all_requirements)
-        if len(missing_reqs) > 0:
-            raise TypeError(
-                f"Invalid transitions in {name}: "
-                "transitions reference requirements which were not declared.\n"
-                f"Missing requirements: {', '.join(map(str, missing_reqs))}"
-            )
-
+        validate_compartment_model(instance)
         return cls
+
+    def __call__(cls, *args, **kwargs):
+        # Perform our initialization on all newly created instances.
+        # This allows us to bypass writing an __init__ function, which
+        # end users would then have to remember to call when subclassing.
+        # This should make implementations easier to write.
+        instance = super().__call__(*args, **kwargs)
+        instance._construct_model()
+        return instance
 
 
 class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClass):
@@ -512,31 +583,6 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
     and the data parameters which are required to compute the transitions.
     """
 
-    _abstract_model = True  # marking this abstract skips metaclass validation
-
-    @cached_property
-    def symbols(self) -> ModelSymbols:
-        """The symbols which represent parts of this model."""
-        return ModelSymbols(
-            [(c.name.full, c.name.full) for c in self.compartments],
-            [(r.name, r.name) for r in self.requirements],
-        )
-
-    @cached_property
-    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
-        """The attributes required by this model."""
-        return OrderedDict(
-            [
-                (AbsoluteName(gpm_strata(DEFAULT_STRATA), "ipm", r.name), r)
-                for r in self.requirements
-            ]
-        )
-
-    @cached_property
-    def transitions(self) -> Sequence[TransitionDef]:
-        """The transitions in the model."""
-        return self.edges(self.symbols)
-
     @abstractmethod
     def edges(self, symbols: ModelSymbols) -> Sequence[TransitionDef]:
         """
@@ -545,6 +591,53 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
         given a reference to this model's symbols library so you can
         build expressions for the transition rates.
         """
+
+    _symbols: ModelSymbols
+    _transitions: Sequence[TransitionDef]
+    _events: Sequence[EdgeDef]
+    _requirements_dict: OrderedDict[AbsoluteName, AttributeDef]
+
+    @final
+    def _construct_model(self):
+        # epymorph's initialization logic, invoked by the metaclass
+        # (see metaclass __call__ for more info)
+        self._symbols = ModelSymbols(
+            [(c.name.full, c.name.full) for c in self.compartments],
+            [(r.name, r.name) for r in self.requirements],
+        )
+        self._transitions = self.edges(self.symbols)
+        self._events = list(_as_events(self._transitions))
+        self._requirements_dict = OrderedDict(
+            [
+                (AbsoluteName(gpm_strata(DEFAULT_STRATA), "ipm", r.name), r)
+                for r in self.requirements
+            ]
+        )
+
+    @property
+    @override
+    def symbols(self) -> ModelSymbols:
+        """The symbols which represent parts of this model."""
+        return self._symbols
+
+    @property
+    @override
+    def transitions(self) -> Sequence[TransitionDef]:
+        """The transitions in the model."""
+        return self._transitions
+
+    @property
+    @override
+    def events(self) -> Sequence[EdgeDef]:
+        """Iterate over all events in order."""
+        # return list(_as_events(self.transitions))
+        return self._events
+
+    @property
+    @override
+    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
+        """The attributes required by this model."""
+        return self._requirements_dict
 
     @property
     @override
@@ -659,6 +752,10 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     _strata: Sequence[tuple[str, CompartmentModel]]
     _meta_requirements: Sequence[AttributeDef]
     _meta_edges: MetaEdgeBuilder
+    _symbols: MultistrataModelSymbols
+    _transitions: Sequence[TransitionDef]
+    _events: Sequence[EdgeDef]
+    _requirements_dict: OrderedDict[AbsoluteName, AttributeDef]
 
     def __init__(
         self,
@@ -681,16 +778,10 @@ class CombinedCompartmentModel(BaseCompartmentModel):
             *self._meta_requirements,
         ]
 
-    @cached_property
-    def symbols(self) -> MultistrataModelSymbols:
-        """The symbols which represent parts of this model."""
-        return MultistrataModelSymbols(
+        symbols = MultistrataModelSymbols(
             strata=self._strata, meta_requirements=self._meta_requirements
         )
-
-    @cached_property
-    def transitions(self) -> Sequence[TransitionDef]:
-        symbols = self.symbols
+        self._symbols = symbols
 
         # Figure out the per-strata mapping from old symbol to new symbol
         # by matching everything up in-order.
@@ -733,7 +824,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
                     ).with_strata(strata)
                     return dataclasses.replace(x, name=name)
 
-        return [
+        self._transitions = [
             *(
                 _remap_transition(trx, strata, mapping)
                 for (strata, ipm), mapping in zip(self._strata, strata_mapping)
@@ -741,10 +832,8 @@ class CombinedCompartmentModel(BaseCompartmentModel):
             ),
             *(fix_edge_names(x) for x in self._meta_edges(symbols)),
         ]
-
-    @cached_property
-    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
-        return OrderedDict(
+        self._events = list(_as_events(self._transitions))
+        self._requirements_dict = OrderedDict(
             [
                 *(
                     (AbsoluteName(gpm_strata(strata_name), "ipm", r.name), r)
@@ -757,6 +846,31 @@ class CombinedCompartmentModel(BaseCompartmentModel):
                 ),
             ]
         )
+
+    @property
+    @override
+    def symbols(self) -> MultistrataModelSymbols:
+        """The symbols which represent parts of this model."""
+        return self._symbols
+
+    @property
+    @override
+    def transitions(self) -> Sequence[TransitionDef]:
+        """The transitions in the model."""
+        return self._transitions
+
+    @property
+    @override
+    def events(self) -> Sequence[EdgeDef]:
+        """Iterate over all events in order."""
+        # return list(_as_events(self.transitions))
+        return self._events
+
+    @property
+    @override
+    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
+        """The attributes required by this model."""
+        return self._requirements_dict
 
     @property
     @override
@@ -789,10 +903,17 @@ _N = TypeVar("_N", bound=CompartmentName | EdgeName)
 
 
 class QuantityGrouping(NamedTuple):
+    """Describes how to group simulation output quantities (events and compartments).
+    The default combines any quantity whose names match exactly. This is common in
+    multistrata models where events from several strata impact one transition.
+    You can also choose to group across strata and subscript differences.
+    Setting `strata` or `subscript` to True means those elements of quantity names
+    (if they exist) are ignored for the purposes of matching."""
+
     strata: bool
     """True to combine quantities across strata."""
     subscript: bool
-    """The to combine quantities across subscript."""
+    """True to combine quantities across subscript."""
 
     def _strip(self, name: _N) -> _N:
         if self.strata:
@@ -1031,9 +1152,13 @@ class QuantityGroup(QuantityStrategy):
         groups, _ = self.grouping.map(self.selected)
         return [g.name.full for g in groups]
 
+    def agg(self, agg: Literal["sum"]) -> "QuantityAggregation":
+        """Combine grouped quantities using the named aggregation."""
+        return QuantityAggregation(self.ipm, self.selection, self.grouping, agg)
+
     def sum(self) -> "QuantityAggregation":
         """Combine grouped quantities by adding their values."""
-        return QuantityAggregation(self.ipm, self.selection, self.grouping, "sum")
+        return self.agg("sum")
 
 
 @dataclass(frozen=True)

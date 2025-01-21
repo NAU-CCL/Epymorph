@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from functools import cached_property
 from typing import Generic, Iterator, Literal, NamedTuple, Self, TypeVar
 
 import numpy as np
@@ -84,6 +83,8 @@ class TimeFrame:
     """The first date in the simulation."""
     duration_days: int
     """The number of days for which to run the simulation."""
+    end_date: date = field(init=False)
+    """The last date included in the simulation."""
 
     def __post_init__(self):
         if self.duration_days < 1:
@@ -92,15 +93,17 @@ class TimeFrame:
                 "(Its duration in days must be at least 1.)"
             )
             raise ValueError(err)
-
-    @cached_property
-    def end_date(self) -> date:
-        """The last date included in the simulation."""
-        return self.start_date + timedelta(days=self.duration_days - 1)
+        end_date = self.start_date + timedelta(days=self.duration_days - 1)
+        object.__setattr__(self, "end_date", end_date)
 
     def is_subset(self, other: "TimeFrame") -> bool:
         """Is the given TimeFrame a subset of this one?"""
         return self.start_date <= other.start_date and self.end_date >= other.end_date
+
+    @property
+    def days(self) -> int:
+        """Alias for `duration_days`"""
+        return self.duration_days
 
     def __iter__(self) -> Iterator[date]:
         """Iterates over the sequence of dates which are part of this time frame."""
@@ -353,8 +356,9 @@ class TimeStrategy:
 
     time_frame: TimeFrame
     """The original time frame."""
-    selection: slice
-    """A slice for selection of a subset of the time frame."""
+    selection: tuple[slice, int | None]
+    """The selected subset of the time frame: described as a date slice
+    and an optional tau step index."""
     grouping: TimeGrouping | None
     """A method for grouping the time series data."""
     aggregation: TimeAggMethod | None
@@ -371,8 +375,9 @@ class TimeStrategy:
     @property
     def date_bounds(self) -> tuple[date, date]:
         """The bounds of the selection, given as the first and last date included."""
-        start = self.selection.start or 0
-        stop = self.selection.stop or self.time_frame.duration_days
+        date_slice, _ = self.selection
+        start = date_slice.start or 0
+        stop = date_slice.stop or self.time_frame.duration_days
         first_date = self.time_frame.start_date + timedelta(days=start)
         last_date = self.time_frame.start_date + timedelta(days=stop - 1)
         return (first_date, last_date)
@@ -386,50 +391,33 @@ class TimeStrategy:
         return TimeFrame.range(first, last)
 
     def selection_ticks(self, taus: int) -> slice:
-        s = self.selection
-        return slice(
-            None if s.start is None else s.start * taus,
-            None if s.stop is None else s.stop * taus,
-            None if s.step is None else s.step * taus,
-        )
-
-
-@dataclass(frozen=True)
-class TimeSelector:
-    """A utility class for selecting a subset of a time frame."""
-
-    time_frame: TimeFrame
-    """The original time frame."""
-
-    def all(self) -> "TimeSelection":
-        """Select the entirety of the time frame."""
-        return TimeSelection(self.time_frame, slice(None))
-
-    def by_slice(self, start: int, stop: int | None = None) -> "TimeSelection":
-        return TimeSelection(self.time_frame, slice(start, stop))
-
-    def _to_selection(self, other: TimeFrame) -> "TimeSelection":
-        if not self.time_frame.is_subset(other):
-            err = "When selecting part of a time frame you must specify a subset."
+        """Converts this into a slice for which ticks are selected (by index)."""
+        day, tau_step = self.selection
+        if tau_step is not None and tau_step >= taus:
+            err = (
+                "Invalid time-axis tau step selection: this model has "
+                f"{taus} tau steps but you selected step index {tau_step} "
+                "which is out of range."
+            )
             raise ValueError(err)
-        from_index = (other.start_date - self.time_frame.start_date).days
-        to_index = (other.end_date - self.time_frame.start_date).days + 1
-        return self.by_slice(from_index, to_index)
-
-    def range(self, from_date: date | str, to_date: date | str) -> "TimeSelection":
-        """Subset the time frame by providing the start and end date (inclusive)."""
-        other = TimeFrame.range(from_date, to_date)
-        return self._to_selection(other)
-
-    def rangex(self, from_date: date | str, until_date: date | str) -> "TimeSelection":
-        """Subset the time frame by providing the start and end date (exclusive)."""
-        other = TimeFrame.rangex(from_date, until_date)
-        return self._to_selection(other)
-
-    def year(self, year: int) -> "TimeSelection":
-        """Subset the time frame to a specific year."""
-        other = TimeFrame.year(year)
-        return self._to_selection(other)
+        # There are two cases:
+        if tau_step is not None:
+            # If tau_step is specified, we want to select only the ticks
+            # in the date range which correspond to that tau step.
+            start = taus * (day.start or 0) + tau_step
+            stop = None if day.stop is None else taus * day.stop + tau_step
+            step = taus
+            return slice(start, stop, step)
+        else:
+            # If tau_step is None, then we will select every tau step
+            # in the date range.
+            # This implies it is not possible to "step" over days --
+            # the time series must be contiguous w.r.t. simulation days.
+            return slice(
+                None if day.start is None else day.start * taus,
+                None if day.stop is None else day.stop * taus,
+                # day.step is ignored if it is present
+            )
 
 
 class _CanAggregate(TimeStrategy):
@@ -453,8 +441,9 @@ class TimeSelection(_CanAggregate, TimeStrategy):
 
     time_frame: TimeFrame
     """The original time frame."""
-    selection: slice
-    """A slice for selection of a subset of the time frame."""
+    selection: tuple[slice, int | None]
+    """The selected subset of the time frame: described as a date slice
+    and an optional tau step index."""
     grouping: None = field(init=False, default=None)
     """A method for grouping the time series data."""
     aggregation: None = field(init=False, default=None)
@@ -466,8 +455,39 @@ class TimeSelection(_CanAggregate, TimeStrategy):
     def group_format(self) -> Literal["tick"]:
         return "tick"
 
-    def group(self, grouping: TimeGrouping) -> "TimeGroup":
-        """Groups the time series using the specified grouping."""
+    def group(
+        self,
+        grouping: Literal["day", "week", "epiweek", "month"] | TimeGrouping,
+    ) -> "TimeGroup":
+        """
+        Groups the time series using the specified grouping.
+
+        Parameters
+        ----------
+        grouping : Literal["day", "week", "epiweek", "month"] | TimeGrouping
+            The grouping to use. You can specify a supported string value --
+            all of which act as shortcuts for common TimeGrouping instances --
+            or you can provide a TimeGrouping instance to perform custom grouping.
+
+            The shortcut values are:
+            - "day": equivalent to epymorph.time.ByDate()
+            - "week": equivalent to epymorph.time.ByWeek()
+            - "epiweek": equivalent to epymorph.time.ByEpiWeek()
+            - "month": equivalent to epymorph.time.ByMonth()
+        """
+        match grouping:
+            # String-based short-cuts:
+            case "day":
+                grouping = ByDate()
+            case "week":
+                grouping = ByWeek()
+            case "epiweek":
+                grouping = ByEpiWeek()
+            case "month":
+                grouping = ByMonth()
+            # Otherwise grouping is a TimeGrouping instance
+            case _:
+                pass
         return TimeGroup(self.time_frame, self.selection, grouping)
 
 
@@ -478,8 +498,9 @@ class TimeGroup(_CanAggregate, TimeStrategy):
 
     time_frame: TimeFrame
     """The original time frame."""
-    selection: slice
-    """A slice for selection of a subset of the time frame."""
+    selection: tuple[slice, int | None]
+    """The selected subset of the time frame: described as a date slice
+    and an optional tau step index."""
     grouping: TimeGrouping
     """A method for grouping the time series data."""
     aggregation: None = field(init=False, default=None)
@@ -499,8 +520,9 @@ class TimeAggregation(TimeStrategy):
 
     time_frame: TimeFrame
     """The original time frame."""
-    selection: slice
-    """A slice for selection of a subset of the time frame."""
+    selection: tuple[slice, int | None]
+    """The selected subset of the time frame: described as a date slice
+    and an optional tau step index."""
     grouping: TimeGrouping | None
     """A method for grouping the time series data."""
     aggregation: TimeAggMethod
@@ -511,3 +533,116 @@ class TimeAggregation(TimeStrategy):
     @override
     def group_format(self):
         return "tick" if self.grouping is None else self.grouping.group_format
+
+
+@dataclass(frozen=True)
+class TimeSelector:
+    """A utility class for selecting a subset of a time frame."""
+
+    time_frame: TimeFrame
+    """The original time frame."""
+
+    def all(self, step: int | None = None) -> TimeSelection:
+        """Select the entirety of the time frame.
+
+        Parameters
+        ----------
+        step : int, optional
+            if given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps
+        """
+        return TimeSelection(self.time_frame, (slice(None), step))
+
+    def _to_selection(
+        self,
+        other: TimeFrame,
+        step: int | None = None,
+    ) -> TimeSelection:
+        if not self.time_frame.is_subset(other):
+            err = "When selecting part of a time frame you must specify a subset."
+            raise ValueError(err)
+        from_index = (other.start_date - self.time_frame.start_date).days
+        to_index = (other.end_date - self.time_frame.start_date).days + 1
+        return TimeSelection(self.time_frame, (slice(from_index, to_index), step))
+
+    def days(
+        self,
+        from_day: int,
+        to_day: int,
+        step: int | None = None,
+    ) -> TimeSelection:
+        """Subset the time frame by providing a start and end simulation day
+        (inclusive).
+
+        Parameters
+        ----------
+        from_day : int
+            the starting simulation day of the range, as an index
+        to_day : int
+            the last included simulation day of the range, as an index
+        step : int, optional
+            if given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps
+        """
+        return TimeSelection(self.time_frame, (slice(from_day, to_day), step))
+
+    def range(
+        self,
+        from_date: date | str,
+        to_date: date | str,
+        step: int | None = None,
+    ) -> TimeSelection:
+        """Subset the time frame by providing the start and end date (inclusive).
+
+        Parameters
+        ----------
+        from_date : date | str
+            the starting date of the range, as a date object or an ISO-8601 string
+        to_date : date | str
+            the last included date of the range, as a date object or an ISO-8601 string
+        step : int, optional
+            if given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps
+        """
+        other = TimeFrame.range(from_date, to_date)
+        return self._to_selection(other, step)
+
+    def rangex(
+        self,
+        from_date: date | str,
+        until_date: date | str,
+        step: int | None = None,
+    ) -> TimeSelection:
+        """Subset the time frame by providing the start and end date (exclusive).
+
+        Parameters
+        ----------
+        from_date : date | str
+            the starting date of the range, as a date object or an ISO-8601 string
+        until_date : date | str
+            the stop date date of the range (the first date excluded)
+            as a date object or an ISO-8601 string
+        step : int, optional
+            if given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps
+        """
+        other = TimeFrame.rangex(from_date, until_date)
+        return self._to_selection(other, step)
+
+    def year(
+        self,
+        year: int,
+        step: int | None = None,
+    ) -> TimeSelection:
+        """Subset the time frame to a specific year.
+
+        Parameters
+        ----------
+        year : int
+            the year to include, from January 1st through December 31st
+        step : int, optional
+            if given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps
+        """
+        other = TimeFrame.year(year)
+        return self._to_selection(other, step)
