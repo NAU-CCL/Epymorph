@@ -1,13 +1,12 @@
 from typing import Any, Tuple
-from unittest.mock import Mock
 
 import numpy as np
 from pandas import read_csv
 
 from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
-from epymorph.data_shape import SimDimensions
-from epymorph.simulation import NamespacedAttributeResolver, SimulationFunctionClass
+from epymorph.parameter_fitting.utils.observations import Observations
+from epymorph.simulation import SimulationFunctionClass
 
 
 class DataLoader:
@@ -28,7 +27,7 @@ class DataLoader:
         """
         self.rume = rume
 
-    def load_data(self, observations: Any) -> Tuple[np.ndarray, np.ndarray]:
+    def load_data(self, observations: Observations) -> Tuple[np.ndarray, np.ndarray]:
         """
         Loads the data from a given source, either a simulation or a CSV file.
 
@@ -46,16 +45,22 @@ class DataLoader:
             - sim_data: Simulated or observed case counts, generated using a
             Poisson distribution.
         """
-        data = Mock(spec=NamespacedAttributeResolver)
-        dim = Mock(spec=SimDimensions)
-        rng = Mock(spec=np.random.Generator)
+        # data = Mock(spec=NamespacedAttributeResolver)
+        # dim = Mock(spec=SimDimensions)
+        # rng = Mock(spec=np.random.Generator)
+
+        rng = np.random.default_rng()
+        data = self.rume.evaluate_params(rng)
+        dim = self.rume.dim
 
         flu_sum = observations.source
 
         # If the source is a simulation function, evaluate it within the simulation
         # context.
         if isinstance(flu_sum, SimulationFunctionClass):
-            cases = flu_sum.evaluate_in_context(data, dim, self.rume.scope, rng)  # type: ignore
+            cases = flu_sum.with_context_internal(
+                data=data, dim=self.rume.dim, scope=self.rume.scope, rng=rng
+            ).evaluate()  # type: ignore
 
             # Flatten the multi-dimensional array to extract tuples (date, data)
             cases_flat = cases.reshape(-1)
@@ -74,9 +79,9 @@ class DataLoader:
             #     csv_df.Cases.to_numpy(),
             # )
 
-            cases = flu_sum.evaluate_in_context(
-                data, self.rume.dim, self.rume.scope, rng
-            )
+            cases = flu_sum.with_context_internal(
+                data=data, dim=self.rume.dim, scope=self.rume.scope, rng=rng
+            ).evaluate()
 
             dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
 

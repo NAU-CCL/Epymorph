@@ -11,7 +11,8 @@ import numpy as np
 
 from epymorph.parameter_fitting.filters.particle import Particle
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
-from epymorph.simulator.data import evaluate_params, initialize_rume
+
+# from epymorph.simulator.data import evaluate_params, initialize_rume
 
 
 class ParticleInitializer:
@@ -67,8 +68,10 @@ class ParticleInitializer:
         # self.rume.params
 
         rng = np.random.default_rng()
-        data = evaluate_params(self.rume, {}, rng)
-        initial_state = initialize_rume(self.rume, rng, data)
+        # data = evaluate_params(self.rume, {}, rng)
+        # initial_state = initialize_rume(self.rume, rng, data)
+        data = self.rume.evaluate_params(rng)
+        initial_state = self.rume.initialize(data, rng)
 
         particles = []
 
