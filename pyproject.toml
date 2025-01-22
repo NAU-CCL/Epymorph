@@ -57,11 +57,15 @@ dev-dependencies = [
     "ruff>=0.7.0",
     "ipykernel>=6.29.5",
     "setuptools>=74.0.0",
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
 ]
 
 [project.scripts]
 epymorph = "epymorph.__main__:main"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["setuptools>=74.0.0"]
@@ -79,6 +83,7 @@ exclude = [
   "**/.*",
   "build",
 ]
+typeCheckingMode = "standard"
 # Pyright doesn't seem to be able to handle sympy operators,
 # so until that's fixed ignore operator errors.
 reportOperatorIssue = "none"

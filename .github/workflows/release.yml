@@ -54,7 +54,7 @@ jobs:
         run: uv sync --frozen --all-extras --dev
 
       - name: Run unit tests
-        run: uv run python -m unittest discover -v -s "./epymorph" -p "*_test.py"
+        run: uv run pytest
 
       - name: Update pyproject.toml version
         run: |

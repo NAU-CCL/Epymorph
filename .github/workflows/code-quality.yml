@@ -55,4 +55,4 @@ jobs:
         run: uv run scripts/data_exports.py --check
 
       - name: Run unit tests
-        run: uv run python -m unittest discover -v -s "./epymorph" -p "*_test.py"
+        run: uv run pytest

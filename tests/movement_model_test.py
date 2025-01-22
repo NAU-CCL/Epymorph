@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring,unused-variable
 import unittest
 
 import numpy as np

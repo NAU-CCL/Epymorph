@@ -20,6 +20,8 @@ build/
 
 # Testing & dev
 .pytest_cache/
+.coverage
+htmlcov
 debug.log
 scratch
 doc/devlog/data/temp_synthetic_data.csv

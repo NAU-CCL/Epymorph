@@ -1,15 +1,38 @@
-# pylint: disable=missing-docstring
+import unittest
 from datetime import date
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from epymorph.data_type import SimDType
 from epymorph.simulation import Tick
 from epymorph.simulator.world_list import Cohort, ListWorld
-from epymorph.test import EpymorphTestCase
 
 
-class TestCohort(EpymorphTestCase):
+def _ndarray_signature(arr):
+    return f"{type(arr).__name__}: dtype({arr.dtype}) shape{repr(arr.shape)}"
+
+
+def assertNpEqual(self, a1: ArrayLike, a2: ArrayLike, msg: str | None = None) -> None:
+    """Check that two numpy ArrayLikes are equal."""
+    if not np.array_equal(a1, a2):
+        if msg is None:
+            if not isinstance(a1, np.ndarray):
+                a1 = np.asarray(a1)
+            if not isinstance(a2, np.ndarray):
+                a2 = np.asarray(a2)
+            sig1 = _ndarray_signature(a1)
+            sig2 = _ndarray_signature(a2)
+            msg = f"""\
+arrays not equal
+- a1: {sig1}
+{str(a1)}
+- a2: {sig2}
+{str(a2)}"""
+        self.fail(msg)
+
+
+class TestCohort(unittest.TestCase):
     def test_can_merge(self):
         c1 = Cohort(np.array([100]), 0, ListWorld.HOME_TICK)
         c2 = Cohort(np.array([200]), 0, ListWorld.HOME_TICK)
@@ -34,11 +57,11 @@ class TestCohort(EpymorphTestCase):
         c2 = Cohort(np.array([200, 66]), 13, 42)
         c1.merge_from(c2)
         # c1 (only compartment value) has changed...
-        self.assertNpEqual(c1.compartments, [300, 99])
+        assertNpEqual(self, c1.compartments, [300, 99])
         self.assertEqual(c1.return_location, 13)
         self.assertEqual(c1.return_tick, 42)
         # c2 remains unchanged...
-        self.assertNpEqual(c2.compartments, [200, 66])
+        assertNpEqual(self, c2.compartments, [200, 66])
         self.assertEqual(c2.return_location, 13)
         self.assertEqual(c2.return_tick, 42)
 
@@ -46,7 +69,7 @@ class TestCohort(EpymorphTestCase):
 HOME_TICK = ListWorld.HOME_TICK
 
 
-class TestListWorld(EpymorphTestCase):
+class TestListWorld(unittest.TestCase):
     def assertWorld(
         self, world_a: list[list[Cohort]], world_b: list[list[Cohort]]
     ) -> None:
@@ -151,11 +174,15 @@ class TestListWorld(EpymorphTestCase):
                 ],
             ]
         )
-        self.assertNpEqual(
-            world.get_cohort_array(0), np.array([[3], [5], [7]], dtype=SimDType)
+        assertNpEqual(
+            self,
+            world.get_cohort_array(0),
+            np.array([[3], [5], [7]], dtype=SimDType),
         )
-        self.assertNpEqual(
-            world.get_cohort_array(1), np.array([[13], [15], [17]], dtype=SimDType)
+        assertNpEqual(
+            self,
+            world.get_cohort_array(1),
+            np.array([[13], [15], [17]], dtype=SimDType),
         )
 
     def test_local_array(self):
@@ -173,8 +200,10 @@ class TestListWorld(EpymorphTestCase):
                 ],
             ]
         )
-        self.assertNpEqual(
-            world.get_local_array(), np.array([[3], [13]], dtype=SimDType)
+        assertNpEqual(
+            self,
+            world.get_local_array(),
+            np.array([[3], [13]], dtype=SimDType),
         )
 
     def test_apply_delta(self):
