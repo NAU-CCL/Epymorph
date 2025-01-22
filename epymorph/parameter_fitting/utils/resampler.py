@@ -20,7 +20,8 @@ class WeightsResampling:
         model_link (ModelLink): Represents the model link used for indexing.
 
     Methods:
-        compute_weights(current_obs_data: np.ndarray, expected_observations: list) -> np.ndarray:
+        compute_weights(current_obs_data: np.ndarray, expected_observations: list)
+        -> np.ndarray:
             Computes the weights for each particle based on the likelihood
             of the current observation.
 
@@ -46,7 +47,8 @@ class WeightsResampling:
             rume (dict): A dictionary of parameters required for simulation.
             likelihood_fn (object): An object for computing the likelihood of
             observations.
-            model_link (ModelLink): A string representing the model link used for indexing.
+            model_link (ModelLink): A string representing the model link used for
+                                    indexing.
         """
         self.N = N
         self.rume = rume

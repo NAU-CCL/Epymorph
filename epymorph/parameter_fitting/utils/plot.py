@@ -20,7 +20,8 @@ class PFPlotRenderer:
 
     def params_plot(self, parameter: str, node_index=0):
         """
-        Plot the specified parameter (e.g., 'infection rate') and its quantiles over time.
+        Plot the specified parameter (e.g., 'infection rate') and its quantiles over
+        time.
 
         Args:
             parameter (str): The estimated parameter to plot. Example: "beta".

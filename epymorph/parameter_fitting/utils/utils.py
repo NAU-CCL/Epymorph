@@ -11,13 +11,15 @@ import pandas as pd
 
 # class Utils:
 #     """
-#     A class providing utility functions for statistical calculations and data management.
+#     A class providing utility functions for statistical calculations and data
+#     management.
 
 #     Methods:
 #         quantiles(items: List[float]) -> List[float]:
 #             Computes specified quantiles for a list of items.
 
-#         save_data(observations_quantiles: Dict[str, List[float]], observations_values: Dict[str, List[float]]):
+#         save_data(observations_quantiles: Dict[str, List[float]],
+#             observations_values: Dict[str, List[float]]):
 #             Saves quantiles and average values of observations to CSV files.
 #     """
 
@@ -69,8 +71,12 @@ def save_data(observations: Dict[str, List[float]] | List, quantiles: bool) -> N
     Saves quantiles and average values of observations to CSV files.
 
     Args:
-        observations_quantiles (Dict[str, List[float]]): A dictionary where keys are parameter names and values are lists of quantiles.
-        observations_values (Dict[str, List[float]]): A dictionary where keys are parameter names and values are lists of average values.
+        observations_quantiles (Dict[str, List[float]]): A dictionary where keys are
+                                                         parameter names and values are
+                                                         lists of quantiles.
+        observations_values (Dict[str, List[float]]): A dictionary where keys are
+                                                      parameter names and values are
+                                                      lists of average values.
 
     Returns:
         None

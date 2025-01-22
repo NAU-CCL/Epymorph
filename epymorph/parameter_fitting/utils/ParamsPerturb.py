@@ -7,8 +7,8 @@ rng = np.random.default_rng()
 class Perturb:
     """
     The `Perturb` class provides methods to apply perturbation to model parameters
-    using different stochastic processes. In this case, a geometric Brownian motion (GBM)
-    is used to perturb a parameter based on volatility and time duration.
+    using different stochastic processes. In this case, a geometric Brownian motion
+    (GBM) is used to perturb a parameter based on volatility and time duration.
 
     Attributes:
         duration (int): The time duration over which the perturbation is applied.
@@ -19,7 +19,8 @@ class Perturb:
         Initializes the Perturb class with a specified duration.
 
         Args:
-            duration (int): The time duration for which the perturbation will be applied.
+            duration (int): The time duration for which the perturbation will be
+                            applied.
         """
         self.duration = duration
 
@@ -29,7 +30,8 @@ class Perturb:
 
         Args:
             param (float): The initial parameter value to be perturbed.
-            volatility (float): The volatility factor that affects the degree of perturbation.
+            volatility (float): The volatility factor that affects the degree of
+                                perturbation.
 
         Returns:
             float: The perturbed parameter after applying GBM.

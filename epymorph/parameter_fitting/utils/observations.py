@@ -6,7 +6,8 @@ from epymorph.time import TimeAggregation, TimeSelection
 
 class ModelLink:
     """
-    Contains the information needed to compute the expected observation from a simulation output.
+    Contains the information needed to compute the expected observation from a
+    simulation output.
     """
 
     def __init__(
@@ -30,8 +31,8 @@ class Observations:
 
     Attributes:
         source (object): The data source containing the observational data.
-        model_link (ModelLink): The link that maps the observations to specific compartments
-        or events in the model.
+        model_link (ModelLink): The link that maps the observations to specific
+        compartments or events in the model.
     """
 
     def __init__(self, source: object, model_link: ModelLink, likelihood: Likelihood):

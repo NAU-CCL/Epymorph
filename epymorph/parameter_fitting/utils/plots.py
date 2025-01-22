@@ -44,7 +44,8 @@ def params_plot(
         np.arange(0, len(key_quantiles)),
         key_quantiles[
             :, 3, node_index
-        ],  # Adjust the column index based on the quantile you want (e.g., 25th and 75th percentiles)
+        ],  # Adjust the column index based on the quantile you want
+        # (e.g., 25th and 75th percentiles)
         key_quantiles[
             :, 22 - 3, node_index
         ],  # Adjust as needed based on the quantiles' positions in the data
@@ -99,8 +100,10 @@ def model_fit(
     Parameters:
     - model_data: 1D array representing the model values across time.
     - true_data: 1D array representing the actual observed data across time.
-    - quantile_lower: The lower quantile (fraction of model data) as a multiplier (e.g., 0.25 for 25% lower bound).
-    - quantile_upper: The upper quantile (fraction of model data) as a multiplier (e.g., 0.75 for 75% upper bound).
+    - quantile_lower: The lower quantile (fraction of model data) as a multiplier
+                      (e.g., 0.25 for 25% lower bound).
+    - quantile_upper: The upper quantile (fraction of model data) as a multiplier
+                      (e.g., 0.75 for 75% upper bound).
     """
     # Calculate artificial lower and upper bounds based on the model data
     lower_bound = output.model_data[:, node_index] * (1 - quantile_lower)

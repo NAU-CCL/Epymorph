@@ -83,7 +83,8 @@ class EpymorphSimulation:
         # Initialize the simulation using the BasicSimulator from the Epymorph library
         sim = BasicSimulator(rume_propagate)
 
-        # Run the simulation and collect the output based on observations (dynamic params)
+        # Run the simulation and collect the output based on observations
+        # (dynamic params)
         output = sim.run(parameters)
 
         data_df = munge(

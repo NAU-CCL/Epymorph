@@ -23,11 +23,13 @@ from epymorph.parameter_fitting.utils.resampler import WeightsResampling
 
 class ParticleFilter(BaseFilter):
     """
-    A class to run the particle filter for estimating parameters in epidemiological models.
+    A class to run the particle filter for estimating parameters in epidemiological
+    models.
 
     Attributes:
         num_particles (int): Number of particles.
-        param_quantiles (Dict[str, List[np.ndarray]]): Quantiles of parameters over time.
+        param_quantiles (Dict[str, List[np.ndarray]]): Quantiles of parameters over
+                                                       time.
         param_values (Dict[str, List[np.ndarray]]): Mean values of parameters over time.
         beta_quantiles (List[float]): Quantiles of beta values.
         beta_values (List[float]): Mean values of beta.

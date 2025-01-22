@@ -130,7 +130,8 @@ class FilterSimulation:
         Runs the particle filter simulation.
 
         Returns:
-            ParticleFilterOutput: The output of the filter simulation containing results.
+            ParticleFilterOutput: The output of the filter simulation containing
+                                  results.
         """
 
         output = self.filter_type.run(
