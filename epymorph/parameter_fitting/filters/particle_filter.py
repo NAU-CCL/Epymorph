@@ -16,9 +16,10 @@ from epymorph.parameter_fitting.utils import utils
 from epymorph.parameter_fitting.utils.epymorph_simulation import EpymorphSimulation
 from epymorph.parameter_fitting.utils.observations import ModelLink
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
-from epymorph.parameter_fitting.utils.ParamsPerturb import Perturb
+from epymorph.parameter_fitting.utils.params_perturb import Perturb
 from epymorph.parameter_fitting.utils.particle_initializer import ParticleInitializer
 from epymorph.parameter_fitting.utils.resampler import WeightsResampling
+from epymorph.rume import Rume
 
 
 class ParticleFilter(BaseFilter):
@@ -54,7 +55,7 @@ class ParticleFilter(BaseFilter):
     def propagate_particles(
         self,
         particles: List[Particle],
-        rume: Any,
+        rume: Rume,
         simulation: EpymorphSimulation,
         date: str,
         duration: int,
@@ -117,7 +118,7 @@ class ParticleFilter(BaseFilter):
 
     def run(
         self,
-        rume: Any,
+        rume: Rume,
         likelihood_fn: Likelihood,
         params_space: Dict[str, EstimateParameters],
         model_link: ModelLink,
@@ -183,7 +184,6 @@ class ParticleFilter(BaseFilter):
             else:
                 duration = 1
 
-            print(t)
             # Propagate particles and update their states
             propagated_particles, expected_observations = self.propagate_particles(
                 particles,

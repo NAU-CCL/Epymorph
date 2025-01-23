@@ -11,7 +11,7 @@ Dependencies:
     - epymorph: Custom package providing filter and likelihood functionalities.
 """
 
-from typing import Any, Dict
+from typing import Dict
 
 import numpy as np
 
@@ -22,6 +22,7 @@ from epymorph.parameter_fitting.output import ParticleFilterOutput
 from epymorph.parameter_fitting.utils.data_loader import DataLoader
 from epymorph.parameter_fitting.utils.observations import ModelLink, Observations
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
+from epymorph.rume import Rume
 
 
 class FilterSimulation:
@@ -49,7 +50,7 @@ class FilterSimulation:
 
     def __init__(
         self,
-        rume: Any,
+        rume: Rume,
         filter_type: BaseFilter,
         params_space: Dict[str, EstimateParameters],
         observations: Observations,
@@ -68,7 +69,7 @@ class FilterSimulation:
         Raises:
             ValueError: If any of the input arguments are invalid.
         """
-        self.rume: Any = rume
+        self.rume: Rume = rume
         self.observations: Observations = observations
         self.likelihood_fn: Likelihood = observations.likelihood
         self.filter_type: BaseFilter = filter_type

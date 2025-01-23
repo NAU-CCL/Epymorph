@@ -1,5 +1,3 @@
-from typing import Dict
-
 import numpy as np
 
 
@@ -17,7 +15,7 @@ class Particle:
     def __init__(
         self,
         state: np.ndarray,
-        parameters: Dict[str, np.ndarray],
+        parameters: dict[str, np.ndarray],
     ) -> None:
         """
         Initializes a Particle instance.

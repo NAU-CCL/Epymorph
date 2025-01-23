@@ -5,14 +5,13 @@ Each particle is initialized with a state and corresponding
 observations based on specified parameters.
 """
 
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import numpy as np
 
 from epymorph.parameter_fitting.filters.particle import Particle
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
-
-# from epymorph.simulator.data import evaluate_params, initialize_rume
+from epymorph.rume import Rume
 
 
 class ParticleInitializer:
@@ -33,7 +32,7 @@ class ParticleInitializer:
     def __init__(
         self,
         num_particles: int,
-        rume: Any,
+        rume: Rume,
         dynamic_params: Dict[str, EstimateParameters],
     ) -> None:
         """
@@ -61,15 +60,7 @@ class ParticleInitializer:
             contains the initial state and the observations for a particle.
         """
 
-        # for _ in self.dynamic_params.keys():
-        #     new_param = NamePattern(strata="*", module="*", id=_)
-
-        # self.rume.params[new_param] = 100
-        # self.rume.params
-
         rng = np.random.default_rng()
-        # data = evaluate_params(self.rume, {}, rng)
-        # initial_state = initialize_rume(self.rume, rng, data)
         data = self.rume.evaluate_params(rng)
         initial_state = self.rume.initialize(data, rng)
 

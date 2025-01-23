@@ -6,7 +6,7 @@ from pandas import read_csv
 from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
-from epymorph.simulation import SimulationFunctionClass
+from epymorph.simulation import BaseSimulationFunction
 
 
 class DataLoader:
@@ -56,7 +56,7 @@ class DataLoader:
 
         # If the source is a simulation function, evaluate it within the simulation
         # context.
-        if isinstance(flu_sum, SimulationFunctionClass):
+        if isinstance(flu_sum, BaseSimulationFunction):
             cases = flu_sum.with_context_internal(
                 data=data, scope=self.rume.scope, rng=rng
             ).evaluate()  # type: ignore
