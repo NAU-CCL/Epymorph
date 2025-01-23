@@ -1,8 +1,5 @@
 import numpy as np
 
-# Initialize a random number generator
-rng = np.random.default_rng()
-
 
 class Perturb:
     """
@@ -24,7 +21,7 @@ class Perturb:
         """
         self.duration = duration
 
-    def gbm(self, param, volatility: float) -> float:
+    def gbm(self, param, volatility: float, rng: np.random.Generator) -> float:
         """
         Applies geometric Brownian motion (GBM) to perturb the given parameter.
 

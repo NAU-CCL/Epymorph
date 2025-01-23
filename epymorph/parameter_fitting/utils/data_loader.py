@@ -6,7 +6,6 @@ from pandas import read_csv
 from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
-from epymorph.simulation import BaseSimulationFunction
 
 
 class DataLoader:
@@ -54,21 +53,21 @@ class DataLoader:
 
         flu_sum = observations.source
 
-        # If the source is a simulation function, evaluate it within the simulation
-        # context.
-        if isinstance(flu_sum, BaseSimulationFunction):
-            cases = flu_sum.with_context_internal(
-                data=data, scope=self.rume.scope, rng=rng
-            ).evaluate()  # type: ignore
+        # # If the source is a simulation function, evaluate it within the simulation
+        # # context.
+        # if isinstance(flu_sum, BaseSimulationFunction):
+        #     cases = flu_sum.with_context_internal(
+        #         data=data, scope=self.rume.scope, rng=rng
+        #     ).evaluate()  # type: ignore
 
-            # Flatten the multi-dimensional array to extract tuples (date, data)
-            cases_flat = cases.reshape(-1)
+        #     # Flatten the multi-dimensional array to extract tuples (date, data)
+        #     cases_flat = cases.reshape(-1)
 
-            # Extract dates and case counts from the flattened array
-            dates = cases_flat["date"].flatten()
-            cases = cases_flat["data"].astype(int).flatten()
+        #     # Extract dates and case counts from the flattened array
+        #     dates = cases_flat["date"].flatten()
+        #     cases = cases_flat["data"].astype(int).flatten()
 
-            return dates, cases
+        #     return dates, cases
 
         # If the source is a CSV time series, read the data from the CSV file.
         if isinstance(flu_sum, CSVTimeSeries):

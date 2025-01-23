@@ -47,9 +47,6 @@ class ParticleFilter(BaseFilter):
         self.num_particles = num_particles
         self.param_quantiles = {}  # Stores quantiles for each parameter
         self.param_values = {}  # Stores mean values for each parameter
-        self.rng = (
-            np.random.default_rng()
-        )  # Random number generator for particle simulations
         self.resampler = resampler
 
     def propagate_particles(
@@ -61,6 +58,7 @@ class ParticleFilter(BaseFilter):
         duration: int,
         model_link: ModelLink,
         params_space: Dict[str, EstimateParameters],
+        rng: np.random.Generator,
     ) -> Tuple[List[Particle], List[np.ndarray]]:
         """
         Propagates particles through the simulation model.
@@ -97,6 +95,7 @@ class ParticleFilter(BaseFilter):
                 date,
                 duration,
                 model_link,
+                rng,
             )
 
             # Update the parameters using their dynamics
@@ -105,7 +104,9 @@ class ParticleFilter(BaseFilter):
                 dynamics = params_space[param].dynamics
                 if isinstance(dynamics, GeometricBrownianMotion):
                     new_parameters[param] = val
-                    new_parameters[param] = params_perturb.gbm(val, dynamics.volatility)
+                    new_parameters[param] = params_perturb.gbm(
+                        val, dynamics.volatility, rng
+                    )
                 else:
                     new_parameters[param] = val
 
@@ -124,6 +125,7 @@ class ParticleFilter(BaseFilter):
         model_link: ModelLink,
         dates: Any,
         cases: List[np.ndarray],
+        rng: np.random.Generator,
     ) -> ParticleFilterOutput:
         """
         Runs the particle filter to estimate parameters.
@@ -160,11 +162,10 @@ class ParticleFilter(BaseFilter):
 
         # Initialize the particles, simulation, and resampling tools
         initializer = ParticleInitializer(self.num_particles, rume, params_space)
-        particles = initializer.initialize_particles()
+        particles = initializer.initialize_particles(rng)
         simulation = EpymorphSimulation(rume, dates[0])
         weights_resampling = self.resampler(
             self.num_particles,
-            rume,
             likelihood_fn,
             model_link,
         )
@@ -193,6 +194,7 @@ class ParticleFilter(BaseFilter):
                 duration,
                 model_link,
                 params_space,
+                rng,
             )
 
             # Append model data (mean of particle states) for this time step
@@ -217,7 +219,7 @@ class ParticleFilter(BaseFilter):
                 if np.any(np.isnan(new_weights)):
                     raise ValueError("NaN values found in computed weights.")
                 particles = weights_resampling.resample_particles(
-                    propagated_particles, new_weights
+                    propagated_particles, new_weights, rng
                 )
 
             for param in particles[0].parameters.keys():
@@ -232,7 +234,7 @@ class ParticleFilter(BaseFilter):
                     h = np.sqrt(1 - a**2)
                     if len(param_cov.shape) < 2:
                         param_cov = np.broadcast_to(param_cov, shape=(1, 1))
-                    rvs = np.random.multivariate_normal(
+                    rvs = rng.multivariate_normal(
                         (1 - a) * param_mean, h**2 * param_cov, size=len(particles)
                     )
                     for i in range(len(particles)):

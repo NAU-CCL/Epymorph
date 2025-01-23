@@ -126,7 +126,7 @@ class FilterSimulation:
         if not isinstance(self.observations, Observations):
             raise ValueError("The 'observations' must be an instance of Observations.")
 
-    def run(self) -> ParticleFilterOutput:
+    def run(self, rng: np.random.Generator | None = None) -> ParticleFilterOutput:
         """
         Runs the particle filter simulation.
 
@@ -135,6 +135,9 @@ class FilterSimulation:
                                   results.
         """
 
+        if not rng:
+            rng = np.random.default_rng()
+
         output = self.filter_type.run(
             self.rume,
             self.likelihood_fn,
@@ -142,6 +145,7 @@ class FilterSimulation:
             self.model_link,
             self.dates,
             self.cases,
+            rng,
         )
 
         return output

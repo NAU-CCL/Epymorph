@@ -48,6 +48,7 @@ class EpymorphSimulation:
         date: str,
         duration: int,
         model_link: ModelLink,
+        rng: np.random.Generator,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Propagates the simulation for a specified duration and returns the final state.
@@ -85,7 +86,7 @@ class EpymorphSimulation:
 
         # Run the simulation and collect the output based on observations
         # (dynamic params)
-        output = sim.run(parameters)
+        output = sim.run(parameters, rng_factory=(lambda: rng))
 
         data_df = munge(
             output,

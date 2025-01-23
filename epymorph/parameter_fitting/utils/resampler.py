@@ -3,8 +3,6 @@ import numpy as np
 from epymorph.parameter_fitting.filters.particle import Particle
 from epymorph.parameter_fitting.utils.observations import ModelLink
 
-rng = np.random.default_rng()
-
 
 class WeightsResampling:
     """
@@ -12,8 +10,6 @@ class WeightsResampling:
 
     Attributes:
         N (int): Number of particles.
-        rume (dict): A dictionary containing simulation parameters including
-        'static_params' and 'ipm'.
         static_params (dict): Static parameters from the rume dictionary.
         likelihood_fn (object): An object responsible for computing the
         likelihood of observations.
@@ -35,7 +31,6 @@ class WeightsResampling:
     def __init__(
         self,
         N: int,
-        rume: dict,
         likelihood_fn,
         model_link: ModelLink,
     ) -> None:
@@ -44,14 +39,12 @@ class WeightsResampling:
 
         Args:
             N (int): Number of particles.
-            rume (dict): A dictionary of parameters required for simulation.
             likelihood_fn (object): An object for computing the likelihood of
             observations.
             model_link (ModelLink): A string representing the model link used for
                                     indexing.
         """
         self.N = N
-        self.rume = rume
         self.likelihood_fn = likelihood_fn
         self.model_link = model_link
 
@@ -97,7 +90,9 @@ class WeightsResampling:
 
         return np.squeeze(weights)
 
-    def resample_particles(self, particles: list, weights: np.ndarray) -> list:
+    def resample_particles(
+        self, particles: list, weights: np.ndarray, rng: np.random.Generator
+    ) -> list:
         """
         Resamples particles based on the computed weights.
 
@@ -164,7 +159,7 @@ class ResamplingByNode(WeightsResampling):
         return weights
 
     def resample_particles(
-        self, particles: list[Particle], weights: np.ndarray
+        self, particles: list[Particle], weights: np.ndarray, rng: np.random.Generator
     ) -> list:
         n_nodes = weights.shape[0]
 

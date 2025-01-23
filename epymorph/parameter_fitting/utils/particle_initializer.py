@@ -50,7 +50,7 @@ class ParticleInitializer:
         self.dynamic_params = dynamic_params
         self.rng = np.random.default_rng()
 
-    def initialize_particles(self) -> List[Particle]:
+    def initialize_particles(self, rng) -> List[Particle]:
         """
         Initializes particles with random values within the specified ranges for dynamic
         parameters.
@@ -60,7 +60,7 @@ class ParticleInitializer:
             contains the initial state and the observations for a particle.
         """
 
-        rng = np.random.default_rng()
+        # rng = np.random.default_rng()
         data = self.rume.evaluate_params(rng)
         initial_state = self.rume.initialize(data, rng)
 
@@ -68,7 +68,9 @@ class ParticleInitializer:
 
         for _ in range(self.num_particles):
             parameters = {
-                _: self.dynamic_params[_].distribution.rvs(size=self.rume.scope.nodes)  # type: ignore
+                _: self.dynamic_params[_].distribution.rvs(
+                    size=self.rume.scope.nodes, random_state=rng
+                )
                 for _ in self.dynamic_params.keys()
             }
 
