@@ -1,211 +1,148 @@
-[move-steps: per-day=3; duration=[1/3, 1/6, 1/2]]
+from functools import cached_property
 
-#################### Dynamic Attribute ####################
-[attrib: source=geo; name=population; shape=N; dtype=int;
-    description="The total population at each node."]
+import numpy as np
+from numpy.typing import NDArray
 
-[attrib: source=geo; name=centroid; shape=N; dtype=[(longitude, float), (latitude, float)];
-    description="The centroids for each node as (longitude, latitude) tuples."]
+from epymorph.data import registry
+from epymorph.data_shape import Shapes
+from epymorph.data_type import CentroidType, SimDType
+from epymorph.movement_model import EveryDay, MovementClause, MovementModel
+from epymorph.simulation import AttributeDef, Tick, TickDelta, TickIndex
+from epymorph.util import pairwise_haversine, row_normalize
 
-#################### Data for Good Numpy Array ####################
-[attrib: source=params; name= distance_0km; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
 
-[attrib: source=params; name= distance_0_10km; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
+class DynamicClause(MovementClause):
+    """The clause of the dynamic model."""
+    requirements = (
+        AttributeDef('population', int, Shapes.N,
+                     comment="The total population at each node."),
 
-[attrib: source=params; name= distance_10_100km; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
+        AttributeDef('centroid', CentroidType, Shapes.N,
+                     comment="The centroids for each node as (longitude, latitude) tuples."),
 
-[attrib: source=params; name=distance_100km; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
+        # Movement patterns for 1< km 
+        AttributeDef('distance_0km', float, Shapes.S,
+                                    comment="A timeseries of real movement data provide by META"),
+        AttributeDef('distance_phi', float, Shapes.S, default_value=40.0,
+                                    comment = 'Influences the distance that movers tend to travel'),
 
-#################### Phi values for Gavity Model ####################
-[attrib: source=params; name= distance_phi; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
+        # Movement patterns for 1 km to 10 km 
+        AttributeDef('distance_0_10km', float, Shapes.S, default_value=40.0,
+                                        comment="A node-to-node LODES 8 commuters matrix."),
+        AttributeDef('short_distance_phi', float, Shapes.S,
+                                    comment = 'Influences the distance that movers tend to travel'),
 
-[attrib: source=params; name=short_distance_phi; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
+        # Movement patterns for 10 km to 100 km 
+        AttributeDef('distance_10_100km', float, Shapes.S, default_value=40.0,
+                                        comment="A node-to-node LODES 8 commuters matrix."),
+        AttributeDef('medium_distance_phi', float, Shapes.S,
+                                    comment = 'Influences the distance that movers tend to travel'),
 
-[attrib: source=params; name=medium_distance_phi; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
+        # Movement patterns for 100 km +
+        AttributeDef('distance_100km', float, Shapes.S, default_value=40.0,
+                                        comment="A node-to-node LODES 8 commuters matrix."),
+        AttributeDef('long_distance_phi', float, Shapes.S,
+                                    comment = 'Influences the distance that movers tend to travel'),
+    )
 
-[attrib: source=params; name=long_distance_phi; shape=S; dtype=float;
-    description="Influences the distance that movers tend to travel."]
+    predicate = EveryDay()
+    leaves = TickIndex(step=0)
+    returns = TickDelta(step=1, days=0)
 
-#################### School Attribute ####################
-[attrib: source=geo; name=school_commuters; shape=NxN; dtype=int;
-    description="A node-to-node commuters matrix."]
+    @cached_property
+    def dispersal_kernal_0km(self) -> NDArray(np.float64):
+        """
+        Utilizing real data provided by Data for Good 
+        The goal of this dispersal kernal is simulate movement patterens of a given county within a state.
+        This dispersal kernal simulate the movement patterns of individual who are considered to move with a 1km radius of their home location. 
+        """
+       
+        centroid = self.data('centroid')
+        phi = self.data('distance_phi')
 
-[attrib: source=params; name=move_control; shape=S; dtype=float;
-    description="A factor which modulates the number of commuters by conducting a binomial draw with this probability and the expected commuters from the commuters matrix."]
+        distance_kernel = np.zeros_like(distance) # Could this used as a cached propety
+        distance = pairwise_haversine(centroid['longitude'], centroid['latitude']) # Could this used as a cached propety
+        distance_indices = distance < 0.621371 # 1km = 0.621371 mi
+        distance_kernel[distance_indices] = 1 / np.exp(distance[distance_indices] / phi)
 
-[attrib: source=params; name=theta; shape=S; dtype=float;
-    description="A factor which allows for randomized movement by conducting a poisson draw with this factor times the average number of commuters between two nodes from the commuters matrix."]
+        return row_normalize(distance_kernel)
+    
+    @cached_property
+    def dispersal_kernal_0_10km(self) -> NDArray(np.float64):
+        """
+        Utilizing real data provided by Data for Good 
+        The goal of this dispersal kernal is simulate movement patterens of a given county within a state.
+        This dispersal kernal simulate the movement patterns of individual who are considered to move with a <1km to 10km radius of their home location. 
+        """
+        centroid = self.data('centroid')
+        phi = self.data('short_distance_phi')
+        
+        distance_kernel = np.zeros_like(distance)
+        distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+        short_distance_indices = (distance >= 0.621371) & (distance <= 6.21371) # 10km = 6.21371 mi
+        distance_kernel[short_distance_indices] = 1 / np.exp(distance[short_distance_indices] / phi)
 
-[predef: function = 
-def movement():
-    ############################## School Movement #############################
-    commuters = geo['school_commuters']
-    commuters_average = (commuters + commuters.T) // 2
-    commuters_by_node = np.sum(commuters, axis=1)
-    commuting_probability = row_normalize(commuters)
+        return row_normalize(distance_kernel)
 
-    ############################## Distance cutoffs #############################
-    centroid = geo['centroid']
-    distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+    @cached_property
+    def dispersal_kernal_10_100km(self) -> NDArray(np.float64):
+        """
+        Utilizing real data provided by Data for Good 
+        The goal of this dispersal kernal is simulate movement patterens of a given county within a state.
+        This dispersal kernal simulate the movement patterns of individual who are considered to move with a 10km to 100km  of their home location. 
+        """
+        centroid = self.data('centroid')
+        phi = self.data('medium_distance_phi')
 
-    distance_indices = distance < 0.621371 # 1km = 0.621371 mi
-    short_distance_indices = (distance >= 0.621371) & (distance <= 6.21371) # 10km = 6.21371 mi
-    medium_distance_indices = (distance > 6.21371) & (distance < 62.1371) # 100km = 62.1371 mi
-    long_distance_indices = distance >= 62.1371 # 100+ km = 62.1371
+        distance_kernel = np.zeros_like(distance)
+        distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+        medium_distance_indices = (distance > 6.21371) & (distance < 62.1371) # 100km = 62.1371 mi
+        distance_kernel[medium_distance_indices] = 1 / np.exp(distance[medium_distance_indices] / phi)
 
-    ############################### Dispersal Kernel ##############################
-    distance_kernel = np.zeros_like(distance)
-    distance_1km_10km_kernel = np.zeros_like(distance)
-    distance_10km_100km_kernel = np.zeros_like(distance)
-    distance_100km_kernel = np.zeros_like(distance)
+        return row_normalize(distance_kernel)
 
-    distance_kernel[distance_indices] = 1 / np.exp(distance[distance_indices] / params['distance_phi'])
-    distance_1km_10km_kernel[short_distance_indices] = 1 / np.exp(distance[short_distance_indices] / params['short_distance_phi'])
-    distance_10km_100km_kernel[medium_distance_indices] = 1 / np.exp(distance[medium_distance_indices] / params['medium_distance_phi'])
-    distance_100km_kernel[long_distance_indices] = 1 / np.exp(distance[long_distance_indices] / params['long_distance_phi'])
+    @cached_property
+    def dispersal_kernal_100km(self) -> NDArray(np.float64):
+        """
+        Utilizing real data provided by Data for Good 
+        The goal of this dispersal kernal is simulate movement patterens of a given county within a state.
+        This dispersal kernal simulate the movement patterns of individual who are considered to move with a 100km+ radius of their home location. 
+        """
+        centroid = self.data('centroid')
+        phi = self.data('long_distance_phi')
+        
+        distance_kernel = np.zeros_like(distance)
+        distance = pairwise_haversine(centroid['longitude'], centroid['latitude'])
+        long_distance_indices = distance >= 62.1371 # 100+ km = 62.1371
+        distance_kernel[long_distance_indices] = 1 / np.exp(distance[long_distance_indices] / phi)
 
-    distance_kernel = row_normalize(distance_kernel)
-    distance_1km_10km_kernel = row_normalize(distance_1km_10km_kernel)
-    distance_10km_100km_kernel = row_normalize(distance_10km_100km_kernel)
-    distance_100km_kernel = row_normalize(distance_100km_kernel)
+        return row_normalize(distance_kernel)
 
-    return {
-        'commuters_average': commuters_average, 
-        'commuters_by_node': commuters_by_node,
-        'commuting_probability': commuting_probability,
-        'distance_kernel': distance_kernel,
-        'distance_1km_10km_kernel': distance_1km_10km_kernel,
-        'distance_10km_100km_kernel': distance_10km_100km_kernel,
-        'distance_100km_kernel': distance_100km_kernel,
-    }
-]
+    
+    def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+        pop = self.data('population')
 
-# Commuter movement
-[mtype: days=[M,T,W,Th,F]; leave=1; duration=0d; return=2; function=
-def commuters(t):
-    typical = predef['commuters_by_node']
-    actual = np.binomial(typical, params['move_control'])
-    return np.multinomial(actual, predef['commuting_probability'])
-]
+        n_commuters_0km = np.floor(pop * self.data('distance_0km')).astype(SimDType)
+        n_commuters_0_10km = np.floor(pop * self.data('distance_0_10km')).astype(SimDType)
+        n_commuters_10_100km = np.floor(pop * self.data('distance_10_100km')).astype(SimDType)
+        n_commuters_100km = np.floor(pop * self.data('distance_100km')).astype(SimDType)
 
-# Random dispersers movement
-[mtype: days=all; leave=1; duration=0d; return=2; function=
-def dispersers(t):
-    avg = predef['commuters_average']
-    return np.poisson(avg * params['theta'])
-]
+        mover_0km = self.rng.multinomial(n_commuters_0km, self.dispersal_kernal_0km) 
+        mover_0_10km = self.rng.multinomial(n_commuters_0_10km, self.dispersal_kernal_0km) 
+        mover_10_100km = self.rng.multinomial(n_commuters_10_100km, self.dispersal_kernal_0km) 
+        mover_100km = self.rng.multinomial(n_commuters_100km, self.dispersal_kernal_0km) 
 
-# Commuter movement: assume 10% of the population are commuters
-[mtype: days=[M,T,W,Th,F]; leave=2; duration=0d; return=3; function=
-def dynamic_1km_movement(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_0km = params['distance_0km'][t.day]
+        return mover_0km, mover_0_10km, mover_10_100km, mover_100km
 
-    #################### Fraction of the population moving ####################
-    staying_at_home = np.floor(population * distance_0km)
+@registry.mm('dynamic')
+class Dynamic(MovementModel):
+    """
+    The dynamic MM descibes the movement patterns of individual using celluar ping location 
+    provide by Data for Good who's parent company is META. The goal of this movement model is
+    to simulate movement patterns of individual on a day to day basis with provided information. 
+    These individual travel to another location for 1/3 of the day, and the return home for the 
+    remaining 2/3 of the day.
 
-    n_commuters = staying_at_home.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_kernel'])
-]
-
-[mtype: days=[M,T,W,Th,F]; leave=2; duration=0d; return=3; function=
-def dynamic_1km_10km_movement(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_0_10km = params['distance_0_10km'][t.day]
-
-    #################### Fraction of the population moving ####################
-    short_distance_movers = np.floor(population * distance_0_10km)
-
-    n_commuters = short_distance_movers.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_1km_10km_kernel'])
-]
-
-[mtype: days=[M,T,W,Th,F]; leave=2; duration=0d; return=3; function=
-def dynamic_10km_100km_movement(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_10_100km = params['distance_10_100km'][t.day]
-
-    #################### Fraction of the population moving ####################
-    medium_distance_movers = np.floor(population * distance_10_100km)
-
-    n_commuters = medium_distance_movers.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_10km_100km_kernel'])
-]
-
-[mtype: days=[M,T,W,Th,F]; leave=2; duration=0d; return=3; function=
-def dynamic_100km_movement(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_100km = params['distance_100km'][t.day]
-
-    #################### Fraction of the population moving ####################
-    long_distance_movers = np.floor(population * distance_100km)
-
-    n_commuters = long_distance_movers.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_100km_kernel'])
-]
-
-########################### Weekend Movement #############################
-
-# Commuter movement: assume 10% of the population are commuters
-[mtype: days=[Sa,Su]; leave=1; duration=0d; return=3; function=
-def dynamic_1km_movement_Weekend(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_0km = params['distance_0km'][t.day]
-
-    #################### Fraction of the population moving ####################
-    staying_at_home = np.floor(population * distance_0km)
-
-    n_commuters = staying_at_home.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_kernel'])
-]
-
-[mtype: days=[Sa,Su]; leave=1; duration=0d; return=3; function=
-def dynamic_1km_10km_movement_Weekend(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_0_10km = params['distance_0_10km'][t.day]
-
-    #################### Fraction of the population moving ####################
-    short_distance_movers = np.floor(population * distance_0_10km)
-
-    n_commuters = short_distance_movers.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_1km_10km_kernel'])
-]
-
-[mtype: days=[Sa,Su]; leave=1; duration=0d; return=3; function=
-def dynamic_10km_100km_movement_Weekend(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_10_100km = params['distance_10_100km'][t.day]
-
-    #################### Fraction of the population moving ####################
-    medium_distance_movers = np.floor(population * distance_10_100km)
-
-    n_commuters = medium_distance_movers.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_10km_100km_kernel'])
-]
-
-[mtype: days=[Sa,Su]; leave=1; duration=0d; return=3; function=
-def dynamic_100km_movement_Weekend(t):
-    population = geo['population']
-    ########################### Params Numpy Array #############################
-    distance_100km = params['distance_100km'][t.day]
-
-    #################### Fraction of the population moving ####################
-    long_distance_movers = np.floor(population * distance_100km)
-
-    n_commuters = long_distance_movers.astype(SimDType)
-    return np.multinomial(n_commuters, predef['distance_100km_kernel'])
-]
+    """
+    steps = (1 / 3, 2 / 3)
+    clauses = (DynamicClause(),)
