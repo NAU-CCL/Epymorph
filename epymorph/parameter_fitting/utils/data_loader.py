@@ -85,4 +85,27 @@ class DataLoader:
 
             return dates, cases
 
+        if isinstance(flu_sum, InfluenzaHospitalizationSumState):
+            # csv_df = read_csv(flu_sum.file_path)
+            # dates, cases = (
+            #     csv_df.Date.to_numpy(),
+            #     csv_df.Cases.to_numpy(),
+            # )
+
+            result = np.array(
+                flu_sum.with_context_internal(
+                    data=data,
+                    time_frame=self.rume.time_frame,
+                    scope=self.rume.scope,
+                    rng=rng,
+                ).evaluate()
+            )
+
+            dates = result["date"][:, 0]
+            cases = result["data"]
+
+            # dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
+
+            return dates, cases
+
         raise ValueError("Unsupported data source provided.")

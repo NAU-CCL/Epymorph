@@ -103,7 +103,6 @@ class ParticleFilter(BaseFilter):
             for param, val in particle.parameters.items():
                 dynamics = params_space[param].dynamics
                 if isinstance(dynamics, GeometricBrownianMotion):
-                    new_parameters[param] = val
                     new_parameters[param] = params_perturb.gbm(
                         val, dynamics.volatility, rng
                     )
