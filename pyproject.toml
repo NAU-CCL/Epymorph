@@ -66,6 +66,9 @@ epymorph = "epymorph.__main__:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = [
+    "--import-mode=importlib",
+]
 
 [build-system]
 requires = ["setuptools>=74.0.0"]
@@ -107,6 +110,7 @@ select = [
   "W", # (no extra whitespace)
   "S", # (security rules)
   "BLE", # (catching Exception is too general)
+  "PT", # (pytest)
 
   # NOTE: rules I'd like to enable some day are below, commented out
   # "ERA", # (no commented code)
@@ -136,5 +140,6 @@ ignore = [
 [tool.ruff.lint.extend-per-file-ignores]
 # Allow star imports in tests and notebooks.
 # I001 (import sort) appears to be broken in notebooks.
-"**/*_test.py" = ["F403", "F405"]
+# S101 we are allowed to use `assert` in pytest
+"tests/**/*_test.py" = ["F403", "F405", "S101"]
 "*.ipynb" = ["F403", "F405", "I001"]
