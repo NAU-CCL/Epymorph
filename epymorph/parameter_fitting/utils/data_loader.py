@@ -7,6 +7,25 @@ from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
 
+_CDC_ADRIOS = [
+    CovidCasesPer100k,  # noqa: F405
+    CovidHospitalizationsPer100k,  # noqa: F405
+    CovidHospitalizationAvgFacility,  # noqa: F405
+    CovidHospitalizationSumFacility,  # noqa: F405
+    InfluenzaHosptializationAvgFacility,  # noqa: F405
+    InfluenzaHospitalizationSumFacility,  # noqa: F405
+    CovidHospitalizationAvgState,  # noqa: F405
+    CovidHospitalizationSumState,  # noqa: F405
+    InfluenzaHospitalizationAvgState,  # noqa: F405
+    InfluenzaHospitalizationSumState,  # noqa: F405
+    FullCovidVaccinations,  # noqa: F405
+    OneDoseCovidVaccinations,  # noqa: F405
+    CovidBoosterDoses,  # noqa: F405
+    CovidDeathsCounty,  # noqa: F405
+    CovidDeathsState,  # noqa: F405
+    InfluenzaDeathsState,  # noqa: F405
+]
+
 
 class DataLoader:
     """
@@ -51,7 +70,7 @@ class DataLoader:
         rng = np.random.default_rng()
         data = self.rume.evaluate_params(rng)
 
-        flu_sum = observations.source
+        source = observations.source
 
         # # If the source is a simulation function, evaluate it within the simulation
         # # context.
@@ -70,14 +89,14 @@ class DataLoader:
         #     return dates, cases
 
         # If the source is a CSV time series, read the data from the CSV file.
-        if isinstance(flu_sum, CSVTimeSeries):
-            csv_df = read_csv(flu_sum.file_path)
+        if isinstance(source, CSVTimeSeries):
+            csv_df = read_csv(source.file_path)
             # dates, cases = (
             #     csv_df.Date.to_numpy(),
             #     csv_df.Cases.to_numpy(),
             # )
 
-            cases = flu_sum.with_context_internal(
+            cases = source.with_context_internal(
                 data=data, scope=self.rume.scope, rng=rng
             ).evaluate()
 
@@ -85,15 +104,9 @@ class DataLoader:
 
             return dates, cases
 
-        if isinstance(flu_sum, InfluenzaHospitalizationSumState):
-            # csv_df = read_csv(flu_sum.file_path)
-            # dates, cases = (
-            #     csv_df.Date.to_numpy(),
-            #     csv_df.Cases.to_numpy(),
-            # )
-
+        if any([isinstance(source, cdc_adrio) for cdc_adrio in _CDC_ADRIOS]):
             result = np.array(
-                flu_sum.with_context_internal(
+                source.with_context_internal(
                     data=data,
                     time_frame=self.rume.time_frame,
                     scope=self.rume.scope,

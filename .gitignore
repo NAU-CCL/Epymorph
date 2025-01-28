@@ -22,3 +22,4 @@ build/
 .pytest_cache/
 debug.log
 scratch
+doc/devlog/data/temp_synthetic_data.csv
