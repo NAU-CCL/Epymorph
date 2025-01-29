@@ -22,20 +22,26 @@ class EpymorphSimulation:
     """
     A class to initialize and run simulations using the Epymorph library.
 
-    Attributes:
-        rume (dict): A dictionary containing the model and simulation parameters,
+    Attributes
+    ----------
+    rume : dict
+        A dictionary containing the model and simulation parameters,
         such as 'rume', 'static_params', 'scope', etc.
-        start_date (str): The start date for the simulation in 'YYYY-MM-DD' format.
+    start_date : str
+        The start date for the simulation in 'YYYY-MM-DD' format.
     """
 
     def __init__(self, rume: Any, start_date: str):
         """
         Initializes the EpymorphSimulation class with the provided parameters.
 
-        Args:
-            rume (dict): A dictionary of parameters required for the simulation,
+        Parameters
+        ----------
+        rume : dict)
+            A dictionary of parameters required for the simulation,
             including model settings.
-            start_date (str): The start date for the simulation in 'YYYY-MM-DD' format.
+        start_date : str
+            The start date for the simulation in 'YYYY-MM-DD' format.
         """
         self.rume = rume
         self.start_date = start_date
@@ -53,19 +59,28 @@ class EpymorphSimulation:
         """
         Propagates the simulation for a specified duration and returns the final state.
 
-        Args:
-            state (np.ndarray): Initial state of the system (e.g., SIRH compartments)
+        Parameters
+        ----------
+        state : np.ndarray
+            Initial state of the system (e.g., SIRH compartments)
             to be used in the simulation.
-            observations (dict): A dictionary containing the parameter values
+        observations : dict)
+            A dictionary containing the parameter values
             (such as beta, gamma, etc.) to update in the simulation.
-            rume (Any): The model configuration to run the simulation.
-            date (str): The starting date for the simulation in 'YYYY-MM-DD' format.
-            duration (int): The number of days the simulation should be propagated.
-            model_link (ModelLink): Specifies which model output to return, either from
+        rume : Any
+            The model configuration to run the simulation.
+        date : str
+            The starting date for the simulation in 'YYYY-MM-DD' format.
+        duration : int
+            The number of days the simulation should be propagated.
+        model_link : ModelLink
+            Specifies which model output to return, either from
             compartments or events.
 
-        Returns:
-            Tuple[np.ndarray, np.ndarray]: A tuple containing the final compartment
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            A tuple containing the final compartment
             state and the processed state (either the sum or last day).
         """
 

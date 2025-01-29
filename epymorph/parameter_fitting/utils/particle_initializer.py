@@ -18,15 +18,22 @@ class ParticleInitializer:
     """
     A class to initialize particles for the particle filter.
 
-    Attributes:
-        num_particles (int): Number of particles.
-        num_population (int): Number of population.
-        seed_size (int): Seed size.
-        static_params (Dict[str, Any]): Static parameters.
-        dynamic_params (Dict[str, Tuple[float, float]]):
+    Attributes
+    ----------
+    num_particles : int
+        Number of particles.
+    num_population : int
+        Number of population.
+    seed_size : int
+        Seed size.
+    static_params : Dict[str, Any])
+        Static parameters.
+    dynamic_params : Dict[str, Tuple[float, float]]
         Dynamic parameters with their ranges.
-        geo (Dict[str, Any]): Geographical information.
-        nodes (int): Number of nodes in the geographical network.
+    geo : Dict[str, Any]
+        Geographical information.
+    nodes : int
+        Number of nodes in the geographical network.
     """
 
     def __init__(
@@ -38,11 +45,15 @@ class ParticleInitializer:
         """
         Initializes the ParticleInitializer with the given parameters.
 
-        Args:
-            num_particles (int): Number of particles.
-            rume (Dict[str, Any]): Dictionary containing model parameters including
+        Parameters
+        ----------
+        num_particles : int
+            Number of particles.
+        rume : Dict[str, Any]
+            Dictionary containing model parameters including
             population size, seed size, static parameters, and geographical information.
-            dynamic_params (Dict[str, Tuple[float, float]]): Dictionary containing
+        dynamic_params : Dict[str, Tuple[float, float]]
+            Dictionary containing
             dynamic parameters and their ranges.
         """
         self.num_particles = num_particles
@@ -55,8 +66,10 @@ class ParticleInitializer:
         Initializes particles with random values within the specified ranges for dynamic
         parameters.
 
-        Returns:
-            List[Tuple[np.ndarray, Dict[str, float]]]: A list of tuples where each tuple
+        Returns
+        -------
+        List[Tuple[np.ndarray, Dict[str, float]]]
+            A list of tuples where each tuple
             contains the initial state and the observations for a particle.
         """
 

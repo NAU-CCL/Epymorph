@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Type
 
 import numpy as np
 import pandas as pd
@@ -27,22 +27,34 @@ class ParticleFilter(BaseFilter):
     A class to run the particle filter for estimating parameters in epidemiological
     models.
 
-    Attributes:
-        num_particles (int): Number of particles.
-        param_quantiles (Dict[str, List[np.ndarray]]): Quantiles of parameters over
-                                                       time.
-        param_values (Dict[str, List[np.ndarray]]): Mean values of parameters over time.
-        beta_quantiles (List[float]): Quantiles of beta values.
-        beta_values (List[float]): Mean values of beta.
-        rng (np.random.Generator): Random number generator for simulations.
+    Attributes
+    ----------
+    num_particles : int
+        Number of particles.
+    param_quantiles : Dict[str, List[np.ndarray]]
+        Quantiles of parameters over time.
+    param_values : Dict[str, List[np.ndarray]]
+        Mean values of parameters over time.
+    beta_quantiles : List[float]
+        Quantiles of beta values.
+    beta_values : List[float]
+        Mean values of beta.
+    rng : np.random.Generator
+        Random number generator for simulations.
     """
 
-    def __init__(self, num_particles: int, resampler=WeightsResampling) -> None:
+    def __init__(
+        self, num_particles: int, resampler: Type[WeightsResampling] = WeightsResampling
+    ) -> None:
         """
         Initializes the ParticleFilter with the given number of particles.
 
-        Args:
-            num_particles (int): Number of particles for the particle filter.
+        Parameters
+        ----------
+        num_particles : int
+            Number of particles for the particle filter.
+        resampler : Type[WeightsResampling], optional
+            The resampler to use in the particle filter.
         """
         self.num_particles = num_particles
         self.param_quantiles = {}  # Stores quantiles for each parameter
@@ -63,21 +75,28 @@ class ParticleFilter(BaseFilter):
         """
         Propagates particles through the simulation model.
 
-        Args:
-            particles (List[Particle]): List of Particle objects.
-            rume (Any): Model parameters including population size and geographical
-            information.
-            simulation (EpymorphSimulation): The simulation object that propagates the
-            particles.
-            date (str): Current date in simulation format.
-            duration (int): Duration of propagation.
-            model_link (ModelLink): Link to the model to use for prediction.
-            params_space (Dict[str, EstimateParameters]): Parameter space for the model.
+        Parameters
+        ----------
+        particles : List[Particle]
+            List of Particle objects.
+        rume : Any
+            Model parameters including population size and geographical information.
+        simulation : EpymorphSimulation
+            The simulation object that propagates the particles.
+        date : str
+            Current date in simulation format.
+        duration : int
+            Duration of propagation.
+        model_link : ModelLink
+            Link to the model to use for prediction.
+        params_space : Dict[str, EstimateParameters]
+            Parameter space for the model.
 
-        Returns:
-            Tuple:
-                - A list of propagated Particle objects with updated observations.
-                - A list of expected observations for each particle after propagation.
+        Returns
+        -------
+        Tuple
+            - A list of propagated Particle objects with updated observations.
+            - A list of expected observations for each particle after propagation.
         """
         propagated_particles = []
         expected_observations = []
@@ -129,21 +148,28 @@ class ParticleFilter(BaseFilter):
         """
         Runs the particle filter to estimate parameters.
 
-        Args:
-            rume (Any): Model parameters, including population size and
-            geographical information.
-            likelihood_fn (Any): The likelihood function to use in the resampling.
-            params_space (Dict[str, EstimateParameters]): Dynamic parameters and
-            their ranges.
-            model_link (Any): Link to the model used for simulations.
-            index (int): Index of the parameter to estimate.
-            dates (List[str]): List of dates for which observations are available.
-            cases (List[int]): Observed case data over time.
+        Parameters
+        ----------
+        rume : Any
+            Model parameters, including population size and geographical information.
+        likelihood_fn : Any
+            The likelihood function to use in the resampling.
+        params_space : Dict[str, EstimateParameters]
+            Dynamic parameters and their ranges.
+        model_link : Any
+            Link to the model used for simulations.
+        index : int
+            Index of the parameter to estimate.
+        dates : List[str]
+            List of dates for which observations are available.
+        cases : List[int]
+            Observed case data over time.
 
-        Returns:
-            ParticleFilterOutput: The result of the particle filter containing
-            parameter estimates,
-                quantiles, and model data.
+        Returns
+        -------
+        ParticleFilterOutput
+            The result of the particle filter containing parameter estimates, quantiles,
+            and model data.
         """
         start_time = time.time()
         dates = pd.to_datetime(dates)

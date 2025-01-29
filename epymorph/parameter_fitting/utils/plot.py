@@ -23,8 +23,10 @@ class PFPlotRenderer:
         Plot the specified parameter (e.g., 'infection rate') and its quantiles over
         time.
 
-        Args:
-            parameter (str): The estimated parameter to plot. Example: "beta".
+        Parameters
+        ----------
+        parameter : str
+            The estimated parameter to plot. Example: "beta".
         """
 
         key = parameter  # Assuming 'infection rate' corresponds to 'beta' in the data
@@ -84,11 +86,16 @@ class PFPlotRenderer:
         """
         Plot model data, true data, and artificial quantiles (lower and upper bounds).
 
-        Parameters:
-        - model_data (array-like): Model values across time.
-        - true_data (array-like): True observed values across time.
-        - quantile_lower (float): The lower quantile (fraction of model data).
-        - quantile_upper (float): The upper quantile (fraction of model data).
+        Parameters
+        ----------
+        model_data : array-like
+            Model values across time.
+        true_data : array-like
+            True observed values across time.
+        quantile_lower : float)
+            The lower quantile (fraction of model data).
+        quantile_upper : float
+            The upper quantile (fraction of model data).
         """
         # Calculate artificial lower and upper bounds based on the model data
         lower_bound = self.output.model_data[:, node_index] * (1 - quantile_lower)

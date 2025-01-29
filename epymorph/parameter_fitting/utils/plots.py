@@ -152,3 +152,46 @@ def model_fit(
 
     # Show the plot
     plt.show()
+
+
+# key = "beta"
+# key_quantiles = np.array(output.param_quantiles[key])
+
+# obs = np.arange(0, len(key_quantiles))
+# pct10 = key_quantiles[:, 3, 0]
+# pct25 = key_quantiles[:, 6, 0]
+# pct50 = key_quantiles[:, 11, 0]
+# pct75 = key_quantiles[:, 22 - 6, 0]
+# pct90 = key_quantiles[:, 22 - 3, 0]
+
+# plt.fill_between(
+#     obs,
+#     pct10,
+#     pct90,
+#     facecolor="blue",
+#     alpha=0.2,
+#     label="Quantile Range (10th to 90th)",
+# )
+# plt.fill_between(
+#     obs,
+#     pct25,
+#     pct75,
+#     facecolor="blue",
+#     alpha=0.4,
+#     label="Quantile Range (25th to 75th)",
+# )
+
+# plt.plot(
+#     obs,
+#     pct50,
+#     color="red",
+#     label="Median (50th Percentile)",
+# )
+
+# plt.title(f"{key} quantiles over time".title())
+# plt.xlabel("Time")
+# plt.ylabel(f"{key}")
+# plt.legend(loc="upper left")
+# plt.grid(True)
+
+# plt.show()

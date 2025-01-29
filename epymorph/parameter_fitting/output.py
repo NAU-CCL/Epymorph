@@ -8,6 +8,10 @@ from epymorph.parameter_fitting.utils.plot import PlotWrapper
 
 @dataclass(frozen=True)
 class ParticleFilterOutput(PlotWrapper):
+    """
+    Encapulates the particle filter output.
+    """
+
     num_particles: int
     parameters_estimated: list
     duration: str

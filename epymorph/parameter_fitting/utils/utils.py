@@ -29,11 +29,15 @@ def quantiles(items: np.ndarray) -> List[float]:
     """
     Computes specified quantiles for a list of items.
 
-    Args:
-        items (List[float]): A list of numerical values.
+    Parameters
+    ----------
+    items : List[float]
+        A list of numerical values.
 
-    Returns:
-        List[float]: A list of quantile values for the provided items.
+    Returns
+    -------
+    List[float]
+        A list of quantile values for the provided items.
     """
     qtl_mark = 1.00 * np.array(
         [
@@ -70,16 +74,13 @@ def save_data(observations: Dict[str, List[float]] | List, quantiles: bool) -> N
     """
     Saves quantiles and average values of observations to CSV files.
 
-    Args:
-        observations_quantiles (Dict[str, List[float]]): A dictionary where keys are
-                                                         parameter names and values are
-                                                         lists of quantiles.
-        observations_values (Dict[str, List[float]]): A dictionary where keys are
-                                                      parameter names and values are
-                                                      lists of average values.
-
-    Returns:
-        None
+    Parameters
+    ----------
+    observations_quantiles : Dict[str, List[float]]
+        A dictionary where keys are parameter names and values are lists of quantiles.
+    observations_values : Dict[str, List[float]]
+        A dictionary where keys are parameter names and values are lists of
+        average values.
     """
     if isinstance(observations, dict):
         for key in observations.keys():

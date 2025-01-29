@@ -32,16 +32,20 @@ class DataLoader:
     A class responsible for loading data from various sources such as
     simulations or CSV files.
 
-    Attributes:
-        rume (Any): Simulation parameters and configuration.
+    Attributes
+    ----------
+    rume : Any
+        Simulation parameters and configuration.
     """
 
     def __init__(self, rume: Any) -> None:
         """
         Initializes the DataLoader with simulation parameters.
 
-        Args:
-            rume (Any): Simulation runtime environment or configuration object.
+        Parameters
+        ----------
+        rume : Any
+            Simulation runtime environment or configuration object.
         """
         self.rume = rume
 
@@ -53,15 +57,18 @@ class DataLoader:
         1. SimulationFunctionClass: Data is generated via simulation in the context.
         2. CSVTimeSeries: Data is loaded from a CSV file.
 
-        Args:
-            observations (Any): The data source, either a simulation function or
-            a CSV time series.
+        Parameters
+        ----------
+        observations : Any
+            The data source, either a simulation function or a CSV time series.
 
-        Returns:
-            Tuple[np.ndarray, np.ndarray]: A tuple containing two numpy arrays:
-            - dates: An array of date values.
-            - sim_data: Simulated or observed case counts, generated using a
-            Poisson distribution.
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            A tuple containing two numpy arrays:
+                - dates: An array of date values.
+                - sim_data: Simulated or observed case counts, generated using a Poisson
+                distribution.
         """
         # data = Mock(spec=NamespacedAttributeResolver)
         # dim = Mock(spec=SimDimensions)

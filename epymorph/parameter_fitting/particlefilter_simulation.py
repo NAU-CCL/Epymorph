@@ -33,19 +33,28 @@ class FilterSimulation:
     filter type, parameter space, and observational data. It validates these inputs
     and runs the particle filter to produce simulation results.
 
-    Attributes:
-        rume (Any): Runtime environment for the simulation,
-        containing necessary parameters.
-        likelihood_fn (Likelihood): The likelihood function to be used.
-        filter_type (BaseFilter): Type of filter (e.g., Particle Filter) to be
+    Attributes
+    ----------
+    rume : Any
+        Runtime environment for the simulation,
+    containing necessary parameters.
+    likelihood_fn : Likelihood
+        The likelihood function to be used.
+    filter_type : BaseFilter
+        Type of filter (e.g., Particle Filter) to be
         used in the simulation.
-        params_space (Dict[str, EstimateParameters]): Parameter estimates
+    params_space : Dict[str, EstimateParameters]
+        Parameter estimates
         for the simulation.
-        observations (Observations): Observational data to be used in the simulation.
-        dataloader (DataLoader): A DataLoader instance to handle loading of
+    observations : Observations
+        Observational data to be used in the simulation.
+    dataloader : DataLoader
+        A DataLoader instance to handle loading of
         observational data.
-        dates (np.ndarray): The dates associated with the observational data.
-        cases (np.ndarray): The case counts associated with the observational data.
+    dates : np.ndarray
+        The dates associated with the observational data.
+    cases : np.ndarray
+        The case counts associated with the observational data.
     """
 
     def __init__(
@@ -58,16 +67,23 @@ class FilterSimulation:
         """
         Initializes the FilterSimulation class.
 
-        Args:
-            rume (Any): Runtime environment or configuration for the epidemiological
+        Parameters
+        ----------
+        rume : Any
+            Runtime environment or configuration for the epidemiological
             model.
-            filter_type (BaseFilter): Type of particle filter to be used.
-            params_space (Dict[str, EstimateParameters]): A dictionary containing
+        filter_type : BaseFilter
+            Type of particle filter to be used.
+        params_space : Dict[str, EstimateParameters]
+            A dictionary containing
             parameter estimates.
-            observations (Observations): An object containing observational data.
+        observations : Observations
+            An object containing observational data.
 
-        Raises:
-            ValueError: If any of the input arguments are invalid.
+        Raises
+        ------
+        ValueError
+            If any of the input arguments are invalid.
         """
         self.rume: Rume = rume
         self.observations: Observations = observations
@@ -100,8 +116,10 @@ class FilterSimulation:
         Ensures that the likelihood function, filter type, model link, and parameter
         estimates are valid.
 
-        Raises:
-            ValueError: If any required field is missing or if the types are incorrect.
+        Raises
+        ------
+        ValueError
+            If any required field is missing or if the types are incorrect.
         """
         # Validate likelihood function
         if not isinstance(self.likelihood_fn, Likelihood):
@@ -130,9 +148,11 @@ class FilterSimulation:
         """
         Runs the particle filter simulation.
 
-        Returns:
-            ParticleFilterOutput: The output of the filter simulation containing
-                                  results.
+        Returns
+        -------
+        ParticleFilterOutput
+            The output of the filter simulation containing
+            results.
         """
 
         if not rng:

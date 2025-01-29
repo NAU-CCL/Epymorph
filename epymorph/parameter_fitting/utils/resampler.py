@@ -8,24 +8,17 @@ class WeightsResampling:
     """
     A class for computing and resampling weights in particle filtering.
 
-    Attributes:
-        N (int): Number of particles.
-        static_params (dict): Static parameters from the rume dictionary.
-        likelihood_fn (object): An object responsible for computing the
+    Attributes
+    ----------
+    N : int
+        Number of particles.
+    static_params : dict
+        Static parameters from the rume dictionary.
+    likelihood_fn : object
+        An object responsible for computing the
         likelihood of observations.
-        model_link (ModelLink): Represents the model link used for indexing.
-
-    Methods:
-        compute_weights(current_obs_data: np.ndarray, expected_observations: list)
-        -> np.ndarray:
-            Computes the weights for each particle based on the likelihood
-            of the current observation.
-
-        resample_particles(particles: list, weights: np.ndarray) -> list:
-            Resamples particles based on the computed weights.
-
-        update_weights(weights: np.ndarray, new_weights: np.ndarray) -> list:
-            Updates the weights by multiplying current weights with new weights.
+    model_link : ModelLink
+        Represents the model link used for indexing.
     """
 
     def __init__(
@@ -37,12 +30,16 @@ class WeightsResampling:
         """
         Initializes the WeightsResampling class with provided parameters.
 
-        Args:
-            N (int): Number of particles.
-            likelihood_fn (object): An object for computing the likelihood of
+        Parameters
+        ----------
+        N : int
+            Number of particles.
+        likelihood_fn : object
+            An object for computing the likelihood of
             observations.
-            model_link (ModelLink): A string representing the model link used for
-                                    indexing.
+        model_link : ModelLink
+            A string representing the model link used for
+            indexing.
         """
         self.N = N
         self.likelihood_fn = likelihood_fn
@@ -55,13 +52,18 @@ class WeightsResampling:
         Computes the weights for each particle based on the likelihood of the
         current observation.
 
-        Args:
-            current_obs_data (np.ndarray): The current observation data.
-            expected_observations (list): A list of expected observations corresponding
-                                          to each particle.
+        Parameters
+        ----------
+        current_obs_data : np.ndarray
+            The current observation data.
+        expected_observations : list
+            A list of expected observations corresponding
+            to each particle.
 
-        Returns:
-            np.ndarray: An array of computed weights normalized to sum to 1.
+        Returns
+        -------
+        np.ndarray
+            An array of computed weights normalized to sum to 1.
         """
         log_weights = np.zeros(self.N)
 
@@ -96,13 +98,18 @@ class WeightsResampling:
         """
         Resamples particles based on the computed weights.
 
-        Args:
-            particles (list): A list of particles, where each particle is a tuple of
+        Parameters
+        ----------
+        particles : list
+            A list of particles, where each particle is a tuple of
             state and observations.
-            weights (np.ndarray): An array of weights corresponding to each particle.
+        weights : np.ndarray
+            An array of weights corresponding to each particle.
 
-        Returns:
-            list: A list of resampled particles.
+        Returns
+        -------
+        list
+            A list of resampled particles.
         """
         resampled_particles = []
         resampled_indices = rng.choice(
@@ -115,13 +122,18 @@ class WeightsResampling:
         """
         Updates the weights by multiplying current weights with new weights.
 
-        Args:
-            weights (np.ndarray): The current weights of the particles.
-            new_weights (np.ndarray): The new weights to be multiplied with the
+        Parameters
+        ----------
+        weights : np.ndarray
+            The current weights of the particles.
+        new_weights : np.ndarray
+            The new weights to be multiplied with the
             current weights.
 
-        Returns:
-            list: A list of updated weights.
+        Returns
+        -------
+        list
+            A list of updated weights.
         """
         updated_weights = [
             new_weight * weight for weight, new_weight in zip(weights, new_weights)
