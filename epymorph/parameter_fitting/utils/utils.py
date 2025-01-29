@@ -1,7 +1,8 @@
 """
 This module provides utility functions for quantile computation and data saving.
 
-It contains the Utils class with static methods to calculate quantiles and save data to CSV files.
+It contains the Utils class with static methods to calculate quantiles and save data to
+CSV files.
 """
 
 from typing import Dict, List

@@ -95,7 +95,8 @@ def model_fit(
     node_index=0,
 ):
     """
-    Plot model data, true data, and artificially created quantiles (lower and upper bounds).
+    Plot model data, true data, and artificially created quantiles (lower and upper
+    bounds).
 
     Parameters:
     - model_data: 1D array representing the model values across time.

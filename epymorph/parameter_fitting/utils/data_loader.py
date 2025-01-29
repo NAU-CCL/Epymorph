@@ -3,6 +3,7 @@ from typing import Any, Tuple
 import numpy as np
 from pandas import read_csv
 
+from epymorph.adrio.adrio import Adrio
 from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
@@ -70,62 +71,35 @@ class DataLoader:
                 - sim_data: Simulated or observed case counts, generated using a Poisson
                 distribution.
         """
-        # data = Mock(spec=NamespacedAttributeResolver)
-        # dim = Mock(spec=SimDimensions)
-        # rng = Mock(spec=np.random.Generator)
-
         rng = np.random.default_rng()
         data = self.rume.evaluate_params(rng)
-
         source = observations.source
 
-        # # If the source is a simulation function, evaluate it within the simulation
-        # # context.
-        # if isinstance(flu_sum, BaseSimulationFunction):
-        #     cases = flu_sum.with_context_internal(
-        #         data=data, scope=self.rume.scope, rng=rng
-        #     ).evaluate()  # type: ignore
+        if isinstance(source, Adrio):
+            if isinstance(source, CSVTimeSeries):
+                csv_df = read_csv(source.file_path)
 
-        #     # Flatten the multi-dimensional array to extract tuples (date, data)
-        #     cases_flat = cases.reshape(-1)
-
-        #     # Extract dates and case counts from the flattened array
-        #     dates = cases_flat["date"].flatten()
-        #     cases = cases_flat["data"].astype(int).flatten()
-
-        #     return dates, cases
-
-        # If the source is a CSV time series, read the data from the CSV file.
-        if isinstance(source, CSVTimeSeries):
-            csv_df = read_csv(source.file_path)
-            # dates, cases = (
-            #     csv_df.Date.to_numpy(),
-            #     csv_df.Cases.to_numpy(),
-            # )
-
-            cases = source.with_context_internal(
-                data=data, scope=self.rume.scope, rng=rng
-            ).evaluate()
-
-            dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
-
-            return dates, cases
-
-        if any([isinstance(source, cdc_adrio) for cdc_adrio in _CDC_ADRIOS]):
-            result = np.array(
-                source.with_context_internal(
-                    data=data,
-                    time_frame=self.rume.time_frame,
-                    scope=self.rume.scope,
-                    rng=rng,
+                cases = source.with_context_internal(
+                    data=data, scope=self.rume.scope, rng=rng
                 ).evaluate()
-            )
 
-            dates = result["date"][:, 0]
-            cases = result["data"]
+                dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
 
-            # dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
+                return dates, cases
 
-            return dates, cases
+            if any([isinstance(source, cdc_adrio) for cdc_adrio in _CDC_ADRIOS]):
+                result = np.array(
+                    source.with_context_internal(
+                        data=data,
+                        time_frame=self.rume.time_frame,
+                        scope=self.rume.scope,
+                        rng=rng,
+                    ).evaluate()
+                )
+
+                dates = result["date"][:, 0]
+                cases = result["data"]
+
+                return dates, cases
 
         raise ValueError("Unsupported data source provided.")

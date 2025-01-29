@@ -1,6 +1,7 @@
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.parameter_fitting.likelihoods.base_likelihood import Likelihood
+from epymorph.simulation import BaseSimulationFunction
 from epymorph.time import TimeAggregation, TimeSelection
 
 
@@ -31,20 +32,25 @@ class Observations:
 
     Attributes
     ----------
-    source : object
+    source : BaseSimulationFunction
         The data source containing the observational data.
     model_link : ModelLink
         The link that maps the observations to specific
         compartments or events in the model.
     """
 
-    def __init__(self, source: object, model_link: ModelLink, likelihood: Likelihood):
+    def __init__(
+        self,
+        source: BaseSimulationFunction,
+        model_link: ModelLink,
+        likelihood: Likelihood,
+    ):
         """
         Initializes the Observations class.
 
         Parameters
         ----------
-        source : object
+        source : BaseSimulationFunction
             The data source, which could be any object type containing the observation
             data (e.g., a DataFrame, list, etc.).
         model_link : ModelLink
