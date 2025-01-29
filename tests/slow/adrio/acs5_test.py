@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from epymorph.adrio import acs5, commuting_flows
@@ -129,3 +130,23 @@ def test_attributes(time_frame: TimeFrame, scope: GeoScope, skip: tuple[str, ...
             )
         except NumpyTypeError as e:
             pytest.fail(f"attribute '{name}': {e}")
+
+
+def test_population_values():
+    # values retrieved manually from Census table B01001
+    expected = [71714, 126442, 142254, 4412779, 110271]
+
+    actual = (
+        acs5.Population()
+        .with_context(
+            scope=CountyScope.in_counties(
+                ["04001", "04003", "04005", "04013", "04017"],
+                year=2020,
+            ),
+            time_frame=TimeFrame.year(2020),
+        )
+        .evaluate()
+    )
+
+    assert match.dtype(int)(actual.dtype)
+    assert np.array_equal(expected, actual)
