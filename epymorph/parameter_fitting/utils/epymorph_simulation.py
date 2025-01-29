@@ -7,12 +7,13 @@ and propagating simulations based on provided observations and parameters.
 """
 
 import dataclasses
-from typing import Any, Tuple
+from typing import Tuple
 
 import numpy as np
 
 from epymorph import initializer
 from epymorph.parameter_fitting.utils.observations import ModelLink
+from epymorph.rume import Rume
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
 from epymorph.tools.data import munge  # noqa: F403
@@ -24,22 +25,21 @@ class EpymorphSimulation:
 
     Attributes
     ----------
-    rume : dict
+    rume : Rume
         A dictionary containing the model and simulation parameters,
         such as 'rume', 'static_params', 'scope', etc.
     start_date : str
         The start date for the simulation in 'YYYY-MM-DD' format.
     """
 
-    def __init__(self, rume: Any, start_date: str):
+    def __init__(self, rume: Rume, start_date: str):
         """
         Initializes the EpymorphSimulation class with the provided parameters.
 
         Parameters
         ----------
-        rume : dict)
-            A dictionary of parameters required for the simulation,
-            including model settings.
+        rume : Rume
+            Parameters required for the simulation, including model settings.
         start_date : str
             The start date for the simulation in 'YYYY-MM-DD' format.
         """
@@ -50,7 +50,7 @@ class EpymorphSimulation:
         self,
         state: np.ndarray,
         parameters: dict,
-        rume: Any,
+        rume: Rume,
         date: str,
         duration: int,
         model_link: ModelLink,
@@ -67,7 +67,7 @@ class EpymorphSimulation:
         observations : dict)
             A dictionary containing the parameter values
             (such as beta, gamma, etc.) to update in the simulation.
-        rume : Any
+        rume : Rume
             The model configuration to run the simulation.
         date : str
             The starting date for the simulation in 'YYYY-MM-DD' format.

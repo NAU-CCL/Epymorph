@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Tuple
 
 import numpy as np
 from pandas import read_csv
@@ -7,6 +7,7 @@ from epymorph.adrio.adrio import Adrio
 from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
+from epymorph.rume import Rume
 
 _CDC_ADRIOS = [
     CovidCasesPer100k,  # noqa: F405
@@ -35,17 +36,17 @@ class DataLoader:
 
     Attributes
     ----------
-    rume : Any
+    rume : Rume
         Simulation parameters and configuration.
     """
 
-    def __init__(self, rume: Any) -> None:
+    def __init__(self, rume: Rume) -> None:
         """
         Initializes the DataLoader with simulation parameters.
 
         Parameters
         ----------
-        rume : Any
+        rume : Rume
             Simulation runtime environment or configuration object.
         """
         self.rume = rume

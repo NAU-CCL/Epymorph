@@ -49,7 +49,7 @@ class ParticleInitializer:
         ----------
         num_particles : int
             Number of particles.
-        rume : Dict[str, Any]
+        rume : Rume
             Dictionary containing model parameters including
             population size, seed size, static parameters, and geographical information.
         dynamic_params : Dict[str, Tuple[float, float]]

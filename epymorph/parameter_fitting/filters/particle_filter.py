@@ -79,7 +79,7 @@ class ParticleFilter(BaseFilter):
         ----------
         particles : List[Particle]
             List of Particle objects.
-        rume : Any
+        rume : Rume
             Model parameters including population size and geographical information.
         simulation : EpymorphSimulation
             The simulation object that propagates the particles.
@@ -150,7 +150,7 @@ class ParticleFilter(BaseFilter):
 
         Parameters
         ----------
-        rume : Any
+        rume : Rume
             Model parameters, including population size and geographical information.
         likelihood_fn : Any
             The likelihood function to use in the resampling.

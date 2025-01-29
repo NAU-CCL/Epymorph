@@ -35,7 +35,7 @@ class FilterSimulation:
 
     Attributes
     ----------
-    rume : Any
+    rume : Rume
         Runtime environment for the simulation,
     containing necessary parameters.
     likelihood_fn : Likelihood
@@ -69,7 +69,7 @@ class FilterSimulation:
 
         Parameters
         ----------
-        rume : Any
+        rume : Rume
             Runtime environment or configuration for the epidemiological
             model.
         filter_type : BaseFilter
@@ -85,11 +85,11 @@ class FilterSimulation:
         ValueError
             If any of the input arguments are invalid.
         """
-        self.rume: Rume = rume
-        self.observations: Observations = observations
-        self.likelihood_fn: Likelihood = observations.likelihood
-        self.filter_type: BaseFilter = filter_type
-        self.params_space: Dict[str, EstimateParameters] = params_space
+        self.rume = rume
+        self.observations = observations
+        self.likelihood_fn = observations.likelihood
+        self.filter_type = filter_type
+        self.params_space = params_space
 
         # Initialize simulation-related attributes
         self.ipm = self.rume.ipm
