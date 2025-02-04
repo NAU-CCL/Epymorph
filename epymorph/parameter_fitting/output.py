@@ -3,11 +3,9 @@ from typing import Dict, List
 
 import numpy as np
 
-from epymorph.parameter_fitting.utils.plot import PlotWrapper
-
 
 @dataclass(frozen=True)
-class ParticleFilterOutput(PlotWrapper):
+class ParticleFilterOutput:
     """
     Encapulates the particle filter output.
     """
