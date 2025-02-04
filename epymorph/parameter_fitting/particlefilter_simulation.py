@@ -44,8 +44,7 @@ class FilterSimulation:
         Type of filter (e.g., Particle Filter) to be
         used in the simulation.
     params_space : Dict[str, EstimateParameters]
-        Parameter estimates
-        for the simulation.
+        Parameter estimates for the simulation.
     observations : Observations
         Observational data to be used in the simulation.
     dataloader : DataLoader
@@ -75,8 +74,7 @@ class FilterSimulation:
         filter_type : BaseFilter
             Type of particle filter to be used.
         params_space : Dict[str, EstimateParameters]
-            A dictionary containing
-            parameter estimates.
+            The parameters to estimate.
         observations : Observations
             An object containing observational data.
 

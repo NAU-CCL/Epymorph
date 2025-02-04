@@ -28,7 +28,7 @@ class ParticleInitializer:
         Seed size.
     static_params : Dict[str, Any])
         Static parameters.
-    dynamic_params : Dict[str, Tuple[float, float]]
+    dynamic_params : Dict[str, EstimateParameters]
         Dynamic parameters with their ranges.
     geo : Dict[str, Any]
         Geographical information.
@@ -50,11 +50,10 @@ class ParticleInitializer:
         num_particles : int
             Number of particles.
         rume : Rume
-            Dictionary containing model parameters including
-            population size, seed size, static parameters, and geographical information.
-        dynamic_params : Dict[str, Tuple[float, float]]
-            Dictionary containing
-            dynamic parameters and their ranges.
+            Model parameters including population size, seed size, static parameters,
+            and geographical information.
+        dynamic_params : Dict[str, EstimateParameters]
+            Dynamic parameters and their ranges.
         """
         self.num_particles = num_particles
         self.rume = rume

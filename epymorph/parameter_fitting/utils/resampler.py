@@ -1,7 +1,6 @@
 import numpy as np
 
 from epymorph.parameter_fitting.filter.particle import Particle
-from epymorph.parameter_fitting.utils.observations import ModelLink
 
 
 class WeightsResampling:
@@ -17,15 +16,12 @@ class WeightsResampling:
     likelihood_fn : object
         An object responsible for computing the
         likelihood of observations.
-    model_link : ModelLink
-        Represents the model link used for indexing.
     """
 
     def __init__(
         self,
         N: int,
         likelihood_fn,
-        model_link: ModelLink,
     ) -> None:
         """
         Initializes the WeightsResampling class with provided parameters.
@@ -37,13 +33,9 @@ class WeightsResampling:
         likelihood_fn : object
             An object for computing the likelihood of
             observations.
-        model_link : ModelLink
-            A string representing the model link used for
-            indexing.
         """
         self.N = N
         self.likelihood_fn = likelihood_fn
-        self.model_link = model_link
 
     def compute_weights(
         self, current_obs_data: np.ndarray, expected_observations: list
@@ -57,7 +49,7 @@ class WeightsResampling:
         current_obs_data : np.ndarray
             The current observation data.
         expected_observations : list
-            A list of expected observations corresponding
+            The expected observations corresponding
             to each particle.
 
         Returns
@@ -99,10 +91,9 @@ class WeightsResampling:
         Parameters
         ----------
         particles : list
-            A list of particles, where each particle is a tuple of
-            state and observations.
+            Particles which represent the estimated state of the system.
         weights : np.ndarray
-            An array of weights corresponding to each particle.
+            Wights corresponding to each particle.
 
         Returns
         -------

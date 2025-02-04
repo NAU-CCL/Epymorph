@@ -51,8 +51,7 @@ class Observations:
         Parameters
         ----------
         source : BaseSimulationFunction
-            The data source, which could be any object type containing the observation
-            data (e.g., a DataFrame, list, etc.).
+            The data source.
         model_link : ModelLink
             Represents the connection between the observational data and the model's
             compartment or event.

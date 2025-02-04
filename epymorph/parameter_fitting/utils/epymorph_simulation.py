@@ -26,8 +26,7 @@ class EpymorphSimulation:
     Attributes
     ----------
     rume : Rume
-        A dictionary containing the model and simulation parameters,
-        such as 'rume', 'static_params', 'scope', etc.
+        Contains the model and simulation parameters,
     start_date : str
         The start date for the simulation in 'YYYY-MM-DD' format.
     """

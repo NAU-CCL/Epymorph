@@ -24,8 +24,7 @@ from epymorph.rume import Rume
 
 class ParticleFilter(BaseFilter):
     """
-    A class to run the particle filter for estimating parameters in epidemiological
-    models.
+    A class to run the particle filter for estimating parameters.
 
     Attributes
     ----------
@@ -35,10 +34,8 @@ class ParticleFilter(BaseFilter):
         Quantiles of parameters over time.
     param_values : Dict[str, List[np.ndarray]]
         Mean values of parameters over time.
-    beta_quantiles : List[float]
-        Quantiles of beta values.
-    beta_values : List[float]
-        Mean values of beta.
+    resampler: Type[WeightsResampling]
+        The resampling method to use.
     rng : np.random.Generator
         Random number generator for simulations.
     """
@@ -57,8 +54,8 @@ class ParticleFilter(BaseFilter):
             The resampler to use in the particle filter.
         """
         self.num_particles = num_particles
-        self.param_quantiles = {}  # Stores quantiles for each parameter
-        self.param_values = {}  # Stores mean values for each parameter
+        self.param_quantiles = {}
+        self.param_values = {}
         self.resampler = resampler
 
     def propagate_particles(
@@ -78,19 +75,19 @@ class ParticleFilter(BaseFilter):
         Parameters
         ----------
         particles : List[Particle]
-            List of Particle objects.
+            The particles which represent the current estimate of the filter.
         rume : Rume
             Model parameters including population size and geographical information.
         simulation : EpymorphSimulation
-            The simulation object that propagates the particles.
+            The object which propagates the particles.
         date : str
-            Current date in simulation format.
+            Current date.
         duration : int
-            Duration of propagation.
+            Duration of propagation in days.
         model_link : ModelLink
-            Link to the model to use for prediction.
+            Information used to match the model output with the observations.
         params_space : Dict[str, EstimateParameters]
-            Parameter space for the model.
+            The parameters to be estimated and the methods used to estimate them.
 
         Returns
         -------
@@ -152,16 +149,16 @@ class ParticleFilter(BaseFilter):
         ----------
         rume : Rume
             Model parameters, including population size and geographical information.
-        likelihood_fn : Any
+        likelihood_fn : Likelihood
             The likelihood function to use in the resampling.
         params_space : Dict[str, EstimateParameters]
-            Dynamic parameters and their ranges.
-        model_link : Any
+            The parameters to estimate and the methods to estimate them.
+        model_link : ModelLink
             Link to the model used for simulations.
         index : int
             Index of the parameter to estimate.
-        dates : List[str]
-            List of dates for which observations are available.
+        dates : Any
+            Dates for which observations are available.
         cases : List[int]
             Observed case data over time.
 
@@ -192,7 +189,6 @@ class ParticleFilter(BaseFilter):
         weights_resampling = self.resampler(
             self.num_particles,
             likelihood_fn,
-            model_link,
         )
 
         # Prepare containers for storing results

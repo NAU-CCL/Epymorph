@@ -61,8 +61,8 @@ class DataLoader:
 
         Parameters
         ----------
-        observations : Any
-            The data source, either a simulation function or a CSV time series.
+        observations : Observations
+            The data source.
 
         Returns
         -------
