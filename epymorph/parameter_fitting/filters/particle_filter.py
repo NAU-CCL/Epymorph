@@ -5,13 +5,13 @@ import numpy as np
 import pandas as pd
 
 from epymorph.parameter_fitting.dynamics.dynamics import (
-    Calvetti,
     GeometricBrownianMotion,
 )
 from epymorph.parameter_fitting.filters.base_filters import BaseFilter
 from epymorph.parameter_fitting.filters.particle import Particle
-from epymorph.parameter_fitting.likelihoods.base_likelihood import Likelihood
+from epymorph.parameter_fitting.likelihood.base_likelihood import Likelihood
 from epymorph.parameter_fitting.output import ParticleFilterOutput
+from epymorph.parameter_fitting.perturbation.perturbation import Calvetti
 from epymorph.parameter_fitting.utils import utils
 from epymorph.parameter_fitting.utils.epymorph_simulation import EpymorphSimulation
 from epymorph.parameter_fitting.utils.observations import ModelLink
@@ -248,14 +248,14 @@ class ParticleFilter(BaseFilter):
                 )
 
             for param in particles[0].parameters.keys():
-                dynamics = params_space[param].dynamics
-                if isinstance(dynamics, Calvetti):
+                perturbation = params_space[param].perturbation
+                if isinstance(perturbation, Calvetti):
                     param_vals = np.array(
                         [particle.parameters[param] for particle in particles]
                     )
                     param_mean = np.mean(np.log(param_vals), axis=0)
                     param_cov = np.cov(np.log(param_vals), rowvar=False)
-                    a = dynamics.a
+                    a = perturbation.a
                     h = np.sqrt(1 - a**2)
                     if len(param_cov.shape) < 2:
                         param_cov = np.broadcast_to(param_cov, shape=(1, 1))

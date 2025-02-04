@@ -2,6 +2,7 @@ from typing import Literal
 
 from epymorph.parameter_fitting.distributions.base_distribution import Distribution
 from epymorph.parameter_fitting.dynamics.dynamics import Dynamics
+from epymorph.parameter_fitting.perturbation.perturbation import Perturbation
 
 
 class EstimateParameters:
@@ -16,17 +17,30 @@ class EstimateParameters:
         The dynamics of the parameter.
     """
 
-    def __init__(self, distribution: Distribution, dynamics: Dynamics):
+    def __init__(
+        self,
+        distribution: Distribution,
+        dynamics: Dynamics | None,
+        perturbation: Perturbation | None,
+    ):
         self.distribution = distribution
         self.dynamics = dynamics
+        self.perturbation = perturbation
 
     @classmethod
-    def TimeVarying(cls, distribution: Distribution, dynamics: Dynamics):
-        return cls(distribution, dynamics=dynamics)
+    def TimeVarying(
+        cls,
+        distribution: Distribution,
+        dynamics: Dynamics,
+        perturbation: Perturbation | None = None,
+    ):
+        return cls(distribution, dynamics=dynamics, perturbation=perturbation)
 
     @classmethod
-    def Static(cls, distribution: Distribution, dynamics: Dynamics):
-        return cls(distribution, dynamics=dynamics)
+    def Static(
+        cls, distribution: Distribution, perturbation: Perturbation | None = None
+    ):
+        return cls(distribution, dynamics=None, perturbation=perturbation)
 
 
 class PropagateParams:
