@@ -26,10 +26,16 @@ class Likelihood(ABC):
 class Poisson(Likelihood):
     """
     Encapsulatees the Poisson likelihood function for observational data.
+
+    Attributes
+    ----------
+    jitter : float
+        A small number added to the expected value to avoid the degenerate case when the
+        expected value is zero.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, jitter: float = 0.0001):
+        self.jitter = jitter
 
     def compute(self, observed, expected):
         """
@@ -42,4 +48,4 @@ class Poisson(Likelihood):
         expected : int
             The data predicted by the model.
         """
-        return poisson.pmf(observed, expected)
+        return poisson.pmf(observed, expected + self.jitter)

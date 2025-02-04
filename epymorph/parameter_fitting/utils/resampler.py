@@ -71,9 +71,7 @@ class WeightsResampling:
             expected = expected_observations[i]
             try:
                 log_weights[i] = np.sum(
-                    np.log(
-                        self.likelihood_fn.compute(current_obs_data, expected + 0.0001)
-                    )
+                    np.log(self.likelihood_fn.compute(current_obs_data, expected))
                 )
             except (ValueError, FloatingPointError):
                 log_weights[i] = -np.inf
@@ -153,9 +151,7 @@ class ResamplingByNode(WeightsResampling):
                 expected = expected_observations[i_particle][i_node]
                 try:
                     log_weights[i_node, i_particle] = np.log(
-                        self.likelihood_fn.compute(
-                            current_obs_data[i_node], expected + 0.0001
-                        )
+                        self.likelihood_fn.compute(current_obs_data[i_node], expected)
                     )
                 except (ValueError, FloatingPointError):
                     log_weights[i_node, i_particle] = -np.inf
