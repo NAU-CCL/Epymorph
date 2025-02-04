@@ -1,8 +1,8 @@
 from typing import Literal
 
-from epymorph.parameter_fitting.distributions.base_distribution import Distribution
-from epymorph.parameter_fitting.dynamics.dynamics import Dynamics
-from epymorph.parameter_fitting.perturbation.perturbation import Perturbation
+from epymorph.parameter_fitting.distribution import Distribution
+from epymorph.parameter_fitting.dynamics import Dynamics
+from epymorph.parameter_fitting.perturbation import Perturbation
 
 
 class EstimateParameters:

@@ -1,7 +1,27 @@
+from abc import ABC, abstractmethod
+
 import numpy as np
 import scipy as sp
 
-from epymorph.parameter_fitting.distributions.base_distribution import Distribution
+
+class Distribution(ABC):
+    """
+    Abstract base class for initial distributions for parameter estimation.
+    """
+
+    @abstractmethod
+    def rvs(self, size: int, random_state: np.random.Generator):
+        """
+        Draws random variates.
+
+        Parameters
+        ----------
+        size : int
+            Number of random variates to draw.
+        random_state : np.random.Generator
+            The random number generator to use.
+        """
+        raise NotImplementedError("Subclasses should implement this method.")
 
 
 class Uniform(Distribution):

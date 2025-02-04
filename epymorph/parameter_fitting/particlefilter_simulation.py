@@ -16,8 +16,8 @@ from typing import Dict
 import numpy as np
 
 from epymorph import *  # noqa: F403
-from epymorph.parameter_fitting.filters.base_filters import BaseFilter
-from epymorph.parameter_fitting.likelihood.base_likelihood import Likelihood
+from epymorph.parameter_fitting.filter.base_filter import BaseFilter
+from epymorph.parameter_fitting.likelihood import Likelihood
 from epymorph.parameter_fitting.output import ParticleFilterOutput
 from epymorph.parameter_fitting.utils.data_loader import DataLoader
 from epymorph.parameter_fitting.utils.observations import ModelLink, Observations

@@ -4,14 +4,14 @@ from typing import Any, Dict, List, Tuple, Type
 import numpy as np
 import pandas as pd
 
-from epymorph.parameter_fitting.dynamics.dynamics import (
+from epymorph.parameter_fitting.dynamics import (
     GeometricBrownianMotion,
 )
-from epymorph.parameter_fitting.filters.base_filters import BaseFilter
-from epymorph.parameter_fitting.filters.particle import Particle
-from epymorph.parameter_fitting.likelihood.base_likelihood import Likelihood
+from epymorph.parameter_fitting.filter.base_filter import BaseFilter
+from epymorph.parameter_fitting.filter.particle import Particle
+from epymorph.parameter_fitting.likelihood import Likelihood
 from epymorph.parameter_fitting.output import ParticleFilterOutput
-from epymorph.parameter_fitting.perturbation.perturbation import Calvetti
+from epymorph.parameter_fitting.perturbation import Calvetti
 from epymorph.parameter_fitting.utils import utils
 from epymorph.parameter_fitting.utils.epymorph_simulation import EpymorphSimulation
 from epymorph.parameter_fitting.utils.observations import ModelLink

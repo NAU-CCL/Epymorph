@@ -1,6 +1,6 @@
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.geography.scope import GeoAggregation, GeoSelection
-from epymorph.parameter_fitting.likelihood.base_likelihood import Likelihood
+from epymorph.parameter_fitting.likelihood import Likelihood
 from epymorph.simulation import BaseSimulationFunction
 from epymorph.time import TimeAggregation, TimeSelection
 

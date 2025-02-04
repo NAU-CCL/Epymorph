@@ -1,6 +1,6 @@
 import numpy as np
 
-from epymorph.parameter_fitting.filters.particle import Particle
+from epymorph.parameter_fitting.filter.particle import Particle
 from epymorph.parameter_fitting.utils.observations import ModelLink
 
 
