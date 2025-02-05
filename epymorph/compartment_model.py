@@ -561,10 +561,10 @@ class CompartmentModelClass(ABCMeta):
         dct["compartments"] = tuple(cmps)
 
         # Check transitions... we have to instantiate the class.
-        cls = super().__new__(cls, name, bases, dct)
-        instance = cls()
+        new_cls = super().__new__(cls, name, bases, dct)
+        instance = new_cls()
         validate_compartment_model(instance)
-        return cls
+        return new_cls
 
     def __call__(cls, *args, **kwargs):
         # Perform our initialization on all newly created instances.

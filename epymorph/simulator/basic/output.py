@@ -10,7 +10,7 @@ from typing import Generic, Literal, TypeVar
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from typing_extensions import deprecated, override
+from typing_extensions import override
 
 from epymorph.data_type import SimDType
 from epymorph.geography.scope import GeoScope
@@ -179,19 +179,3 @@ class Output(
             ),
             axis=1,  # stick them together side-by-side
         )
-
-    @property
-    @deprecated("Use `compartments`", category=None)
-    def prevalence(self) -> NDArray[SimDType]:
-        """Deprecated alias for compartments."""
-        return self.compartments
-
-    @property
-    @deprecated("Use `events`", category=None)
-    def incidence(self) -> NDArray[SimDType]:
-        return self.events
-
-    @property
-    @deprecated("Use `events_per_day`", category=None)
-    def incidence_per_day(self) -> NDArray[SimDType]:
-        return self.events_per_day
