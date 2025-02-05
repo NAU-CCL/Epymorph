@@ -53,8 +53,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 
+      # NOTE: we're running "pytest tests/fast" here as a temporary measure --
+      # at present, certain data sources are not reliably available,
+      # and so rather than stop our ability to make releases, we'll skip
+      # tests which might rely on external data (besides our S3 cache).
       - name: Run unit tests
-        run: uv run pytest
+        run: uv run pytest tests/fast
 
       - name: Update pyproject.toml version
         run: |
