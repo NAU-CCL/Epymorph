@@ -4,7 +4,7 @@ from numpy.typing import NDArray
 from epymorph.attribute import ModuleNamespace
 from epymorph.data_type import SimDType
 from epymorph.database import DataResolver
-from epymorph.error import MmSimException
+from epymorph.error import MmSimError
 from epymorph.event import EventBus, OnMovementClause, OnMovementFinish, OnMovementStart
 from epymorph.movement_model import MovementClause
 from epymorph.rume import Rume
@@ -151,7 +151,7 @@ class MovementExecutor:
                     f"Error from applying clause '{clause.__class__.__name__}': "
                     "see exception trace"
                 )
-                raise MmSimException(msg) from e
+                raise MmSimError(msg) from e
 
             available_movers = self._world.get_local_array()
             clause_event = calculate_travelers(

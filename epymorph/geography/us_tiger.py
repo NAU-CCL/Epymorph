@@ -22,7 +22,7 @@ from typing_extensions import override
 
 from epymorph.adrio.adrio import ProgressCallback
 from epymorph.cache import (
-    CacheMiss,
+    CacheMissError,
     check_file_in_cache,
     load_bundle_from_cache,
     load_or_fetch_url,
@@ -88,6 +88,8 @@ Not needed if we didn't have to filter out 4 territories. (60, 66, 69, 78)
 _TIGER_URL = "https://www2.census.gov/geo/tiger"
 
 _TIGER_CACHE_PATH = module_cache_path(__name__)
+
+_CACHE_VERSION = 1
 
 _SUPPORTED_STATE_FILES = ["us"]
 """
@@ -218,13 +220,12 @@ def _load_summary_from_cache(
     # NOTE: this would be more natural as a decorator,
     # but Pylance seems to have problems tracking the return type properly
     # with that implementation
-    CACHE_VERSION = 1
     path = _TIGER_CACHE_PATH.joinpath(relpath)
     try:
-        content = load_bundle_from_cache(path, CACHE_VERSION)
+        content = load_bundle_from_cache(path, _CACHE_VERSION)
         with np.load(content["data.npz"]) as data_npz:
             return on_hit(**{k: v.tolist() for k, v in data_npz.items()})
-    except CacheMiss:
+    except CacheMissError:
         data = on_miss()
         data_bytes = BytesIO()
         # NOTE: Python doesn't include a type for dataclass instances;
@@ -232,7 +233,7 @@ def _load_summary_from_cache(
         # to break test discovery. Oh well; just ignore this one.
         model_dict = asdict(data)  # type: ignore
         np.savez_compressed(data_bytes, **model_dict)
-        save_bundle_to_cache(path, CACHE_VERSION, {"data.npz": data_bytes})
+        save_bundle_to_cache(path, _CACHE_VERSION, {"data.npz": data_bytes})
         return data
 
 

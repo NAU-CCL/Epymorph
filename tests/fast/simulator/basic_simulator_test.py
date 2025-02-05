@@ -15,10 +15,10 @@ from epymorph.data.mm.pei import Pei as PeiMM
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.error import (
-    IpmSimInvalidProbsException,
-    IpmSimLessThanZeroException,
-    IpmSimNaNException,
-    MmSimException,
+    IpmSimInvalidProbsError,
+    IpmSimLessThanZeroError,
+    IpmSimNaNError,
+    MmSimError,
 )
 from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import StateScope
@@ -200,7 +200,7 @@ class SimulateTest(unittest.TestCase):
 
         sim = BasicSimulator(rume)
 
-        with self.assertRaises(IpmSimLessThanZeroException) as e:
+        with self.assertRaises(IpmSimLessThanZeroError) as e:
             sim.run(rng_factory=default_rng(42))
 
         err_msg = str(e.exception)
@@ -224,7 +224,7 @@ class SimulateTest(unittest.TestCase):
             ]
 
             def edges(self, symbols):
-                [S, I, R] = symbols.all_compartments
+                [S, I, R] = symbols.all_compartments  # noqa: N806
                 [β, γ, ξ] = symbols.all_requirements
 
                 # N is NOT protected by Max(1, ...) here
@@ -252,7 +252,7 @@ class SimulateTest(unittest.TestCase):
         )
 
         sim = BasicSimulator(rume)
-        with self.assertRaises(IpmSimNaNException) as e:
+        with self.assertRaises(IpmSimNaNError) as e:
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
@@ -281,7 +281,7 @@ class SimulateTest(unittest.TestCase):
         )
 
         sim = BasicSimulator(rume)
-        with self.assertRaises(IpmSimInvalidProbsException) as e:
+        with self.assertRaises(IpmSimInvalidProbsError) as e:
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
@@ -312,7 +312,7 @@ class SimulateTest(unittest.TestCase):
         )
 
         sim = BasicSimulator(rume)
-        with self.assertRaises(MmSimException) as e:
+        with self.assertRaises(MmSimError) as e:
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)

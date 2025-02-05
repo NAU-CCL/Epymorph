@@ -26,7 +26,7 @@ from epymorph.strata import DEFAULT_STRATA
 from epymorph.time import TimeFrame
 
 
-def assertListAlmostEqual(
+def assert_list_almost_equal(
     self,
     list1: Sequence[float],
     list2: Sequence[float],
@@ -51,7 +51,7 @@ class Sir(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        [S, I, R] = symbols.all_compartments
+        [S, I, R] = symbols.all_compartments  # noqa: N806
         [beta, gamma] = symbols.all_requirements
         return [
             edge(S, I, rate=beta * S * I),
@@ -67,7 +67,7 @@ class CombineMmTest(unittest.TestCase):
                 "b": [1 / 2, 1 / 2],
             }
         )
-        assertListAlmostEqual(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
+        assert_list_almost_equal(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertDictEqual(
             start_map,
             {
@@ -89,7 +89,7 @@ class CombineMmTest(unittest.TestCase):
                 "a": [1 / 3, 2 / 3],
             }
         )
-        assertListAlmostEqual(self, new_taus, [1 / 3, 2 / 3])
+        assert_list_almost_equal(self, new_taus, [1 / 3, 2 / 3])
         self.assertDictEqual(
             start_map,
             {
@@ -110,7 +110,7 @@ class CombineMmTest(unittest.TestCase):
                 "b": [1 / 3, 2 / 3],
             }
         )
-        assertListAlmostEqual(self, new_taus, [1 / 3, 2 / 3])
+        assert_list_almost_equal(self, new_taus, [1 / 3, 2 / 3])
         self.assertDictEqual(
             start_map,
             {
@@ -135,7 +135,7 @@ class CombineMmTest(unittest.TestCase):
                 "d": [0.5, 0.5],
             }
         )
-        assertListAlmostEqual(self, new_taus, [0.1, 0.1, 0.3, 0.1, 0.2, 0.2])
+        assert_list_almost_equal(self, new_taus, [0.1, 0.1, 0.3, 0.1, 0.2, 0.2])
         self.assertDictEqual(
             start_map,
             {
@@ -183,7 +183,7 @@ class CombineMmTest(unittest.TestCase):
         new_mms = remap_taus([("a", Model1()), ("b", Model2())])
 
         new_taus = new_mms["a"].steps
-        assertListAlmostEqual(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
+        assert_list_almost_equal(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertEqual(len(new_mms), 2)
 
         new_mm1 = new_mms["a"]
@@ -222,7 +222,7 @@ class CombineMmTest(unittest.TestCase):
         new_mms = remap_taus([("a", Model1()), ("b", Model2())])
 
         new_taus = new_mms["a"].steps
-        assertListAlmostEqual(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
+        assert_list_almost_equal(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertEqual(len(new_mms), 2)
 
         new_mm1 = new_mms["a"]
@@ -240,7 +240,7 @@ class RumeTest(unittest.TestCase):
         sir = Sir()
         centroids = Centroids()
         # Make sure centroids has the tau steps we will expect later...
-        assertListAlmostEqual(self, centroids.steps, [1 / 3, 2 / 3])
+        assert_list_almost_equal(self, centroids.steps, [1 / 3, 2 / 3])
 
         rume = SingleStrataRume.build(
             ipm=sir,
@@ -253,7 +253,7 @@ class RumeTest(unittest.TestCase):
         self.assertIs(sir, rume.ipm)
 
         self.assertEqual(rume.num_ticks, 360)
-        assertListAlmostEqual(self, rume.tau_step_lengths, [1 / 3, 2 / 3])
+        assert_list_almost_equal(self, rume.tau_step_lengths, [1 / 3, 2 / 3])
 
         assert_array_equal(
             rume.compartment_mask[DEFAULT_STRATA],
@@ -270,7 +270,7 @@ class RumeTest(unittest.TestCase):
         sir = Sir()
         no = No()
         # Make sure 'no' has the tau steps we will expect later...
-        assertListAlmostEqual(self, no.steps, [1.0])
+        assert_list_almost_equal(self, no.steps, [1.0])
 
         rume = MultistrataRume.build(
             strata=[
@@ -295,7 +295,7 @@ class RumeTest(unittest.TestCase):
         )
 
         self.assertEqual(rume.num_ticks, 180)
-        assertListAlmostEqual(self, rume.tau_step_lengths, [1.0])
+        assert_list_almost_equal(self, rume.tau_step_lengths, [1.0])
 
         assert_array_equal(
             rume.compartment_mask["aaa"],
@@ -352,7 +352,7 @@ class RumeTest(unittest.TestCase):
         sir = Sir()
         centroids = Centroids()
         # Make sure centroids has the tau steps we will expect later...
-        assertListAlmostEqual(self, centroids.steps, [1 / 3, 2 / 3])
+        assert_list_almost_equal(self, centroids.steps, [1 / 3, 2 / 3])
 
         rume = MultistrataRume.build(
             strata=[
@@ -371,7 +371,7 @@ class RumeTest(unittest.TestCase):
         )
 
         self.assertEqual(rume.num_ticks, 360)
-        assertListAlmostEqual(self, rume.tau_step_lengths, [1 / 3, 2 / 3])
+        assert_list_almost_equal(self, rume.tau_step_lengths, [1 / 3, 2 / 3])
 
         # NOTE: these tests will break if someone alters the MM or Init definition;
         # even just the comments

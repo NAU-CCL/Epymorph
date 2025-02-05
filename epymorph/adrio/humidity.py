@@ -27,8 +27,8 @@ class AbsoluteHumidity(Adrio[np.float64]):
     @override
     def evaluate_adrio(self) -> NDArray[np.float64]:
         temperature = self.data("temperature")
-        relH = self.defer(RelativeHumidity())
-        npHumidity = []
+        rel_h = self.defer(RelativeHumidity())
+        np_humidity = []
 
         # equation from relative humidity to absolute humidity provided by following url
         # https://carnotcycle.wordpress.com/2012/08/04/how-to-convert-relative-humidity-to-absolute-humidity/
@@ -36,17 +36,17 @@ class AbsoluteHumidity(Adrio[np.float64]):
         # a larger range of temperature values with a smaller margin of error
         # (Alduchov and Eskridge 1996)
         constants = 6.112 * 2.16679
-        npHumidity = (
+        np_humidity = (
             (
                 constants
                 * np.exp((17.625 * temperature) / (temperature + 243.04))
-                * (relH)
+                * (rel_h)
             )
             / (273.15 + temperature)
             / 1000  # convert to kilograms
         )
 
-        return npHumidity
+        return np_humidity
 
 
 @adrio_cache
@@ -68,17 +68,17 @@ class RelativeHumidity(Adrio[np.float64]):
     def evaluate_adrio(self) -> NDArray[np.float64]:
         temperature = self.data("temperature")
         dewpoint = self.data("dewpoint")
-        npHumidity = []
+        np_humidity = []
 
         # equation for calculating relative humidity provided by following url
         # https://qed.epa.gov/hms/meteorology/humidity/algorithms/#:~:text=Relative%20humidity%20is%20calculated%20using,is%20air%20temperature%20(celsius).
-        npHumidity = 100 * (
+        np_humidity = 100 * (
             np.exp((17.625 * dewpoint) / (243.04 + dewpoint))
             / np.exp((17.625 * temperature) / (243.04 + temperature))
         )
 
         # if the humidity exceeds 100%, warn users
-        if (npHumidity > 100).any():
+        if (np_humidity > 100).any():
             warn("At least one value of relative humidity exceeds 100%.")
 
-        return np.array(npHumidity, dtype=np.float64)
+        return np.array(np_humidity, dtype=np.float64)

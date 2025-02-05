@@ -17,7 +17,7 @@ from epymorph.data.ipm.sirs import Sirs
 from epymorph.data.mm.centroids import Centroids
 from epymorph.data_shape import Shapes
 from epymorph.data_type import AttributeArray, CentroidDType
-from epymorph.error import AttributeException
+from epymorph.error import DataAttributeError
 from epymorph.geography.us_census import StateScope
 from epymorph.initializer import SingleLocation
 from epymorph.params import (
@@ -71,10 +71,10 @@ class EvaluateParamsTest(unittest.TestCase):
         ]
 
         def meta_edges(s: MultistrataModelSymbols):
-            [S_aaa, I_aaa, R_aaa] = s.strata_compartments("aaa")
-            [S_bbb, I_bbb, R_bbb] = s.strata_compartments("bbb")
+            [S_aaa, I_aaa, R_aaa] = s.strata_compartments("aaa")  # noqa: N806
+            [S_bbb, I_bbb, R_bbb] = s.strata_compartments("bbb")  # noqa: N806
             [beta_bbb_aaa] = s.all_meta_requirements
-            N_aaa = sympy.Max(1, S_aaa + I_aaa + R_aaa)
+            N_aaa = sympy.Max(1, S_aaa + I_aaa + R_aaa)  # noqa: N806
             return [
                 edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
             ]
@@ -188,7 +188,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume(params)
 
-        with self.assertRaises(AttributeException) as ctx:
+        with self.assertRaises(DataAttributeError) as ctx:
             rume.evaluate_params(rng=np.random.default_rng(1))
 
         err = str(ctx.exception).lower()
@@ -337,7 +337,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        with self.assertRaises(AttributeException) as ctx:
+        with self.assertRaises(DataAttributeError) as ctx:
             rume.evaluate_params(
                 override_params={
                     "gpm:aaa::ipm::gamma": Gamma(),

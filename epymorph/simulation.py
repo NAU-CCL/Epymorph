@@ -399,7 +399,7 @@ class SimulationFunctionClass(ABCMeta):
     """
 
     def __new__(
-        mcs: Type[_TypeT],
+        cls: Type[_TypeT],
         name: str,
         bases: tuple[type, ...],
         dct: dict[str, Any],
@@ -430,7 +430,7 @@ class SimulationFunctionClass(ABCMeta):
                 dct["requirements"] = tuple(reqs)
 
         # Check serializable
-        if not is_picklable(name, mcs):
+        if not is_picklable(name, cls):
             raise TypeError(
                 f"Invalid simulation function {name}: "
                 "classes must be serializable (using jsonpickle)."
@@ -460,7 +460,7 @@ class SimulationFunctionClass(ABCMeta):
 
             dct["evaluate"] = evaluate
 
-        return super().__new__(mcs, name, bases, dct)
+        return super().__new__(cls, name, bases, dct)
 
 
 ResultT = TypeVar("ResultT")

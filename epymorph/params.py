@@ -18,7 +18,7 @@ from epymorph.data_type import (
     AttributeValue,
 )
 from epymorph.database import DataResolver, evaluate_param
-from epymorph.error import AttributeException
+from epymorph.error import DataAttributeError
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
@@ -219,15 +219,15 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
 
     @final
     def evaluate(self) -> NDArray[np.float64]:
-        D = self.time_frame.days
+        T = self.time_frame.days
         N = self.scope.nodes
-        ds = np.broadcast_to(np.arange(D).reshape((D, 1)), (D, N))
-        ns = np.broadcast_to(np.arange(N).reshape((1, N)), (D, N))
+        ds = np.broadcast_to(np.arange(T).reshape((T, 1)), (T, N))
+        ns = np.broadcast_to(np.arange(N).reshape((1, N)), (T, N))
         fn = lambdify(_ALL_PARAM_SYMBOLS, self._expr)
-        result = fn([ds, ns, D, N])
+        result = fn([ds, ns, T, N])
         if isinstance(result, np.ndarray):
             return result.astype(dtype=np.float64, copy=False)
-        return np.broadcast_to(np.array(result, dtype=np.float64), (D, N))
+        return np.broadcast_to(np.array(result, dtype=np.float64), (T, N))
 
 
 @evaluate_param.register
@@ -244,5 +244,5 @@ def _(
     try:
         expr_func = ParamExpressionTimeAndNode(value)
     except ValueError as e:
-        raise AttributeException(str(e)) from None
+        raise DataAttributeError(str(e)) from None
     return evaluate_param(expr_func, name, data, scope, time_frame, ipm, rng)

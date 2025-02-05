@@ -29,19 +29,19 @@ class DimensionError(Exception):
     """Raised when epymorph needed dimensional information that was not provided."""
 
 
-class ValidationException(Exception):
+class ValidationError(Exception):
     """Superclass for exceptions which happen during simulation validation."""
 
 
-class AttributeException(ValidationException):
+class DataAttributeError(ValidationError):
     """Exception handling data attributes."""
 
 
-class AttributeExceptionGroup(ExceptionGroup, AttributeException):
+class DataAttributeErrorGroup(ExceptionGroup, DataAttributeError):  # noqa: N818
     """Multiple exceptions encountered handling data attributes."""
 
 
-class GeoValidationException(ValidationException):
+class GeoValidationError(ValidationError):
     """Exception for invalid GEO."""
 
     attribute_errors: list[str] | None
@@ -57,23 +57,23 @@ class GeoValidationException(ValidationException):
         return str(self) + "".join((f"\n- {e}" for e in self.attribute_errors))
 
 
-class DataResourceException(Exception):
+class DataResourceError(Exception):
     """Exception during resource loading from ADRIOs."""
 
 
-class IpmValidationException(ValidationException):
+class IpmValidationError(ValidationError):
     """Exception for invalid IPM."""
 
 
-class MmValidationException(ValidationException):
+class MmValidationError(ValidationError):
     """Exception for invalid MM."""
 
 
-class InitValidationException(ValidationException):
+class InitValidationError(ValidationError):
     """Exception for invalid Init."""
 
 
-class SimValidationException(ValidationException):
+class SimValidationError(ValidationError):
     """
     Exception for cases where a simulation is invalid as configured,
     typically because the MM, IPM, or Initializer require data attributes
@@ -81,31 +81,31 @@ class SimValidationException(ValidationException):
     """
 
 
-class CompilationException(Exception):
+class CompilationError(Exception):
     """Exception during the compilation phase of the simulation."""
 
 
-class IpmCompileException(CompilationException):
+class IpmCompileError(CompilationError):
     """Exception during the compilation of the IPM."""
 
 
-class MmCompileException(CompilationException):
+class MmCompileError(CompilationError):
     """Exception during the compilation of the MM."""
 
 
-class SimulationException(Exception):
+class SimulationError(Exception):
     """Superclass for exceptions which happen during simulation runtime."""
 
 
-class InitException(SimulationException):
+class InitError(SimulationError):
     """Exception for invalid initialization."""
 
 
-class IpmSimException(SimulationException):
+class IpmSimError(SimulationError):
     """Exception during IPM processing."""
 
 
-class IpmSimExceptionWithFields(IpmSimException):
+class IpmSimWithFieldsError(IpmSimError):
     """
     Exception during IPM processing where it is appropriate to show specific
     fields within the simulation.
@@ -131,7 +131,7 @@ class IpmSimExceptionWithFields(IpmSimException):
         return f"{msg}\n{fields}"
 
 
-class IpmSimNaNException(IpmSimExceptionWithFields):
+class IpmSimNaNError(IpmSimWithFieldsError):
     """Exception for handling NaN (not a number) rate values"""
 
     def __init__(self, display_fields: list[tuple[str, dict]]):
@@ -151,7 +151,7 @@ class IpmSimNaNException(IpmSimExceptionWithFields):
         super().__init__(msg, display_fields)
 
 
-class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
+class IpmSimLessThanZeroError(IpmSimWithFieldsError):
     """Exception for handling less than 0 rate values"""
 
     def __init__(self, display_fields: list[tuple[str, dict]]):
@@ -165,7 +165,7 @@ class IpmSimLessThanZeroException(IpmSimExceptionWithFields):
         super().__init__(msg, display_fields)
 
 
-class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
+class IpmSimInvalidProbsError(IpmSimWithFieldsError):
     """Exception for handling invalid probability values"""
 
     def __init__(self, display_fields: list[tuple[str, dict]]):
@@ -177,11 +177,11 @@ class IpmSimInvalidProbsException(IpmSimExceptionWithFields):
         super().__init__(msg, display_fields)
 
 
-class MmSimException(SimulationException):
+class MmSimError(SimulationError):
     """Exception during MM processing."""
 
 
-class SimStateException(SimulationException):
+class SimStateError(SimulationError):
     """
     Exception when the simulation is not in a valid state to perform
     the requested operation.

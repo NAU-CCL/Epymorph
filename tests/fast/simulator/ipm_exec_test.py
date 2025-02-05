@@ -30,7 +30,7 @@ class Sir(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        [S, I, R] = symbols.all_compartments
+        [S, I, R] = symbols.all_compartments  # noqa: N806
         [beta, gamma] = symbols.all_requirements
         return [
             edge(S, I, rate=beta * S * I),
@@ -53,7 +53,7 @@ class Sirbd(CompartmentModel):
     ]
 
     def edges(self, symbols):
-        [S, I, R] = symbols.all_compartments
+        [S, I, R] = symbols.all_compartments  # noqa: N806
         [beta, gamma, b, d] = symbols.all_requirements
 
         return [
@@ -132,7 +132,7 @@ class StandardIpmExecutorTest(unittest.TestCase):
             ]
 
             def edges(self, symbols):
-                [S, I, R] = symbols.all_compartments
+                [S, I, R] = symbols.all_compartments  # noqa: N806
                 beta, gamma, b, d = 0.4, 1 / 10, 100, 0.05
                 return [
                     edge(S, I, rate=beta * S * I),

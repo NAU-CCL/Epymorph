@@ -11,7 +11,7 @@ from typing_extensions import override
 from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.data_type import CentroidDType, StructDType
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE
@@ -35,14 +35,14 @@ from epymorph.geography.us_tiger import (
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
-        raise DataResourceException("Census scope is required for us_tiger attributes.")
+        raise DataResourceError("Census scope is required for us_tiger attributes.")
     return scope
 
 
 def _validate_year(scope: CensusScope) -> TigerYear:
     year = scope.year
     if not is_tiger_year(year):
-        raise DataResourceException(
+        raise DataResourceError(
             f"{year} is not a supported year for us_tiger attributes."
         )
     return year
@@ -68,7 +68,7 @@ def _get_geo(scope: CensusScope, progress: ProgressCallback) -> GeoDataFrame:
                 progress,
             )
         case x:
-            raise DataResourceException(
+            raise DataResourceError(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
     geoid_df = DataFrame({"GEOID": scope.node_ids})
@@ -95,7 +95,7 @@ def _get_info(scope: CensusScope, progress: ProgressCallback) -> DataFrame:
                 progress,
             )
         case x:
-            raise DataResourceException(
+            raise DataResourceError(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
     geoid_df = DataFrame({"GEOID": scope.node_ids})
@@ -123,7 +123,7 @@ class _UsTigerAdrio(Adrio[T_co], ABC):
                 states = list(STATE.truncate_unique(scope.node_ids))
                 est = check_cache_block_groups(year, states)
             case x:
-                raise DataResourceException(
+                raise DataResourceError(
                     f"{x} is not a supported granularity for us_tiger attributes."
                 )
         key = f"us_tiger:{scope.granularity}:{year}"
@@ -196,7 +196,7 @@ class PostalCode(_UsTigerAdrio[np.str_]):
     def evaluate_adrio(self):
         scope = _validate_scope(self.scope)
         if scope.granularity != "state":
-            raise DataResourceException(
+            raise DataResourceError(
                 "PostalCode is only available at state granularity."
             )
         info_df = _get_info(scope, self.progress)

@@ -12,7 +12,7 @@ from typing_extensions import override
 from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE
@@ -125,7 +125,7 @@ def _fetch_lodes(
     # check for valid year input
     if year not in range(2002, 2022):
         msg = "Invalid year. LODES data is only available for 2002-2021"
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     # file type is main (residence in state only) by default
     file_type = "main"
@@ -153,7 +153,7 @@ def _fetch_lodes(
             "Invalid year for job type, no federal jobs can be found "
             "between 2002 to 2009"
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     # LODES year and state exceptions
     # exceptions can be found in this document for LODES8.1: https://lehd.ces.census.gov/data/lodes/LODES8/LODESTechDoc8.1.pdf
@@ -202,7 +202,7 @@ def _fetch_lodes(
     ]
     for condition, message in invalid_conditions:
         if condition:
-            raise DataResourceException(message)
+            raise DataResourceError(message)
 
     # translate state FIPS code to state to use in URL
     state_codes = get_states(scope.year).state_fips_to_code
@@ -225,7 +225,7 @@ def _fetch_lodes(
                 load_or_fetch_url(u, _LODES_CACHE_PATH / Path(u).name) for u in url_list
             ]
         except Exception as e:
-            raise DataResourceException("Unable to fetch LODES data.") from e
+            raise DataResourceError("Unable to fetch LODES data.") from e
 
         # progress tracking here accounts for downloading aux and main files as one step
         # since they are being downloaded one right after the other
@@ -287,12 +287,12 @@ def _fetch_lodes(
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
         msg = "Census scope is required for LODES attributes."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     # check if the CensusScope year is the current LODES geography: 2020
     if scope.year != 2020:
         msg = "GeoScope year does not match the LODES geography year."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     return scope
 

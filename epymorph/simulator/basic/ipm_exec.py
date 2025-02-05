@@ -19,9 +19,9 @@ from epymorph.compartment_model import (
 from epymorph.data_type import AttributeValue, SimArray, SimDType
 from epymorph.database import DataResolver
 from epymorph.error import (
-    IpmSimInvalidProbsException,
-    IpmSimLessThanZeroException,
-    IpmSimNaNException,
+    IpmSimInvalidProbsError,
+    IpmSimLessThanZeroError,
+    IpmSimNaNError,
 )
 from epymorph.rume import Rume
 from epymorph.simulation import Tick
@@ -241,18 +241,18 @@ class IpmExecutor:
                         rate = rate_lambda(rate_args)
                         if rate < 0:
                             err = self._get_default_error_args(rate_args, node, tick)
-                            raise IpmSimLessThanZeroException(err)
+                            raise IpmSimLessThanZeroError(err)
                         occur[index] = self._rng.poisson(rate * tick.tau)
                     case CompiledFork(size, rate_lambda, prob_lambda):
                         # get rate from lambda expression, catch divide by zero error
                         rate = rate_lambda(rate_args)
                         if rate < 0:
                             err = self._get_default_error_args(rate_args, node, tick)
-                            raise IpmSimLessThanZeroException(err)
+                            raise IpmSimLessThanZeroError(err)
                         prob = prob_lambda(rate_args)
                         if any(n < 0 for n in prob):
                             err = self._get_invalid_prob_args(rate_args, node, tick, t)
-                            raise IpmSimInvalidProbsException(err)
+                            raise IpmSimInvalidProbsError(err)
                         occur[index : (index + size)] = self._rng.multinomial(
                             n=self._rng.poisson(rate * tick.tau),
                             pvals=prob,
@@ -260,7 +260,7 @@ class IpmExecutor:
                 index += t.size
             except (ZeroDivisionError, FloatingPointError):
                 err = self._get_zero_division_args(rate_args, node, tick, t)
-                raise IpmSimNaNException(err) from None
+                raise IpmSimNaNError(err) from None
 
         # Check for event overruns leaving each compartment and correct counts.
         for cidx, eidxs in enumerate(self._events_leaving_compartment):

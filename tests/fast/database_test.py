@@ -25,7 +25,7 @@ from epymorph.database import (
     Match,
     ReqTree,
 )
-from epymorph.error import AttributeException, AttributeExceptionGroup
+from epymorph.error import DataAttributeError, DataAttributeErrorGroup
 from epymorph.geography.scope import GeoScope
 from epymorph.params import ParamFunction, ParamFunctionTimeAndNode
 from epymorph.time import TimeFrame
@@ -912,7 +912,7 @@ class ParamEvalTest(unittest.TestCase):
         }
 
         # detect conflicting defaults!
-        with self.assertRaises(AttributeExceptionGroup) as ctx:
+        with self.assertRaises(DataAttributeErrorGroup) as ctx:
             ReqTree.of(
                 requirements=requirements,
                 params=Database({NP("*::ipm::beta"): F()}),
@@ -955,7 +955,7 @@ class ParamEvalTest(unittest.TestCase):
             def evaluate(self):
                 return 3.0 * self.data("beta")
 
-        with self.assertRaises(AttributeException) as ctx:
+        with self.assertRaises(DataAttributeError) as ctx:
             ReqTree.of(
                 requirements={
                     AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),

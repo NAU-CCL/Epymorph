@@ -53,7 +53,7 @@ from epymorph.database import (
     DataResolver,
     ReqTree,
 )
-from epymorph.error import InitException
+from epymorph.error import InitError
 from epymorph.geography.scope import GeoScope
 from epymorph.initializer import Initializer
 from epymorph.movement_model import MovementClause, MovementModel
@@ -539,10 +539,10 @@ class Rume(ABC, Generic[GeoScopeT_co]):
                     for gpm in self.strata
                 ]
             )
-        except InitException as e:
+        except InitError as e:
             raise e
         except Exception as e:
-            raise InitException("Initializer failed during evaluation.") from e
+            raise InitError("Initializer failed during evaluation.") from e
 
 
 @dataclass(frozen=True)

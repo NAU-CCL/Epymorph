@@ -75,7 +75,7 @@ class FileVersionError(FileError):
     """Error loading a file due to unmet version requirements."""
 
 
-class CacheMiss(FileError):
+class CacheMissError(FileError):
     """Raised on a cache-miss (for any reason) during a load-from-cache operation."""
 
 
@@ -298,7 +298,7 @@ def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
     try:
         return load_file(_resolve_cache_path(from_path))
     except FileError as e:
-        raise CacheMiss() from e
+        raise CacheMissError() from e
 
 
 def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
@@ -311,7 +311,7 @@ def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
     try:
         # Try to load from cache.
         return load_file_from_cache(cache_path)
-    except CacheMiss:
+    except CacheMissError:
         # On cache miss, fetch file contents.
         file = fetch()
         # And attempt to save the file to the cache for next time.
@@ -373,7 +373,7 @@ def load_bundle_from_cache(
     try:
         return load_bundle(_resolve_cache_path(from_path), version_at_least)
     except FileError as e:
-        raise CacheMiss() from e
+        raise CacheMissError() from e
 
 
 ####################

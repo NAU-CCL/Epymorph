@@ -28,7 +28,7 @@ class EstimateParameters:
         self.perturbation = perturbation
 
     @classmethod
-    def TimeVarying(
+    def TimeVarying(  # noqa: N802
         cls,
         distribution: Distribution,
         dynamics: Dynamics,
@@ -37,7 +37,7 @@ class EstimateParameters:
         return cls(distribution, dynamics=dynamics, perturbation=perturbation)
 
     @classmethod
-    def Static(
+    def Static(  # noqa: N802
         cls, distribution: Distribution, perturbation: Perturbation | None = None
     ):
         return cls(distribution, dynamics=None, perturbation=perturbation)

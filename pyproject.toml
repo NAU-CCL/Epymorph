@@ -114,6 +114,7 @@ select = [
   "T20", # (no extra print statements laying around)
   "ERA", # (no commented code)
   "FURB", # (use modern python)
+  "N", # (naming conventions)
 
   # NOTE: rules I'd like to enable some day are below, commented out
   # "C4", # (clean comprehensions usage)
@@ -122,7 +123,6 @@ select = [
   # "D", (enforced documentation)
   # "DOC", (enforced documentation; complementary with D)
   # "ANN", (enforced type annotations)
-  # "N", (naming conventions)
   # "RET", (clean return handling)
   # "SIM", (code simplifications)
   # "SLF", (prevent private member access)
@@ -142,5 +142,12 @@ ignore = [
 # S101 we are allowed to use `assert` in pytest
 # I001 (import sort) appears to be broken in notebooks.
 # T201 allow prints in notebooks.
+# N806 allow non-PEP8-compliant names in IPMs
 "tests/**/*_test.py" = ["F403", "F405", "S101"]
 "*.ipynb" = ["F403", "F405", "I001", "T201"]
+"epymorph/data/ipm/*" = ["N806"]
+
+[tool.ruff.lint.pep8-naming]
+# These variable names are very convenient for describing simulation dimensions,
+# so we'll special-case them.
+extend-ignore-names = ["T", "S", "C", "E", "N", "X"]

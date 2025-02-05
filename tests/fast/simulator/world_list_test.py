@@ -14,7 +14,7 @@ def _ndarray_signature(arr):
     return f"{type(arr).__name__}: dtype({arr.dtype}) shape{repr(arr.shape)}"
 
 
-def assertNpEqual(self, a1: ArrayLike, a2: ArrayLike, msg: str | None = None) -> None:
+def assert_np_equal(self, a1: ArrayLike, a2: ArrayLike, msg: str | None = None) -> None:
     """Check that two numpy ArrayLikes are equal."""
     if not np.array_equal(a1, a2):
         if msg is None:
@@ -58,11 +58,11 @@ class TestCohort(unittest.TestCase):
         c2 = Cohort(np.array([200, 66]), 13, 42)
         c1.merge_from(c2)
         # c1 (only compartment value) has changed...
-        assertNpEqual(self, c1.compartments, [300, 99])
+        assert_np_equal(self, c1.compartments, [300, 99])
         self.assertEqual(c1.return_location, 13)
         self.assertEqual(c1.return_tick, 42)
         # c2 remains unchanged...
-        assertNpEqual(self, c2.compartments, [200, 66])
+        assert_np_equal(self, c2.compartments, [200, 66])
         self.assertEqual(c2.return_location, 13)
         self.assertEqual(c2.return_tick, 42)
 
@@ -71,8 +71,10 @@ HOME_TICK = ListWorld.HOME_TICK
 
 
 class TestListWorld(unittest.TestCase):
-    def assertWorld(
-        self, world_a: list[list[Cohort]], world_b: list[list[Cohort]]
+    def assert_world(
+        self,
+        world_a: list[list[Cohort]],
+        world_b: list[list[Cohort]],
     ) -> None:
         if len(world_a) != len(world_b):
             msg = (
@@ -109,7 +111,7 @@ class TestListWorld(unittest.TestCase):
 
         actual.normalize()
 
-        self.assertWorld(actual.locations, expected)
+        self.assert_world(actual.locations, expected)
 
     def test_normalize_02(self):
         # more complex normalization: some cohorts to combine, not already sorted
@@ -134,7 +136,7 @@ class TestListWorld(unittest.TestCase):
 
         actual.normalize()
 
-        self.assertWorld(actual.locations, expected)
+        self.assert_world(actual.locations, expected)
 
     def test_normalize_03(self):
         # normalization of a bunch of mergeable cohorts
@@ -158,7 +160,7 @@ class TestListWorld(unittest.TestCase):
 
         actual.normalize()
 
-        self.assertWorld(actual.locations, expected)
+        self.assert_world(actual.locations, expected)
 
     def test_cohort_array(self):
         world = ListWorld(
@@ -175,12 +177,12 @@ class TestListWorld(unittest.TestCase):
                 ],
             ]
         )
-        assertNpEqual(
+        assert_np_equal(
             self,
             world.get_cohort_array(0),
             np.array([[3], [5], [7]], dtype=SimDType),
         )
-        assertNpEqual(
+        assert_np_equal(
             self,
             world.get_cohort_array(1),
             np.array([[13], [15], [17]], dtype=SimDType),
@@ -201,7 +203,7 @@ class TestListWorld(unittest.TestCase):
                 ],
             ]
         )
-        assertNpEqual(
+        assert_np_equal(
             self,
             world.get_local_array(),
             np.array([[3], [13]], dtype=SimDType),
@@ -227,7 +229,7 @@ class TestListWorld(unittest.TestCase):
             1, np.array([[-10, 10], [-20, 20], [-30, 30]], dtype=SimDType)
         )
 
-        self.assertWorld(
+        self.assert_world(
             world.locations,
             [
                 [
@@ -270,7 +272,7 @@ class TestListWorld(unittest.TestCase):
         )
 
         # Movement cohorts maintain their identity.
-        self.assertWorld(
+        self.assert_world(
             world.locations,
             [
                 [
@@ -313,7 +315,7 @@ class TestListWorld(unittest.TestCase):
         )
 
         # Movement cohorts merge with locals.
-        self.assertWorld(
+        self.assert_world(
             world.locations,
             [
                 [
@@ -345,7 +347,7 @@ class TestListWorld(unittest.TestCase):
 
         world.apply_return(Tick(1, 1, date(2023, 1, 1), 0, 1.0), return_stats=False)
 
-        self.assertWorld(
+        self.assert_world(
             world.locations,
             [
                 [

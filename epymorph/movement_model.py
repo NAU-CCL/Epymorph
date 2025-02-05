@@ -93,14 +93,14 @@ class MovementClauseClass(SimulationFunctionClass):
     """
 
     def __new__(
-        mcs: Type[_TypeT],
+        cls: Type[_TypeT],
         name: str,
         bases: tuple[type, ...],
         dct: dict[str, Any],
     ) -> _TypeT:
         # Skip these checks for classes we want to treat as abstract:
         if dct.get("_abstract_simfunc", False):
-            return super().__new__(mcs, name, bases, dct)
+            return super().__new__(cls, name, bases, dct)
 
         # Check predicate.
         predicate = dct.get("predicate")
@@ -135,7 +135,7 @@ class MovementClauseClass(SimulationFunctionClass):
                     f"Invalid returns in {name}: days cannot be less than zero."
                 )
 
-        return super().__new__(mcs, name, bases, dct)
+        return super().__new__(cls, name, bases, dct)
 
 
 class MovementClause(
@@ -194,14 +194,14 @@ class MovementModelClass(ABCMeta):
     """
 
     def __new__(
-        mcs: Type[_TypeT],
+        cls: Type[_TypeT],
         name: str,
         bases: tuple[type, ...],
         dct: dict[str, Any],
     ) -> _TypeT:
         # Skip these checks for known base classes:
         if name in ("MovementModel",):
-            return super().__new__(mcs, name, bases, dct)
+            return super().__new__(cls, name, bases, dct)
 
         # Check tau steps.
         steps = dct.get("steps")
@@ -254,7 +254,7 @@ class MovementModelClass(ABCMeta):
                 )
         dct["clauses"] = tuple(clauses)
 
-        return super().__new__(mcs, name, bases, dct)
+        return super().__new__(cls, name, bases, dct)
 
 
 class MovementModel(ABC, metaclass=MovementModelClass):

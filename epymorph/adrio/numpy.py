@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.adrio.adrio import Adrio
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceError
 
 _SliceLike = slice | type(Ellipsis)
 _ArraySlice = _SliceLike | tuple[_SliceLike, ...]
@@ -40,7 +40,7 @@ class NPY(Adrio[Any]):
             msg = (
                 "Incorrect file type. Only .npy files can be loaded through NPY ADRIOs."
             )
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
         self.file_path = file_path
         self.array_slice = array_slice
 
@@ -53,13 +53,13 @@ class NPY(Adrio[Any]):
             return data
         except OSError as e:
             msg = "File not found."
-            raise DataResourceException(msg) from e
+            raise DataResourceError(msg) from e
         except ValueError as e:
             msg = "Object arrays cannot be loaded."
-            raise DataResourceException(msg) from e
+            raise DataResourceError(msg) from e
         except IndexError as e:
             msg = "Specified array slice is invalid for the shape of this data."
-            raise DataResourceException(msg) from e
+            raise DataResourceError(msg) from e
 
 
 class NPZ(Adrio[Any]):
@@ -96,7 +96,7 @@ class NPZ(Adrio[Any]):
             msg = (
                 "Incorrect file type. Only .npz files can be loaded through NPZ ADRIOs."
             )
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
         self.file_path = file_path
         self.array_name = array_name
         self.array_slice = array_slice
@@ -110,10 +110,10 @@ class NPZ(Adrio[Any]):
             return data
         except OSError as e:
             msg = "File not found."
-            raise DataResourceException(msg) from e
+            raise DataResourceError(msg) from e
         except ValueError as e:
             msg = "Object arrays cannot be loaded."
-            raise DataResourceException(msg) from e
+            raise DataResourceError(msg) from e
         except IndexError as e:
             msg = "Specified array slice is invalid for the shape of this data."
-            raise DataResourceException(msg) from e
+            raise DataResourceError(msg) from e

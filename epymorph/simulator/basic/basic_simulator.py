@@ -7,13 +7,13 @@ import numpy as np
 from epymorph.attribute import NamePattern
 from epymorph.data_type import SimDType
 from epymorph.error import (
-    AttributeException,
-    CompilationException,
-    InitException,
-    IpmSimException,
-    MmSimException,
-    SimValidationException,
-    ValidationException,
+    CompilationError,
+    DataAttributeError,
+    InitError,
+    IpmSimError,
+    MmSimError,
+    SimValidationError,
+    ValidationError,
     error_gate,
 )
 from epymorph.event import EventBus, OnStart, OnTick
@@ -61,25 +61,25 @@ class BasicSimulator(Generic[RumeT]):
 
         with error_gate(
             "evaluating simulation attributes",
-            ValidationException,
-            CompilationException,
+            ValidationError,
+            CompilationError,
         ):
             try:
                 data = rume.evaluate_params(override_params=params, rng=rng)
-            except AttributeException as e:
+            except DataAttributeError as e:
                 msg = f"RUME attribute requirements were not met. See errors:\n- {e}"
-                raise SimValidationException(msg) from None
+                raise SimValidationError(msg) from None
             except ExceptionGroup as e:
                 msg = "RUME attribute requirements were not met. See errors:" + "".join(
                     f"\n- {e}" for e in e.exceptions
                 )
-                raise SimValidationException(msg) from None
+                raise SimValidationError(msg) from None
 
-        with error_gate("initializing the simulation", InitException):
+        with error_gate("initializing the simulation", InitError):
             initial_values = rume.initialize(data, rng)
             world = ListWorld.from_initials(initial_values)
 
-        with error_gate("compiling the simulation", CompilationException):
+        with error_gate("compiling the simulation", CompilationError):
             ipm_exec = IpmExecutor(rume, world, data, rng)
             movement_exec = MovementExecutor(rume, world, data, rng)
 
@@ -102,11 +102,11 @@ class BasicSimulator(Generic[RumeT]):
             t = tick.sim_index
 
             # First do movement
-            with error_gate("executing movement", MmSimException, AttributeException):
+            with error_gate("executing movement", MmSimError, DataAttributeError):
                 movement_exec.apply(tick)
 
             # Then do IPM
-            with error_gate("executing the IPM", IpmSimException, AttributeException):
+            with error_gate("executing the IPM", IpmSimError, DataAttributeError):
                 vcs, ves, hcs, hes = ipm_exec.apply(tick)
                 visit_compartments[t] = vcs
                 visit_events[t] = ves

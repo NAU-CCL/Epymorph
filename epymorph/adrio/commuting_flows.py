@@ -10,7 +10,7 @@ from typing_extensions import override
 from epymorph.adrio.adrio import Adrio, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -36,7 +36,7 @@ def _validate_year(scope: CensusScope):
             year = 2020
         else:
             msg = "Invalid year. Commuting data is only available for 2010-2023"
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
 
         warn(
             f"Commuting data cannot be retrieved for {passed_year}, "
@@ -49,7 +49,7 @@ def _validate_year(scope: CensusScope):
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
         msg = "Census scope is required for commuting flows data."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     # check for invalid granularity
     if isinstance(scope, TractScope | BlockGroupScope):
@@ -57,7 +57,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
             "Commuting data cannot be retrieved for tract "
             "or block group granularities"
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     year = scope.year
     node_ids = scope.node_ids
@@ -80,7 +80,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
             "Commuting flows data cannot be retrieved for Connecticut counties "
             "for years 2020 or 2021."
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     return scope
 
@@ -174,7 +174,7 @@ class Commuters(Adrio[np.int64]):
             cache_path = _COMMFLOWS_CACHE_PATH / f"{year}.xlsx"
             commuter_file = load_or_fetch_url(url, cache_path)
         except Exception as e:
-            raise DataResourceException("Unable to fetch commuting flows data.") from e
+            raise DataResourceError("Unable to fetch commuting flows data.") from e
 
         # increment progress, just one step here
         if progress is not None:
@@ -211,7 +211,7 @@ class Commuters(Adrio[np.int64]):
                 )
 
             case _:
-                raise DataResourceException("Unsupported query.")
+                raise DataResourceError("Unsupported query.")
 
         # Filter out GEOIDs that aren't in our scope.
         res_selection = data_df["res_geoid"].isin(node_ids)
