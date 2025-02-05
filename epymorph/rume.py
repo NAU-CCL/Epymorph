@@ -442,7 +442,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
             lines.extend(estimate_report(CACHE_PATH, estimates, max_bandwidth))
 
         for l in lines:
-            print(l)
+            print(l)  # noqa: T201
 
     def requirements_tree(
         self,

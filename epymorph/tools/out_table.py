@@ -169,7 +169,7 @@ class TableRenderer:
             case "string":
                 return result_df.to_string()
             case "print":
-                print(result_df.to_string(index=False))
+                print(result_df.to_string(index=False))  # noqa: T201
                 return None
             case x:
                 msg = f"Invalid result_format: {x}"

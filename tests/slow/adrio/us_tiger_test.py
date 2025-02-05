@@ -84,7 +84,7 @@ def calculate_expected_values():
         cy = y_sum / (6 * a)
         return (cx, cy)
 
-    print(gdf["geometry"].apply(centroid).to_list())
+    print(gdf["geometry"].apply(centroid).to_list())  # noqa: T201
 
 
 if __name__ == "__main__":

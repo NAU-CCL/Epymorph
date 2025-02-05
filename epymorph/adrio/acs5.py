@@ -6,6 +6,7 @@ from functools import cache
 from json import load as load_json
 from os import environ
 from typing import Literal, NamedTuple, Sequence, TypeGuard
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -540,7 +541,7 @@ class GiniIndex(Adrio[np.float64]):
 
         # if granularity is block groups, use the data of the parent tract
         if isinstance(scope, BlockGroupScope):
-            print(
+            warn(
                 "Gini Index cannot be retrieved for block group level, "
                 "fetching tract level data instead."
             )

@@ -1,5 +1,7 @@
 """ADRIOs that access the US Census ACS Commuting Flows files."""
 
+from warnings import warn
+
 import numpy as np
 from numpy.typing import NDArray
 from pandas import read_excel
@@ -36,7 +38,7 @@ def _validate_year(scope: CensusScope):
             msg = "Invalid year. Commuting data is only available for 2010-2023"
             raise DataResourceException(msg)
 
-        print(
+        warn(
             f"Commuting data cannot be retrieved for {passed_year}, "
             f"fetching {year} data instead."
         )

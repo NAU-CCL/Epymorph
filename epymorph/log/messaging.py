@@ -3,6 +3,7 @@ Contexts which provide console messaging for epymorph processes like simulation 
 and ADRIO fetching. It's nice to have some console output to show progress during
 long-running tasks!
 """
+# ruff: noqa: T201
 
 from contextlib import contextmanager
 from functools import partial

@@ -111,11 +111,11 @@ select = [
   "S", # (security rules)
   "BLE", # (catching Exception is too general)
   "PT", # (pytest)
+  "T20", # (no extra print statements laying around)
 
   # NOTE: rules I'd like to enable some day are below, commented out
   # "ERA", # (no commented code)
   # "C4", # (clean comprehensions usage)
-  # "T20", (no extra print statements laying around)
   # "UP", (use modern python)
   # "FURB", (use modern python)
   # "B", (possible bugs)
@@ -139,7 +139,8 @@ ignore = [
 
 [tool.ruff.lint.extend-per-file-ignores]
 # Allow star imports in tests and notebooks.
-# I001 (import sort) appears to be broken in notebooks.
 # S101 we are allowed to use `assert` in pytest
+# I001 (import sort) appears to be broken in notebooks.
+# T201 allow prints in notebooks.
 "tests/**/*_test.py" = ["F403", "F405", "S101"]
-"*.ipynb" = ["F403", "F405", "I001"]
+"*.ipynb" = ["F403", "F405", "I001", "T201"]

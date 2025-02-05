@@ -288,7 +288,6 @@ class EvaluateParamsTest(unittest.TestCase):
 
             def evaluate1(self) -> float:
                 beta = self.data(self.BETA)
-                print(beta, type(beta), beta.dtype)
                 return float(beta) / 4.0
 
         class Xi(ParamFunctionNumpy):
