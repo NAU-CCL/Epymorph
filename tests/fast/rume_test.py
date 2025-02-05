@@ -1,4 +1,7 @@
-# pylint: disable=missing-docstring
+# ruff: noqa: PT009,PT027
+import unittest
+from typing import Sequence
+
 import numpy as np
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
@@ -20,8 +23,19 @@ from epymorph.rume import (
 )
 from epymorph.simulation import NEVER, Tick, TickDelta, TickIndex
 from epymorph.strata import DEFAULT_STRATA
-from epymorph.test import EpymorphTestCase
 from epymorph.time import TimeFrame
+
+
+def assertListAlmostEqual(
+    self,
+    list1: Sequence[float],
+    list2: Sequence[float],
+    msg: str | None = None,
+) -> None:
+    """Check that two lists of numbers are approximately equal."""
+    self.assertEqual(len(list1), len(list2), msg=msg)
+    for a, b in zip(list1, list2):
+        self.assertAlmostEqual(a, b, msg=msg)
 
 
 class Sir(CompartmentModel):
@@ -45,7 +59,7 @@ class Sir(CompartmentModel):
         ]
 
 
-class CombineMmTest(EpymorphTestCase):
+class CombineMmTest(unittest.TestCase):
     def test_combine_tau_steps_1(self):
         new_taus, start_map, stop_map = combine_tau_steps(
             {
@@ -53,7 +67,7 @@ class CombineMmTest(EpymorphTestCase):
                 "b": [1 / 2, 1 / 2],
             }
         )
-        self.assertListAlmostEqual(new_taus, [1 / 3, 1 / 6, 1 / 2])
+        assertListAlmostEqual(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertDictEqual(
             start_map,
             {
@@ -75,7 +89,7 @@ class CombineMmTest(EpymorphTestCase):
                 "a": [1 / 3, 2 / 3],
             }
         )
-        self.assertListAlmostEqual(new_taus, [1 / 3, 2 / 3])
+        assertListAlmostEqual(self, new_taus, [1 / 3, 2 / 3])
         self.assertDictEqual(
             start_map,
             {
@@ -96,7 +110,7 @@ class CombineMmTest(EpymorphTestCase):
                 "b": [1 / 3, 2 / 3],
             }
         )
-        self.assertListAlmostEqual(new_taus, [1 / 3, 2 / 3])
+        assertListAlmostEqual(self, new_taus, [1 / 3, 2 / 3])
         self.assertDictEqual(
             start_map,
             {
@@ -121,7 +135,7 @@ class CombineMmTest(EpymorphTestCase):
                 "d": [0.5, 0.5],
             }
         )
-        self.assertListAlmostEqual(new_taus, [0.1, 0.1, 0.3, 0.1, 0.2, 0.2])
+        assertListAlmostEqual(self, new_taus, [0.1, 0.1, 0.3, 0.1, 0.2, 0.2])
         self.assertDictEqual(
             start_map,
             {
@@ -169,7 +183,7 @@ class CombineMmTest(EpymorphTestCase):
         new_mms = remap_taus([("a", Model1()), ("b", Model2())])
 
         new_taus = new_mms["a"].steps
-        self.assertListAlmostEqual(new_taus, [1 / 3, 1 / 6, 1 / 2])
+        assertListAlmostEqual(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertEqual(len(new_mms), 2)
 
         new_mm1 = new_mms["a"]
@@ -208,7 +222,7 @@ class CombineMmTest(EpymorphTestCase):
         new_mms = remap_taus([("a", Model1()), ("b", Model2())])
 
         new_taus = new_mms["a"].steps
-        self.assertListAlmostEqual(new_taus, [1 / 3, 1 / 6, 1 / 2])
+        assertListAlmostEqual(self, new_taus, [1 / 3, 1 / 6, 1 / 2])
         self.assertEqual(len(new_mms), 2)
 
         new_mm1 = new_mms["a"]
@@ -220,13 +234,13 @@ class CombineMmTest(EpymorphTestCase):
         self.assertEqual(new_mm2.clauses[0].returns.step, -1)
 
 
-class RumeTest(EpymorphTestCase):
+class RumeTest(unittest.TestCase):
     def test_create_monostrata_1(self):
         # A single-strata RUME uses the IPM without modification.
         sir = Sir()
         centroids = Centroids()
         # Make sure centroids has the tau steps we will expect later...
-        self.assertListAlmostEqual(centroids.steps, [1 / 3, 2 / 3])
+        assertListAlmostEqual(self, centroids.steps, [1 / 3, 2 / 3])
 
         rume = SingleStrataRume.build(
             ipm=sir,
@@ -239,7 +253,7 @@ class RumeTest(EpymorphTestCase):
         self.assertIs(sir, rume.ipm)
 
         self.assertEqual(rume.num_ticks, 360)
-        self.assertListAlmostEqual(rume.tau_step_lengths, [1 / 3, 2 / 3])
+        assertListAlmostEqual(self, rume.tau_step_lengths, [1 / 3, 2 / 3])
 
         assert_array_equal(
             rume.compartment_mask[DEFAULT_STRATA],
@@ -256,7 +270,7 @@ class RumeTest(EpymorphTestCase):
         sir = Sir()
         no = No()
         # Make sure 'no' has the tau steps we will expect later...
-        self.assertListAlmostEqual(no.steps, [1.0])
+        assertListAlmostEqual(self, no.steps, [1.0])
 
         rume = MultistrataRume.build(
             strata=[
@@ -281,7 +295,7 @@ class RumeTest(EpymorphTestCase):
         )
 
         self.assertEqual(rume.num_ticks, 180)
-        self.assertListAlmostEqual(rume.tau_step_lengths, [1.0])
+        assertListAlmostEqual(self, rume.tau_step_lengths, [1.0])
 
         assert_array_equal(
             rume.compartment_mask["aaa"],
@@ -338,7 +352,7 @@ class RumeTest(EpymorphTestCase):
         sir = Sir()
         centroids = Centroids()
         # Make sure centroids has the tau steps we will expect later...
-        self.assertListAlmostEqual(centroids.steps, [1 / 3, 2 / 3])
+        assertListAlmostEqual(self, centroids.steps, [1 / 3, 2 / 3])
 
         rume = MultistrataRume.build(
             strata=[
@@ -357,7 +371,7 @@ class RumeTest(EpymorphTestCase):
         )
 
         self.assertEqual(rume.num_ticks, 360)
-        self.assertListAlmostEqual(rume.tau_step_lengths, [1 / 3, 2 / 3])
+        assertListAlmostEqual(self, rume.tau_step_lengths, [1 / 3, 2 / 3])
 
         # NOTE: these tests will break if someone alters the MM or Init definition;
         # even just the comments

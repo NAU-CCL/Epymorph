@@ -1,4 +1,4 @@
-# pylint: disable=missing-docstring,unused-variable
+# ruff: noqa: PT009,PT027
 import unittest
 
 import numpy as np

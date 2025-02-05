@@ -462,5 +462,14 @@ class DataShapeMatcher(Matcher[NDArray]):
 
     def __call__(self, value: NDArray) -> bool:
         if self._exact:
-            return value.shape == self._shape.to_tuple(self._dim)
+            # If making an exact match, convert the expected shape to a tuple
+            # then see that the expected shape matches the value shape.
+            # They must have the same number of dimensions.
+            # A value of -1 in the expected tuple matches any value,
+            # this is to support shapes with Arbitrary dimensions.
+            expected = self._shape.to_tuple(self._dim)
+            return len(value.shape) == len(expected) and all(
+                True if exp == -1 else exp == act
+                for exp, act in zip(expected, value.shape)
+            )
         return self._shape.matches(self._dim, value)

@@ -1,4 +1,4 @@
-# pylint: disable=missing-docstring
+# ruff: noqa: PT009,PT027
 import unittest
 from datetime import date
 

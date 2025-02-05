@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring
 import unittest
 from math import cos
 from unittest.mock import MagicMock

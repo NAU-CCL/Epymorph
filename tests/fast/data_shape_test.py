@@ -1,3 +1,4 @@
+# ruff: noqa: PT009,PT027
 import unittest
 from functools import reduce
 from typing import Any, TypeGuard, TypeVar
