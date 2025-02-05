@@ -6,7 +6,8 @@ class Dynamics(ABC): ...
 
 class GeometricBrownianMotion(Dynamics):
     """
-    Encapsulates the hyperparameters for geometric Brownian motion.
+    Encapsulates the hyperparameters for geometric Brownian motion, where the logarithm
+    of geometric Brownian motion is standard Brownian motion.
 
     Attributes
     ----------

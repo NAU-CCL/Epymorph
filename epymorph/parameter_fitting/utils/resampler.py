@@ -98,7 +98,7 @@ class WeightsResampling:
         Returns
         -------
         list
-            A list of resampled particles.
+            The resampled particles.
         """
         resampled_particles = []
         resampled_indices = rng.choice(
@@ -122,7 +122,7 @@ class WeightsResampling:
         Returns
         -------
         list
-            A list of updated weights.
+            The updated weights.
         """
         updated_weights = [
             new_weight * weight for weight, new_weight in zip(weights, new_weights)
@@ -131,9 +131,43 @@ class WeightsResampling:
 
 
 class ResamplingByNode(WeightsResampling):
+    """
+    Uses an approximate resampling algorithm which is efficient for multi-node systems.
+    The weights for each node are computed separately. During resampling the particles
+    are decomposed by node, each node is resampled separately, and new particles are
+    reconstructed treating nodes independently.
+
+    Attributes
+    ----------
+    N : int
+        Number of particles.
+    static_params : dict
+        Static parameters from the rume dictionary.
+    likelihood_fn : object
+        An object responsible for computing the
+        likelihood of observations.
+    """
+
     def compute_weights(
         self, current_obs_data: np.ndarray, expected_observations: list
     ) -> np.ndarray:
+        """
+        Computes the weights for each node for each particle based on the likelihood of
+        the current observation.
+
+        Parameters
+        ----------
+        current_obs_data : np.ndarray
+            The current observation data.
+        expected_observations : list
+            The expected observations corresponding
+            to each particle.
+
+        Returns
+        -------
+        np.ndarray
+            An array of computed weights with each row normalized to sum to 1.
+        """
         n_nodes = expected_observations[0].shape[0]
         log_weights = np.zeros(shape=(n_nodes, self.N))
 
@@ -160,6 +194,23 @@ class ResamplingByNode(WeightsResampling):
     def resample_particles(
         self, particles: list[Particle], weights: np.ndarray, rng: np.random.Generator
     ) -> list:
+        """
+        Resamples particles using an approximate algorithm based on the computed
+        weights. The particles are deconstructed by node, each node is resampled
+        independently, then new particles are reconstructed.
+
+        Parameters
+        ----------
+        particles : list
+            Particles which represent the estimated state of the system.
+        weights : np.ndarray
+            Wights corresponding to each node for each particle.
+
+        Returns
+        -------
+        list
+            The resampled particles.
+        """
         n_nodes = weights.shape[0]
 
         resampled_indices = np.zeros(shape=(n_nodes, self.N), dtype=np.int_)

@@ -146,6 +146,12 @@ class FilterSimulation:
         """
         Runs the particle filter simulation.
 
+        Parameters
+        ----------
+        rng : np.random.Generator | None, optional
+            The random number generator used by the particle filter. It is also passed
+            to the simulator during particle propagation.
+
         Returns
         -------
         ParticleFilterOutput

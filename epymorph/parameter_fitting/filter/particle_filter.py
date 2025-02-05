@@ -37,7 +37,7 @@ class ParticleFilter(BaseFilter):
     resampler: Type[WeightsResampling]
         The resampling method to use.
     rng : np.random.Generator
-        Random number generator for simulations.
+        Random number generator for simulations and resampling.
     """
 
     def __init__(

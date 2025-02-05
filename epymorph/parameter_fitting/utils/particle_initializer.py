@@ -67,9 +67,8 @@ class ParticleInitializer:
 
         Returns
         -------
-        List[Tuple[np.ndarray, Dict[str, float]]]
-            A list of tuples where each tuple
-            contains the initial state and the observations for a particle.
+        List[Particle]
+            The initialized particles.
         """
 
         # rng = np.random.default_rng()

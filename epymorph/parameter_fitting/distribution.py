@@ -6,13 +6,15 @@ import scipy as sp
 
 class Distribution(ABC):
     """
-    Abstract base class for initial distributions for parameter estimation.
+    Abstract base class for the prior/initial distributions for static/dynamic parameter
+    estimation.
     """
 
     @abstractmethod
     def rvs(self, size: int, random_state: np.random.Generator):
         """
-        Draws random variates.
+        Draws independent random variates (aka random deviates, realizations,
+        or samples) from the distribution.
 
         Parameters
         ----------
@@ -26,33 +28,33 @@ class Distribution(ABC):
 
 class Uniform(Distribution):
     """
-    Uniform distribution for the initial distribution for estimating parameters.
+    Continuous uniform distribution on an interval.
 
     Attributes
     ----------
     a : float
-        The left endpoint of the distribution.
+        The left endpoint of the interval.
     b : float
-        The right endpoint of the distribution.
+        The right endpoint of the interval.
     """
 
     def __init__(self, a: float, b: float):
         """
-        Initializes the distribution.
+        Initializes the parameters of the distribution.
 
         Parameters
         ----------
         a : float
-            The left endpoint of the distribution.
+            The left endpoint of the the interval.
         b : float
-            The right endpoint of the distribution.
+            The right endpoint of the the interval.
         """
         self.a = a
         self.b = b
 
     def rvs(self, size=1, random_state: np.random.Generator | None = None):
         """
-        Draws random uniform variates.
+        Draws from a random continuous uniform distribution on an interval.
 
         Parameters
         ----------

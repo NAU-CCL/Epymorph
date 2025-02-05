@@ -1,7 +1,9 @@
+from typing import Any
+
+from epymorph.adrio.adrio import Adrio
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.parameter_fitting.likelihood import Likelihood
-from epymorph.simulation import BaseSimulationFunction
 from epymorph.time import TimeAggregation, TimeSelection
 
 
@@ -26,22 +28,20 @@ class Observations:
     """
     The `Observations` class is used to handle observational data for the simulation.
 
-    This class initializes with a data source (which can be any object) and a model link
-    that represents the connection between the observational data and the corresponding
-    model compartments or events.
-
     Attributes
     ----------
-    source : BaseSimulationFunction
+    source : Adrio[Any]
         The data source containing the observational data.
     model_link : ModelLink
         The link that maps the observations to specific
         compartments or events in the model.
+    likelihood : Likelihood
+        The likelihood function used to compare observed data with model outputs.
     """
 
     def __init__(
         self,
-        source: BaseSimulationFunction,
+        source: Adrio[Any],
         model_link: ModelLink,
         likelihood: Likelihood,
     ):
@@ -50,11 +50,13 @@ class Observations:
 
         Parameters
         ----------
-        source : BaseSimulationFunction
+        source : Adrio[Any]
             The data source.
         model_link : ModelLink
             Represents the connection between the observational data and the model's
             compartment or event.
+        likelihood : Likelihood
+            The likelihood function used to compare observed data with model outputs.
         """
         self.source = source
         self.model_link = model_link

@@ -19,7 +19,7 @@ class Particle:
         parameters: dict[str, np.ndarray],
     ) -> None:
         """
-        Initializes a Particle instance.
+        Initializes a single particle.
 
         Parameters
         ----------

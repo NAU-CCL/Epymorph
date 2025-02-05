@@ -8,6 +8,23 @@ import numpy as np
 class ParticleFilterOutput:
     """
     Encapulates the particle filter output.
+
+    Attributes
+    ----------
+    num_particles : int
+        The number of particles used in the particle filter.
+    parameters_estimated : list
+        The parameters which were estimated.
+    duration : str
+        The total duration of the particle filter simulation.
+    param_quantiles : Dict[str, List[float]]
+        The estimated quantiles of each parameter at each observation time.
+    param_values : Dict[str, List[float]]
+        The estimated average of each parameter at each observation time.
+    true_data : np.ndarray
+        The observed data which was used by the particle filter.
+    model_data : np.ndarray
+        The prediced data from the particle filter.
     """
 
     num_particles: int

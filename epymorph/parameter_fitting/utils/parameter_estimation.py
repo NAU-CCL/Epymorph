@@ -7,7 +7,7 @@ from epymorph.parameter_fitting.perturbation import Perturbation
 
 class EstimateParameters:
     """
-    Contains the information needed to estimate a parameter.
+    Contains the information needed to estimate a single parameter.
 
     Attributes
     ----------

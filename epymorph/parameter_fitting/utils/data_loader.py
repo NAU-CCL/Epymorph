@@ -53,11 +53,11 @@ class DataLoader:
 
     def load_data(self, observations: Observations) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Loads the data from a given source, either a simulation or a CSV file.
+        Loads the data from a given source.
 
         This method handles two types of sources:
-        1. SimulationFunctionClass: Data is generated via simulation in the context.
-        2. CSVTimeSeries: Data is loaded from a CSV file.
+        1. CSVTimeSeries: Data is loaded from a CSV file.
+        2. Any of the CDC adrios.
 
         Parameters
         ----------
@@ -71,6 +71,11 @@ class DataLoader:
                 - dates: An array of date values.
                 - sim_data: Simulated or observed case counts, generated using a Poisson
                 distribution.
+
+        Raises
+        ------
+        ValueError
+            Raised if the data source is not supported.
         """
         rng = np.random.default_rng()
         data = self.rume.evaluate_params(rng)
