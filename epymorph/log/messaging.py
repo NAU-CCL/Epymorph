@@ -14,7 +14,7 @@ from typing import Generator
 import humanize
 from humanize import naturalsize
 
-from epymorph.event import AdrioProgress, EventBus, OnStart, OnTick
+from epymorph.event import ADRIOProgress, EventBus, OnStart, OnTick
 from epymorph.util import progress, subscriptions
 
 _events = EventBus()
@@ -88,7 +88,7 @@ def sim_messaging(
         if start_time is not None:
             print(f"Runtime: {(end_time - start_time):.3f}s")
 
-    def on_adrio_progress(e: AdrioProgress) -> None:
+    def on_adrio_progress(e: ADRIOProgress) -> None:
         nonlocal last_progress_length
         if e.ratio_complete == 0:
             print(f"Loading {e.attribute} ({e.adrio_name}):")

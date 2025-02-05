@@ -13,7 +13,7 @@ import numpy as np
 
 from epymorph import initializer
 from epymorph.parameter_fitting.utils.observations import ModelLink
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
 from epymorph.tools.data import munge  # noqa: F403
@@ -31,7 +31,7 @@ class EpymorphSimulation:
         The start date for the simulation in 'YYYY-MM-DD' format.
     """
 
-    def __init__(self, rume: Rume, start_date: str):
+    def __init__(self, rume: RUME, start_date: str):
         """
         Initializes the EpymorphSimulation class with the provided parameters.
 
@@ -49,7 +49,7 @@ class EpymorphSimulation:
         self,
         state: np.ndarray,
         parameters: dict,
-        rume: Rume,
+        rume: RUME,
         date: str,
         duration: int,
         model_link: ModelLink,

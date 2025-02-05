@@ -79,7 +79,7 @@ from epymorph.util import (
 
 
 @dataclass(frozen=True)
-class Gpm:
+class GPM:
     """
     A GPM (short for Geo-Population Model) combines an IPM, MM, and
     initialization scheme. Most often, a GPM is used to specify the modules
@@ -224,7 +224,7 @@ GeoScopeT_co = TypeVar("GeoScopeT_co", covariant=True, bound=GeoScope)
 
 
 @dataclass(frozen=True)
-class Rume(ABC, Generic[GeoScopeT_co]):
+class RUME(ABC, Generic[GeoScopeT_co]):
     """
     A RUME (or Runnable Modeling Experiment) contains the configuration of an
     epymorph-style simulation. It brings together one or more IPMs, MMs, initialization
@@ -234,7 +234,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
     running a disease simulation and providing time-series results of the disease model.
     """
 
-    strata: Sequence[Gpm]
+    strata: Sequence[GPM]
     ipm: BaseCompartmentModel
     mms: OrderedDict[str, MovementModel]
     scope: GeoScopeT_co
@@ -546,7 +546,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
 
 
 @dataclass(frozen=True)
-class SingleStrataRume(Rume[GeoScopeT_co]):
+class SingleStrataRUME(RUME[GeoScopeT_co]):
     """A RUME with a single strata."""
 
     ipm: CompartmentModel
@@ -559,10 +559,10 @@ class SingleStrataRume(Rume[GeoScopeT_co]):
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> "SingleStrataRume[GeoScopeT]":
+    ) -> "SingleStrataRUME[GeoScopeT]":
         """Create a RUME with only a single strata."""
-        return SingleStrataRume(
-            strata=[Gpm(DEFAULT_STRATA, ipm, mm, init)],
+        return SingleStrataRUME(
+            strata=[GPM(DEFAULT_STRATA, ipm, mm, init)],
             ipm=ipm,
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
             scope=scope,
@@ -576,22 +576,22 @@ class SingleStrataRume(Rume[GeoScopeT_co]):
 
 
 @dataclass(frozen=True)
-class MultistrataRume(Rume[GeoScopeT_co]):
+class MultistrataRUME(RUME[GeoScopeT_co]):
     """A RUME with a multiple strata."""
 
     ipm: CombinedCompartmentModel
 
     @staticmethod
     def build(
-        strata: Sequence[Gpm],
+        strata: Sequence[GPM],
         meta_requirements: Sequence[AttributeDef],
         meta_edges: MetaEdgeBuilder,
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> "MultistrataRume[GeoScopeT]":
+    ) -> "MultistrataRUME[GeoScopeT]":
         """Create a multistrata RUME by combining one GPM per strata."""
-        return MultistrataRume(
+        return MultistrataRUME(
             strata=strata,
             # Combine IPMs
             ipm=CombinedCompartmentModel(
@@ -611,10 +611,10 @@ class MultistrataRume(Rume[GeoScopeT_co]):
         return str
 
 
-class MultistrataRumeBuilder(ABC):
+class MultistrataRUMEBuilder(ABC):
     """Create a multi-strata RUME by combining GPMs, one for each strata."""
 
-    strata: Sequence[Gpm]
+    strata: Sequence[GPM]
     """The strata that are part of this RUME."""
 
     meta_requirements: Sequence[AttributeDef]
@@ -638,9 +638,9 @@ class MultistrataRumeBuilder(ABC):
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> MultistrataRume[GeoScopeT]:
+    ) -> MultistrataRUME[GeoScopeT]:
         """Build the RUME."""
-        return MultistrataRume[GeoScopeT].build(
+        return MultistrataRUME[GeoScopeT].build(
             self.strata,
             self.meta_requirements,
             self.meta_edges,

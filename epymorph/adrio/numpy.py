@@ -6,14 +6,14 @@ import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio
+from epymorph.adrio.adrio import ADRIO
 from epymorph.error import DataResourceError
 
 _SliceLike = slice | type(Ellipsis)
 _ArraySlice = _SliceLike | tuple[_SliceLike, ...]
 
 
-class NPY(Adrio[Any]):
+class NPY(ADRIO[Any]):
     """Retrieves an array of data from a user-provided .npy file."""
 
     file_path: PathLike
@@ -62,7 +62,7 @@ class NPY(Adrio[Any]):
             raise DataResourceError(msg) from e
 
 
-class NPZ(Adrio[Any]):
+class NPZ(ADRIO[Any]):
     """Retrieves an array of data from a user-defined .npz file."""
 
     file_path: PathLike

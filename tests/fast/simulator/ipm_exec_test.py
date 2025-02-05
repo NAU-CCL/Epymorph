@@ -12,9 +12,9 @@ from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.database import DataResolver
 from epymorph.geography.scope import GeoScope
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.simulation import Tick
-from epymorph.simulator.basic.ipm_exec import IpmExecutor
+from epymorph.simulator.basic.ipm_exec import IPMExecutor
 from epymorph.simulator.world_list import ListWorld
 
 
@@ -68,9 +68,9 @@ class Sirbd(CompartmentModel):
 
 class StandardIpmExecutorTest(unittest.TestCase):
     def test_init_01(self):
-        exe = IpmExecutor(
+        exe = IPMExecutor(
             rume=MagicMock(
-                spec=Rume,
+                spec=RUME,
                 ipm=Sir(),
                 tau_step_lengths=[1.0],
                 num_tau_steps=1,
@@ -94,9 +94,9 @@ class StandardIpmExecutorTest(unittest.TestCase):
         )
 
     def test_init_02(self):
-        exe = IpmExecutor(
+        exe = IPMExecutor(
             rume=MagicMock(
-                spec=Rume,
+                spec=RUME,
                 ipm=Sirbd(),
                 tau_step_lengths=[1.0],
                 num_tau_steps=1,
@@ -162,9 +162,9 @@ class StandardIpmExecutorTest(unittest.TestCase):
         ], dtype=SimDType), return_tick=0)
         # fmt: on
 
-        exe = IpmExecutor(
+        exe = IPMExecutor(
             rume=MagicMock(
-                spec=Rume,
+                spec=RUME,
                 ipm=SIRBD2(),
                 tau_step_lengths=[1.0],
                 num_tau_steps=1,

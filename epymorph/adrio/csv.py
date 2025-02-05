@@ -10,8 +10,8 @@ from numpy.typing import DTypeLike, NDArray
 from pandas import DataFrame, Series, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio
-from epymorph.error import DataResourceError, GeoValidationError
+from epymorph.adrio.adrio import ADRIO
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
 from epymorph.geography.us_geography import CensusGranularity
@@ -144,7 +144,7 @@ def _validate_result(scope: GeoScope, data: Series) -> None:
         raise DataResourceError(msg)
 
 
-class CSV(Adrio[Any]):
+class CSV(ADRIO[Any]):
     """Retrieves an N-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -176,12 +176,12 @@ class CSV(Adrio[Any]):
         self.key_type = key_type
         self.skiprows = skiprows
 
-    @override
-    def evaluate_adrio(self) -> NDArray[Any]:
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
-            raise GeoValidationError(msg)
+            raise ValueError(msg)
 
+    @override
+    def evaluate_adrio(self) -> NDArray[Any]:
         path = Path(self.file_path)
         # workaround for bad pandas type definitions
         skiprows: int = self.skiprows  # type: ignore
@@ -216,7 +216,7 @@ class CSV(Adrio[Any]):
             raise DataResourceError(msg)
 
 
-class CSVTimeSeries(Adrio[Any]):
+class CSVTimeSeries(ADRIO[Any]):
     """Retrieves a TxN-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -256,12 +256,12 @@ class CSVTimeSeries(Adrio[Any]):
         self.file_time_frame = time_frame
         self.time_col = time_col
 
-    @override
-    def evaluate_adrio(self) -> NDArray[Any]:
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
-            raise GeoValidationError(msg)
+            raise ValueError(msg)
 
+    @override
+    def evaluate_adrio(self) -> NDArray[Any]:
         path = Path(self.file_path)
         skiprows: int = self.skiprows  # type: ignore
         if path.exists():
@@ -313,7 +313,7 @@ class CSVTimeSeries(Adrio[Any]):
             raise DataResourceError(msg)
 
 
-class CSVMatrix(Adrio[Any]):
+class CSVMatrix(ADRIO[Any]):
     """Retrieves an NxN-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -349,12 +349,12 @@ class CSVMatrix(Adrio[Any]):
         self.key_type = key_type
         self.skiprows = skiprows
 
-    @override
-    def evaluate_adrio(self) -> NDArray[Any]:
         if len({self.from_key_col, self.to_key_col, self.data_col}) != 3:
             msg = "From key column, to key column, and data column must all be unique."
-            raise GeoValidationError(msg)
+            raise ValueError(msg)
 
+    @override
+    def evaluate_adrio(self) -> NDArray[Any]:
         path = Path(self.file_path)
         if not path.exists():
             msg = f"File {self.file_path} not found"

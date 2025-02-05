@@ -61,8 +61,8 @@ from epymorph.error import DataAttributeError, DataAttributeErrorGroup
 from epymorph.geography.scope import GeoScope
 from epymorph.time import TimeFrame
 from epymorph.util import (
-    AnsiColor,
-    AnsiStyle,
+    ANSIColor,
+    ANSIStyle,
     ansi_stylize,
     filter_unique,
 )
@@ -762,10 +762,10 @@ class ReqNode(ReqTree[V]):
                 resd = f" <- {value_name}"
             case DefaultValue():
                 properties.append(f"default={self.value}")
-                color = AnsiColor.CYAN
+                color = ANSIColor.CYAN
                 resd = ""
             case MissingValue():
-                color = AnsiColor.RED
+                color = ANSIColor.RED
                 resd = ""
             case x:
                 # have to handle the impossible case
@@ -775,7 +775,7 @@ class ReqNode(ReqTree[V]):
         indent = "  " * depth
         corner = "└╴" if depth > 0 else ""
         name = ansi_stylize(format_name(self.name), color)
-        prop = ansi_stylize(f"({', '.join(properties)})", color, AnsiStyle.ITALIC)
+        prop = ansi_stylize(f"({', '.join(properties)})", color, ANSIStyle.ITALIC)
 
         return "\n".join(
             [

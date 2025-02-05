@@ -15,9 +15,9 @@ from epymorph.geography.us_census import StateScope
 from epymorph.initializer import NoInfection, SingleLocation
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
 from epymorph.rume import (
-    Gpm,
-    MultistrataRume,
-    SingleStrataRume,
+    GPM,
+    MultistrataRUME,
+    SingleStrataRUME,
     combine_tau_steps,
     remap_taus,
 )
@@ -242,7 +242,7 @@ class RumeTest(unittest.TestCase):
         # Make sure centroids has the tau steps we will expect later...
         assert_list_almost_equal(self, centroids.steps, [1 / 3, 2 / 3])
 
-        rume = SingleStrataRume.build(
+        rume = SingleStrataRUME.build(
             ipm=sir,
             mm=centroids,
             init=NoInfection(),
@@ -272,15 +272,15 @@ class RumeTest(unittest.TestCase):
         # Make sure 'no' has the tau steps we will expect later...
         assert_list_almost_equal(self, no.steps, [1.0])
 
-        rume = MultistrataRume.build(
+        rume = MultistrataRUME.build(
             strata=[
-                Gpm(
+                GPM(
                     name="aaa",
                     ipm=sir,
                     mm=no,
                     init=SingleLocation(location=0, seed_size=100),
                 ),
-                Gpm(
+                GPM(
                     name="bbb",
                     ipm=sir,
                     mm=no,
@@ -354,9 +354,9 @@ class RumeTest(unittest.TestCase):
         # Make sure centroids has the tau steps we will expect later...
         assert_list_almost_equal(self, centroids.steps, [1 / 3, 2 / 3])
 
-        rume = MultistrataRume.build(
+        rume = MultistrataRUME.build(
             strata=[
-                Gpm(
+                GPM(
                     name="aaa",
                     ipm=sir,
                     mm=centroids,

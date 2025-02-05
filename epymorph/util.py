@@ -42,7 +42,7 @@ def normalize_list(values: list[str]) -> list[str]:
     return list(map(normalize_str, values))
 
 
-class AnsiColor(Enum):
+class ANSIColor(Enum):
     # Standard Colors
     BLACK = 30
     RED = 31
@@ -63,7 +63,7 @@ class AnsiColor(Enum):
     BRIGHT_WHITE = 97
 
 
-class AnsiStyle(Enum):
+class ANSIStyle(Enum):
     RESET = 0  # Reset all styles
     BOLD = 1  # Bold text
     DIM = 2  # Dim text
@@ -74,8 +74,8 @@ class AnsiStyle(Enum):
 
 def ansi_stylize(
     text: str,
-    color: AnsiColor | None = AnsiColor.WHITE,
-    style: AnsiStyle | None = None,
+    color: ANSIColor | None = ANSIColor.WHITE,
+    style: ANSIStyle | None = None,
 ) -> str:
     """Uses ANSI escape codes to stylize a given text, which may not work everywhere.
     Any applied color or style are reset after the text.
@@ -91,7 +91,7 @@ def ansi_stylize(
     codes = [str(x.value) for x in (color, style) if x is not None]
     if len(codes) == 0:
         return text
-    return f"\033[{';'.join(codes)}m{text}\033[{AnsiStyle.RESET.value}m"
+    return f"\033[{';'.join(codes)}m{text}\033[{ANSIStyle.RESET.value}m"
 
 
 # function utilities

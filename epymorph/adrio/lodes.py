@@ -9,7 +9,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceError
@@ -380,7 +380,7 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
     )
 
 
-class _LodesAdrio(Adrio[np.int64], ABC):
+class _LodesADRIO(ADRIO[np.int64], ABC):
     _override_year: int | None
     """The year for the commuting data.
     If None, defaults to the year in which the simulation time frame starts."""
@@ -396,7 +396,7 @@ class _LodesAdrio(Adrio[np.int64], ABC):
 
 
 @adrio_cache
-class Commuters(_LodesAdrio):
+class Commuters(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving
     from a home GEOID to a work GEOID.
@@ -439,7 +439,7 @@ class Commuters(_LodesAdrio):
 
 
 @adrio_cache
-class CommutersByAge(_LodesAdrio):
+class CommutersByAge(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
     home GEOID to a work GEOID that fall under a certain age range.
@@ -501,7 +501,7 @@ class CommutersByAge(_LodesAdrio):
 
 
 @adrio_cache
-class CommutersByEarnings(_LodesAdrio):
+class CommutersByEarnings(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
     home GEOID to a work GEOID that earn a certain income range monthly.
@@ -563,7 +563,7 @@ class CommutersByEarnings(_LodesAdrio):
 
 
 @adrio_cache
-class CommutersByIndustry(_LodesAdrio):
+class CommutersByIndustry(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
     home GEOID to a work GEOID that work under specified industry sector.

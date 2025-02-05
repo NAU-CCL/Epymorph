@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from epymorph.data_type import SimDType
 from epymorph.event import EventBus, OnMovementClause, OnStart
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.util import subscriptions
 
 _events = EventBus()
@@ -69,7 +69,7 @@ class _MovementDataBuilder(MovementData):
     """
 
     ready: bool
-    rume: Rume | None
+    rume: RUME | None
     requested: list[_Entry]
     actual: list[_Entry]
 

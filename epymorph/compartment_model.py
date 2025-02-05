@@ -31,7 +31,7 @@ from sympy import Add, Expr, Float, Integer, Symbol
 from typing_extensions import override
 
 from epymorph.attribute import AbsoluteName, AttributeDef
-from epymorph.error import IpmValidationError
+from epymorph.error import IPMValidationError
 from epymorph.strata import DEFAULT_STRATA, META_STRATA, gpm_strata
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
 from epymorph.tools.ipm_diagram import render_diagram
@@ -227,7 +227,7 @@ def fork(*edges: EdgeDef) -> ForkDef:
             "In a Fork, all edges must share the same `state_from`.\n"
             f"  Problem in: {str(edges)}"
         )
-        raise IpmValidationError(err)
+        raise IPMValidationError(err)
     # it is assumed the fork's edges are defined with complementary rate expressions
     edge_rates = [e.rate for e in edges]
     # the "base rate" -- how many individuals transition on any of these edges --
@@ -451,7 +451,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
             "transitions cannot use exogenous states (BIRTH/DEATH) "
             "as both source and destination."
         )
-        raise IpmValidationError(err)
+        raise IPMValidationError(err)
 
     # Extract the set of compartments used by transitions.
     trx_comps = set(
@@ -479,7 +479,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
             "transitions reference compartments which were not declared.\n"
             f"Missing compartments: {', '.join(map(str, missing_comps))}"
         )
-        raise IpmValidationError(err)
+        raise IPMValidationError(err)
 
     # declared compartments minus used compartments is ideally empty,
     # otherwise raise a warning
@@ -501,7 +501,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
             "transitions reference requirements which were not declared.\n"
             f"Missing requirements: {', '.join(map(str, missing_reqs))}"
         )
-        raise IpmValidationError(err)
+        raise IPMValidationError(err)
 
     # declared requirements minus used requirements is ideally empty,
     # otherwise raise a warning
@@ -542,21 +542,21 @@ class CompartmentModelClass(ABCMeta):
         cmps = dct.get("compartments")
         if cmps is None or not isinstance(cmps, (list, tuple)):
             err = f"Invalid compartments in {name}: please specify as a list or tuple."
-            raise IpmValidationError(err)
+            raise IPMValidationError(err)
         if len(cmps) == 0:
             err = (
                 f"Invalid compartments in {name}: "
                 "please specify at least one compartment."
             )
-            raise IpmValidationError(err)
+            raise IPMValidationError(err)
         if not are_instances(cmps, CompartmentDef):
             err = (
                 f"Invalid compartments in {name}: must be instances of CompartmentDef."
             )
-            raise IpmValidationError(err)
+            raise IPMValidationError(err)
         if not are_unique(c.name for c in cmps):
             err = f"Invalid compartments in {name}: compartment names must be unique."
-            raise IpmValidationError(err)
+            raise IPMValidationError(err)
         # Make compartments immutable.
         dct["compartments"] = tuple(cmps)
 

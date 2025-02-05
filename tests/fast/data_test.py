@@ -13,7 +13,7 @@ from epymorph.attribute import (
     ModuleNamePattern,
 )
 from epymorph.compartment_model import MultistrataModelSymbols, edge
-from epymorph.data.ipm.sirs import Sirs
+from epymorph.data.ipm.sirs import SIRS
 from epymorph.data.mm.centroids import Centroids
 from epymorph.data_shape import Shapes
 from epymorph.data_type import AttributeArray, CentroidDType
@@ -27,7 +27,7 @@ from epymorph.params import (
     ParamFunctionTimeAndNode,
     simulation_symbols,
 )
-from epymorph.rume import Gpm, MultistrataRume, Rume
+from epymorph.rume import GPM, RUME, MultistrataRUME
 from epymorph.simulation import ParamValue
 from epymorph.time import TimeFrame
 
@@ -65,7 +65,7 @@ class EvaluateParamsTest(unittest.TestCase):
             "*::*::centroid": np.array([(1.0, 1.0), (2.0, 2.0)], dtype=CentroidDType),
         }
 
-    def _create_rume(self, rume_params: dict[str, ParamValue] | None = None) -> Rume:
+    def _create_rume(self, rume_params: dict[str, ParamValue] | None = None) -> RUME:
         meta_requirements = [
             AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
         ]
@@ -79,20 +79,20 @@ class EvaluateParamsTest(unittest.TestCase):
                 edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
             ]
 
-        return MultistrataRume.build(
+        return MultistrataRUME.build(
             strata=[
-                Gpm(
+                GPM(
                     name="aaa",
-                    ipm=Sirs(),
+                    ipm=SIRS(),
                     mm=Centroids(),
                     init=SingleLocation(location=0, seed_size=100),
                     params={
                         # leave phi unspecified to test default value resolution
                     },
                 ),
-                Gpm(
+                GPM(
                     name="bbb",
-                    ipm=Sirs(),
+                    ipm=SIRS(),
                     mm=Centroids(),
                     init=SingleLocation(location=0, seed_size=100),
                     params={

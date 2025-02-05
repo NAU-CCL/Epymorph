@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from epymorph.adrio import acs5, commuting_flows
-from epymorph.adrio.adrio import Adrio
+from epymorph.adrio.adrio import ADRIO
 from epymorph.data_shape import DataShape, DataShapeMatcher, Dimensions
 from epymorph.data_type import dtype_as_np
 from epymorph.geography.scope import GeoScope
@@ -13,7 +13,7 @@ from epymorph.util import NumpyTypeError, check_ndarray, match
 # - the ADRIO that fetches it
 # - the expected type of the result
 # - the expected shape of the result
-_attributes_to_test: dict[str, tuple[Adrio, type[int | float], DataShape]] = {
+_attributes_to_test: dict[str, tuple[ADRIO, type[int | float], DataShape]] = {
     "population": (
         acs5.Population(),
         int,
@@ -45,7 +45,7 @@ _attributes_to_test: dict[str, tuple[Adrio, type[int | float], DataShape]] = {
         Shapes.NxN,
     ),
     "gini_index": (
-        acs5.GiniIndex(),
+        acs5.GINIIndex(),
         float,
         Shapes.N,
     ),

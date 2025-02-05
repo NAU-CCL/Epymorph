@@ -1,6 +1,6 @@
 from typing import Any
 
-from epymorph.adrio.adrio import Adrio
+from epymorph.adrio.adrio import ADRIO
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.parameter_fitting.likelihood import Likelihood
@@ -41,7 +41,7 @@ class Observations:
 
     def __init__(
         self,
-        source: Adrio[Any],
+        source: ADRIO[Any],
         model_link: ModelLink,
         likelihood: Likelihood,
     ):

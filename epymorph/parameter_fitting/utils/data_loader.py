@@ -3,11 +3,11 @@ from typing import Tuple
 import numpy as np
 from pandas import read_csv
 
-from epymorph.adrio.adrio import Adrio
+from epymorph.adrio.adrio import ADRIO
 from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 
 _CDC_ADRIOS = [
     CovidCasesPer100k,  # noqa: F405
@@ -40,7 +40,7 @@ class DataLoader:
         Simulation parameters and configuration.
     """
 
-    def __init__(self, rume: Rume) -> None:
+    def __init__(self, rume: RUME) -> None:
         """
         Initializes the DataLoader with simulation parameters.
 
@@ -81,7 +81,7 @@ class DataLoader:
         data = self.rume.evaluate_params(rng)
         source = observations.source
 
-        if isinstance(source, Adrio):
+        if isinstance(source, ADRIO):
             if isinstance(source, CSVTimeSeries):
                 csv_df = read_csv(source.file_path)
 

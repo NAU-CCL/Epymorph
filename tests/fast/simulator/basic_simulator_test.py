@@ -9,21 +9,21 @@ from numpy.typing import NDArray
 from epymorph.attribute import AttributeDef
 from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.data.ipm.pei import Pei as PeiIPM
-from epymorph.data.ipm.sirh import Sirh
+from epymorph.data.ipm.sirh import SIRH
 from epymorph.data.mm.no import No as NoMM
 from epymorph.data.mm.pei import Pei as PeiMM
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.error import (
-    IpmSimInvalidProbsError,
-    IpmSimLessThanZeroError,
-    IpmSimNaNError,
-    MmSimError,
+    IPMSimInvalidProbsError,
+    IPMSimLessThanZeroError,
+    IPMSimNaNError,
+    MMSimError,
 )
 from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import StateScope
 from epymorph.initializer import SingleLocation
-from epymorph.rume import SingleStrataRume
+from epymorph.rume import SingleStrataRUME
 from epymorph.simulation import default_rng
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
@@ -63,7 +63,7 @@ class SimulateTest(unittest.TestCase):
         }
 
     def test_pei(self):
-        rume = SingleStrataRume.build(
+        rume = SingleStrataRUME.build(
             ipm=PeiIPM(),
             mm=PeiMM(),
             init=SingleLocation(location=0, seed_size=10_000),
@@ -146,7 +146,7 @@ class SimulateTest(unittest.TestCase):
         )
 
     def test_override_params(self):
-        rume = SingleStrataRume.build(
+        rume = SingleStrataRUME.build(
             ipm=PeiIPM(),
             mm=PeiMM(),
             init=SingleLocation(location=0, seed_size=10_000),
@@ -183,7 +183,7 @@ class SimulateTest(unittest.TestCase):
         """
         Test exception handling for a negative rate value due to a negative parameter
         """
-        rume = SingleStrataRume.build(
+        rume = SingleStrataRUME.build(
             ipm=PeiIPM(),
             mm=PeiMM(),
             init=SingleLocation(location=0, seed_size=10_000),
@@ -200,7 +200,7 @@ class SimulateTest(unittest.TestCase):
 
         sim = BasicSimulator(rume)
 
-        with self.assertRaises(IpmSimLessThanZeroError) as e:
+        with self.assertRaises(IPMSimLessThanZeroError) as e:
             sim.run(rng_factory=default_rng(42))
 
         err_msg = str(e.exception)
@@ -236,7 +236,7 @@ class SimulateTest(unittest.TestCase):
                     edge(R, S, rate=ξ * R),
                 ]
 
-        rume = SingleStrataRume.build(
+        rume = SingleStrataRUME.build(
             ipm=Sirs(),
             mm=NoMM(),
             init=SingleLocation(location=1, seed_size=5),
@@ -252,7 +252,7 @@ class SimulateTest(unittest.TestCase):
         )
 
         sim = BasicSimulator(rume)
-        with self.assertRaises(IpmSimNaNError) as e:
+        with self.assertRaises(IPMSimNaNError) as e:
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
@@ -264,8 +264,8 @@ class SimulateTest(unittest.TestCase):
 
     def test_negative_probs_error(self):
         """Test for handling negative probability error"""
-        rume = SingleStrataRume.build(
-            ipm=Sirh(),
+        rume = SingleStrataRUME.build(
+            ipm=SIRH(),
             mm=NoMM(),
             init=SingleLocation(location=1, seed_size=5),
             scope=self._pei_scope(),
@@ -281,7 +281,7 @@ class SimulateTest(unittest.TestCase):
         )
 
         sim = BasicSimulator(rume)
-        with self.assertRaises(IpmSimInvalidProbsError) as e:
+        with self.assertRaises(IPMSimInvalidProbsError) as e:
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
@@ -295,7 +295,7 @@ class SimulateTest(unittest.TestCase):
 
     def test_mm_clause_error(self):
         """Test for handling invalid movement model clause application"""
-        rume = SingleStrataRume.build(
+        rume = SingleStrataRUME.build(
             ipm=PeiIPM(),
             mm=PeiMM(),
             init=SingleLocation(location=1, seed_size=5),
@@ -312,7 +312,7 @@ class SimulateTest(unittest.TestCase):
         )
 
         sim = BasicSimulator(rume)
-        with self.assertRaises(MmSimError) as e:
+        with self.assertRaises(MMSimError) as e:
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)

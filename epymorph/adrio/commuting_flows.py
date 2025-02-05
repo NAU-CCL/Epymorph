@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from pandas import read_excel
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, adrio_cache
+from epymorph.adrio.adrio import ADRIO, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceError
@@ -86,7 +86,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
 
 
 @adrio_cache
-class Commuters(Adrio[np.int64]):
+class Commuters(ADRIO[np.int64]):
     """
     Creates an NxN matrix of integers representing commuters from the ACS commuting
     flow data.

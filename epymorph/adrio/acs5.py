@@ -15,7 +15,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
 from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
@@ -39,12 +39,12 @@ from epymorph.util import filter_with_mask
 
 _ACS5_CACHE_PATH = module_cache_path(__name__)
 
-Acs5Year = Literal[
+ACS5Year = Literal[
     2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022
 ]
 """A supported ACS5 data year."""
 
-ACS5_YEARS: Sequence[Acs5Year] = (
+ACS5_YEARS: Sequence[ACS5Year] = (
     2009,
     2010,
     2011,
@@ -108,7 +108,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
-def is_acs5_year(year: int) -> TypeGuard[Acs5Year]:
+def is_acs5_year(year: int) -> TypeGuard[ACS5Year]:
     """A type-guard function to ensure a year is a supported ACS5 year."""
     return year in ACS5_YEARS
 
@@ -284,7 +284,7 @@ def _fetch_acs5(
 
 
 @adrio_cache
-class Population(Adrio[np.int64]):
+class Population(ADRIO[np.int64]):
     """
     Retrieves an N-shaped array of integers representing the total population of each
     geographic node. Data is retrieved from Census table variable B01001_001 using ACS5
@@ -299,7 +299,7 @@ class Population(Adrio[np.int64]):
 
 
 @adrio_cache
-class PopulationByAgeTable(Adrio[np.int64]):
+class PopulationByAgeTable(ADRIO[np.int64]):
     """
     Creates a table of population data for each geographic node split into various age
     categories. Data is retrieved from Census table B01001 using ACS5 5-year estimates.
@@ -371,7 +371,7 @@ class AgeRange(NamedTuple):
 
 
 @adrio_cache
-class PopulationByAge(Adrio[np.int64]):
+class PopulationByAge(ADRIO[np.int64]):
     """
     Retrieves an N-shaped array of integers representing the total population
     within a specified age range for each geographic node. Data is retrieved from
@@ -429,7 +429,7 @@ class PopulationByAge(Adrio[np.int64]):
 
 
 @adrio_cache
-class AverageHouseholdSize(Adrio[np.float64]):
+class AverageHouseholdSize(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the average number of people
     living in each household for every geographic node.
@@ -444,7 +444,7 @@ class AverageHouseholdSize(Adrio[np.float64]):
 
 
 @adrio_cache
-class DissimilarityIndex(Adrio[np.float64]):
+class DissimilarityIndex(ADRIO[np.float64]):
     """
     Calculates an N-shaped array of floats representing the amount of racial segregation
     between a specified racial majority and minority groups on a scale of
@@ -527,7 +527,7 @@ class DissimilarityIndex(Adrio[np.float64]):
 
 
 @adrio_cache
-class GiniIndex(Adrio[np.float64]):
+class GINIIndex(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the amount of income inequality
     on a scale of 0 (perfect equality) to 1 (perfect inequality) for each
@@ -573,7 +573,7 @@ class GiniIndex(Adrio[np.float64]):
 
 
 @adrio_cache
-class MedianAge(Adrio[np.float64]):
+class MedianAge(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the median age in
     each geographic node. Data is retrieved from Census table variable
@@ -588,7 +588,7 @@ class MedianAge(Adrio[np.float64]):
 
 
 @adrio_cache
-class MedianIncome(Adrio[np.float64]):
+class MedianIncome(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the median yearly income in
     each geographic node. Data is retrieved from Census table variable B19013_001

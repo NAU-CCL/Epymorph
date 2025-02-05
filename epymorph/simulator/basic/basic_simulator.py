@@ -7,19 +7,19 @@ import numpy as np
 from epymorph.attribute import NamePattern
 from epymorph.data_type import SimDType
 from epymorph.error import (
-    CompilationError,
     DataAttributeError,
     InitError,
-    IpmSimError,
-    MmSimError,
+    IPMSimError,
+    MMSimError,
+    SimCompilationError,
     SimValidationError,
     ValidationError,
     error_gate,
 )
 from epymorph.event import EventBus, OnStart, OnTick
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.simulation import ParamValue, simulation_clock
-from epymorph.simulator.basic.ipm_exec import IpmExecutor
+from epymorph.simulator.basic.ipm_exec import IPMExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
 from epymorph.simulator.world_list import ListWorld
@@ -28,20 +28,20 @@ from epymorph.util import CovariantMapping
 
 _events = EventBus()
 
-RumeT = TypeVar("RumeT", bound=Rume)
+RUMEType = TypeVar("RUMEType", bound=RUME)
 
 
-class BasicSimulator(Generic[RumeT]):
+class BasicSimulator(Generic[RUMEType]):
     """
     A simulator for running singular simulation passes and producing time-series output.
     The most basic simulator!
     """
 
-    rume: RumeT
-    ipm_exec: IpmExecutor
+    rume: RUMEType
+    ipm_exec: IPMExecutor
     mm_exec: MovementExecutor
 
-    def __init__(self, rume: RumeT):
+    def __init__(self, rume: RUMEType):
         self.rume = rume
 
     def run(
@@ -50,7 +50,7 @@ class BasicSimulator(Generic[RumeT]):
         params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
         time_frame: TimeFrame | None = None,
         rng_factory: Callable[[], np.random.Generator] | None = None,
-    ) -> Output[RumeT]:
+    ) -> Output[RUMEType]:
         """Run a RUME with the given overrides."""
 
         rume = self.rume
@@ -62,7 +62,7 @@ class BasicSimulator(Generic[RumeT]):
         with error_gate(
             "evaluating simulation attributes",
             ValidationError,
-            CompilationError,
+            SimCompilationError,
         ):
             try:
                 data = rume.evaluate_params(override_params=params, rng=rng)
@@ -79,8 +79,8 @@ class BasicSimulator(Generic[RumeT]):
             initial_values = rume.initialize(data, rng)
             world = ListWorld.from_initials(initial_values)
 
-        with error_gate("compiling the simulation", CompilationError):
-            ipm_exec = IpmExecutor(rume, world, data, rng)
+        with error_gate("compiling the simulation", SimCompilationError):
+            ipm_exec = IPMExecutor(rume, world, data, rng)
             movement_exec = MovementExecutor(rume, world, data, rng)
 
         name = self.__class__.__name__
@@ -102,11 +102,11 @@ class BasicSimulator(Generic[RumeT]):
             t = tick.sim_index
 
             # First do movement
-            with error_gate("executing movement", MmSimError, DataAttributeError):
+            with error_gate("executing movement", MMSimError, DataAttributeError):
                 movement_exec.apply(tick)
 
             # Then do IPM
-            with error_gate("executing the IPM", IpmSimError, DataAttributeError):
+            with error_gate("executing the IPM", IPMSimError, DataAttributeError):
                 vcs, ves, hcs, hes = ipm_exec.apply(tick)
                 visit_compartments[t] = vcs
                 visit_events[t] = ves

@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, concat, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
 from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
@@ -361,7 +361,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
 
 
 @adrio_cache
-class CovidCasesPer100k(Adrio[np.float64]):
+class CovidCasesPer100k(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     number of COVID-19 cases per 100k population.
@@ -385,7 +385,7 @@ class CovidCasesPer100k(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationsPer100k(Adrio[np.float64]):
+class CovidHospitalizationsPer100k(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     number of COVID-19 hospitalizations per 100k population.
@@ -409,7 +409,7 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationAvgFacility(Adrio[np.float64]):
+class CovidHospitalizationAvgFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of COVID-19 hospitalizations from the facility level dataset.
@@ -440,7 +440,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationSumFacility(Adrio[np.float64]):
+class CovidHospitalizationSumFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of all COVID-19 hospitalizations from the facility level dataset.
@@ -471,7 +471,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
+class InfluenzaHosptializationAvgFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of influenza hospitalizations from the facility level dataset.
@@ -502,7 +502,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
+class InfluenzaHospitalizationSumFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of influenza hospitalizations from the facility level dataset.
@@ -533,7 +533,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationAvgState(Adrio[np.float64]):
+class CovidHospitalizationAvgState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of COVID-19 hospitalizations from the state level dataset.
@@ -557,7 +557,7 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationSumState(Adrio[np.float64]):
+class CovidHospitalizationSumState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of COVID-19 hospitalizations from the state level dataset.
@@ -581,7 +581,7 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
+class InfluenzaHospitalizationAvgState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of influenza hospitalizations from the state level dataset.
@@ -605,7 +605,7 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHospitalizationSumState(Adrio[np.float64]):
+class InfluenzaHospitalizationSumState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of influenza hospitalizations from the state level dataset.
@@ -629,7 +629,7 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
 
 
 @adrio_cache
-class FullCovidVaccinations(Adrio[np.float64]):
+class FullCovidVaccinations(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     cumulative total number of individuals fully vaccinated for COVID-19.
@@ -653,7 +653,7 @@ class FullCovidVaccinations(Adrio[np.float64]):
 
 
 @adrio_cache
-class OneDoseCovidVaccinations(Adrio[np.float64]):
+class OneDoseCovidVaccinations(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     cumulative total number of individuals with at least one dose of COVID-19
@@ -678,7 +678,7 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidBoosterDoses(Adrio[np.float64]):
+class CovidBoosterDoses(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     cumulative total number of COVID-19 booster doses administered.
@@ -702,7 +702,7 @@ class CovidBoosterDoses(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidDeathsCounty(Adrio[np.float64]):
+class CovidDeathsCounty(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly total of COVID-19 deaths from the county level dataset.
@@ -726,7 +726,7 @@ class CovidDeathsCounty(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidDeathsState(Adrio[np.float64]):
+class CovidDeathsState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly total of COVID-19 deaths from the state level dataset.
@@ -750,7 +750,7 @@ class CovidDeathsState(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaDeathsState(Adrio[np.float64]):
+class InfluenzaDeathsState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly total of influenza deaths from the state level dataset.

@@ -18,7 +18,7 @@ from epymorph.compartment_model import (
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.log.messaging import sim_messaging
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.time import Dim, TimeAggregation, TimeSelection
 from epymorph.util import mask
 
@@ -26,7 +26,7 @@ from epymorph.util import mask
 class Output(Protocol):
     """A generic output interface."""
 
-    rume: Rume
+    rume: RUME
     """The Rume used in the simulation that generated this output."""
 
     @property
@@ -186,7 +186,7 @@ def munge(
     return data_df.rename(columns=q_mapping)
 
 
-RumeT = TypeVar("RumeT", bound=Rume)
+RumeT = TypeVar("RumeT", bound=RUME)
 
 
 def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> RumeT:

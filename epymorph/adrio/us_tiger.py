@@ -8,7 +8,7 @@ from geopandas import GeoDataFrame
 from pandas import DataFrame, to_numeric
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
 from epymorph.data_type import CentroidDType, StructDType
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceError
@@ -105,7 +105,7 @@ def _get_info(scope: CensusScope, progress: ProgressCallback) -> DataFrame:
 T_co = TypeVar("T_co", bound=np.generic)
 
 
-class _UsTigerAdrio(Adrio[T_co], ABC):
+class _USTigerAdrio(ADRIO[T_co], ABC):
     """Abstract class for shared functionality in US Tiger ADRIOs."""
 
     def estimate_data(self) -> DataEstimate:
@@ -138,7 +138,7 @@ class _UsTigerAdrio(Adrio[T_co], ABC):
 
 
 @adrio_cache
-class GeometricCentroid(_UsTigerAdrio[StructDType]):
+class GeometricCentroid(_USTigerAdrio[StructDType]):
     """The centroid of the geographic polygons."""
 
     @override
@@ -152,7 +152,7 @@ class GeometricCentroid(_UsTigerAdrio[StructDType]):
 
 
 @adrio_cache
-class InternalPoint(_UsTigerAdrio[StructDType]):
+class InternalPoint(_USTigerAdrio[StructDType]):
     """
     The internal point provided by TIGER data. These points are selected by
     Census workers so as to be guaranteed to be within the geographic polygons,
@@ -171,7 +171,7 @@ class InternalPoint(_UsTigerAdrio[StructDType]):
 
 
 @adrio_cache
-class Name(_UsTigerAdrio[np.str_]):
+class Name(_USTigerAdrio[np.str_]):
     """For states and counties, the proper name of the location; otherwise its GEOID."""
 
     @override
@@ -186,7 +186,7 @@ class Name(_UsTigerAdrio[np.str_]):
 
 
 @adrio_cache
-class PostalCode(_UsTigerAdrio[np.str_]):
+class PostalCode(_USTigerAdrio[np.str_]):
     """
     For states only, the postal code abbreviation for the state
     ("AZ" for Arizona, and so on).
@@ -204,7 +204,7 @@ class PostalCode(_UsTigerAdrio[np.str_]):
 
 
 @adrio_cache
-class LandAreaM2(_UsTigerAdrio[np.float64]):
+class LandAreaM2(_USTigerAdrio[np.float64]):
     """
     The land area of the geo node in meters-squared. This is the 'ALAND' attribute
     from the TIGER data files.

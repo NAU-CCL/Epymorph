@@ -35,7 +35,7 @@ from epymorph.params import (
     ParamFunctionTime,
     ParamFunctionTimeAndNode,
 )
-from epymorph.rume import Gpm, MultistrataRume, MultistrataRumeBuilder, SingleStrataRume
+from epymorph.rume import GPM, MultistrataRUME, MultistrataRUMEBuilder, SingleStrataRUME
 from epymorph.simulation import default_rng
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
@@ -55,11 +55,11 @@ __all__ = [
     "BIRTH",
     "DEATH",
     # Single Strata RUME
-    "SingleStrataRume",
+    "SingleStrataRUME",
     # Multistrata RUME
-    "MultistrataRume",
-    "MultistrataRumeBuilder",
-    "Gpm",
+    "MultistrataRUME",
+    "MultistrataRUMEBuilder",
+    "GPM",
     "MultistrataModelSymbols",
     # Simulator
     "BasicSimulator",

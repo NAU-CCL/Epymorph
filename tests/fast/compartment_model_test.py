@@ -20,7 +20,7 @@ from epymorph.compartment_model import (
     edge,
 )
 from epymorph.data_shape import Shapes
-from epymorph.error import IpmValidationError
+from epymorph.error import IPMValidationError
 from epymorph.sympy_shim import to_symbol
 from epymorph.util import are_instances
 
@@ -118,7 +118,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_03(self):
         # Test for error: Reference an undeclared compartment in a transition.
-        with self.assertRaises(IpmValidationError) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -145,7 +145,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_04(self):
         # Test for error: Reference an undeclared requirement in a transition.
-        with self.assertRaises(IpmValidationError) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -172,7 +172,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_05(self):
         # Test for error: Source and destination are both exogenous!
-        with self.assertRaises(IpmValidationError) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -199,7 +199,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_06(self):
         # Test for error: model with no compartments.
-        with self.assertRaises(IpmValidationError) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = []
