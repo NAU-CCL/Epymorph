@@ -1,4 +1,5 @@
 """ADRIOs that load data from locally available CSV files."""
+# ruff: noqa: A005
 
 from datetime import date
 from os import PathLike

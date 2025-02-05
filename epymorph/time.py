@@ -1,3 +1,4 @@
+# ruff: noqa: A005
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, timedelta
