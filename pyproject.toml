@@ -113,11 +113,11 @@ select = [
   "PT", # (pytest)
   "T20", # (no extra print statements laying around)
   "ERA", # (no commented code)
+  "FURB", # (use modern python)
 
   # NOTE: rules I'd like to enable some day are below, commented out
   # "C4", # (clean comprehensions usage)
   # "UP", (use modern python)
-  # "FURB", (use modern python)
   # "B", (possible bugs)
   # "D", (enforced documentation)
   # "DOC", (enforced documentation; complementary with D)
