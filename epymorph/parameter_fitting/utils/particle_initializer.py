@@ -71,7 +71,6 @@ class ParticleInitializer:
             The initialized particles.
         """
 
-        # rng = np.random.default_rng()
         data = self.rume.evaluate_params(rng)
         initial_state = self.rume.initialize(data, rng)
 

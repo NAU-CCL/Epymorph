@@ -444,7 +444,7 @@ class SimulationFunctionClass(ABCMeta):
         # are picklable before we try to serialize it...
         # Thus I don't think we can guarantee picklability at class definition time.
         # Something like:
-        #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]
+        #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]  # noqa: ERA001
         # Why worry? Lambda functions are probably the most likely problem;
         # they're not picklable by default.
         # But a simple workaround is to use a def function and,

@@ -181,30 +181,6 @@ class ParamFunctionTimeAndNode(_ParamFunction1[ResultDType]):
         """
 
 
-# NOTE: data_shape does not yet support TxNxN attributes,
-#       so this type of function is moot for now
-#       (commented out to prevent confusion)
-# class ParamFunctionTimeAndNodeAndNode(_ParamFunction1[T_co]):
-#     """
-#     A param function which produces a time-by-node-by-node 3-dimensional
-#     array of data, one value at a time.
-#     """
-#
-#     @final
-#     def evaluate(self) -> NDArray[T_co]:
-#         result = [[[self.evaluate1(day, n1, n2) for n2 in range(self.dim.nodes)]
-#                    for n1 in range(self.dim.nodes)]
-#                   for day in range(self.dim.days)]
-#         return np.array(result, dtype=self.dtype)
-#
-#     @abstractmethod
-#     def evaluate1(self, day: int, node_from: int, node_to: int) -> AttributeValue:
-#         """
-#         Produce a scalar value for this parameter by day and node-pair
-#         in the given simulation context.
-#         """
-
-
 _ALL_PARAMS = ("day", "node_index", "duration_days", "nodes")
 _ALL_PARAM_SYMBOLS = [to_symbol(x) for x in _ALL_PARAMS]
 _PARAMS_MAP = dict(zip(_ALL_PARAMS, _ALL_PARAM_SYMBOLS))

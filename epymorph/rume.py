@@ -98,7 +98,7 @@ class Gpm:
     # And we could design around that but I'm not certain this feature isn't destinated
     # to be removed anyway... so for now users will have to do the parsing or maybe
     # we'll add a utility function that effectively does this:
-    # params = {ModuleNamePattern.parse(k): v for k, v in (params or {}).items()}
+    # params = {ModuleNamePattern.parse(k): v for k, v in (params or {}).items()}  # noqa: E501, ERA001
 
 
 ########

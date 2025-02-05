@@ -77,11 +77,11 @@ _SUPPORTED_STATES = [
     "24", "25", "26", "27", "28", "29", "30", "31", "32", "33",
     "34", "35", "36", "37", "38", "39", "40", "41", "42", "44",
     "45", "46", "47", "48", "49", "50", "51", "53", "54", "55",
-    "56", "72", # '60', '66', '69', '78'
+    "56", "72",
 ]
 """
 The FIPS IDs of states which are included in our set of supported states.
-Not needed if we didn't have to filter out 4 territories.
+Not needed if we didn't have to filter out 4 territories. (60, 66, 69, 78)
 """
 # fmt: on
 
@@ -89,7 +89,6 @@ _TIGER_URL = "https://www2.census.gov/geo/tiger"
 
 _TIGER_CACHE_PATH = module_cache_path(__name__)
 
-# _SUPPORTED_STATE_FILES = ['us', '60', '66', '69', '78']
 _SUPPORTED_STATE_FILES = ["us"]
 """
 The IDs of TIGER files that are included in our set of supported states.

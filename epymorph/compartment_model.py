@@ -630,7 +630,6 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
     @override
     def events(self) -> Sequence[EdgeDef]:
         """Iterate over all events in order."""
-        # return list(_as_events(self.transitions))
         return self._events
 
     @property
@@ -863,7 +862,6 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     @override
     def events(self) -> Sequence[EdgeDef]:
         """Iterate over all events in order."""
-        # return list(_as_events(self.transitions))
         return self._events
 
     @property
