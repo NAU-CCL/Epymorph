@@ -1,3 +1,4 @@
+# ruff: noqa: PT009,PT027
 import unittest
 
 from epymorph.geography.us_census import StateScope
