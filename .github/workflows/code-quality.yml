@@ -29,6 +29,22 @@ jobs:
         with:
           python-version-file: ".python-version"
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Create cache directory
+        run: mkdir -p .cache
+
+      - name: Download cache files from S3
+        run: aws s3 sync s3://epymorph-gha-cache .cache
+
+      - name: Set CACHE_DIR environment variable
+        run: echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
+
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 

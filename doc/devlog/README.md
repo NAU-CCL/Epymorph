@@ -77,6 +77,8 @@ This folder is a handy place to put Jupyter notebooks or other documents which h
 | 2024-12-06.ipynb | Tyler | | Visualizing movement models. |
 | 2024-12-16.ipynb | Tyler | | Demonstrates table output tools with time-axis group-and-aggregate. |
 | 2024-12-19-v0.9.ipynb | Tyler | | Introduces v0.9 by example. (See others in this series.) |
+| 2025-01-23-param-estimation-demo.ipynb | Jeff | ✓ | Demonstrates the usage of the particle filter on real data. |
+| 2025-01-23-param-estimation-multinode.ipynb | Jeff | ✓ | Demonstrates the usage of the particle filter on a multi-node system. |
 
 ## Contributing
 
