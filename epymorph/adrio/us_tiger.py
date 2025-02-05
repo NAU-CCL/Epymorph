@@ -146,7 +146,7 @@ class GeometricCentroid(_USTigerAdrio[StructDType]):
         scope = _validate_scope(self.scope)
         return (
             _get_geo(scope, self.progress)["geometry"]
-            .apply(lambda x: x.centroid.coords[0])
+            .apply(lambda x: x.centroid.coords[0])  # type: ignore
             .to_numpy(dtype=CentroidDType)
         )
 
