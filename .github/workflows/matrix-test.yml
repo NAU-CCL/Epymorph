@@ -1,7 +1,7 @@
 # Runs unit tests with a matrix of Python versions and operating systems
 
 name: Test matrix
-on: pull_request
+on: workflow_dispatch
 
 jobs:
   test-matrix:
@@ -28,6 +28,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Configure AWS Credentials
+        if: env.SIDELOAD_CACHE == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Download cache files from S3
+        if: env.SIDELOAD_CACHE == 'true'
+        run: |
+          mkdir -p .cache
+          echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
+          aws s3 sync s3://epymorph-gha-cache .cache
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
