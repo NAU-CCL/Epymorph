@@ -14,7 +14,7 @@ from epymorph.compartment_model import (
     CompartmentName,
     EdgeDef,
     EdgeName,
-    MultistrataModelSymbols,
+    MultiStrataModelSymbols,
     TransitionDef,
     compartment,
     edge,
@@ -298,7 +298,7 @@ class CompartmentModelTest(unittest.TestCase):
 
         sir = Sir()
 
-        def meta_edges(sym: MultistrataModelSymbols):
+        def meta_edges(sym: MultiStrataModelSymbols):
             [S_aaa, I_aaa, R_aaa] = sym.strata_compartments("aaa")
             [S_bbb, I_bbb, R_bbb] = sym.strata_compartments("bbb")
             [beta_bbb_aaa] = sym.all_meta_requirements
@@ -468,7 +468,7 @@ class CompartmentModelTest(unittest.TestCase):
         strata = [("one", SirsBirthDeath()), ("two", SirsBirthDeath())]
         meta_requirements = ()
 
-        def meta_edges(symbols: MultistrataModelSymbols) -> Sequence[TransitionDef]:
+        def meta_edges(symbols: MultiStrataModelSymbols) -> Sequence[TransitionDef]:
             [S1, I1, R1] = symbols.strata_compartments("one")
             [S2, I2, R2] = symbols.strata_compartments("two")
             [b1, *_] = symbols.strata_requirements("one")

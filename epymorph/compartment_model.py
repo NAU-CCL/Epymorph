@@ -654,7 +654,7 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
 ###################################
 
 
-class MultistrataModelSymbols(ModelSymbols):
+class MultiStrataModelSymbols(ModelSymbols):
     """IPM symbols needed in defining the model's transition rate expressions."""
 
     all_meta_requirements: Sequence[Symbol]
@@ -736,7 +736,7 @@ class MultistrataModelSymbols(ModelSymbols):
         return sym.all_requirements if len(names) == 0 else sym.requirements(*names)
 
 
-MetaEdgeBuilder = Callable[[MultistrataModelSymbols], Sequence[TransitionDef]]
+MetaEdgeBuilder = Callable[[MultiStrataModelSymbols], Sequence[TransitionDef]]
 """A function for creating meta edges in a multistrata RUME."""
 
 
@@ -751,7 +751,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     _strata: Sequence[tuple[str, CompartmentModel]]
     _meta_requirements: Sequence[AttributeDef]
     _meta_edges: MetaEdgeBuilder
-    _symbols: MultistrataModelSymbols
+    _symbols: MultiStrataModelSymbols
     _transitions: Sequence[TransitionDef]
     _events: Sequence[EdgeDef]
     _requirements_dict: OrderedDict[AbsoluteName, AttributeDef]
@@ -777,7 +777,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
             *self._meta_requirements,
         ]
 
-        symbols = MultistrataModelSymbols(
+        symbols = MultiStrataModelSymbols(
             strata=self._strata, meta_requirements=self._meta_requirements
         )
         self._symbols = symbols
@@ -848,7 +848,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
 
     @property
     @override
-    def symbols(self) -> MultistrataModelSymbols:
+    def symbols(self) -> MultiStrataModelSymbols:
         """The symbols which represent parts of this model."""
         return self._symbols
 

@@ -40,7 +40,7 @@ from epymorph.compartment_model import (
     CombinedCompartmentModel,
     CompartmentModel,
     MetaEdgeBuilder,
-    MultistrataModelSymbols,
+    MultiStrataModelSymbols,
     TransitionDef,
 )
 from epymorph.data_shape import Shapes
@@ -576,7 +576,7 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
 
 
 @dataclass(frozen=True)
-class MultistrataRUME(RUME[GeoScopeT_co]):
+class MultiStrataRUME(RUME[GeoScopeT_co]):
     """A RUME with a multiple strata."""
 
     ipm: CombinedCompartmentModel
@@ -589,9 +589,9 @@ class MultistrataRUME(RUME[GeoScopeT_co]):
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> "MultistrataRUME[GeoScopeT]":
+    ) -> "MultiStrataRUME[GeoScopeT]":
         """Create a multistrata RUME by combining one GPM per strata."""
-        return MultistrataRUME(
+        return MultiStrataRUME(
             strata=strata,
             # Combine IPMs
             ipm=CombinedCompartmentModel(
@@ -611,7 +611,7 @@ class MultistrataRUME(RUME[GeoScopeT_co]):
         return str
 
 
-class MultistrataRUMEBuilder(ABC):
+class MultiStrataRUMEBuilder(ABC):
     """Create a multi-strata RUME by combining GPMs, one for each strata."""
 
     strata: Sequence[GPM]
@@ -624,9 +624,9 @@ class MultistrataRUMEBuilder(ABC):
     """
 
     @abstractmethod
-    def meta_edges(self, symbols: MultistrataModelSymbols) -> Sequence[TransitionDef]:
+    def meta_edges(self, symbols: MultiStrataModelSymbols) -> Sequence[TransitionDef]:
         """
-        When implementing a MultistrataRumeBuilder, override this method
+        When implementing a MultiStrataRumeBuilder, override this method
         to build the meta-transition-edges -- the edges which represent
         cross-strata interactions. You are given a reference to this model's symbols
         library so you can build expressions for the transition rates.
@@ -638,9 +638,9 @@ class MultistrataRUMEBuilder(ABC):
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> MultistrataRUME[GeoScopeT]:
+    ) -> MultiStrataRUME[GeoScopeT]:
         """Build the RUME."""
-        return MultistrataRUME[GeoScopeT].build(
+        return MultiStrataRUME[GeoScopeT].build(
             self.strata,
             self.meta_requirements,
             self.meta_edges,

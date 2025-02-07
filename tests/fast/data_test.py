@@ -12,7 +12,7 @@ from epymorph.attribute import (
     AttributeDef,
     ModuleNamePattern,
 )
-from epymorph.compartment_model import MultistrataModelSymbols, edge
+from epymorph.compartment_model import MultiStrataModelSymbols, edge
 from epymorph.data.ipm.sirs import SIRS
 from epymorph.data.mm.centroids import Centroids
 from epymorph.data_shape import Shapes
@@ -27,7 +27,7 @@ from epymorph.params import (
     ParamFunctionTimeAndNode,
     simulation_symbols,
 )
-from epymorph.rume import GPM, RUME, MultistrataRUME
+from epymorph.rume import GPM, RUME, MultiStrataRUME
 from epymorph.simulation import ParamValue
 from epymorph.time import TimeFrame
 
@@ -70,7 +70,7 @@ class EvaluateParamsTest(unittest.TestCase):
             AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
         ]
 
-        def meta_edges(s: MultistrataModelSymbols):
+        def meta_edges(s: MultiStrataModelSymbols):
             [S_aaa, I_aaa, R_aaa] = s.strata_compartments("aaa")  # noqa: N806
             [S_bbb, I_bbb, R_bbb] = s.strata_compartments("bbb")  # noqa: N806
             [beta_bbb_aaa] = s.all_meta_requirements
@@ -79,7 +79,7 @@ class EvaluateParamsTest(unittest.TestCase):
                 edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
             ]
 
-        return MultistrataRUME.build(
+        return MultiStrataRUME.build(
             strata=[
                 GPM(
                     name="aaa",
