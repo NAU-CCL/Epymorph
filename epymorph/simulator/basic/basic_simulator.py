@@ -23,7 +23,6 @@ from epymorph.simulator.basic.ipm_exec import IPMExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
 from epymorph.simulator.world_list import ListWorld
-from epymorph.time import TimeFrame
 from epymorph.util import CovariantMapping
 
 _events = EventBus()
@@ -48,14 +47,11 @@ class BasicSimulator(Generic[RUMEType]):
         self,
         /,
         params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
-        time_frame: TimeFrame | None = None,
         rng_factory: Callable[[], np.random.Generator] | None = None,
     ) -> Output[RUMEType]:
         """Run a RUME with the given overrides."""
 
         rume = self.rume
-        if time_frame is not None:
-            rume = rume.with_time_frame(time_frame)
 
         rng = (rng_factory or np.random.default_rng)()
 
