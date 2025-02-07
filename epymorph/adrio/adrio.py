@@ -21,7 +21,7 @@ from epymorph.database import (
     DataResolver,
     evaluate_param,
 )
-from epymorph.event import AdrioProgress, DownloadActivity, EventBus
+from epymorph.event import ADRIOProgress, DownloadActivity, EventBus
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import SimulationFunction
 from epymorph.time import TimeFrame
@@ -34,7 +34,7 @@ ProgressCallback = Callable[[float, DownloadActivity | None], None]
 _events = EventBus()
 
 
-class Adrio(SimulationFunction[NDArray[ResultDType]]):
+class ADRIO(SimulationFunction[NDArray[ResultDType]]):
     """
     ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
     to load data from external sources for epymorph simulations. This may be from
@@ -59,7 +59,7 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         """The ADRIO parent class overrides this to provide ADRIO-specific
         functionality. ADRIO implementations should override `evaluate_adrio`."""
         _events.on_adrio_progress.publish(
-            AdrioProgress(
+            ADRIOProgress(
                 adrio_name=self.class_name,
                 attribute=self.name,
                 final=False,
@@ -72,7 +72,7 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
         result = self.evaluate_adrio()
         t1 = perf_counter()
         _events.on_adrio_progress.publish(
-            AdrioProgress(
+            ADRIOProgress(
                 adrio_name=self.class_name,
                 attribute=self.name,
                 final=True,
@@ -91,7 +91,7 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
     ) -> None:
         """Emit a progress event."""
         _events.on_adrio_progress.publish(
-            AdrioProgress(
+            ADRIOProgress(
                 adrio_name=self.class_name,
                 attribute=self.name,
                 final=False,
@@ -104,7 +104,7 @@ class Adrio(SimulationFunction[NDArray[ResultDType]]):
 
 @evaluate_param.register
 def _(
-    value: Adrio,
+    value: ADRIO,
     name: AbsoluteName,
     data: DataResolver,
     scope: GeoScope | None,
@@ -117,7 +117,7 @@ def _(
     return np.asarray(sim_func.evaluate())
 
 
-AdrioClassT = TypeVar("AdrioClassT", bound=type[Adrio])
+AdrioClassT = TypeVar("AdrioClassT", bound=type[ADRIO])
 
 
 def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
@@ -162,7 +162,7 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
     return cls
 
 
-class NodeId(Adrio[np.str_]):
+class NodeID(ADRIO[np.str_]):
     """An ADRIO that provides the node IDs as they exist in the geo scope."""
 
     @override
@@ -170,13 +170,13 @@ class NodeId(Adrio[np.str_]):
         return self.scope.node_ids
 
 
-class Scale(Adrio[np.float64]):
+class Scale(ADRIO[np.float64]):
     """Scales the result of another ADRIO by multiplying values by the given factor."""
 
-    _parent: Adrio[np.float64]
+    _parent: ADRIO[np.float64]
     _factor: float
 
-    def __init__(self, parent: Adrio[np.float64], factor: float):
+    def __init__(self, parent: ADRIO[np.float64], factor: float):
         """
         Initializes scaling with the ADRIO to be scaled and with the factor to multiply
         those resulting ADRIO values by.
@@ -196,7 +196,7 @@ class Scale(Adrio[np.float64]):
         return self.defer(self._parent).astype(dtype=np.float64) * self._factor
 
 
-class PopulationPerKm2(Adrio[np.float64]):
+class PopulationPerKM2(ADRIO[np.float64]):
     """
     Calculates population density by combining the values from attributes named
     `population` and `land_area_km2`. You must provide those attributes

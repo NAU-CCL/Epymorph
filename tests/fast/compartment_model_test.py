@@ -1,4 +1,4 @@
-# ruff: noqa: PT009,PT027
+# ruff: noqa: PT009,PT027,N806
 import unittest
 from typing import Sequence
 
@@ -14,13 +14,13 @@ from epymorph.compartment_model import (
     CompartmentName,
     EdgeDef,
     EdgeName,
-    MultistrataModelSymbols,
+    MultiStrataModelSymbols,
     TransitionDef,
     compartment,
     edge,
 )
 from epymorph.data_shape import Shapes
-from epymorph.error import IpmValidationException
+from epymorph.error import IPMValidationError
 from epymorph.sympy_shim import to_symbol
 from epymorph.util import are_instances
 
@@ -118,7 +118,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_03(self):
         # Test for error: Reference an undeclared compartment in a transition.
-        with self.assertRaises(IpmValidationException) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -145,7 +145,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_04(self):
         # Test for error: Reference an undeclared requirement in a transition.
-        with self.assertRaises(IpmValidationException) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -172,7 +172,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_05(self):
         # Test for error: Source and destination are both exogenous!
-        with self.assertRaises(IpmValidationException) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = [
@@ -199,7 +199,7 @@ class CompartmentModelTest(unittest.TestCase):
 
     def test_create_06(self):
         # Test for error: model with no compartments.
-        with self.assertRaises(IpmValidationException) as e:
+        with self.assertRaises(IPMValidationError) as e:
 
             class MyIpm(CompartmentModel):
                 compartments = []
@@ -298,7 +298,7 @@ class CompartmentModelTest(unittest.TestCase):
 
         sir = Sir()
 
-        def meta_edges(sym: MultistrataModelSymbols):
+        def meta_edges(sym: MultiStrataModelSymbols):
             [S_aaa, I_aaa, R_aaa] = sym.strata_compartments("aaa")
             [S_bbb, I_bbb, R_bbb] = sym.strata_compartments("bbb")
             [beta_bbb_aaa] = sym.all_meta_requirements
@@ -468,7 +468,7 @@ class CompartmentModelTest(unittest.TestCase):
         strata = [("one", SirsBirthDeath()), ("two", SirsBirthDeath())]
         meta_requirements = ()
 
-        def meta_edges(symbols: MultistrataModelSymbols) -> Sequence[TransitionDef]:
+        def meta_edges(symbols: MultiStrataModelSymbols) -> Sequence[TransitionDef]:
             [S1, I1, R1] = symbols.strata_compartments("one")
             [S2, I2, R2] = symbols.strata_compartments("two")
             [b1, *_] = symbols.strata_requirements("one")

@@ -14,7 +14,7 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
-from epymorph.error import AttributeException, InitException
+from epymorph.error import DataAttributeError, InitError
 from epymorph.geography.custom import CustomScope
 from epymorph.time import TimeFrame
 
@@ -72,7 +72,7 @@ class TestNoInfection(unittest.TestCase):
         np.testing.assert_array_equal(expected, actual)
 
     def test_no_05(self):
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             init.NoInfection("BAD_CMPARTMNT").with_context(*_eval_context()).evaluate()
 
 
@@ -126,7 +126,7 @@ class TestExplicitInitializer(unittest.TestCase):
             [0, 0],
         ]
         ini = init.Explicit(initials).with_context(*_eval_context())
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             ini.evaluate()
 
     def test_explicit_04(self):
@@ -139,7 +139,7 @@ class TestExplicitInitializer(unittest.TestCase):
             [0, 0, 500],
         ]
         ini = init.Explicit(initials).with_context(*_eval_context())
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             ini.evaluate()
 
 
@@ -194,7 +194,7 @@ class TestProportionalInitializer(unittest.TestCase):
         np.testing.assert_array_equal(actual, expected)
 
     def test_bad_args(self):
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # row sums to zero!
             ratios = np.array(
                 [
@@ -207,7 +207,7 @@ class TestProportionalInitializer(unittest.TestCase):
             )
             init.Proportional(ratios).with_context(*_eval_context()).evaluate()
 
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # row sums to negative!
             ratios = np.array(
                 [
@@ -220,7 +220,7 @@ class TestProportionalInitializer(unittest.TestCase):
             )
             init.Proportional(ratios).with_context(*_eval_context()).evaluate()
 
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # bad type
             ratios = np.array(
                 [
@@ -290,19 +290,19 @@ class TestIndexedInitializer(unittest.TestCase):
         np.testing.assert_array_equal(expected, actual)
 
     def test_indexed_locations_bad(self):
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # indices must be one dimension
             init.IndexedLocations(
                 selection=np.array([[1], [3]], dtype=np.intp),
                 seed_size=100,
             ).with_context(*_eval_context()).evaluate()
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # indices must be in range (positive)
             init.IndexedLocations(
                 selection=np.array([1, 8], dtype=np.intp),
                 seed_size=100,
             ).with_context(*_eval_context()).evaluate()
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # indices must be in range (negative)
             init.IndexedLocations(
                 selection=np.array([1, -8], dtype=np.intp),
@@ -364,7 +364,7 @@ class TestLabeledInitializer(unittest.TestCase):
         np.testing.assert_array_equal(expected, actual)
 
     def test_labeled_locations_bad(self):
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             init.LabeledLocations(
                 labels=np.array(["A", "B", "Z"]),
                 seed_size=100,
@@ -454,7 +454,7 @@ class TestTopInitializer(unittest.TestCase):
         np.testing.assert_array_equal(expected, actual)
 
     def test_missing_attribute(self):
-        with self.assertRaises(AttributeException):
+        with self.assertRaises(DataAttributeError):
             # we didn't provide quidditch_championships data!
             i = init.TopLocations(
                 top_attribute=AttributeDef("quidditch_championships", int, Shapes.N),
@@ -464,7 +464,7 @@ class TestTopInitializer(unittest.TestCase):
             i.with_context(*_eval_context()).evaluate()
 
     def test_wrong_type_attribute(self):
-        with self.assertRaises(AttributeException):
+        with self.assertRaises(DataAttributeError):
             # we asked for an int array, but the data is a float array
             i = init.TopLocations(
                 top_attribute=AttributeDef("quidditch_championships", int, Shapes.N),
@@ -482,7 +482,7 @@ class TestTopInitializer(unittest.TestCase):
             ).evaluate()
 
     def test_invalid_size_attribute(self):
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # what does "top" mean in an NxN array? too ambiguous
             i = init.TopLocations(
                 top_attribute=AttributeDef("quidditch_relative_rank", int, Shapes.NxN),
@@ -539,7 +539,7 @@ class TestBottomInitializer(unittest.TestCase):
         np.testing.assert_array_equal(expected, actual)
 
     def test_missing_attribute(self):
-        with self.assertRaises(AttributeException):
+        with self.assertRaises(DataAttributeError):
             # we didn't provide quidditch_championships data!
             i = init.BottomLocations(
                 bottom_attribute=AttributeDef("quidditch_championships", int, Shapes.N),
@@ -549,7 +549,7 @@ class TestBottomInitializer(unittest.TestCase):
             i.with_context(*_eval_context()).evaluate()
 
     def test_invalid_size_attribute(self):
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             # what does "bottom" mean in an NxN array? too ambiguous
             i = init.BottomLocations(
                 bottom_attribute=AttributeDef(
@@ -577,5 +577,5 @@ class TestCustomInitializer(unittest.TestCase):
             def evaluate(self):
                 return np.array([-1])
 
-        with self.assertRaises(InitException):
+        with self.assertRaises(InitError):
             MyInit().with_context(*_eval_context()).evaluate()

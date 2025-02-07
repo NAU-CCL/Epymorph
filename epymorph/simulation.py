@@ -399,7 +399,7 @@ class SimulationFunctionClass(ABCMeta):
     """
 
     def __new__(
-        mcs: Type[_TypeT],
+        cls: Type[_TypeT],
         name: str,
         bases: tuple[type, ...],
         dct: dict[str, Any],
@@ -430,7 +430,7 @@ class SimulationFunctionClass(ABCMeta):
                 dct["requirements"] = tuple(reqs)
 
         # Check serializable
-        if not is_picklable(name, mcs):
+        if not is_picklable(name, cls):
             raise TypeError(
                 f"Invalid simulation function {name}: "
                 "classes must be serializable (using jsonpickle)."
@@ -444,7 +444,7 @@ class SimulationFunctionClass(ABCMeta):
         # are picklable before we try to serialize it...
         # Thus I don't think we can guarantee picklability at class definition time.
         # Something like:
-        #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]
+        #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]  # noqa: ERA001
         # Why worry? Lambda functions are probably the most likely problem;
         # they're not picklable by default.
         # But a simple workaround is to use a def function and,
@@ -460,7 +460,7 @@ class SimulationFunctionClass(ABCMeta):
 
             dct["evaluate"] = evaluate
 
-        return super().__new__(mcs, name, bases, dct)
+        return super().__new__(cls, name, bases, dct)
 
 
 ResultT = TypeVar("ResultT")

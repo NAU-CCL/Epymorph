@@ -11,7 +11,7 @@ import numpy as np
 
 from epymorph.parameter_fitting.filter.particle import Particle
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 
 
 class ParticleInitializer:
@@ -39,7 +39,7 @@ class ParticleInitializer:
     def __init__(
         self,
         num_particles: int,
-        rume: Rume,
+        rume: RUME,
         dynamic_params: Dict[str, EstimateParameters],
     ) -> None:
         """
@@ -71,7 +71,6 @@ class ParticleInitializer:
             The initialized particles.
         """
 
-        # rng = np.random.default_rng()
         data = self.rume.evaluate_params(rng)
         initial_state = self.rume.initialize(data, rng)
 

@@ -22,7 +22,7 @@ from epymorph.parameter_fitting.output import ParticleFilterOutput
 from epymorph.parameter_fitting.utils.data_loader import DataLoader
 from epymorph.parameter_fitting.utils.observations import ModelLink, Observations
 from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 
 
 class FilterSimulation:
@@ -58,7 +58,7 @@ class FilterSimulation:
 
     def __init__(
         self,
-        rume: Rume,
+        rume: RUME,
         filter_type: BaseFilter,
         params_space: Dict[str, EstimateParameters],
         observations: Observations,

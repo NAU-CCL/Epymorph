@@ -53,7 +53,7 @@ def _get_geo(scope: GeoScope) -> gpd.GeoDataFrame:
             gdf = get_block_groups_geo(scope.year, states)
         case _:
             raise GeographyError("Unsupported Census granularity.")
-    return gpd.GeoDataFrame(gdf[gdf["GEOID"].isin(scope.node_ids)])
+    return gpd.GeoDataFrame(gdf[gdf["GEOID"].isin(scope.node_ids)])  # type: ignore
 
 
 class NodeLabelRenderer:
@@ -384,8 +384,8 @@ class MapRenderer:
             transform=transform,
         )
 
-        vmin = vmin if vmin is not None else cast(float, data_gdf["data"].min())
-        vmax = vmax if vmax is not None else cast(float, data_gdf["data"].max())
+        vmin = vmin if vmin is not None else cast(float, data_gdf["data"].min())  # type: ignore
+        vmax = vmax if vmax is not None else cast(float, data_gdf["data"].max())  # type: ignore
         color_scale = plt.cm.ScalarMappable(
             cmap=cmap,
             norm=Normalize(vmin, vmax),

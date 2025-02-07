@@ -6,6 +6,7 @@ from functools import cache
 from json import load as load_json
 from os import environ
 from typing import Literal, NamedTuple, Sequence, TypeGuard
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -14,11 +15,11 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
 from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -38,12 +39,12 @@ from epymorph.util import filter_with_mask
 
 _ACS5_CACHE_PATH = module_cache_path(__name__)
 
-Acs5Year = Literal[
+ACS5Year = Literal[
     2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022
 ]
 """A supported ACS5 data year."""
 
-ACS5_YEARS: Sequence[Acs5Year] = (
+ACS5_YEARS: Sequence[ACS5Year] = (
     2009,
     2010,
     2011,
@@ -70,7 +71,7 @@ def _get_api() -> Census:
             "Census API key not found. "
             "Please ensure you have set the environment variable 'CENSUS_API_KEY'"
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
     return Census(api_key)
 
 
@@ -82,7 +83,7 @@ def _get_vars(year: int) -> dict[str, dict]:
         file = load_or_fetch_url(vars_url, cache_path)
         return load_json(file)["variables"]
     except Exception as e:
-        raise DataResourceException("Unable to load ACS5 variables.") from e
+        raise DataResourceError("Unable to load ACS5 variables.") from e
 
 
 @cache
@@ -99,15 +100,15 @@ def _get_group_vars(year: int, group: str) -> list[tuple[str, dict]]:
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
-        raise DataResourceException("Census scope is required for acs5 attributes.")
+        raise DataResourceError("Census scope is required for acs5 attributes.")
     if not is_acs5_year(scope.year):
-        raise DataResourceException(
+        raise DataResourceError(
             f"{scope.year} is not a supported year for acs5 attributes."
         )
     return scope
 
 
-def is_acs5_year(year: int) -> TypeGuard[Acs5Year]:
+def is_acs5_year(year: int) -> TypeGuard[ACS5Year]:
     """A type-guard function to ensure a year is a supported ACS5 year."""
     return year in ACS5_YEARS
 
@@ -230,7 +231,7 @@ def _make_acs5_queries(scope: CensusScope) -> list[dict[str, str]]:
             ]
 
         case _:
-            raise DataResourceException("Unsupported query.")
+            raise DataResourceError("Unsupported query.")
 
 
 def _fetch_acs5(
@@ -256,13 +257,13 @@ def _fetch_acs5(
 
     except CensusException as e:
         err = "Unable to load data from the US Census API at this time."
-        raise DataResourceException(err) from e
+        raise DataResourceError(err) from e
     if acs_df.empty:
         msg = (
             "ACS5 query returned empty. "
             "Ensure all geographies included in your scope are supported and try again."
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     # concatenate geoid components to create 'geoid' column
     columns: list[str] = {
@@ -279,11 +280,11 @@ def _fetch_acs5(
         return geoid_df.merge(acs_df, on="geoid", how="left", validate="1:1")
     except pd.errors.MergeError:
         msg = "Fetched data was not an exact match for the scope's geographies."
-        raise DataResourceException(msg) from None
+        raise DataResourceError(msg) from None
 
 
 @adrio_cache
-class Population(Adrio[np.int64]):
+class Population(ADRIO[np.int64]):
     """
     Retrieves an N-shaped array of integers representing the total population of each
     geographic node. Data is retrieved from Census table variable B01001_001 using ACS5
@@ -298,7 +299,7 @@ class Population(Adrio[np.int64]):
 
 
 @adrio_cache
-class PopulationByAgeTable(Adrio[np.int64]):
+class PopulationByAgeTable(ADRIO[np.int64]):
     """
     Creates a table of population data for each geographic node split into various age
     categories. Data is retrieved from Census table B01001 using ACS5 5-year estimates.
@@ -365,12 +366,12 @@ class AgeRange(NamedTuple):
             start = int(m.group(1))
             end = None
         else:
-            raise DataResourceException(f"No match for {label}")
+            raise DataResourceError(f"No match for {label}")
         return AgeRange(start, end)
 
 
 @adrio_cache
-class PopulationByAge(Adrio[np.int64]):
+class PopulationByAge(ADRIO[np.int64]):
     """
     Retrieves an N-shaped array of integers representing the total population
     within a specified age range for each geographic node. Data is retrieved from
@@ -418,17 +419,17 @@ class PopulationByAge(Adrio[np.int64]):
 
         # At least one var must have its start equal to the ADRIO range
         if not any((x.start == adrio_range.start for x in included)):
-            raise DataResourceException(f"bad start {adrio_range}")
+            raise DataResourceError(f"bad start {adrio_range}")
         # At least one var must have its end equal to the ADRIO range
         if not any((x.end == adrio_range.end for x in included)):
-            raise DataResourceException(f"bad end {adrio_range}")
+            raise DataResourceError(f"bad end {adrio_range}")
 
         table = self.data(self.POP_BY_AGE_TABLE)
         return table[:, col_mask].sum(axis=1)
 
 
 @adrio_cache
-class AverageHouseholdSize(Adrio[np.float64]):
+class AverageHouseholdSize(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the average number of people
     living in each household for every geographic node.
@@ -443,7 +444,7 @@ class AverageHouseholdSize(Adrio[np.float64]):
 
 
 @adrio_cache
-class DissimilarityIndex(Adrio[np.float64]):
+class DissimilarityIndex(ADRIO[np.float64]):
     """
     Calculates an N-shaped array of floats representing the amount of racial segregation
     between a specified racial majority and minority groups on a scale of
@@ -494,7 +495,7 @@ class DissimilarityIndex(Adrio[np.float64]):
         high_scope = _validate_scope(self.scope)
         if isinstance(high_scope, BlockGroupScope):
             msg = "Dissimilarity index cannot be retreived for block group scope."
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
         low_scope = high_scope.lower_granularity()
 
         majority_var = self.race_variables[self.majority_pop]
@@ -526,7 +527,7 @@ class DissimilarityIndex(Adrio[np.float64]):
 
 
 @adrio_cache
-class GiniIndex(Adrio[np.float64]):
+class GINIIndex(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the amount of income inequality
     on a scale of 0 (perfect equality) to 1 (perfect inequality) for each
@@ -540,7 +541,7 @@ class GiniIndex(Adrio[np.float64]):
 
         # if granularity is block groups, use the data of the parent tract
         if isinstance(scope, BlockGroupScope):
-            print(
+            warn(
                 "Gini Index cannot be retrieved for block group level, "
                 "fetching tract level data instead."
             )
@@ -572,7 +573,7 @@ class GiniIndex(Adrio[np.float64]):
 
 
 @adrio_cache
-class MedianAge(Adrio[np.float64]):
+class MedianAge(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the median age in
     each geographic node. Data is retrieved from Census table variable
@@ -587,7 +588,7 @@ class MedianAge(Adrio[np.float64]):
 
 
 @adrio_cache
-class MedianIncome(Adrio[np.float64]):
+class MedianIncome(ADRIO[np.float64]):
     """
     Retrieves an N-shaped array of floats representing the median yearly income in
     each geographic node. Data is retrieved from Census table variable B19013_001

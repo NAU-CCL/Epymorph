@@ -29,7 +29,7 @@ class MovementClauseTest(unittest.TestCase):
         with self.assertRaises(TypeError) as e:
 
             class MyClause(MovementClause):
-                # leaves = TickIndex(step=0)
+                # leaves = TickIndex(step=0)  # noqa: ERA001
                 returns = TickDelta(days=0, step=1)
                 predicate = EveryDay()
 
@@ -44,7 +44,7 @@ class MovementClauseTest(unittest.TestCase):
 
             class MyClause(MovementClause):
                 leaves = TickIndex(step=0)
-                # returns = TickDelta(days=0, step=1)
+                # returns = TickDelta(days=0, step=1)  # noqa: ERA001
                 predicate = EveryDay()
 
                 def evaluate(self, tick: Tick) -> NDArray[SimDType]:
@@ -59,7 +59,7 @@ class MovementClauseTest(unittest.TestCase):
             class MyClause(MovementClause):
                 leaves = TickIndex(step=0)
                 returns = TickDelta(days=0, step=1)
-                # predicate = EveryDay()
+                # predicate = EveryDay()  # noqa: ERA001
 
                 def evaluate(self, tick: Tick) -> NDArray[SimDType]:
                     return np.array([0])
@@ -135,7 +135,7 @@ class MovementModelTest(unittest.TestCase):
         with self.assertRaises(TypeError) as e:
 
             class MyModel(MovementModel):
-                # steps = [1 / 3, 2 / 3]
+                # steps = [1 / 3, 2 / 3]  # noqa: ERA001
                 clauses = [MovementModelTest.MyClause()]
 
         self.assertIn("invalid steps in mymodel", str(e.exception).lower())
@@ -174,7 +174,7 @@ class MovementModelTest(unittest.TestCase):
 
             class MyModel(MovementModel):
                 steps = [1 / 3, 2 / 3]
-                # clauses = [MovementModelTest.MyClause()]
+                # clauses = [MovementModelTest.MyClause()]  # noqa: ERA001
 
         self.assertIn("invalid clauses", str(e.exception).lower())
 

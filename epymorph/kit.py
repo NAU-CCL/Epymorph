@@ -9,7 +9,7 @@ from epymorph.compartment_model import (
     DEATH,
     CompartmentModel,
     ModelSymbols,
-    MultistrataModelSymbols,
+    MultiStrataModelSymbols,
     TransitionDef,
     compartment,
     edge,
@@ -35,7 +35,7 @@ from epymorph.params import (
     ParamFunctionTime,
     ParamFunctionTimeAndNode,
 )
-from epymorph.rume import Gpm, MultistrataRume, MultistrataRumeBuilder, SingleStrataRume
+from epymorph.rume import GPM, MultiStrataRUME, MultiStrataRUMEBuilder, SingleStrataRUME
 from epymorph.simulation import default_rng
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import TimeFrame
@@ -55,12 +55,12 @@ __all__ = [
     "BIRTH",
     "DEATH",
     # Single Strata RUME
-    "SingleStrataRume",
-    # Multistrata RUME
-    "MultistrataRume",
-    "MultistrataRumeBuilder",
-    "Gpm",
-    "MultistrataModelSymbols",
+    "SingleStrataRUME",
+    # Multi-strata RUME
+    "MultiStrataRUME",
+    "MultiStrataRUMEBuilder",
+    "GPM",
+    "MultiStrataModelSymbols",
     # Simulator
     "BasicSimulator",
     "sim_messaging",

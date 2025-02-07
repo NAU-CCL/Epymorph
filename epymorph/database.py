@@ -57,12 +57,12 @@ from epymorph.data_type import (
     dtype_as_np,
     dtype_str,
 )
-from epymorph.error import AttributeException, AttributeExceptionGroup
+from epymorph.error import DataAttributeError, DataAttributeErrorGroup
 from epymorph.geography.scope import GeoScope
 from epymorph.time import TimeFrame
 from epymorph.util import (
-    AnsiColor,
-    AnsiStyle,
+    ANSIColor,
+    ANSIStyle,
     ansi_stylize,
     filter_unique,
 )
@@ -265,9 +265,9 @@ def assert_can_adapt(
     """Check that we can adapt the given `value` to the given type and shape,
     given dimensional information. Raises AttributeException if not."""
     if not np.can_cast(value, dtype_as_np(data_type)):
-        raise AttributeException("Not a compatible type.")
+        raise DataAttributeError("Not a compatible type.")
     if not data_shape.matches(dim, value):
-        raise AttributeException("Not a compatible shape.")
+        raise DataAttributeError("Not a compatible shape.")
 
 
 def adapt(
@@ -288,7 +288,7 @@ def adapt(
         )
         return data_shape.adapt(dim, typed)
     except Exception as e:
-        raise AttributeException("Failed to adapt value.") from e
+        raise DataAttributeError("Failed to adapt value.") from e
 
 
 class DataResolver:
@@ -408,7 +408,7 @@ class DataResolver:
             return self._adapted_values[key]
 
         if name not in self._raw_values:
-            raise AttributeException(f"No value for name '{name}'")
+            raise DataAttributeError(f"No value for name '{name}'")
         value = self._raw_values[name]
         adapted_value = adapt(definition.type, definition.shape, self._dim, value)
         self._adapted_values[key] = adapted_value
@@ -452,7 +452,7 @@ class DataResolver:
                     "Cannot generate a TxN series unless all attributes "
                     f"broadcast to TxN. {attr_name} is {attr_def.shape}"
                 )
-                raise AttributeException(err)
+                raise DataAttributeError(err)
             return dataclasses.replace(attr_def, shape=Shapes.TxN)
 
         resolved = [self.resolve(n, as_txn(n, d)) for n, d in requirements]
@@ -690,7 +690,7 @@ class ReqTree(Generic[V]):
         ) -> ReqNode:
             if name in chain:
                 err = f"Circular dependency in evaluation of parameter {name}"
-                raise AttributeException(err)
+                raise DataAttributeError(err)
 
             if (val_match := params.query(name)) is not None:
                 # User provided a parameter value to use.
@@ -762,10 +762,10 @@ class ReqNode(ReqTree[V]):
                 resd = f" <- {value_name}"
             case DefaultValue():
                 properties.append(f"default={self.value}")
-                color = AnsiColor.CYAN
+                color = ANSIColor.CYAN
                 resd = ""
             case MissingValue():
-                color = AnsiColor.RED
+                color = ANSIColor.RED
                 resd = ""
             case x:
                 # have to handle the impossible case
@@ -775,7 +775,7 @@ class ReqNode(ReqTree[V]):
         indent = "  " * depth
         corner = "└╴" if depth > 0 else ""
         name = ansi_stylize(format_name(self.name), color)
-        prop = ansi_stylize(f"({', '.join(properties)})", color, AnsiStyle.ITALIC)
+        prop = ansi_stylize(f"({', '.join(properties)})", color, ANSIStyle.ITALIC)
 
         return "\n".join(
             [
@@ -844,7 +844,7 @@ def evaluate_param(
         the evaluated value
     """
     err = f"Parameter not a supported type (found: {type(value)})"
-    raise AttributeException(err)
+    raise DataAttributeError(err)
 
 
 @evaluate_param.register
@@ -890,7 +890,7 @@ def _(
         "Parameter was given as a class instead of an instance. "
         "Did you forget to instantiate it?"
     )
-    raise AttributeException(err)
+    raise DataAttributeError(err)
 
 
 def evaluate_requirements(
@@ -935,7 +935,7 @@ def evaluate_requirements(
                 *(str(r.name) for r in missing),
             ]
         )
-        raise AttributeException(err)
+        raise DataAttributeError(err)
 
     # For each node in the requirements tree (traversing depth-first),
     # evaluate each value and validate it against the requirement's definition;
@@ -948,7 +948,7 @@ def evaluate_requirements(
         C=ipm.num_compartments if ipm is not None else None,
         E=ipm.num_events if ipm is not None else None,
     )
-    errors = list[AttributeException]()
+    errors = list[DataAttributeError]()
     resolved = DataResolver(dim)
     resolved_by = dict[AbsoluteName, ResolutionTree]()
     evaluated = dict[ResolutionTree, AttributeArray]()
@@ -979,12 +979,12 @@ def evaluate_requirements(
             try:
                 d = node.definition
                 assert_can_adapt(d.type, d.shape, dim, value)
-            except AttributeException as e:
+            except DataAttributeError as e:
                 err = (
                     f"Attribute '{node.name}' ({node.resolution}) is "
                     f"not properly specified: {e}"
                 )
-                raise AttributeException(err)
+                raise DataAttributeError(err)
 
             # Store value
             if not resolved.has(node.name):
@@ -999,12 +999,12 @@ def evaluate_requirements(
                     "values both resolving to the same name. If this is the case, "
                     "you will need to provide an explicit value instead."
                 )
-                raise AttributeException(err)
+                raise DataAttributeError(err)
 
-        except AttributeException as e:
+        except DataAttributeError as e:
             errors.append(e)
 
     if len(errors) > 0:
-        raise AttributeExceptionGroup("Errors found evaluating parameters.", errors)
+        raise DataAttributeErrorGroup("Errors found evaluating parameters.", errors)
 
     return resolved

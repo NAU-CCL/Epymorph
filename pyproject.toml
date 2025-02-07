@@ -52,9 +52,9 @@ dependencies = [
   "scipy~=1.14.1",
 ]
 
-[tool.uv]
-dev-dependencies = [
-    "ruff>=0.7.0",
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
     "ipykernel>=6.29.5",
     "setuptools>=74.0.0",
     "pytest>=8.3.4",
@@ -111,18 +111,18 @@ select = [
   "S", # (security rules)
   "BLE", # (catching Exception is too general)
   "PT", # (pytest)
+  "T20", # (no extra print statements laying around)
+  "ERA", # (no commented code)
+  "FURB", # (use modern python)
+  "N", # (naming conventions)
 
   # NOTE: rules I'd like to enable some day are below, commented out
-  # "ERA", # (no commented code)
   # "C4", # (clean comprehensions usage)
-  # "T20", (no extra print statements laying around)
   # "UP", (use modern python)
-  # "FURB", (use modern python)
   # "B", (possible bugs)
   # "D", (enforced documentation)
   # "DOC", (enforced documentation; complementary with D)
   # "ANN", (enforced type annotations)
-  # "N", (naming conventions)
   # "RET", (clean return handling)
   # "SIM", (code simplifications)
   # "SLF", (prevent private member access)
@@ -139,7 +139,15 @@ ignore = [
 
 [tool.ruff.lint.extend-per-file-ignores]
 # Allow star imports in tests and notebooks.
-# I001 (import sort) appears to be broken in notebooks.
 # S101 we are allowed to use `assert` in pytest
+# I001 (import sort) appears to be broken in notebooks.
+# T201 allow prints in notebooks.
+# N806 allow non-PEP8-compliant names in IPMs
 "tests/**/*_test.py" = ["F403", "F405", "S101"]
-"*.ipynb" = ["F403", "F405", "I001"]
+"*.ipynb" = ["F403", "F405", "I001", "T201"]
+"epymorph/data/ipm/*" = ["N806"]
+
+[tool.ruff.lint.pep8-naming]
+# These variable names are very convenient for describing simulation dimensions,
+# so we'll special-case them.
+extend-ignore-names = ["T", "S", "C", "E", "N", "X"]

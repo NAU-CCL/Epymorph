@@ -31,7 +31,7 @@ from sympy import Add, Expr, Float, Integer, Symbol
 from typing_extensions import override
 
 from epymorph.attribute import AbsoluteName, AttributeDef
-from epymorph.error import IpmValidationException
+from epymorph.error import IPMValidationError
 from epymorph.strata import DEFAULT_STRATA, META_STRATA, gpm_strata
 from epymorph.sympy_shim import simplify, simplify_sum, substitute, to_symbol
 from epymorph.tools.ipm_diagram import render_diagram
@@ -227,7 +227,7 @@ def fork(*edges: EdgeDef) -> ForkDef:
             "In a Fork, all edges must share the same `state_from`.\n"
             f"  Problem in: {str(edges)}"
         )
-        raise IpmValidationException(err)
+        raise IPMValidationError(err)
     # it is assumed the fork's edges are defined with complementary rate expressions
     edge_rates = [e.rate for e in edges]
     # the "base rate" -- how many individuals transition on any of these edges --
@@ -451,7 +451,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
             "transitions cannot use exogenous states (BIRTH/DEATH) "
             "as both source and destination."
         )
-        raise IpmValidationException(err)
+        raise IPMValidationError(err)
 
     # Extract the set of compartments used by transitions.
     trx_comps = set(
@@ -479,7 +479,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
             "transitions reference compartments which were not declared.\n"
             f"Missing compartments: {', '.join(map(str, missing_comps))}"
         )
-        raise IpmValidationException(err)
+        raise IPMValidationError(err)
 
     # declared compartments minus used compartments is ideally empty,
     # otherwise raise a warning
@@ -501,7 +501,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
             "transitions reference requirements which were not declared.\n"
             f"Missing requirements: {', '.join(map(str, missing_reqs))}"
         )
-        raise IpmValidationException(err)
+        raise IPMValidationError(err)
 
     # declared requirements minus used requirements is ideally empty,
     # otherwise raise a warning
@@ -528,13 +528,13 @@ class CompartmentModelClass(ABCMeta):
     """
 
     def __new__(
-        mcs: Type["CompartmentModelClass"],
+        cls: Type["CompartmentModelClass"],
         name: str,
         bases: tuple[type, ...],
         dct: dict[str, Any],
     ) -> "CompartmentModelClass":
         # Skip these checks for abstract classes:
-        cls0 = super().__new__(mcs, name, bases, dct)
+        cls0 = super().__new__(cls, name, bases, dct)
         if getattr(cls0, "__abstractmethods__", False):
             return cls0
 
@@ -542,29 +542,29 @@ class CompartmentModelClass(ABCMeta):
         cmps = dct.get("compartments")
         if cmps is None or not isinstance(cmps, (list, tuple)):
             err = f"Invalid compartments in {name}: please specify as a list or tuple."
-            raise IpmValidationException(err)
+            raise IPMValidationError(err)
         if len(cmps) == 0:
             err = (
                 f"Invalid compartments in {name}: "
                 "please specify at least one compartment."
             )
-            raise IpmValidationException(err)
+            raise IPMValidationError(err)
         if not are_instances(cmps, CompartmentDef):
             err = (
                 f"Invalid compartments in {name}: must be instances of CompartmentDef."
             )
-            raise IpmValidationException(err)
+            raise IPMValidationError(err)
         if not are_unique(c.name for c in cmps):
             err = f"Invalid compartments in {name}: compartment names must be unique."
-            raise IpmValidationException(err)
+            raise IPMValidationError(err)
         # Make compartments immutable.
         dct["compartments"] = tuple(cmps)
 
         # Check transitions... we have to instantiate the class.
-        cls = super().__new__(mcs, name, bases, dct)
-        instance = cls()
+        new_cls = super().__new__(cls, name, bases, dct)
+        instance = new_cls()
         validate_compartment_model(instance)
-        return cls
+        return new_cls
 
     def __call__(cls, *args, **kwargs):
         # Perform our initialization on all newly created instances.
@@ -630,7 +630,6 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
     @override
     def events(self) -> Sequence[EdgeDef]:
         """Iterate over all events in order."""
-        # return list(_as_events(self.transitions))
         return self._events
 
     @property
@@ -655,7 +654,7 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
 ###################################
 
 
-class MultistrataModelSymbols(ModelSymbols):
+class MultiStrataModelSymbols(ModelSymbols):
     """IPM symbols needed in defining the model's transition rate expressions."""
 
     all_meta_requirements: Sequence[Symbol]
@@ -737,7 +736,7 @@ class MultistrataModelSymbols(ModelSymbols):
         return sym.all_requirements if len(names) == 0 else sym.requirements(*names)
 
 
-MetaEdgeBuilder = Callable[[MultistrataModelSymbols], Sequence[TransitionDef]]
+MetaEdgeBuilder = Callable[[MultiStrataModelSymbols], Sequence[TransitionDef]]
 """A function for creating meta edges in a multistrata RUME."""
 
 
@@ -752,7 +751,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     _strata: Sequence[tuple[str, CompartmentModel]]
     _meta_requirements: Sequence[AttributeDef]
     _meta_edges: MetaEdgeBuilder
-    _symbols: MultistrataModelSymbols
+    _symbols: MultiStrataModelSymbols
     _transitions: Sequence[TransitionDef]
     _events: Sequence[EdgeDef]
     _requirements_dict: OrderedDict[AbsoluteName, AttributeDef]
@@ -778,7 +777,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
             *self._meta_requirements,
         ]
 
-        symbols = MultistrataModelSymbols(
+        symbols = MultiStrataModelSymbols(
             strata=self._strata, meta_requirements=self._meta_requirements
         )
         self._symbols = symbols
@@ -849,7 +848,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
 
     @property
     @override
-    def symbols(self) -> MultistrataModelSymbols:
+    def symbols(self) -> MultiStrataModelSymbols:
         """The symbols which represent parts of this model."""
         return self._symbols
 
@@ -863,7 +862,6 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     @override
     def events(self) -> Sequence[EdgeDef]:
         """Iterate over all events in order."""
-        # return list(_as_events(self.transitions))
         return self._events
 
     @property

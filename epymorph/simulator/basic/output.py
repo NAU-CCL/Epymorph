@@ -10,16 +10,16 @@ from typing import Generic, Literal, TypeVar
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from typing_extensions import deprecated, override
+from typing_extensions import override
 
 from epymorph.data_type import SimDType
 from epymorph.geography.scope import GeoScope
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.tools.out_map import MapRendererMixin
 from epymorph.tools.out_plot import PlotRendererMixin
 from epymorph.tools.out_table import TableRendererMixin
 
-RumeT_co = TypeVar("RumeT_co", covariant=True, bound=Rume[GeoScope])
+RUMEType_co = TypeVar("RUMEType_co", covariant=True, bound=RUME[GeoScope])
 
 
 @dataclass(frozen=True)
@@ -27,14 +27,14 @@ class Output(
     TableRendererMixin,
     PlotRendererMixin,
     MapRendererMixin,
-    Generic[RumeT_co],
+    Generic[RUMEType_co],
 ):
     """
     The output of a simulation run, including compartment data for all populations and
     all IPM compartments and event data for all populations and all IPM events.
     """
 
-    rume: RumeT_co  # type: ignore (pylance can't tell that rume is immutable)
+    rume: RUMEType_co  # type: ignore (pylance can't tell that rume is immutable)
     """The Rume used in the simulation that generated this output."""
 
     initial: NDArray[SimDType]
@@ -179,19 +179,3 @@ class Output(
             ),
             axis=1,  # stick them together side-by-side
         )
-
-    @property
-    @deprecated("Use `compartments`", category=None)
-    def prevalence(self) -> NDArray[SimDType]:
-        """Deprecated alias for compartments."""
-        return self.compartments
-
-    @property
-    @deprecated("Use `events`", category=None)
-    def incidence(self) -> NDArray[SimDType]:
-        return self.events
-
-    @property
-    @deprecated("Use `events_per_day`", category=None)
-    def incidence_per_day(self) -> NDArray[SimDType]:
-        return self.events_per_day

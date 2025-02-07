@@ -5,7 +5,7 @@ from epymorph.compartment_model import CompartmentModel, compartment, edge
 from epymorph.data_shape import Shapes
 
 
-class Seirs(CompartmentModel):
+class SEIRS(CompartmentModel):
     """A basic SEIRS model."""
 
     compartments = [

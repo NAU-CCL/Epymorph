@@ -40,7 +40,7 @@ from epymorph.compartment_model import (
     CombinedCompartmentModel,
     CompartmentModel,
     MetaEdgeBuilder,
-    MultistrataModelSymbols,
+    MultiStrataModelSymbols,
     TransitionDef,
 )
 from epymorph.data_shape import Shapes
@@ -53,7 +53,7 @@ from epymorph.database import (
     DataResolver,
     ReqTree,
 )
-from epymorph.error import InitException
+from epymorph.error import InitError
 from epymorph.geography.scope import GeoScope
 from epymorph.initializer import Initializer
 from epymorph.movement_model import MovementClause, MovementModel
@@ -79,7 +79,7 @@ from epymorph.util import (
 
 
 @dataclass(frozen=True)
-class Gpm:
+class GPM:
     """
     A GPM (short for Geo-Population Model) combines an IPM, MM, and
     initialization scheme. Most often, a GPM is used to specify the modules
@@ -98,7 +98,7 @@ class Gpm:
     # And we could design around that but I'm not certain this feature isn't destinated
     # to be removed anyway... so for now users will have to do the parsing or maybe
     # we'll add a utility function that effectively does this:
-    # params = {ModuleNamePattern.parse(k): v for k, v in (params or {}).items()}
+    # params = {ModuleNamePattern.parse(k): v for k, v in (params or {}).items()}  # noqa: E501, ERA001
 
 
 ########
@@ -224,7 +224,7 @@ GeoScopeT_co = TypeVar("GeoScopeT_co", covariant=True, bound=GeoScope)
 
 
 @dataclass(frozen=True)
-class Rume(ABC, Generic[GeoScopeT_co]):
+class RUME(ABC, Generic[GeoScopeT_co]):
     """
     A RUME (or Runnable Modeling Experiment) contains the configuration of an
     epymorph-style simulation. It brings together one or more IPMs, MMs, initialization
@@ -234,7 +234,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
     running a disease simulation and providing time-series results of the disease model.
     """
 
-    strata: Sequence[Gpm]
+    strata: Sequence[GPM]
     ipm: BaseCompartmentModel
     mms: OrderedDict[str, MovementModel]
     scope: GeoScopeT_co
@@ -442,7 +442,7 @@ class Rume(ABC, Generic[GeoScopeT_co]):
             lines.extend(estimate_report(CACHE_PATH, estimates, max_bandwidth))
 
         for l in lines:
-            print(l)
+            print(l)  # noqa: T201
 
     def requirements_tree(
         self,
@@ -539,14 +539,14 @@ class Rume(ABC, Generic[GeoScopeT_co]):
                     for gpm in self.strata
                 ]
             )
-        except InitException as e:
+        except InitError as e:
             raise e
         except Exception as e:
-            raise InitException("Initializer failed during evaluation.") from e
+            raise InitError("Initializer failed during evaluation.") from e
 
 
 @dataclass(frozen=True)
-class SingleStrataRume(Rume[GeoScopeT_co]):
+class SingleStrataRUME(RUME[GeoScopeT_co]):
     """A RUME with a single strata."""
 
     ipm: CompartmentModel
@@ -559,10 +559,10 @@ class SingleStrataRume(Rume[GeoScopeT_co]):
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> "SingleStrataRume[GeoScopeT]":
+    ) -> "SingleStrataRUME[GeoScopeT]":
         """Create a RUME with only a single strata."""
-        return SingleStrataRume(
-            strata=[Gpm(DEFAULT_STRATA, ipm, mm, init)],
+        return SingleStrataRUME(
+            strata=[GPM(DEFAULT_STRATA, ipm, mm, init)],
             ipm=ipm,
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
             scope=scope,
@@ -576,22 +576,22 @@ class SingleStrataRume(Rume[GeoScopeT_co]):
 
 
 @dataclass(frozen=True)
-class MultistrataRume(Rume[GeoScopeT_co]):
+class MultiStrataRUME(RUME[GeoScopeT_co]):
     """A RUME with a multiple strata."""
 
     ipm: CombinedCompartmentModel
 
     @staticmethod
     def build(
-        strata: Sequence[Gpm],
+        strata: Sequence[GPM],
         meta_requirements: Sequence[AttributeDef],
         meta_edges: MetaEdgeBuilder,
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> "MultistrataRume[GeoScopeT]":
+    ) -> "MultiStrataRUME[GeoScopeT]":
         """Create a multistrata RUME by combining one GPM per strata."""
-        return MultistrataRume(
+        return MultiStrataRUME(
             strata=strata,
             # Combine IPMs
             ipm=CombinedCompartmentModel(
@@ -611,10 +611,10 @@ class MultistrataRume(Rume[GeoScopeT_co]):
         return str
 
 
-class MultistrataRumeBuilder(ABC):
+class MultiStrataRUMEBuilder(ABC):
     """Create a multi-strata RUME by combining GPMs, one for each strata."""
 
-    strata: Sequence[Gpm]
+    strata: Sequence[GPM]
     """The strata that are part of this RUME."""
 
     meta_requirements: Sequence[AttributeDef]
@@ -624,9 +624,9 @@ class MultistrataRumeBuilder(ABC):
     """
 
     @abstractmethod
-    def meta_edges(self, symbols: MultistrataModelSymbols) -> Sequence[TransitionDef]:
+    def meta_edges(self, symbols: MultiStrataModelSymbols) -> Sequence[TransitionDef]:
         """
-        When implementing a MultistrataRumeBuilder, override this method
+        When implementing a MultiStrataRumeBuilder, override this method
         to build the meta-transition-edges -- the edges which represent
         cross-strata interactions. You are given a reference to this model's symbols
         library so you can build expressions for the transition rates.
@@ -638,9 +638,9 @@ class MultistrataRumeBuilder(ABC):
         scope: GeoScopeT,
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
-    ) -> MultistrataRume[GeoScopeT]:
+    ) -> MultiStrataRUME[GeoScopeT]:
         """Build the RUME."""
-        return MultistrataRume[GeoScopeT].build(
+        return MultiStrataRUME[GeoScopeT].build(
             self.strata,
             self.meta_requirements,
             self.meta_edges,

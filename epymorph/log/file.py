@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Generator
 
 from epymorph.event import (
-    AdrioProgress,
+    ADRIOProgress,
     EventBus,
     OnMovementClause,
     OnMovementFinish,
@@ -63,7 +63,7 @@ def file_log(
         if start_time is not None:
             sim_log.info(f"Runtime: {(end_time - start_time):.3f}s")
 
-    def on_adrio_progress(e: AdrioProgress) -> None:
+    def on_adrio_progress(e: ADRIOProgress) -> None:
         if e.final:
             adrio_log.info(f"Loaded ADRIO {e.adrio_name} in ({e.duration:.3f} seconds)")
 

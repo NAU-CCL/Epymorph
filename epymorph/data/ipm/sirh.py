@@ -7,7 +7,7 @@ from epymorph.compartment_model import CompartmentModel, compartment, edge, fork
 from epymorph.data_shape import Shapes
 
 
-class Sirh(CompartmentModel):
+class SIRH(CompartmentModel):
     """A basic SIRH model."""
 
     compartments = [

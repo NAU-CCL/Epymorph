@@ -11,13 +11,13 @@ import rasterio.io as rio
 from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
 from epymorph.attribute import AttributeDef
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE
@@ -94,7 +94,7 @@ def _fetch_raster(
             file = load_or_fetch_url(url, _PRISM_CACHE_PATH / Path(url).name)
 
         except Exception as e:
-            raise DataResourceException("Unable to fetch PRISM data.") from e
+            raise DataResourceError("Unable to fetch PRISM data.") from e
 
         # if the progress isnt None
         if progress is not None:
@@ -134,7 +134,7 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
             "Given date range is out of PRISM scope, please enter dates between "
             f"1981-01-01 and {latest_date}"
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     return date_range
 
@@ -188,7 +188,7 @@ def _estimate_prism(
     )
 
 
-class _PRISMAdrio(Adrio[np.float64], ABC):
+class _PRISMAdrio(ADRIO[np.float64], ABC):
     _override_time_frame: TimeFrame | None
     """An override time frame for which to fetch data.
     If None, the simulation time frame will be used."""
@@ -224,7 +224,7 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
                     "Alaska, Hawaii, and Puerto Rico cannot be evaluated for PRISM "
                     "attributes. Please enter a geoid within the 48 contiguous states."
                 )
-                raise DataResourceException(msg)
+                raise DataResourceError(msg)
         return scope
 
     @abstractmethod
@@ -284,7 +284,7 @@ class _PRISMAdrio(Adrio[np.float64], ABC):
                 )
 
                 if errors == "raise":
-                    raise DataResourceException(error_msg)
+                    raise DataResourceError(error_msg)
                 elif errors == "warn":
                     warn(error_msg)
 

@@ -12,12 +12,12 @@ from epymorph.attribute import (
     AttributeDef,
     ModuleNamePattern,
 )
-from epymorph.compartment_model import MultistrataModelSymbols, edge
-from epymorph.data.ipm.sirs import Sirs
+from epymorph.compartment_model import MultiStrataModelSymbols, edge
+from epymorph.data.ipm.sirs import SIRS
 from epymorph.data.mm.centroids import Centroids
 from epymorph.data_shape import Shapes
 from epymorph.data_type import AttributeArray, CentroidDType
-from epymorph.error import AttributeException
+from epymorph.error import DataAttributeError
 from epymorph.geography.us_census import StateScope
 from epymorph.initializer import SingleLocation
 from epymorph.params import (
@@ -27,7 +27,7 @@ from epymorph.params import (
     ParamFunctionTimeAndNode,
     simulation_symbols,
 )
-from epymorph.rume import Gpm, MultistrataRume, Rume
+from epymorph.rume import GPM, RUME, MultiStrataRUME
 from epymorph.simulation import ParamValue
 from epymorph.time import TimeFrame
 
@@ -65,34 +65,34 @@ class EvaluateParamsTest(unittest.TestCase):
             "*::*::centroid": np.array([(1.0, 1.0), (2.0, 2.0)], dtype=CentroidDType),
         }
 
-    def _create_rume(self, rume_params: dict[str, ParamValue] | None = None) -> Rume:
+    def _create_rume(self, rume_params: dict[str, ParamValue] | None = None) -> RUME:
         meta_requirements = [
             AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
         ]
 
-        def meta_edges(s: MultistrataModelSymbols):
-            [S_aaa, I_aaa, R_aaa] = s.strata_compartments("aaa")
-            [S_bbb, I_bbb, R_bbb] = s.strata_compartments("bbb")
+        def meta_edges(s: MultiStrataModelSymbols):
+            [S_aaa, I_aaa, R_aaa] = s.strata_compartments("aaa")  # noqa: N806
+            [S_bbb, I_bbb, R_bbb] = s.strata_compartments("bbb")  # noqa: N806
             [beta_bbb_aaa] = s.all_meta_requirements
-            N_aaa = sympy.Max(1, S_aaa + I_aaa + R_aaa)
+            N_aaa = sympy.Max(1, S_aaa + I_aaa + R_aaa)  # noqa: N806
             return [
                 edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
             ]
 
-        return MultistrataRume.build(
+        return MultiStrataRUME.build(
             strata=[
-                Gpm(
+                GPM(
                     name="aaa",
-                    ipm=Sirs(),
+                    ipm=SIRS(),
                     mm=Centroids(),
                     init=SingleLocation(location=0, seed_size=100),
                     params={
                         # leave phi unspecified to test default value resolution
                     },
                 ),
-                Gpm(
+                GPM(
                     name="bbb",
-                    ipm=Sirs(),
+                    ipm=SIRS(),
                     mm=Centroids(),
                     init=SingleLocation(location=0, seed_size=100),
                     params={
@@ -188,7 +188,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume(params)
 
-        with self.assertRaises(AttributeException) as ctx:
+        with self.assertRaises(DataAttributeError) as ctx:
             rume.evaluate_params(rng=np.random.default_rng(1))
 
         err = str(ctx.exception).lower()
@@ -288,7 +288,6 @@ class EvaluateParamsTest(unittest.TestCase):
 
             def evaluate1(self) -> float:
                 beta = self.data(self.BETA)
-                print(beta, type(beta), beta.dtype)
                 return float(beta) / 4.0
 
         class Xi(ParamFunctionNumpy):
@@ -338,7 +337,7 @@ class EvaluateParamsTest(unittest.TestCase):
 
         rume = self._create_rume()
 
-        with self.assertRaises(AttributeException) as ctx:
+        with self.assertRaises(DataAttributeError) as ctx:
             rume.evaluate_params(
                 override_params={
                     "gpm:aaa::ipm::gamma": Gamma(),

@@ -26,7 +26,6 @@ from typing import (
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
-from typing_extensions import deprecated
 
 acceptable_name = re_compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 """A pattern that matches generally acceptable names for use across epymorph."""
@@ -42,7 +41,7 @@ def normalize_list(values: list[str]) -> list[str]:
     return list(map(normalize_str, values))
 
 
-class AnsiColor(Enum):
+class ANSIColor(Enum):
     # Standard Colors
     BLACK = 30
     RED = 31
@@ -63,7 +62,7 @@ class AnsiColor(Enum):
     BRIGHT_WHITE = 97
 
 
-class AnsiStyle(Enum):
+class ANSIStyle(Enum):
     RESET = 0  # Reset all styles
     BOLD = 1  # Bold text
     DIM = 2  # Dim text
@@ -74,8 +73,8 @@ class AnsiStyle(Enum):
 
 def ansi_stylize(
     text: str,
-    color: AnsiColor | None = AnsiColor.WHITE,
-    style: AnsiStyle | None = None,
+    color: ANSIColor | None = ANSIColor.WHITE,
+    style: ANSIStyle | None = None,
 ) -> str:
     """Uses ANSI escape codes to stylize a given text, which may not work everywhere.
     Any applied color or style are reset after the text.
@@ -91,7 +90,7 @@ def ansi_stylize(
     codes = [str(x.value) for x in (color, style) if x is not None]
     if len(codes) == 0:
         return text
-    return f"\033[{';'.join(codes)}m{text}\033[{AnsiStyle.RESET.value}m"
+    return f"\033[{';'.join(codes)}m{text}\033[{ANSIStyle.RESET.value}m"
 
 
 # function utilities
@@ -292,22 +291,6 @@ def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
 N = TypeVar("N", bound=np.number)
 
 NDIndices = NDArray[np.intp]
-
-
-@deprecated("Don't use this; use np.repeat")
-def stutter(it: Iterable[T], times: int) -> Iterable[T]:
-    """Make the iterable `it` repeat each item `times` times.
-    (Unlike `itertools.repeat` which repeats whole sequences in order.)"""
-    return (xs for x in it for xs in (x,) * times)
-
-
-@deprecated("Don't use this; use np.reshape and np.sum")
-def stridesum(arr: NDArray[N], n: int, dtype: DTypeLike = None) -> NDArray[N]:
-    """Compute a new array by grouping every `n` rows and summing them together."""
-    if len(arr) % n != 0:
-        pad = n - (len(arr) % n)
-        arr = np.pad(arr, pad_width=(0, pad), mode="constant", constant_values=0)
-    return arr.reshape((-1, n)).sum(axis=1, dtype=dtype)
 
 
 def normalize(arr: NDArray[N]) -> NDArray[N]:
@@ -764,13 +747,15 @@ def subscriptions() -> Generator[Subscriber, None, None]:
 
 # singletons
 
+SingletonT = TypeVar("SingletonT", bound="Singleton")
+
 
 class Singleton(type):
     """A metaclass for classes you want to treat as singletons."""
 
-    _instances: dict[type["Singleton"], "Singleton"] = {}
+    _instances = {}
 
-    def __call__(cls: type["Singleton"], *args: Any, **kwargs: Any) -> "Singleton":
+    def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]

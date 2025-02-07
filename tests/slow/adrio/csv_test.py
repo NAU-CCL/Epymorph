@@ -152,7 +152,7 @@ def test_csv_03(tmp_path, rng):
     adrio_scope = CountyScope.in_counties(["08001", "35001", "04013"], year=2021)
 
     # NOTE: time subsetting is not currently supported by the CSVTimeSeries ADRIO.
-    # adrio_time_frame = TimeFrame.range("2021-01-15", "2021-03-15")
+    # adrio_time_frame = TimeFrame.range("2021-01-15", "2021-03-15")  # noqa: ERA001
     adrio_time_frame = TimeFrame.range("2021-01-01", "2021-03-31")
 
     adrio_date_range = pd.date_range(

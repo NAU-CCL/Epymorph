@@ -1,4 +1,5 @@
 """ADRIOs that load data from locally available CSV files."""
+# ruff: noqa: A005
 
 from datetime import date
 from os import PathLike
@@ -9,8 +10,8 @@ from numpy.typing import DTypeLike, NDArray
 from pandas import DataFrame, Series, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio
-from epymorph.error import DataResourceException, GeoValidationException
+from epymorph.adrio.adrio import ADRIO
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
 from epymorph.geography.us_geography import CensusGranularity
@@ -59,20 +60,20 @@ def _parse_abbrev(
     """
     if not isinstance(scope, StateScope):
         msg = "State scope is required to use state abbreviation key format."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     state_mapping = get_states(scope.year).state_code_to_fips
 
     result_df = df.copy()
     result_df[key_col] = [state_mapping.get(x) for x in result_df[key_col]]
     if result_df[key_col].isna().any():
-        raise DataResourceException("Invalid state code in key column.")
+        raise DataResourceError("Invalid state code in key column.")
     result_df = result_df[result_df[key_col].isin(scope.node_ids)]
 
     if key_col2 is not None:
         result_df[key_col2] = [state_mapping.get(x) for x in result_df[key_col2]]
         if result_df[key_col2].isna().any():
-            raise DataResourceException("Invalid state code in second key column.")
+            raise DataResourceError("Invalid state code in second key column.")
         result_df = result_df[result_df[key_col2].isin(scope.node_ids)]
 
     return result_df
@@ -88,7 +89,7 @@ def _parse_county_state(
     """
     if not isinstance(scope, CountyScope):
         msg = "County scope is required to use county, state key format."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     node_ids = scope.node_ids
     geoid_to_name = get_counties(scope.year).county_fips_to_name
@@ -116,11 +117,11 @@ def _parse_geoid(
     """
     if not isinstance(scope, CensusScope):
         msg = "Census scope is required to use geoid key format."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     granularity = CensusGranularity.of(scope.granularity)
     if not all(granularity.matches(x) for x in df[key_col]):
-        raise DataResourceException("Invalid geoid in key column.")
+        raise DataResourceError("Invalid geoid in key column.")
 
     result_df = df.copy()
     result_df = result_df[result_df[key_col].isin(scope.node_ids)]
@@ -140,10 +141,10 @@ def _validate_result(scope: GeoScope, data: Series) -> None:
             "Key column missing keys for geographies in scope "
             "or contains unrecognized keys."
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
 
-class CSV(Adrio[Any]):
+class CSV(ADRIO[Any]):
     """Retrieves an N-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -175,12 +176,12 @@ class CSV(Adrio[Any]):
         self.key_type = key_type
         self.skiprows = skiprows
 
-    @override
-    def evaluate_adrio(self) -> NDArray[Any]:
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
-            raise GeoValidationException(msg)
+            raise ValueError(msg)
 
+    @override
+    def evaluate_adrio(self) -> NDArray[Any]:
         path = Path(self.file_path)
         # workaround for bad pandas type definitions
         skiprows: int = self.skiprows  # type: ignore
@@ -203,7 +204,7 @@ class CSV(Adrio[Any]):
                     "Data for required geographies missing from CSV file "
                     "or could not be found."
                 )
-                raise DataResourceException(msg)
+                raise DataResourceError(msg)
 
             sorted_df = parsed_df.rename(columns={self.key_col: "key"}).sort_values(
                 by="key"
@@ -212,10 +213,10 @@ class CSV(Adrio[Any]):
 
         else:
             msg = f"File {self.file_path} not found"
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
 
 
-class CSVTimeSeries(Adrio[Any]):
+class CSVTimeSeries(ADRIO[Any]):
     """Retrieves a TxN-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -255,12 +256,12 @@ class CSVTimeSeries(Adrio[Any]):
         self.file_time_frame = time_frame
         self.time_col = time_col
 
-    @override
-    def evaluate_adrio(self) -> NDArray[Any]:
         if self.key_col == self.data_col:
             msg = "Key column and data column must not be the same."
-            raise GeoValidationException(msg)
+            raise ValueError(msg)
 
+    @override
+    def evaluate_adrio(self) -> NDArray[Any]:
         path = Path(self.file_path)
         skiprows: int = self.skiprows  # type: ignore
         if path.exists():
@@ -282,7 +283,7 @@ class CSVTimeSeries(Adrio[Any]):
                     "Data for required geographies missing from CSV file "
                     "or could not be found."
                 )
-                raise DataResourceException(msg)
+                raise DataResourceError(msg)
 
             parsed_df[self.time_col] = parsed_df[self.time_col].apply(
                 date.fromisoformat
@@ -292,7 +293,7 @@ class CSVTimeSeries(Adrio[Any]):
             is_after = parsed_df[self.time_col] > self.file_time_frame.end_date
             if any(is_before | is_after):
                 msg = "Found time column value(s) outside of provided date range."
-                raise DataResourceException(msg)
+                raise DataResourceError(msg)
 
             sorted_df = (
                 parsed_df.rename(
@@ -309,10 +310,10 @@ class CSVTimeSeries(Adrio[Any]):
 
         else:
             msg = f"File {self.file_path} not found"
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
 
 
-class CSVMatrix(Adrio[Any]):
+class CSVMatrix(ADRIO[Any]):
     """Retrieves an NxN-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -348,16 +349,16 @@ class CSVMatrix(Adrio[Any]):
         self.key_type = key_type
         self.skiprows = skiprows
 
-    @override
-    def evaluate_adrio(self) -> NDArray[Any]:
         if len({self.from_key_col, self.to_key_col, self.data_col}) != 3:
             msg = "From key column, to key column, and data column must all be unique."
-            raise GeoValidationException(msg)
+            raise ValueError(msg)
 
+    @override
+    def evaluate_adrio(self) -> NDArray[Any]:
         path = Path(self.file_path)
         if not path.exists():
             msg = f"File {self.file_path} not found"
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
 
         skiprows: int = self.skiprows  # type: ignore
         csv_df = read_csv(

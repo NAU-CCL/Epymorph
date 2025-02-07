@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 
 from epymorph.attribute import AbsoluteName
 from epymorph.data_type import SimDType
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.util import Event, Singleton
 
 #####################
@@ -23,7 +23,7 @@ class OnStart(NamedTuple):
 
     simulator: str
     """Name of the simulator class."""
-    rume: Rume
+    rume: RUME
     """The RUME for the simulation."""
 
 
@@ -117,7 +117,7 @@ class DownloadActivity(NamedTuple):
     """What is the current approximate download speed?"""
 
 
-class AdrioProgress(NamedTuple):
+class ADRIOProgress(NamedTuple):
     """The payload of AdrioEvents.on_adrio_progress
 
     Perhaps not all ADRIOs will report progress, but those that do
@@ -172,7 +172,7 @@ class EventBus(metaclass=Singleton):
     """
 
     # ADRIO Events
-    on_adrio_progress: Event[AdrioProgress]
+    on_adrio_progress: Event[ADRIOProgress]
     """Event fires when an ADRIO is fetching data."""
 
     def __init__(self):

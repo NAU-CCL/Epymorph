@@ -8,10 +8,10 @@ from geopandas import GeoDataFrame
 from pandas import DataFrame, to_numeric
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
 from epymorph.data_type import CentroidDType, StructDType
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceException
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE
@@ -35,14 +35,14 @@ from epymorph.geography.us_tiger import (
 
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
-        raise DataResourceException("Census scope is required for us_tiger attributes.")
+        raise DataResourceError("Census scope is required for us_tiger attributes.")
     return scope
 
 
 def _validate_year(scope: CensusScope) -> TigerYear:
     year = scope.year
     if not is_tiger_year(year):
-        raise DataResourceException(
+        raise DataResourceError(
             f"{year} is not a supported year for us_tiger attributes."
         )
     return year
@@ -68,7 +68,7 @@ def _get_geo(scope: CensusScope, progress: ProgressCallback) -> GeoDataFrame:
                 progress,
             )
         case x:
-            raise DataResourceException(
+            raise DataResourceError(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
     geoid_df = DataFrame({"GEOID": scope.node_ids})
@@ -95,7 +95,7 @@ def _get_info(scope: CensusScope, progress: ProgressCallback) -> DataFrame:
                 progress,
             )
         case x:
-            raise DataResourceException(
+            raise DataResourceError(
                 f"{x} is not a supported granularity for us_tiger attributes."
             )
     geoid_df = DataFrame({"GEOID": scope.node_ids})
@@ -105,7 +105,7 @@ def _get_info(scope: CensusScope, progress: ProgressCallback) -> DataFrame:
 T_co = TypeVar("T_co", bound=np.generic)
 
 
-class _UsTigerAdrio(Adrio[T_co], ABC):
+class _USTigerAdrio(ADRIO[T_co], ABC):
     """Abstract class for shared functionality in US Tiger ADRIOs."""
 
     def estimate_data(self) -> DataEstimate:
@@ -123,7 +123,7 @@ class _UsTigerAdrio(Adrio[T_co], ABC):
                 states = list(STATE.truncate_unique(scope.node_ids))
                 est = check_cache_block_groups(year, states)
             case x:
-                raise DataResourceException(
+                raise DataResourceError(
                     f"{x} is not a supported granularity for us_tiger attributes."
                 )
         key = f"us_tiger:{scope.granularity}:{year}"
@@ -138,7 +138,7 @@ class _UsTigerAdrio(Adrio[T_co], ABC):
 
 
 @adrio_cache
-class GeometricCentroid(_UsTigerAdrio[StructDType]):
+class GeometricCentroid(_USTigerAdrio[StructDType]):
     """The centroid of the geographic polygons."""
 
     @override
@@ -146,13 +146,13 @@ class GeometricCentroid(_UsTigerAdrio[StructDType]):
         scope = _validate_scope(self.scope)
         return (
             _get_geo(scope, self.progress)["geometry"]
-            .apply(lambda x: x.centroid.coords[0])
+            .apply(lambda x: x.centroid.coords[0])  # type: ignore
             .to_numpy(dtype=CentroidDType)
         )
 
 
 @adrio_cache
-class InternalPoint(_UsTigerAdrio[StructDType]):
+class InternalPoint(_USTigerAdrio[StructDType]):
     """
     The internal point provided by TIGER data. These points are selected by
     Census workers so as to be guaranteed to be within the geographic polygons,
@@ -171,7 +171,7 @@ class InternalPoint(_UsTigerAdrio[StructDType]):
 
 
 @adrio_cache
-class Name(_UsTigerAdrio[np.str_]):
+class Name(_USTigerAdrio[np.str_]):
     """For states and counties, the proper name of the location; otherwise its GEOID."""
 
     @override
@@ -186,7 +186,7 @@ class Name(_UsTigerAdrio[np.str_]):
 
 
 @adrio_cache
-class PostalCode(_UsTigerAdrio[np.str_]):
+class PostalCode(_USTigerAdrio[np.str_]):
     """
     For states only, the postal code abbreviation for the state
     ("AZ" for Arizona, and so on).
@@ -196,7 +196,7 @@ class PostalCode(_UsTigerAdrio[np.str_]):
     def evaluate_adrio(self):
         scope = _validate_scope(self.scope)
         if scope.granularity != "state":
-            raise DataResourceException(
+            raise DataResourceError(
                 "PostalCode is only available at state granularity."
             )
         info_df = _get_info(scope, self.progress)
@@ -204,7 +204,7 @@ class PostalCode(_UsTigerAdrio[np.str_]):
 
 
 @adrio_cache
-class LandAreaM2(_UsTigerAdrio[np.float64]):
+class LandAreaM2(_USTigerAdrio[np.float64]):
     """
     The land area of the geo node in meters-squared. This is the 'ALAND' attribute
     from the TIGER data files.

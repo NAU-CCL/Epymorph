@@ -11,8 +11,8 @@ from numpy.typing import NDArray
 from pandas import DataFrame, concat, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import Adrio, ProgressCallback, adrio_cache
-from epymorph.error import DataResourceException
+from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
+from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE, CensusGranularityName
@@ -132,7 +132,7 @@ def _fetch_cases(
         or time_frame.end_date > date(2023, 5, 4)
     ):
         msg = "COVID cases data is only available between 2/24/2022 and 5/4/2023."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     source = DataSource(
         url_base="https://data.cdc.gov/resource/3nnm-4jni.csv?",
@@ -168,7 +168,7 @@ def _fetch_facility_hospitalization(
             "Facility level hospitalization data is only available between 12/13/2020 "
             "and 5/10/2023."
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     source = DataSource(
         url_base="https://healthdata.gov/resource/anag-cw7u.csv?",
@@ -201,10 +201,10 @@ def _fetch_state_hospitalization(
             "State level hospitalization data can only be retrieved for state "
             "granularity."
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
     if time_frame.start_date < date(2020, 1, 4):
         msg = "State level hospitalization data is only available starting 1/4/2020."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
     if time_frame.end_date > date(2024, 5, 1):
         warn("State level hospitalization data is voluntary past 5/1/2024.")
 
@@ -237,7 +237,7 @@ def _fetch_vaccination(
         or time_frame.end_date > date(2024, 5, 10)
     ):
         msg = "Vaccination data is only available between 12/13/2020 and 5/10/2024."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     source = DataSource(
         url_base="https://data.cdc.gov/resource/8xkx-amqh.csv?",
@@ -269,7 +269,7 @@ def _fetch_deaths_county(
         msg = (
             "County level deaths data is only available between 1/4/2020 and 4/5/2024."
         )
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     if scope.granularity == "state":
         source = DataSource(
@@ -307,7 +307,7 @@ def _fetch_deaths_state(
     """
     if time_frame.start_date < date(2020, 1, 4):
         msg = "State level deaths data is only available starting 1/4/2020."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
 
     states = get_states(scope.year)
     state_mapping = dict(zip(states.geoid, states.name, strict=True))
@@ -356,12 +356,12 @@ def _query_location(info: DataSource, loc_clause: str, date_clause: str) -> Data
 def _validate_scope(scope: GeoScope) -> CensusScope:
     if not isinstance(scope, CensusScope):
         msg = "Census scope is required for CDC attributes."
-        raise DataResourceException(msg)
+        raise DataResourceError(msg)
     return scope
 
 
 @adrio_cache
-class CovidCasesPer100k(Adrio[np.float64]):
+class CovidCasesPer100k(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     number of COVID-19 cases per 100k population.
@@ -385,7 +385,7 @@ class CovidCasesPer100k(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationsPer100k(Adrio[np.float64]):
+class CovidHospitalizationsPer100k(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     number of COVID-19 hospitalizations per 100k population.
@@ -409,7 +409,7 @@ class CovidHospitalizationsPer100k(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationAvgFacility(Adrio[np.float64]):
+class CovidHospitalizationAvgFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of COVID-19 hospitalizations from the facility level dataset.
@@ -423,7 +423,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
     def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
         self.replace_sentinel = replace_sentinel
         self.override_time_frame = time_frame
 
@@ -440,7 +440,7 @@ class CovidHospitalizationAvgFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationSumFacility(Adrio[np.float64]):
+class CovidHospitalizationSumFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of all COVID-19 hospitalizations from the facility level dataset.
@@ -454,7 +454,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
     def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
         self.replace_sentinel = replace_sentinel
         self.override_time_frame = time_frame
 
@@ -471,7 +471,7 @@ class CovidHospitalizationSumFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
+class InfluenzaHosptializationAvgFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of influenza hospitalizations from the facility level dataset.
@@ -485,7 +485,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
     def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
         self.replace_sentinel = replace_sentinel
         self.override_time_frame = time_frame
 
@@ -502,7 +502,7 @@ class InfluenzaHosptializationAvgFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
+class InfluenzaHospitalizationSumFacility(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of influenza hospitalizations from the facility level dataset.
@@ -516,7 +516,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
     def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
         if replace_sentinel not in range(4):
             msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceException(msg)
+            raise DataResourceError(msg)
         self.replace_sentinel = replace_sentinel
         self.override_time_frame = time_frame
 
@@ -533,7 +533,7 @@ class InfluenzaHospitalizationSumFacility(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationAvgState(Adrio[np.float64]):
+class CovidHospitalizationAvgState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of COVID-19 hospitalizations from the state level dataset.
@@ -557,7 +557,7 @@ class CovidHospitalizationAvgState(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidHospitalizationSumState(Adrio[np.float64]):
+class CovidHospitalizationSumState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of COVID-19 hospitalizations from the state level dataset.
@@ -581,7 +581,7 @@ class CovidHospitalizationSumState(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
+class InfluenzaHospitalizationAvgState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly averages of influenza hospitalizations from the state level dataset.
@@ -605,7 +605,7 @@ class InfluenzaHospitalizationAvgState(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaHospitalizationSumState(Adrio[np.float64]):
+class InfluenzaHospitalizationSumState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly sums of influenza hospitalizations from the state level dataset.
@@ -629,7 +629,7 @@ class InfluenzaHospitalizationSumState(Adrio[np.float64]):
 
 
 @adrio_cache
-class FullCovidVaccinations(Adrio[np.float64]):
+class FullCovidVaccinations(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     cumulative total number of individuals fully vaccinated for COVID-19.
@@ -653,7 +653,7 @@ class FullCovidVaccinations(Adrio[np.float64]):
 
 
 @adrio_cache
-class OneDoseCovidVaccinations(Adrio[np.float64]):
+class OneDoseCovidVaccinations(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     cumulative total number of individuals with at least one dose of COVID-19
@@ -678,7 +678,7 @@ class OneDoseCovidVaccinations(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidBoosterDoses(Adrio[np.float64]):
+class CovidBoosterDoses(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     cumulative total number of COVID-19 booster doses administered.
@@ -702,7 +702,7 @@ class CovidBoosterDoses(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidDeathsCounty(Adrio[np.float64]):
+class CovidDeathsCounty(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly total of COVID-19 deaths from the county level dataset.
@@ -726,7 +726,7 @@ class CovidDeathsCounty(Adrio[np.float64]):
 
 
 @adrio_cache
-class CovidDeathsState(Adrio[np.float64]):
+class CovidDeathsState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly total of COVID-19 deaths from the state level dataset.
@@ -750,7 +750,7 @@ class CovidDeathsState(Adrio[np.float64]):
 
 
 @adrio_cache
-class InfluenzaDeathsState(Adrio[np.float64]):
+class InfluenzaDeathsState(ADRIO[np.float64]):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
     weekly total of influenza deaths from the state level dataset.

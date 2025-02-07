@@ -16,7 +16,7 @@ from typing_extensions import override
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import DataShape, DataShapeMatcher, Shapes
 from epymorph.data_type import SimArray, SimDType
-from epymorph.error import InitException
+from epymorph.error import InitError
 from epymorph.simulation import (
     SimulationFunction,
 )
@@ -46,7 +46,7 @@ class Initializer(SimulationFunction[SimArray], ABC):
                 return self.ipm.select.compartments(name_or_index).compartment_index
         except ValueError:
             err = f"Unknown compartment '{name_or_index}' specified in initializer."
-            raise InitException(err)
+            raise InitError(err)
 
     @override
     def validate(self, result) -> None:
@@ -59,17 +59,17 @@ class Initializer(SimulationFunction[SimArray], ABC):
             )
         except NumpyTypeError as e:
             err = f"Invalid return type from Initializer '{self.__class__.__name__}'"
-            raise InitException(err) from e
+            raise InitError(err) from e
 
         if np.min(result) < 0:
             err = (
                 f"Initializer '{self.__class__.__name__}' returned "
                 "values less than zero."
             )
-            raise InitException(err)
+            raise InitError(err)
 
     @property
-    def _NxC(self) -> tuple[int, int]:
+    def _nxc(self) -> tuple[int, int]:
         return (self.scope.nodes, self.ipm.num_compartments)
 
     def _condition_input_array(
@@ -107,7 +107,7 @@ class Initializer(SimulationFunction[SimArray], ABC):
                 "for this simulation.\n"
                 f"Expected: {shape}-shaped array of {dtype_name(np.dtype(SimDType))}"
             )
-            raise InitException(err)
+            raise InitError(err)
 
 
 # Pre-baked initializer implementations
@@ -138,7 +138,7 @@ class NoInfection(Initializer):
 
     def evaluate(self) -> SimArray:
         pop = self.data(_POPULATION_ATTR)
-        result = np.zeros(self._NxC, dtype=SimDType)
+        result = np.zeros(self._nxc, dtype=SimDType)
         initial = self.as_compartment(self.initial_compartment)
         result[:, initial] = pop
         return result
@@ -208,7 +208,7 @@ class Proportional(Initializer):
         row_sums = cast(NDArray[np.float64], np.sum(ratios, axis=1, dtype=np.float64))
         if np.any(row_sums <= 0):
             err = "One or more rows sum to zero or less."
-            raise InitException(err)
+            raise InitError(err)
 
         pop = self.data(_POPULATION_ATTR)
         result = pop[:, np.newaxis] * (ratios / row_sums[:, np.newaxis])
@@ -274,7 +274,7 @@ class IndexedLocations(SeededInfection):
             err = (
                 "Initializer argument 'seed_size' must be a non-negative integer value."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         self.selection = selection
         self.seed_size = seed_size
@@ -296,7 +296,7 @@ class IndexedLocations(SeededInfection):
                 "Initializer argument 'selection' invalid: "
                 f"some indices are out of range ({-N}, {N})."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         pop = self.data(_POPULATION_ATTR)
         selected = pop[sel]
@@ -306,7 +306,7 @@ class IndexedLocations(SeededInfection):
                 f"Attempted to infect {self.seed_size} individuals "
                 f"but only had {available} available."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         # Randomly select individuals from each of the selected locations.
         if len(selected) == 1:
@@ -314,7 +314,7 @@ class IndexedLocations(SeededInfection):
         else:
             infected = self.rng.multivariate_hypergeometric(selected, self.seed_size)
 
-        result = np.zeros(self._NxC, dtype=SimDType)
+        result = np.zeros(self._nxc, dtype=SimDType)
         result[:, initial] = pop
 
         # Special case: the "no" IPM has only one compartment!
@@ -359,7 +359,7 @@ class SingleLocation(IndexedLocations):
                 "Initializer argument 'location' must be a valid index "
                 f"to an array of {N} populations."
             )
-            raise InitException(err)
+            raise InitError(err)
         return super().evaluate()
 
 
@@ -403,7 +403,7 @@ class LabeledLocations(SeededInfection):
                 "Initializer argument 'labels' invalid: "
                 "some labels are not in the geography."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         (selection,) = np.isin(geo_labels, self.labels).nonzero()
         sub = IndexedLocations(
@@ -447,7 +447,7 @@ class RandomLocations(SeededInfection):
                 "Initializer argument 'num_locations' must be "
                 f"a value from 1 up to the number of locations ({N})."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         indices = np.arange(N, dtype=np.intp)
         selection = self.rng.choice(indices, self.num_locations)
@@ -492,7 +492,7 @@ class TopLocations(SeededInfection):
 
         if not top_attribute.shape == Shapes.N:
             err = "Initializer argument `top_locations` must be an N-shaped attribute."
-            raise InitException(err)
+            raise InitError(err)
 
         self.top_attribute = top_attribute
         self.requirements = (_POPULATION_ATTR, top_attribute)
@@ -506,7 +506,7 @@ class TopLocations(SeededInfection):
                 "Initializer argument 'num_locations' must be "
                 f"a value from 1 up to the number of locations ({N})."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         # `argpartition` chops an array in two halves
         # (yielding indices of the original array):
@@ -561,7 +561,7 @@ class BottomLocations(SeededInfection):
             err = (
                 "Initializer argument `bottom_locations` must be an N-shaped attribute."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         self.bottom_attribute = bottom_attribute
         self.requirements = (_POPULATION_ATTR, bottom_attribute)
@@ -575,7 +575,7 @@ class BottomLocations(SeededInfection):
                 "Initializer argument 'num_locations' must be "
                 f"a value from 1 up to the number of locations ({N})."
             )
-            raise InitException(err)
+            raise InitError(err)
 
         # `argpartition` chops an array in two halves
         # (yielding indices of the original array):

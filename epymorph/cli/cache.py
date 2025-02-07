@@ -1,4 +1,5 @@
 """Implements the `cache` CLI subcommands."""
+# ruff: noqa: T201
 
 from argparse import _SubParsersAction
 

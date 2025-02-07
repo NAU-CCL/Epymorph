@@ -19,7 +19,7 @@ from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParame
 from epymorph.parameter_fitting.utils.params_perturb import Perturb
 from epymorph.parameter_fitting.utils.particle_initializer import ParticleInitializer
 from epymorph.parameter_fitting.utils.resampler import WeightsResampling
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 
 
 class ParticleFilter(BaseFilter):
@@ -61,7 +61,7 @@ class ParticleFilter(BaseFilter):
     def propagate_particles(
         self,
         particles: List[Particle],
-        rume: Rume,
+        rume: RUME,
         simulation: EpymorphSimulation,
         date: str,
         duration: int,
@@ -134,7 +134,7 @@ class ParticleFilter(BaseFilter):
 
     def run(
         self,
-        rume: Rume,
+        rume: RUME,
         likelihood_fn: Likelihood,
         params_space: Dict[str, EstimateParameters],
         model_link: ModelLink,
@@ -176,9 +176,9 @@ class ParticleFilter(BaseFilter):
         if len(data.shape) == 1:
             data = data[:, np.newaxis]  # Reshape to 2D array (N, 1)
 
-        print("Running Particle Filter simulation")
-        print(f"• {dates[0]} to {dates[-1]} ({rume.time_frame.duration_days} days)")
-        print(f"• {self.num_particles} particles")
+        print("Running Particle Filter simulation")  # noqa: T201
+        print(f"• {dates[0]} to {dates[-1]} ({rume.time_frame.duration_days} days)")  # noqa: T201
+        print(f"• {self.num_particles} particles")  # noqa: T201
 
         num_observations = len(data)
 
@@ -279,8 +279,8 @@ class ParticleFilter(BaseFilter):
         parameters_estimated = list(self.param_quantiles.keys())
         # Calculate total runtime
         total_runtime = time.time() - start_time
-        print(f"\nSimulation completed in {total_runtime:.2f}s")
-        print(f"\nParameters estimated: {parameters_estimated}")
+        print(f"\nSimulation completed in {total_runtime:.2f}s")  # noqa: T201
+        print(f"\nParameters estimated: {parameters_estimated}")  # noqa: T201
 
         # Prepare the output object
         out = ParticleFilterOutput(

@@ -7,7 +7,7 @@ from epymorph.compartment_model import CompartmentModel, compartment, edge, fork
 from epymorph.data_shape import Shapes
 
 
-class Sparsemod(CompartmentModel):
+class SparseMod(CompartmentModel):
     """A model similar to one used in sparsemod."""
 
     compartments = [

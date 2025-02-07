@@ -4,10 +4,10 @@ from numpy.typing import NDArray
 from epymorph.attribute import ModuleNamespace
 from epymorph.data_type import SimDType
 from epymorph.database import DataResolver
-from epymorph.error import MmSimException
+from epymorph.error import MMSimError
 from epymorph.event import EventBus, OnMovementClause, OnMovementFinish, OnMovementStart
 from epymorph.movement_model import MovementClause
-from epymorph.rume import Rume
+from epymorph.rume import RUME
 from epymorph.simulation import (
     Tick,
     resolve_tick_delta,
@@ -92,7 +92,7 @@ _events = EventBus()
 class MovementExecutor:
     """Movement model execution specifically for multi-strata simulations."""
 
-    _rume: Rume
+    _rume: RUME
     """the RUME"""
     _world: World
     """the world state"""
@@ -103,7 +103,7 @@ class MovementExecutor:
 
     def __init__(
         self,
-        rume: Rume,
+        rume: RUME,
         world: World,
         data: DataResolver,
         rng: np.random.Generator,
@@ -151,7 +151,7 @@ class MovementExecutor:
                     f"Error from applying clause '{clause.__class__.__name__}': "
                     "see exception trace"
                 )
-                raise MmSimException(msg) from e
+                raise MMSimError(msg) from e
 
             available_movers = self._world.get_local_array()
             clause_event = calculate_travelers(
