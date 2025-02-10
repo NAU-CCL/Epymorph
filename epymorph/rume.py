@@ -5,7 +5,6 @@ but will certainly not require less. A GPM (Geo-Population Model) is a subset of
 configuration, and it is possible to combine multiple GPMs into one multi-strata RUME.
 """
 
-import dataclasses
 import textwrap
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -18,7 +17,6 @@ from typing import (
     Mapping,
     NamedTuple,
     OrderedDict,
-    Self,
     Sequence,
     TypeVar,
     final,
@@ -403,14 +401,6 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         simulation quantities.
         """
         return simulation_symbols(*symbols)
-
-    def with_time_frame(self, time_frame: TimeFrame) -> Self:
-        """Create a RUME with a new time frame."""
-        # TODO: do we need to go through all of the params and subset any
-        # that are time-based?
-        # How would that work? Or maybe reconciling to time frame happens
-        # at param evaluation time...
-        return dataclasses.replace(self, time_frame=time_frame)
 
     def estimate_data(
         self,
