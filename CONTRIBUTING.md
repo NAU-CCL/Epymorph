@@ -1,10 +1,12 @@
 # Contributing to epymorph
 
-(For now this is intended for developers on the team. TODO: update this when we go open source.)
+epymorph is open source software and we welcome your contributions and feedback.
 
-## Setup
+The most direct way to contribute is by submitting [Pull Requests to our GitHub repository](https://github.com/NAU-CCL/Epymorph), or by [submitting Issues](https://github.com/NAU-CCL/Epymorph/issues) if you encounter bugs. In order to help us respond as fast as possible, please try to provide as much descriptive detail in your requests as you can. Consider including code samples, error messages, input data, information about your operating system and Python version, and anything else that may be relevant.
 
-A correctly configured development environment is critical for contributing to the project. For epymorph, that includes the following pieces:
+## Development Setup
+
+A correctly configured development environment is critical for contributing code to the project. For epymorph, that includes the following pieces:
 
 - the epymorph git repository, cloned to your development machine,
 - a python runtime of an appropriate version,
@@ -30,7 +32,7 @@ To set up our recommended environment follow these steps:
 
 That's it! In the terminal, you can run the command `uv run epymorph --help` to check that epymorph has been successfully installed. You should see a description of epymorph's command-line interface.
 
-The included VS Code settings configure the editor to run linting checks and auto-format the code on file save. You should verify that this is true! Make a trivial change to a python code file, like adding some blanks lines, and save the file. The formatter should fix the file to remove the extraneous blank lines. If it doesn't, double check your configuration. We require a strict auto-formatter in order to maintain a clean and readable change history and avoid unnecessary merge conflicts in contributions.
+The included VS Code settings configure the editor to run linting checks and auto-format the code on file save. You should verify that this is true! Make a trivial change to a python code file, like adding some blank lines, and save the file. The formatter should fix the file to remove the extraneous blank lines. If it doesn't, double check your configuration. We require a strict auto-formatter in order to maintain a clean and readable change history and avoid unnecessary merge conflicts in contributions.
 
 ## Configuration
 
@@ -45,11 +47,3 @@ CENSUS_API_KEY=abcd1234
 ```
 
 You may need to reload VS Code first, but otherwise the values in this file will be used automatically. Of course you can set other environment variables here as well.
-
-## Code organization
-
-The `epymorph` directory is the main python package for the project.
-
-`epymorph/data` is the model library, containing named implementations of general-purpose IPMs and MMs.
-
-The `doc` directory contains Jupyter Notebooks demonstrating features of epymorph (`doc/demo`) and general development progress (`doc/devlog`).

@@ -1,37 +1,49 @@
-# Builds and releases to Github whenever a "v" tag is added.
+# Builds and releases to GitHub and PyPI whenever a "v" tag is added.
 
 # Useful docs:
-# https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases
-# https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-# https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28
-# https://cli.github.com/manual/gh_release_create
+# https://docs.astral.sh/uv/concepts/projects/build/
 # https://docs.astral.sh/uv/guides/integration/github/
 # https://docs.astral.sh/ruff/integrations/#github-actions
+# https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# https://cli.github.com/manual/gh_release_create
 
-name: Build and release to Github
+name: Build and release
+
 on:
   push:
     tags:
       - 'v*'
 
 jobs:
-  build:
-    name: Build and release
-    runs-on: ubuntu-latest
+  # First job: run unit tests on OS/Python matrix.
+  test-matrix:
+    name: Test matrix
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - name: Checkout code
+      - name: Check out code
         uses: actions/checkout@v4
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
           version: "0.5.x"
-      
-      - name: Set up Python
+
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version-file: '.python-version'
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --dev
 
       - name: Configure AWS Credentials
         if: env.SIDELOAD_CACHE == 'true'
@@ -48,32 +60,43 @@ jobs:
           echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
           aws s3 sync s3://epymorph-gha-cache .cache
 
-      - name: Install dependencies
-        run: uv sync --frozen --all-extras --dev
-
-      # NOTE: we're running "pytest tests/fast" here as a temporary measure --
-      # at present, certain data sources are not reliably available,
-      # and so rather than stop our ability to make releases, we'll skip
-      # tests which might rely on external data (besides our S3 cache).
       - name: Run unit tests
         run: uv run pytest tests/fast
 
-      - name: Update pyproject.toml version
-        run: |
-          version="${GITHUB_REF#refs/tags/v}"
-          sed -i "s/version = .*/version = \"${version}\"/" pyproject.toml
+  # Second job: iff tests succeed, build and publish the release (not matrixed).
+  build-release:
+    name: Build and release
+    runs-on: ubuntu-latest
+    needs: test-matrix
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          version: "0.5.x"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --dev
 
       - name: Build project
         run: uv build
 
-      - name: Create release
+      - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF#refs/tags/v}"
-          
-          # release assets
+          version="$(uv run python -m setuptools_scm)"
           wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
           source_file="./dist/epymorph-${version}.tar.gz"
-
           gh release create "v${version}" --generate-notes $wheel_file $source_file
+
+      - name: Create PyPI Release
+        run: uv publish

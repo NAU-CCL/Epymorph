@@ -1,7 +1,7 @@
 [project]
 name = "epymorph"
 
-version = "0.0.0"
+dynamic = ["version"]
 
 authors = [
   { name = "Tyler Coles", email = "tyler.coles@nau.edu" },
@@ -19,18 +19,25 @@ description = "EpiMoRPH disease modeling"
 
 readme = "README.md"
 
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 
-# license = ""
+license = {text="GPL-3.0-only"}
 
 keywords = ["epidemiology", "disease modeling", "metapopulation"]
 
 classifiers = [
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Operating System :: OS Independent",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Typing :: Typed",
+  "Development Status :: 4 - Beta",
+  "Private :: Do Not Upload",
 ]
 
 dependencies = [
@@ -57,9 +64,15 @@ dev = [
     "ruff>=0.9.0",
     "ipykernel>=6.29.5",
     "setuptools>=74.0.0",
+    "setuptools-scm>=8.1.0",
     "pytest>=8.3.4",
     "pytest-cov>=6.0.0",
 ]
+
+[project.urls]
+Homepage = "https://docs.www.epimorph.org"
+Source = "https://github.com/NAU-CCL/Epymorph"
+Issues = "https://github.com/NAU-CCL/Epymorph/issues"
 
 [project.scripts]
 epymorph = "epymorph.__main__:main"
@@ -71,7 +84,7 @@ addopts = [
 ]
 
 [build-system]
-requires = ["setuptools>=74.0.0"]
+requires = ["setuptools>=74.0.0", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -79,6 +92,9 @@ include = ["epymorph*"]
 
 [tool.setuptools.package-data]
 "epymorph" = ["py.typed"]
+
+[tool.setuptools_scm]
+# enable setuptools_scm
 
 [tool.pyright]
 exclude = [

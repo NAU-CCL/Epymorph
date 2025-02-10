@@ -1,10 +1,12 @@
 # epymorph
 
-Prototype EpiMoRPH system written in Python. It is usable as a code library, for instance from within a Jupyter Notebook.
+The `epymorph` package is the product of the EpiMoRPH (Epidemiological Modeling Resources for Public Health) project, and aims to provide a simplified framework for completing the full lifecycle of a spatial modeling experiment. epymorph streamlines methods for building, simulating, and fitting, metapopulation models of infectious pathogens. This Python package is easily accessible to beginning modelers, while also sophisticated enough to allow rapid design and execution of complex modeling experiments by highly experienced modelers. Specific aims include dramatic streamlining of model building speed, increased model transparency, automated fitting of models to observed data, and easy transportability of models across temporal and geographic scenarios.
 
-See the `USAGE.ipynb` Notebook for a basic usage example.
+Read the [documentation at docs.epimorph.org](https://docs.www.epimorph.org).
 
-See `CONTRIBUTING.md` for development environment setup instructions.
+Or see the [USAGE.ipynb](USAGE.ipynb) Notebook for a basic usage example.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for instructions on setting up a development environment.
 
 ## Configuration
 
