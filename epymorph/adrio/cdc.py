@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal, Mapping
+from typing import Mapping
 from urllib.parse import quote, urlencode
 from warnings import warn
 
@@ -322,33 +322,6 @@ def _fetch_deaths_state(
     return _api_query(source, scope, time_frame, progress)
 
 
-def _fetch_respiratory(
-    attrib_name: str,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
-    """
-    Fetches data from CDC dataset reporting weekly hospital data and metrics from rsv
-    and other respiratory illnesses during manditory and voluntary
-    reporting periods.
-    Available from 8/8/2020 to present at state granularity.
-    https://data.cdc.gov/Public-Health-Surveillance/Weekly-Hospital-Respiratory-Data-HRD-Metrics-by-Ju/mpgq-jmmr/about_data
-    """
-
-    source = DataSource(
-        url_base="https://data.cdc.gov/resource/mpgq-jmmr.csv?",
-        date_col="weekendingdate",
-        fips_col="jurisdiction",
-        data_col=attrib_name,
-        granularity="state",
-        replace_sentinel=None,
-        map_geo_ids=get_states(scope.year).state_fips_to_code,
-    )
-
-    return _api_query(source, scope, time_frame, progress)
-
-
 def _query_location(info: DataSource, loc_clause: str, date_clause: str) -> DataFrame:
     """
     Helper function for _api_query() that builds and sends queries for
@@ -358,12 +331,13 @@ def _query_location(info: DataSource, loc_clause: str, date_clause: str) -> Data
     total_returned = 0
     cdc_df = DataFrame()
 
-    # temporary fix for month/week filtering
     group_col = ""
     group_filter = ""
-    if info.url_base == "https://data.cdc.gov/resource/r8kw-7aab.csv?":
-        group_col = ",`group`"
-        group_filter = "AND `group`='By Week'"
+    group_filter = (
+        "AND `group`='By Week'"
+        if info.url_base == "https://data.cdc.gov/resource/r8kw-7aab.csv?"
+        else ""
+    )
 
     while current_return == 10000:
         url = info.url_base + urlencode(
@@ -801,191 +775,6 @@ class InfluenzaDeathsState(ADRIO[np.float64]):
         scope = _validate_scope(self.scope)
         return _fetch_deaths_state(
             "influenza_deaths",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-# note, rsv data seems to be november 25th, 2023   - present
-@adrio_cache
-class RSVHospitalizations(Adrio[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of patients hospitalized with confirmed RSV for that week. May be specified
-    for the total number of patients, the number of adult patients, or the number of
-    pediatric patients.
-    """
-
-    AmountType = Literal["Total", "Adult", "Pediatric"]
-
-    amount_variables: dict[AmountType, str] = {
-        "Total": "total",
-        "Adult": "adult",
-        "Pediatric": "ped",
-    }
-
-    amount_type: AmountType
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(
-        self,
-        amount_type: AmountType = "Total",
-        time_frame: TimeFrame | None = None,
-    ):
-        self.override_time_frame = time_frame
-        self.amount_type = amount_type
-
-    @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        amount_var = self.amount_variables[self.amount_type]
-        if amount_var == "total":
-            hosp_col_variable = "totalconfrsvhosppats"
-        else:
-            hosp_col_variable = f"numconfrsvhosppats{amount_var}"
-        return _fetch_respiratory(
-            hosp_col_variable,
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-# also starting november 25th, 2023
-@adrio_cache
-class RSVAdmissions(Adrio[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of new patients admitted with confirmed RSV for that week. May be specified
-    for the total number of patients, the total number of adult patients, the total
-    number of pediatric patients, or any of the specified age ranges.
-    """
-
-    AmountType = Literal[
-        "0 to 4",
-        "5 to 17",
-        "18 to 49",
-        "50 to 64",
-        "65 to 74",
-        "75 and above",
-        "Adult",
-        "Pediatric",
-        "Total",
-    ]
-
-    amount_variables: dict[AmountType, str] = {
-        "0 to 4": "0to4",
-        "5 to 17": "5to17",
-        "18 to 49": "18to49",
-        "50 to 64": "50to64",
-        "65 to 74": "65to74",
-        "75 and above": "75plus",
-        "Adult": "adult",
-        "Pediatric": "ped",
-        "Total": "total",
-    }
-    # note: could add unknown.... is that wanted?
-
-    amount_type: AmountType
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(
-        self, amount_type: AmountType = "Total", time_frame: TimeFrame | None = None
-    ):
-        self.amount_type = amount_type
-        self.override_time_frame = time_frame
-
-    @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        amount_var = self.amount_variables[self.amount_type]
-        age_type_var = ""
-        if amount_var == "total":
-            hosp_col_variable = "totalconfrsvnewadm"
-        elif amount_var in ["adult", "ped"]:
-            hosp_col_variable = f"totalconfrsvnewadm{amount_var}"
-        else:
-            if amount_var in ["0to4", "5to17"]:
-                age_type_var = "ped"
-            else:
-                age_type_var = "adult"
-            hosp_col_variable = f"numconfrsvnewadm{age_type_var}{amount_var}"
-        return _fetch_respiratory(
-            hosp_col_variable,
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-# per 100k rsv, basically the exact same as rsvadmissions, more readable but could
-# easily be done in the above class
-@adrio_cache
-class RSVAdmissionsPer100k(Adrio[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of new patients admitted with confirmed RSV for that week. May be specified
-    for the total number of patients, the total number of adult patients, the total
-    number of pediatric patients, or any of the specified age ranges.
-    """
-
-    AmountType = Literal[
-        "0 to 4",
-        "5 to 17",
-        "18 to 49",
-        "50 to 64",
-        "65 to 74",
-        "75 and above",
-        "Adult",
-        "Pediatric",
-        "Total",
-    ]
-
-    amount_variables: dict[AmountType, str] = {
-        "0 to 4": "0to4",
-        "5 to 17": "5to17",
-        "18 to 49": "18to49",
-        "50 to 64": "50to64",
-        "65 to 74": "65to74",
-        "75 and above": "75plus",
-        "Adult": "adult",
-        "Pediatric": "ped",
-        "Total": "total",
-    }
-
-    amount_type: AmountType
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(
-        self, amount_type: AmountType = "Total", time_frame: TimeFrame | None = None
-    ):
-        self.amount_type = amount_type
-        self.override_time_frame = time_frame
-
-    @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        amount_var = self.amount_variables[self.amount_type]
-        age_type_var = ""
-        if amount_var == "total":
-            hosp_col_variable = "totalconfrsvnewadmper100k"
-        elif amount_var in ["adult", "ped"]:
-            hosp_col_variable = f"totalconfrsvnewadm{amount_var}per100k"
-        else:
-            if amount_var in ["0to4", "5to17"]:
-                age_type_var = "ped"
-            else:
-                age_type_var = "adult"
-            hosp_col_variable = f"numconfrsvnewadm{age_type_var}{amount_var}per100k"
-        return _fetch_respiratory(
-            hosp_col_variable,
             scope,
             self.override_time_frame or self.time_frame,
             self.progress,
