@@ -147,9 +147,9 @@ class DiseaseHospitalizations(_RespiratoryADRIO):
 
         Parameters
         ----------
-        time_frame : TimeFrame, optional
-            The range of dates to fetch hospital metric data for.
-            Default: the simulation time frame.
+        disease_name: DiseaseType
+            The name of the disease that is desired to be fetched for (options: 'RSV',
+            'Influenza', 'Covid').
         amount_type : AmountType
             The category of hospitalized patient sums to fetch for.
             - `'Total'`: Displays the total amount of patients that have been
@@ -158,6 +158,15 @@ class DiseaseHospitalizations(_RespiratoryADRIO):
             who have been hospitalized with a disease.
             - `'Pediatric'`: Displays the number of pediatric patients, from ages 0 to
             17, who have been hospitalized with a disease.
+        voluntary_reporting: bool, optional
+            The flag that indicates whether the user would like the ADRIO to warn or
+            error when the timeframe is within a voluntary reporting period.
+            If True, all available data is returned with a warning about the
+            timeframe. (default)
+            If False, the ADRIO will error and will not return any requested data.
+        time_frame : TimeFrame, optional
+            The range of dates to fetch hospital metric data for.
+            Default: the simulation time frame.
         """
         super().__init__(disease_name, voluntary_reporting, time_frame)
         self.amount_type = amount_type
@@ -228,9 +237,9 @@ class DiseaseAdmissions(_RespiratoryADRIO):
 
         Parameters
         ----------
-        time_frame : TimeFrame, optional
-            The range of dates to fetch hospital metric data for.
-            Default: the simulation time frame.
+        disease_name: DiseaseType
+            The name of the disease that is desired to be fetched for (options: 'RSV',
+            'Influenza', 'Covid').
         amount_type : AmountType
             The category of the disease of hospitalized patient sums to fetch for.
             The parameters for 'Total', 'Adult', and 'Pediatric' start from
@@ -255,7 +264,15 @@ class DiseaseAdmissions(_RespiratoryADRIO):
             - `'75 and above'`: Displays the number of patient admissions, from ages 75
             and beyond, with the confirmed disease.
             - `'Unknown'`: Displays the number of patient admissions with an unkown age
-            with the confirmed disease.
+        voluntary_reporting: bool, optional
+            The flag that indicates whether the user would like the ADRIO to warn or
+            error when the timeframe is within a voluntary reporting period.
+            If True, all available data is returned with a warning about the
+            timeframe. (default)
+            If False, the ADRIO will error and will not return any requested data.
+        time_frame : TimeFrame, optional
+            The range of dates to fetch hospital metric data for.
+            Default: the simulation time frame.
         """
         super().__init__(disease_name, voluntary_reporting, time_frame)
         self.amount_type = amount_type
@@ -338,9 +355,9 @@ class AdmissionsPer100k(_RespiratoryADRIO):
 
         Parameters
         ----------
-        time_frame : TimeFrame, optional
-            The range of dates to fetch hospital metric data for.
-            Default: the simulation time frame.
+        disease_name: DiseaseType
+            The name of the disease that is desired to be fetched for (options: 'RSV',
+            'Influenza', 'Covid').
         amount_type : AmountType
             The category of hospitalized patient sums to fetch for.
             - `'Total'`: Displays the total amount of patient admissions with
@@ -361,6 +378,15 @@ class AdmissionsPer100k(_RespiratoryADRIO):
             with the confirmed disease.
             - `'75 and above'`: Displays the number of patient admissions, from ages 75
             and beyond, with the confirmed disease.
+        voluntary_reporting: bool, optional
+            The flag that indicates whether the user would like the ADRIO to warn or
+            error when the timeframe is within a voluntary reporting period.
+            If True, all available data is returned with a warning about the
+            timeframe. (default)
+            If False, the ADRIO will error and will not return any requested data.
+        time_frame : TimeFrame, optional
+            The range of dates to fetch hospital metric data for.
+            Default: the simulation time frame.
         """
         super().__init__(disease_name, voluntary_reporting, time_frame)
         self.amount_type = amount_type
@@ -421,9 +447,9 @@ class HospitalizationsICU(_RespiratoryADRIO):
 
         Parameters
         ----------
-        time_frame : TimeFrame, optional
-            The range of dates to fetch hospital metric data for.
-            Default: the simulation time frame.
+        disease_name: DiseaseType
+            The name of the disease that is desired to be fetched for (options: 'RSV',
+            'Influenza', 'Covid').
         amount_type : AmountType
             The category of hospitalized patient sums to fetch for.
             - `'Total'`: Displays the total amount of patients that have been
@@ -432,6 +458,15 @@ class HospitalizationsICU(_RespiratoryADRIO):
             who have been hospitalized with a confirmed disease.
             - `'Pediatric'`: Displays the number of pediatric patients, from ages 0 to
             17, who have been hospitalized with a confirmed disease.
+        voluntary_reporting: bool, optional
+            The flag that indicates whether the user would like the ADRIO to warn or
+            error when the timeframe is within a voluntary reporting period.
+            If True, all available data is returned with a warning about the
+            timeframe. (default)
+            If False, the ADRIO will error and will not return any requested data.
+        time_frame : TimeFrame, optional
+            The range of dates to fetch hospital metric data for.
+            Default: the simulation time frame.
         """
         super().__init__(disease_name, voluntary_reporting, time_frame)
         self.amount_type = amount_type
