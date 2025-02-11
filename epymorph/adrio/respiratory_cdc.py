@@ -75,11 +75,7 @@ class _RespiratoryADRIO(ADRIO[np.float64]):
         first_mandate_end = date(2024, 4, 30)
         second_mandate_start = date(2024, 11, 1)
         no_mandate_range = TimeFrame.rangex(first_mandate_end, second_mandate_start)
-        before_dataset_error = (
-            "The Weekly Hospital Respiratory dataset provides metrics starting"
-            " August 8th, 2020.\nPlease enter a time frame starting on or after "
-            "08/08/2020."
-        )
+
         covid_flu_voluntary_msg = (
             "The dates you entered take place during a voluntary reporting "
             "period.\nEnter dates between August 8th, 2020 through April"
@@ -94,7 +90,11 @@ class _RespiratoryADRIO(ADRIO[np.float64]):
 
         # check if the dates are before August 8th, 2020
         if self.data_time_frame.start_date < dataset_start:
-            raise DataResourceError(before_dataset_error)
+            raise DataResourceError(
+                "The Weekly Hospital Respiratory dataset provides metrics starting"
+                " August 8th, 2020.\nPlease enter a time frame starting on or after "
+                "08/08/2020."
+            )
 
         # check for the voluntary reporting period for Covid and Influenza
         voluntary_covid_flu = (
@@ -183,7 +183,7 @@ class DiseaseHospitalizations(_RespiratoryADRIO):
 class DiseaseAdmissions(_RespiratoryADRIO):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of new patients admitted with a confirmed disease for that week. May be
+    number of new admissions for a confirmed disease for that week. May be
     specified for the total number of patients, the total number of adult patients, the
     total number of pediatric patients, or any of the specified age ranges.
     """
@@ -293,7 +293,7 @@ class DiseaseAdmissions(_RespiratoryADRIO):
 class AdmissionsPer100k(_RespiratoryADRIO):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of new patients admitted with a confirmed disease for that week per
+    number of new admissions for a confirmed disease for that week per
     100k population. May be specified for the total number of patients, the total number
     of adult patients, the total number of pediatric patients, or any of the specified
     age ranges.
@@ -333,7 +333,7 @@ class AdmissionsPer100k(_RespiratoryADRIO):
         time_frame: TimeFrame | None = None,
     ):
         """
-        Creates an ADRIO of the confirmed admissions for a confirmed disease per 100k
+        Creates an ADRIO of the admissions for a confirmed disease per 100k
         population.
 
         Parameters
@@ -394,7 +394,7 @@ class AdmissionsPer100k(_RespiratoryADRIO):
 class HospitalizationsICU(_RespiratoryADRIO):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of patients hospitalized with a confirmed disease for that week. May be
+    number of ICU patients hospitalized with a confirmed disease for that week. May be
     specified for the total number of patients, the number of adult patients, or the
     number of pediatric patients.
     """
