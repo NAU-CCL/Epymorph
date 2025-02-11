@@ -127,9 +127,8 @@ def _fetch_cases(
     Available between 2/24/2022 and 5/4/2023 at state and county granularities.
     https://healthdata.gov/dataset/United-States-COVID-19-Community-Levels-by-County/nn5b-j5u9/about_data
     """
-    if (
-        time_frame.start_date < date(2022, 2, 24)  #
-        or time_frame.end_date > date(2023, 5, 4)
+    if time_frame.start_date < date(2022, 2, 24) or time_frame.end_date > date(
+        2023, 5, 4
     ):
         msg = "COVID cases data is only available between 2/24/2022 and 5/4/2023."
         raise DataResourceError(msg)
@@ -160,9 +159,8 @@ def _fetch_facility_hospitalization(
     Available between 12/13/2020 and 5/10/2023 at state and county granularities.
     https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data
     """
-    if (
-        time_frame.start_date < date(2020, 12, 13)  #
-        or time_frame.end_date > date(2023, 5, 10)
+    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(
+        2023, 5, 10
     ):
         msg = (
             "Facility level hospitalization data is only available between 12/13/2020 "
@@ -232,9 +230,8 @@ def _fetch_vaccination(
     Available between 12/13/2020 and 5/10/2024 at state and county granularities.
     https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh/about_data
     """
-    if (
-        time_frame.start_date < date(2020, 12, 13)  #
-        or time_frame.end_date > date(2024, 5, 10)
+    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(
+        2024, 5, 10
     ):
         msg = "Vaccination data is only available between 12/13/2020 and 5/10/2024."
         raise DataResourceError(msg)
@@ -333,13 +330,24 @@ def _query_location(info: DataSource, loc_clause: str, date_clause: str) -> Data
     current_return = 10000
     total_returned = 0
     cdc_df = DataFrame()
+
+    group_col = ""
+    group_filter = ""
+    group_filter = (
+        "AND `group`='By Week'"
+        if info.url_base == "https://data.cdc.gov/resource/r8kw-7aab.csv?"
+        else ""
+    )
+
     while current_return == 10000:
         url = info.url_base + urlencode(
             quote_via=quote,
             safe=",()'$:",
             query={
-                "$select": f"{info.date_col},{info.fips_col},{info.data_col}",
-                "$where": f"{loc_clause} AND {date_clause}",
+                "$select": (
+                    f"{info.date_col},{info.fips_col},{info.data_col}{group_col}"
+                ),
+                "$where": f"{loc_clause} AND {date_clause}{group_filter}",
                 "$limit": 10000,
                 "$offset": total_returned,
             },
