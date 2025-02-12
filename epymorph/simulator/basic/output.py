@@ -30,8 +30,8 @@ class Output(
     Generic[RUMEType_co],
 ):
     """
-    The output of a simulation run, including compartment data for all populations and
-    all IPM compartments and event data for all populations and all IPM events.
+    The output of a simulation run, including compartment data for all locations and
+    all IPM compartments and event data for all locations and all IPM events.
     """
 
     rume: RUMEType_co  # type: ignore (pylance can't tell that rume is immutable)
@@ -39,8 +39,8 @@ class Output(
 
     initial: NDArray[SimDType]
     """
-    Initial compartments by population and compartment.
-    Array of shape (N,C) where N is the number of populations,
+    Initial compartments by location and compartment.
+    Array of shape (N,C) where N is the number of locations,
     and C is the number of compartments
     """
 
@@ -88,9 +88,9 @@ class Output(
     @property
     def compartments(self) -> NDArray[SimDType]:
         """
-        Compartment data by timestep, population, and compartment.
+        Compartment data by timestep, location, and compartment.
         Array of shape (S,N,C) where S is the number of ticks in the simulation,
-        N is the number of populations, and C is the number of compartments.
+        N is the number of locations, and C is the number of compartments.
         """
         if self.data_mode == "visit":
             return self.visit_compartments
@@ -100,9 +100,9 @@ class Output(
     @property
     def events(self) -> NDArray[SimDType]:
         """
-        Event data by timestep, population, and event.
+        Event data by timestep, location, and event.
         Array of shape (S,N,E) where S is the number of ticks in the simulation,
-        N is the number of populations, and E is the number of events.
+        N is the number of locations, and E is the number of events.
         """
         if self.data_mode == "visit":
             return self.visit_events

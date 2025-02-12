@@ -49,7 +49,28 @@ class BasicSimulator(Generic[RUMEType]):
         params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
         rng_factory: Callable[[], np.random.Generator] | None = None,
     ) -> Output[RUMEType]:
-        """Run a RUME with the given overrides."""
+        """
+        Run a forward simulation on the RUME and produce one realization (output).
+
+        Parameters
+        ----------
+        params : CovariantMapping[str | NamePattern, ParamValue], optional
+            The set of parameters to override for the sake of this
+            run. Specified as a dictionary of name/value pairs, where values
+            can be in any form normally allowed for the construction of a RUME.
+            Any parameter not overridden uses the value from the RUME.
+        rng_factory : Callable[[], np.random.Generator], optional
+            A function used to construct the random number generator for this
+            run. This can be used to provide a seeded random number generator
+            if consistent results are desired. By default BasicSimulator creates
+            a new random number generator for each run, using numpy's default rng
+            logic.
+
+        Returns
+        -------
+        Output[RUMEType]
+            The simulation results.
+        """
 
         rume = self.rume
 

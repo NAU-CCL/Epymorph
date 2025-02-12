@@ -225,22 +225,41 @@ GeoScopeT_co = TypeVar("GeoScopeT_co", covariant=True, bound=GeoScope)
 class RUME(ABC, Generic[GeoScopeT_co]):
     """
     A RUME (or Runnable Modeling Experiment) contains the configuration of an
-    epymorph-style simulation. It brings together one or more IPMs, MMs, initialization
+    epymorph-style simulation.
+
+    It brings together one or more IPMs, MMs, initialization
     routines, and a geo-temporal scope. Model parameters can also be specified.
     The RUME will eventually be used to construct a Simulation, which is an
     algorithm that uses a RUME to produce some results -- in the most basic case,
     running a disease simulation and providing time-series results of the disease model.
+
+    This class is an abstract parent class; users will typically use
+    `SingleStrataRUME.build` and `MultiStrataRUMEBuilder` to construct
+    concrete RUMEs.
     """
 
     strata: Sequence[GPM]
+    """The list of strata."""
     ipm: BaseCompartmentModel
+    """The compartmental model."""
     mms: OrderedDict[str, MovementModel]
+    """The movement models (by strata)."""
     scope: GeoScopeT_co
+    """The geo scope."""
     time_frame: TimeFrame
+    """The simulation time frame."""
     params: Mapping[NamePattern, ParamValue]
+    """Parameter values set on the RUME."""
     tau_step_lengths: list[float] = field(init=False)
+    """The lengths of each tau step in the simulation as fractions of a day."""
     num_tau_steps: int = field(init=False)
+    """The number of tau steps per day in the simulation."""
     num_ticks: int = field(init=False)
+    """
+    The number of total simulation ticks, the product of multiplying
+    the number of simulation days from the time frame by the number of tau steps
+    per day.
+    """
 
     def __post_init__(self):
         if not are_unique(g.name for g in self.strata):
@@ -537,7 +556,18 @@ class RUME(ABC, Generic[GeoScopeT_co]):
 
 @dataclass(frozen=True)
 class SingleStrataRUME(RUME[GeoScopeT_co]):
-    """A RUME with a single strata."""
+    """
+    A RUME with a single strata.
+
+    We recommend using the static method
+    [`SingleStrataRUME.build`](`epymorph.rume.SingleStrataRUME.build`)
+    instead of the normal class constructor, as it is more convenient.
+
+    See Also
+    --------
+    [`RUME`](`epymorph.rume.RUME`), the parent class, for more attributes and methods
+    of this class
+    """
 
     ipm: CompartmentModel
 
@@ -550,7 +580,25 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
     ) -> "SingleStrataRUME[GeoScopeT]":
-        """Create a RUME with only a single strata."""
+        """
+        Create a RUME with a single strata.
+
+        Parameters
+        ----------
+        ipm : CompartmentModel
+            The compartmental model.
+        mm : MovementModel
+            The movement model.
+        init : Initializer
+            The logic for setting the initial conditions of the simulation.
+        scope : GeoScope
+            The geo scope.
+        time_frame : TimeFrame
+            The time frame to simulate.
+        params : CovariantMapping[str | NamePattern, ParamValue]
+            Parameter values that will be used to fulfill the data requirements
+            of the various modules of the RUME.
+        """
         return SingleStrataRUME(
             strata=[GPM(DEFAULT_STRATA, ipm, mm, init)],
             ipm=ipm,
@@ -567,7 +615,14 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
 
 @dataclass(frozen=True)
 class MultiStrataRUME(RUME[GeoScopeT_co]):
-    """A RUME with a multiple strata."""
+    """
+    A RUME with multiple strata.
+
+    See Also
+    --------
+    [`RUME`](`epymorph.rume.RUME`), the parent class, for more attributes and methods
+    of this class
+    """
 
     ipm: CombinedCompartmentModel
 
@@ -580,7 +635,12 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
         time_frame: TimeFrame,
         params: CovariantMapping[str | NamePattern, ParamValue],
     ) -> "MultiStrataRUME[GeoScopeT]":
-        """Create a multistrata RUME by combining one GPM per strata."""
+        """
+        Create a multistrata RUME by combining one GPM per strata.
+        Using this function directly is not the recommended workflow
+        for creating a multistrata RUME; see
+        [`MultiStrataRUMEBuilder`](`epymorph.rume.MultiStrataRUMEBuilder`).
+        """
         return MultiStrataRUME(
             strata=strata,
             # Combine IPMs
@@ -602,7 +662,7 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
 
 
 class MultiStrataRUMEBuilder(ABC):
-    """Create a multi-strata RUME by combining GPMs, one for each strata."""
+    """Declare a multi-strata RUME by combining GPMs, one for each strata."""
 
     strata: Sequence[GPM]
     """The strata that are part of this RUME."""
