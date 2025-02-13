@@ -371,7 +371,7 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
 
     key = f"lodes:{year}:{job_type}"
     return AvailableDataEstimate(
-        name=self.full_name,
+        name=self.class_name,
         cache_key=key,
         new_network_bytes=est.missing_cache_size,
         new_cache_bytes=est.missing_cache_size,
