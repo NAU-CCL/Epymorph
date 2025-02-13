@@ -32,7 +32,6 @@ classifiers = [
   "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Typing :: Typed",
   "Development Status :: 4 - Beta",
-  "Private :: Do Not Upload",
 ]
 
 dependencies = [
