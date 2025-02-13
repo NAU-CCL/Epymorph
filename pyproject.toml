@@ -81,6 +81,12 @@ addopts = [
 requires = ["setuptools>=74.0.0", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+# squash addition of license-files metadata field
+# because PyPI complains if it's there? idk
+# https://github.com/pypa/setuptools/issues/4759#issuecomment-2547778989
+license-files = []
+
 [tool.setuptools.packages.find]
 include = ["epymorph*"]
 
