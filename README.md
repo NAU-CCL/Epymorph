@@ -4,9 +4,9 @@ The `epymorph` package is the product of the EpiMoRPH (Epidemiological Modeling 
 
 Read the [documentation at docs.epimorph.org](https://docs.www.epimorph.org).
 
-Or see the [USAGE.ipynb](USAGE.ipynb) Notebook for a basic usage example.
+For general inquiries please contact us via email at Epymorph@nau.edu
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for instructions on setting up a development environment.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for more information on how to contribute to the codebase.
 
 ## Configuration
 

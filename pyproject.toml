@@ -5,17 +5,13 @@ dynamic = ["version"]
 
 authors = [
   { name = "Tyler Coles", email = "tyler.coles@nau.edu" },
-  { name = "Frank Burkhart" },
-  { name = "Alex Nez" },
-  { name = "Trevor Johnson" },
-  { name = "Jarom Craghead" },
-  { name = "Ajay Shyam Pasam" },
-  { name = "Sindhura Paruchuri" },
-  { name = "Izaac Molina" },
-  { name = "Meaghan Freund" },
+  { name = "Jeffrey Covington", email = "jeffrey.covington@nau.edu" },
+  { name = "Ye Chen", email = "ye.chen@nau.edu" },
+  { name = "Eck Doerry", email = "eck.doerry@nau.edu" },
+  { name = "Joseph Mihaljevic", email = "joseph.mihaljevic@nau.edu" },
 ]
 
-description = "EpiMoRPH disease modeling"
+description = "EpiMoRPH spatial disease modeling"
 
 readme = "README.md"
 

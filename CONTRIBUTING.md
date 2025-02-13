@@ -2,7 +2,9 @@
 
 epymorph is open source software and we welcome your contributions and feedback.
 
-The most direct way to contribute is by submitting [Pull Requests to our GitHub repository](https://github.com/NAU-CCL/Epymorph), or by [submitting Issues](https://github.com/NAU-CCL/Epymorph/issues) if you encounter bugs. In order to help us respond as fast as possible, please try to provide as much descriptive detail in your requests as you can. Consider including code samples, error messages, input data, information about your operating system and Python version, and anything else that may be relevant.
+For general inquiries please contact us via email at Epymorph@nau.edu
+
+You can contribute directly to the codebase by [submitting Issues](https://github.com/NAU-CCL/Epymorph/issues) if you encounter bugs. We are also happy to consider [Pull Requests](https://github.com/NAU-CCL/Epymorph). In order to help us respond as fast as possible, please provide as much descriptive detail in your requests as you can. You might include code samples, error messages, input data, information about your operating system and Python version, and anything else that may be relevant.
 
 ## Development Setup
 
