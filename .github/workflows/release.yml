@@ -70,9 +70,7 @@ jobs:
     needs: test-matrix
     permissions:
       contents: write
-      issues: read
       id-token: write
-      metadata: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
