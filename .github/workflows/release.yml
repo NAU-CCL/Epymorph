@@ -68,6 +68,8 @@ jobs:
     name: Build and release
     runs-on: ubuntu-latest
     needs: test-matrix
+    permissions:
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
