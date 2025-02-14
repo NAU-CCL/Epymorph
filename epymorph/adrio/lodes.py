@@ -297,8 +297,10 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
-def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataEstimate:
-    scope = _validate_scope(self.scope)
+def _estimate_lodes(
+    class_name: str, scope: CensusScope, job_type: str, year: int
+) -> DataEstimate:
+    scope = _validate_scope(scope)
     est_main_size = 0
     est_aux_size = 0
     urls_aux = []
@@ -371,7 +373,7 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
 
     key = f"lodes:{year}:{job_type}"
     return AvailableDataEstimate(
-        name=self.class_name,
+        name=class_name,
         cache_key=key,
         new_network_bytes=est.missing_cache_size,
         new_cache_bytes=est.missing_cache_size,
@@ -426,8 +428,9 @@ class Commuters(_LodesADRIO):
     def estimate_data(self) -> DataEstimate:
         scope = self.scope
         scope = _validate_scope(scope)
+        __cls = self.__class__.__name__
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.data_year)
+        est = _estimate_lodes(__cls, scope, job_var, self.data_year)
         return est
 
     @override
@@ -487,8 +490,9 @@ class CommutersByAge(_LodesADRIO):
     def estimate_data(self) -> DataEstimate:
         scope = self.scope
         scope = _validate_scope(scope)
+        __cls = self.__class__.__name__
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.data_year)
+        est = _estimate_lodes(__cls, scope, job_var, self.data_year)
         return est
 
     @override
@@ -549,8 +553,9 @@ class CommutersByEarnings(_LodesADRIO):
     def estimate_data(self) -> DataEstimate:
         scope = self.scope
         scope = _validate_scope(scope)
+        __cls = self.__class__.__name__
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.data_year)
+        est = _estimate_lodes(__cls, scope, job_var, self.data_year)
         return est
 
     @override
@@ -611,8 +616,9 @@ class CommutersByIndustry(_LodesADRIO):
     def estimate_data(self) -> DataEstimate:
         scope = self.scope
         scope = _validate_scope(scope)
+        __cls = self.__class__.__name__
         job_var = _JOB_VARIABLES[self.job_type]
-        est = _estimate_lodes(self, scope, job_var, self.data_year)
+        est = _estimate_lodes(__cls, scope, job_var, self.data_year)
         return est
 
     @override

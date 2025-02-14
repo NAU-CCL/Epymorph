@@ -140,7 +140,7 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
 
 
 def _estimate_prism(
-    self, file_size: int, date_range: TimeFrame, attribute: str
+    class_name: str, file_size: int, date_range: TimeFrame, attribute: str
 ) -> DataEstimate:
     """
     Calculate estimates for downloading PRISM files.
@@ -179,7 +179,7 @@ def _estimate_prism(
 
     key = f"prism:{attribute}:{date_range}"
     return AvailableDataEstimate(
-        name=self.class_name,
+        name=class_name,
         cache_key=key,
         new_network_bytes=est.missing_cache_size,
         new_cache_bytes=est.missing_cache_size,
@@ -337,7 +337,8 @@ class Precipitation(_PRISMAdrio):
 
     def estimate_data(self) -> DataEstimate:
         file_size = 1_200_000  # no significant change in size, average to about 1.2MB
-        est = _estimate_prism(self, file_size, self.data_time_frame, "ppt")
+        __cls = self.__class__.__name__
+        est = _estimate_prism(__cls, file_size, self.data_time_frame, "ppt")
         return est
 
     def retrieve_prism(self) -> NDArray[np.float64]:
@@ -387,13 +388,14 @@ class DewPoint(_PRISMAdrio):
 
     def estimate_data(self) -> DataEstimate:
         year = self.data_time_frame.end_date.year
+        __cls = self.__class__.__name__
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_800_000  # average to 1.8MB after 2020
         else:
             file_size = 1_400_000  # average to 1.4MB 2020 and before
-        return _estimate_prism(self, file_size, self.data_time_frame, "tdmean")
+        return _estimate_prism(__cls, file_size, self.data_time_frame, "tdmean")
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         centroids = self.data("centroid")
@@ -458,13 +460,14 @@ class Temperature(_PRISMAdrio):
     def estimate_data(self) -> DataEstimate:
         year = self.data_time_frame.end_date.year
         temp_var = self.temp_variables[self.temp_var]
+        __cls = self.__class__.__name__
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_700_000  # average to 1.7MB after 2020
         else:
             file_size = 1_400_000  # average to 1.4MB 2020 and before
-        return _estimate_prism(self, file_size, self.data_time_frame, temp_var)
+        return _estimate_prism(__cls, file_size, self.data_time_frame, temp_var)
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         temp_var = self.temp_variables[self.temp_var]
@@ -526,13 +529,14 @@ class VaporPressureDeficit(_PRISMAdrio):
 
     def estimate_data(self) -> DataEstimate:
         year = self.data_time_frame.end_date.year
+        __cls = self.__class__.__name__
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_700_000  # average to 1.7MB after 2020
         else:
             file_size = 1_300_000  # average to 1.3MB 2020 and before
-        return _estimate_prism(self, file_size, self.data_time_frame, self.vpd_var)
+        return _estimate_prism(__cls, file_size, self.data_time_frame, self.vpd_var)
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         vpd_var = self.vpd_variables[self.vpd_var]
