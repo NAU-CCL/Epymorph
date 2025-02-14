@@ -3,6 +3,8 @@ from typing import Dict, List
 
 import numpy as np
 
+from epymorph.parameter_fitting.filter.particle import Particle
+
 
 @dataclass(frozen=True)
 class ParticleFilterOutput:
@@ -34,6 +36,7 @@ class ParticleFilterOutput:
     param_values: Dict[str, List[float]]
     true_data: np.ndarray
     model_data: np.ndarray
+    particles: List[Particle]
 
     def __str__(self) -> str:
         output = []

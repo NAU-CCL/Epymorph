@@ -291,6 +291,7 @@ class ParticleFilter(BaseFilter):
             self.param_values,
             true_data=np.array(data),
             model_data=np.array(model_data),
+            particles=particles,
         )
 
         return out
