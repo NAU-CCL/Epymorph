@@ -139,55 +139,6 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
     return date_range
 
 
-def _estimate_prism(
-    class_name: str, file_size: int, date_range: TimeFrame, attribute: str
-) -> DataEstimate:
-    """
-    Calculate estimates for downloading PRISM files.
-    """
-    est_file_size = file_size
-    total_files = date_range.duration_days
-
-    # setup urls as list to check if theyre in the cache
-
-    # setup date variables
-    first_day = date_range.start_date
-    last_day = date_range.end_date
-    latest_date = datetype.today() - timedelta(days=1)
-    six_months_ago = datetype.today() + relativedelta(months=-6)
-    last_completed_month = six_months_ago.replace(day=1) - timedelta(days=1)
-    date_list = [
-        first_day + timedelta(days=x) for x in range((last_day - first_day).days + 1)
-    ]
-
-    # get url names to check in cache
-    urls = [
-        _generate_file_name(attribute, latest_date, last_completed_month, day)[0]
-        for day in date_list
-    ]
-
-    # sum the files needed to download
-    missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_PRISM_CACHE_PATH / Path(u).name)
-    )
-
-    # calculate the cache estimate
-    est = CacheEstimate(
-        total_cache_size=total_files * est_file_size,
-        missing_cache_size=missing_files * est_file_size,
-    )
-
-    key = f"prism:{attribute}:{date_range}"
-    return AvailableDataEstimate(
-        name=class_name,
-        cache_key=key,
-        new_network_bytes=est.missing_cache_size,
-        new_cache_bytes=est.missing_cache_size,
-        total_cache_bytes=est.total_cache_size,
-        max_bandwidth=None,
-    )
-
-
 class _PRISMAdrio(ADRIO[np.float64], ABC):
     _override_time_frame: TimeFrame | None
     """An override time frame for which to fetch data.
@@ -298,6 +249,55 @@ class _PRISMAdrio(ADRIO[np.float64], ABC):
         return raster_vals
 
 
+def _estimate_prism(
+    adrio_instance: _PRISMAdrio, file_size: int, date_range: TimeFrame, attribute: str
+) -> DataEstimate:
+    """
+    Calculate estimates for downloading PRISM files.
+    """
+    est_file_size = file_size
+    total_files = date_range.duration_days
+
+    # setup urls as list to check if theyre in the cache
+
+    # setup date variables
+    first_day = date_range.start_date
+    last_day = date_range.end_date
+    latest_date = datetype.today() - timedelta(days=1)
+    six_months_ago = datetype.today() + relativedelta(months=-6)
+    last_completed_month = six_months_ago.replace(day=1) - timedelta(days=1)
+    date_list = [
+        first_day + timedelta(days=x) for x in range((last_day - first_day).days + 1)
+    ]
+
+    # get url names to check in cache
+    urls = [
+        _generate_file_name(attribute, latest_date, last_completed_month, day)[0]
+        for day in date_list
+    ]
+
+    # sum the files needed to download
+    missing_files = total_files - sum(
+        1 for u in urls if check_file_in_cache(_PRISM_CACHE_PATH / Path(u).name)
+    )
+
+    # calculate the cache estimate
+    est = CacheEstimate(
+        total_cache_size=total_files * est_file_size,
+        missing_cache_size=missing_files * est_file_size,
+    )
+
+    key = f"prism:{attribute}:{date_range}"
+    return AvailableDataEstimate(
+        name=adrio_instance.class_name,
+        cache_key=key,
+        new_network_bytes=est.missing_cache_size,
+        new_cache_bytes=est.missing_cache_size,
+        total_cache_bytes=est.total_cache_size,
+        max_bandwidth=None,
+    )
+
+
 @adrio_cache
 class Precipitation(_PRISMAdrio):
     """
@@ -337,8 +337,7 @@ class Precipitation(_PRISMAdrio):
 
     def estimate_data(self) -> DataEstimate:
         file_size = 1_200_000  # no significant change in size, average to about 1.2MB
-        __cls = self.__class__.__name__
-        est = _estimate_prism(__cls, file_size, self.data_time_frame, "ppt")
+        est = _estimate_prism(self, file_size, self.data_time_frame, "ppt")
         return est
 
     def retrieve_prism(self) -> NDArray[np.float64]:
@@ -388,14 +387,13 @@ class DewPoint(_PRISMAdrio):
 
     def estimate_data(self) -> DataEstimate:
         year = self.data_time_frame.end_date.year
-        __cls = self.__class__.__name__
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_800_000  # average to 1.8MB after 2020
         else:
             file_size = 1_400_000  # average to 1.4MB 2020 and before
-        return _estimate_prism(__cls, file_size, self.data_time_frame, "tdmean")
+        return _estimate_prism(self, file_size, self.data_time_frame, "tdmean")
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         centroids = self.data("centroid")
@@ -460,14 +458,13 @@ class Temperature(_PRISMAdrio):
     def estimate_data(self) -> DataEstimate:
         year = self.data_time_frame.end_date.year
         temp_var = self.temp_variables[self.temp_var]
-        __cls = self.__class__.__name__
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_700_000  # average to 1.7MB after 2020
         else:
             file_size = 1_400_000  # average to 1.4MB 2020 and before
-        return _estimate_prism(__cls, file_size, self.data_time_frame, temp_var)
+        return _estimate_prism(self, file_size, self.data_time_frame, temp_var)
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         temp_var = self.temp_variables[self.temp_var]
@@ -529,14 +526,13 @@ class VaporPressureDeficit(_PRISMAdrio):
 
     def estimate_data(self) -> DataEstimate:
         year = self.data_time_frame.end_date.year
-        __cls = self.__class__.__name__
 
         # file sizes are larger after the year 2020
         if year > 2020:
             file_size = 1_700_000  # average to 1.7MB after 2020
         else:
             file_size = 1_300_000  # average to 1.3MB 2020 and before
-        return _estimate_prism(__cls, file_size, self.data_time_frame, self.vpd_var)
+        return _estimate_prism(self, file_size, self.data_time_frame, self.vpd_var)
 
     def retrieve_prism(self) -> NDArray[np.float64]:
         vpd_var = self.vpd_variables[self.vpd_var]
