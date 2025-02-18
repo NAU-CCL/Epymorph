@@ -297,8 +297,25 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
-def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataEstimate:
-    scope = _validate_scope(self.scope)
+class _LodesADRIO(ADRIO[np.int64], ABC):
+    _override_year: int | None
+    """The year for the commuting data.
+    If None, defaults to the year in which the simulation time frame starts."""
+
+    def __init__(self, year: int | None = None):
+        self._override_year = year
+
+    @property
+    def data_year(self) -> int:
+        if self._override_year is not None:
+            return self._override_year
+        return self.time_frame.start_date.year
+
+
+def _estimate_lodes(
+    adrio_instance: _LodesADRIO, scope: CensusScope, job_type: str, year: int
+) -> DataEstimate:
+    scope = _validate_scope(scope)
     est_main_size = 0
     est_aux_size = 0
     urls_aux = []
@@ -371,28 +388,13 @@ def _estimate_lodes(self, scope: CensusScope, job_type: str, year: int) -> DataE
 
     key = f"lodes:{year}:{job_type}"
     return AvailableDataEstimate(
-        name=self.full_name,
+        name=adrio_instance.class_name,
         cache_key=key,
         new_network_bytes=est.missing_cache_size,
         new_cache_bytes=est.missing_cache_size,
         total_cache_bytes=est.total_cache_size,
         max_bandwidth=None,
     )
-
-
-class _LodesADRIO(ADRIO[np.int64], ABC):
-    _override_year: int | None
-    """The year for the commuting data.
-    If None, defaults to the year in which the simulation time frame starts."""
-
-    def __init__(self, year: int | None = None):
-        self._override_year = year
-
-    @property
-    def data_year(self) -> int:
-        if self._override_year is not None:
-            return self._override_year
-        return self.time_frame.start_date.year
 
 
 @adrio_cache
