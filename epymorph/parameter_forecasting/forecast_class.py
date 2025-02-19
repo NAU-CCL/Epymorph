@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -68,57 +68,28 @@ class PropagateParticles:
         return propagated_particles, expected_observations
 
 
-class ForecastParameters:
+class ForecastSiulation:
     def __init__(
         self,
         initial_particles: List[Particle],
         rume: RUME,
         params_space: Dict[str, EstimateParameters],
         model_link: ModelLink,
-        start_date: str,
-        duration_weeks: int,
-        time_interval: int = 7,
+        duration: int,
     ):
         self.initial_particles = initial_particles
         self.rume = rume
         self.params_space = params_space
         self.model_link = model_link
-        self.start_date = start_date
-        self.duration_weeks = duration_weeks
-        self.time_interval = time_interval
+        self.duration = duration
         self.propagation = PropagateParticles()
         self.rng = np.random.default_rng()
         self.param_quantiles = {}
         self.param_values = {}
 
-    from datetime import datetime, timedelta
-
-    def calculate_end_date(self, start_date: str, duration_weeks: int):
-        # Convert start_date string to a datetime object
-        start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
-
-        # Calculate the total duration in days
-        total_days = duration_weeks * 7
-
-        # Calculate the end date by adding the total days to the start date
-        end_date_obj = start_date_obj + timedelta(days=total_days)
-
-        # Generate the dates list
-        dates_list = []
-        current_date = start_date_obj
-
-        while current_date <= end_date_obj:
-            dates_list.append(current_date.strftime("%Y-%m-%d"))
-            current_date += timedelta(days=7)  # Adding 7 days to get the next date
-
-        return end_date_obj.strftime("%Y-%m-%d"), dates_list
-
-    def forecast_params(self):
-        simulation = EpymorphSimulation(self.rume, self.start_date)
-
-        end_date, dates_list = self.calculate_end_date(
-            self.start_date, self.duration_weeks
-        )
+    def run(self):
+        start_date = self.rume.time_frame.end_date
+        simulation = EpymorphSimulation(self.rume, start_date.strftime("%Y-%m-%d"))
 
         # Prepare containers for storing results
         for key in self.params_space.keys():
@@ -128,15 +99,16 @@ class ForecastParameters:
         model_data = []
         model_data_quantiles = []
 
-        for t in range(len(dates_list)):
+        for t in range(self.duration):
+            start_date = start_date + timedelta(days=1)
             # Propagate particles and update their states
             propagated_particles, expected_observations = (
                 self.propagation.propagate_particles(
                     self.initial_particles,
                     self.rume,
                     simulation,
-                    dates_list[t],
-                    self.time_interval,
+                    start_date.strftime("%Y-%m-%d"),
+                    7,
                     self.model_link,
                     self.params_space,
                     self.rng,
