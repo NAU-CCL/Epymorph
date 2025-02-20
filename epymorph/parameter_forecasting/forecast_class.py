@@ -35,7 +35,7 @@ class PropagateParticles:
 
         # Initialize perturbation handler
         params_perturb = Perturb(duration)
-
+        print("date = ", date)
         # Propagate each particle through the model
         for particle in particles:
             # Use the particle's state and parameters for propagation
@@ -99,12 +99,14 @@ class ForecastSiulation:
         model_data = []
         model_data_quantiles = []
 
+        particles = self.initial_particles
+
         for t in range(self.duration):
-            start_date = start_date + timedelta(days=1)
+            start_date = start_date + timedelta(days=7)
             # Propagate particles and update their states
             propagated_particles, expected_observations = (
                 self.propagation.propagate_particles(
-                    self.initial_particles,
+                    particles,
                     self.rume,
                     simulation,
                     start_date.strftime("%Y-%m-%d"),
@@ -172,7 +174,7 @@ class ForecastSiulation:
             self.param_quantiles,
             self.param_values,
             true_data=np.array([]),
-            model_data=np.array([]),
+            model_data=np.array(model_data),
             particles=particles,  # type: ignore
         )
 
