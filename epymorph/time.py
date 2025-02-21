@@ -12,11 +12,19 @@ from typing_extensions import override
 
 @dataclass(frozen=True)
 class DateRange:
-    """Like `range` but for dates, with an optional fixed interval between dates."""
+    """
+    Like [`range`](:py:class:`range`) but for dates, with an optional fixed interval
+    between dates.
+
+    DateRange is a frozen dataclass.
+    """
 
     start_date: date
+    """The first date in the range."""
     stop_date: date | None = field(default=None)
+    """The optional end of the date range (not included in the range)."""
     step: timedelta | None = field(default=None)
+    """The optional interval between dates in the range (default, 1 day)."""
 
     def __iter__(self) -> Iterator[date]:
         step = self.step or timedelta(days=1)

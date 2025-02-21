@@ -186,11 +186,36 @@ _ALL_PARAM_SYMBOLS = [to_symbol(x) for x in _ALL_PARAMS]
 _PARAMS_MAP = dict(zip(_ALL_PARAMS, _ALL_PARAM_SYMBOLS))
 
 ParamSymbol = Literal["day", "node_index", "duration_days", "nodes"]
+"""
+The names of common symbols used in epymorph simulation expressions.
+For example, building a
+[`ParamExpressionTimeAndNode`](`epymorph.params.ParamExpressionTimeAndNode`)
+may make use of these symbols.
+
+See Also
+--------
+[`RUME.symbols`](`epymorph.rume.RUME.symbols`) and
+[`simulation_symbols`](`epymorph.params.simulation_symbols`)
+which are methods for using these names to obtain symbol references.
+
+`Literal["day", "node_index", "duration_days", "nodes"]`
+"""
 
 
 def simulation_symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
     """
     Convenient function to retrieve the symbols used to represent simulation quantities.
+
+    Parameters
+    ----------
+    *symbols : ParamSymbol
+        The symbols to retrieve, as var-args.
+
+    Returns
+    -------
+    tuple[sympy.Symbol, ...]
+        A tuple containing the symbols requested, in the order
+        requested.
     """
     return tuple(_PARAMS_MAP[x] for x in symbols if x in _PARAMS_MAP)
 

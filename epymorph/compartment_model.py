@@ -47,10 +47,16 @@ from epymorph.util import (
 ######################
 
 BIRTH = Symbol("birth_exogenous")
-"""An IPM psuedo-compartment representing exogenous input of individuals."""
+"""
+An IPM psuedo-compartment representing exogenous input of individuals.
+This is useful in defining IPM edges.
+"""
 
 DEATH = Symbol("death_exogenous")
-"""An IPM psuedo-compartment representing exogenous removal of individuals."""
+"""
+An IPM psuedo-compartment representing exogenous removal of individuals.
+This is useful in defining IPM edges.
+"""
 
 exogenous_states = (BIRTH, DEATH)
 """A complete listing of epymorph-supported exogenous states."""
@@ -58,10 +64,29 @@ exogenous_states = (BIRTH, DEATH)
 
 @dataclass(frozen=True)
 class CompartmentName:
+    """
+    The name of a compartment, which may have subscript and strata parts.
+
+    CompartmentName is a frozen dataclass.
+
+    Parameters
+    ----------
+    base : str
+        The base name of the compartment.
+    subscript : str | None
+        The optional subscript part of the name.
+    strata : str | None
+        The optional strata part of the name.
+    """
+
     base: str
+    """The base name of the compartment."""
     subscript: str | None
+    """The optional subscript part of the name."""
     strata: str | None
+    """The optional strata part of the name."""
     full: str = field(init=False, hash=False, compare=False)
+    """The full name as a string, with all parts combined with underscores."""
 
     def __post_init__(self):
         full = "_".join(
@@ -72,11 +97,27 @@ class CompartmentName:
         object.__setattr__(self, "full", full)
 
     def with_subscript(self, subscript: str | None) -> Self:
+        """
+        Return a copy of this name with the subscript changed.
+
+        Parameters
+        ----------
+        subscript : str | None
+            The new subscript.
+        """
         if self.subscript == "exogenous":
             return self
         return dataclasses.replace(self, subscript=subscript)
 
     def with_strata(self, strata: str | None) -> Self:
+        """
+        Return a copy of this name with the strata changed.
+
+        Parameters
+        ----------
+        strata : str | None
+            The new strata.
+        """
         if self.subscript == "exogenous":
             return self
         return dataclasses.replace(self, strata=strata)
@@ -86,6 +127,27 @@ class CompartmentName:
 
     @classmethod
     def parse(cls, name: str) -> Self:
+        """
+        Parses a string as a CompartmentName. If the name contains no underscores,
+        the entire name is the base name. If the name contains at least one underscore,
+        the part before the first underscore is the base name and everything after is
+        the subscript part. It is not possible to create a stratified name this way.
+
+        For example: in "E_phase_1", "E" is the base name and "phase_1" is the
+        subscript.
+
+        This is a class method.
+
+        Parameters
+        ----------
+        name : str
+            The string to parse.
+
+        Returns
+        -------
+        Self
+            A CompartmentName instance.
+        """
         if (i := name.find("_")) != -1:
             return cls(name[0:i], name[i + 1 :], None)
         return cls(name, None, None)
@@ -93,13 +155,28 @@ class CompartmentName:
 
 @dataclass(frozen=True)
 class CompartmentDef:
-    """Defines an IPM compartment."""
+    """
+    Defines an IPM compartment.
+
+    CompartmentDef is a frozen dataclass.
+    """
 
     name: CompartmentName
+    """The name of the compartment."""
     tags: list[str]
+    """Tags associated with the compartment."""
     description: str | None = field(default=None)
+    """An optional description."""
 
     def with_strata(self, strata: str) -> Self:
+        """
+        Return a copy of this compartment with the strata changed.
+
+        Parameters
+        ----------
+        strata : str | None
+            The new strata.
+        """
         return dataclasses.replace(self, name=self.name.with_strata(strata))
 
 
@@ -108,7 +185,25 @@ def compartment(
     tags: list[str] | None = None,
     description: str | None = None,
 ) -> CompartmentDef:
-    """Define an IPM compartment."""
+    """
+    Define an IPM compartment. Convenience constructor for `CompartmentDef`.
+
+    Parameters
+    ----------
+    name : str
+        The name of the compartment. This will be converted to a
+        [`CompartmentName`](`epymorph.compartment_model.CompartmentName`) using
+        [`CompartmentName.parse`](`epymorph.compartment_model.CompartmentName.parse`).
+    tags : list[str], optional
+        An optional list of tags to associate with this compartment.
+    description : str, optional
+        An optional description of the compartment.
+
+    Returns
+    -------
+    CompartmentDef
+        The compartment definition.
+    """
     return CompartmentDef(CompartmentName.parse(name), tags or [], description)
 
 
@@ -127,9 +222,23 @@ def quick_compartments(symbol_names: str) -> list[CompartmentDef]:
 
 @dataclass(frozen=True)
 class EdgeName:
+    """
+    The name of a transition edge, from one compartment to another.
+
+    Parameters
+    ----------
+    compartment_from : CompartmentName
+        The source compartment for this edge.
+    compartment_to : CompartmentName
+        The destination compartment for this edge.
+    """
+
     compartment_from: CompartmentName
+    """The source compartment for this edge."""
     compartment_to: CompartmentName
+    """The destination compartment for this edge."""
     full: str = field(init=False, hash=False, compare=False)
+    """The name of the edge as a string."""
 
     def __post_init__(self):
         full = f"{self.compartment_from} → {self.compartment_to}"
@@ -142,6 +251,14 @@ class EdgeName:
             raise ValueError(f"Edges must be within a single strata ({full})")
 
     def with_subscript(self, subscript: str | None) -> Self:
+        """
+        Return a copy of this edge with the subscript changed.
+
+        Parameters
+        ----------
+        subscript : str | None
+            The new subscript.
+        """
         return dataclasses.replace(
             self,
             compartment_from=self.compartment_from.with_subscript(subscript),
@@ -149,6 +266,14 @@ class EdgeName:
         )
 
     def with_strata(self, strata: str | None) -> Self:
+        """
+        Return a copy of this edge with the strata changed.
+
+        Parameters
+        ----------
+        strata : str | None
+            The new strata.
+        """
         return dataclasses.replace(
             self,
             compartment_from=self.compartment_from.with_strata(strata),
@@ -164,12 +289,17 @@ class EdgeDef:
     """Defines a single edge transitions in a compartment model."""
 
     name: EdgeName
+    """The name of the edge."""
     rate: Expr
+    """The rate of flow along this edge."""
     compartment_from: Symbol
+    """The symbol describing the source compartment."""
     compartment_to: Symbol
+    """The symbol describing the destination compartment."""
 
     @property
     def tuple(self) -> tuple[str, str]:
+        """The edge in tuple form: `(from_name, to_name)`"""
         return str(self.compartment_from), str(self.compartment_to)
 
 
@@ -197,8 +327,11 @@ class ForkDef:
     """Defines a fork-style transition in a compartment model."""
 
     rate: Expr
+    """The shared base-rate of the fork."""
     edges: list[EdgeDef]
+    """The edges that participate in the fork."""
     probs: list[Expr]
+    """The probability of each edge in the fork."""
 
     def __str__(self) -> str:
         lhs = str(self.edges[0].compartment_from)
@@ -214,11 +347,22 @@ def fork(*edges: EdgeDef) -> ForkDef:
     and that each edge in the fork is given a proportion on that base rate.
 
     For example, consider two edges given rates:
+
     1. `delta * EXPOSED * rho`
     2. `delta * EXPOSED * (1 - rho)`
 
     `delta * EXPOSED` is the base rate and `rho` describes the proportional split for
     each edge.
+
+    Parameters
+    ----------
+    edges : *EdgeDef
+        All edges that participate in the fork, as a var-arg.
+
+    Returns
+    -------
+    ForkDef
+        The fork definition.
     """
 
     # First verify that the edges all come from the same state.
@@ -241,7 +385,16 @@ def fork(*edges: EdgeDef) -> ForkDef:
 
 
 TransitionDef = EdgeDef | ForkDef
-"""All ways to define a compartment model transition: edges or forks."""
+"""
+All ways to define a compartment model transition: edges or forks.
+
+`EdgeDef | ForkDef`
+
+See Also
+--------
+[`EdgeDef`](`epymorph.compartment_model.EdgeDef`) and
+[`ForkDef`](`epymorph.compartment_model.ForkDef`).
+"""
 
 
 def _as_events(trxs: Iterable[TransitionDef]) -> Iterator[EdgeDef]:
@@ -344,7 +497,15 @@ class ModelSymbols:
 
 
 class BaseCompartmentModel(ABC):
-    """Shared base-class for compartment models."""
+    """
+    Shared base-class for compartment models.
+
+    BaseCompartmentModel is an abstract class. In practice users will mostly use
+    [`CompartmentModel`](`epymorph.compartment_model.CompartmentModel`) for
+    single-strata IPMs or
+    [`CombinedCompartmentModel`](`epymorph.compartment_model.CombinedCompartmentModel`)
+    for multi-strata IPMs.
+    """
 
     compartments: Sequence[CompartmentDef] = ()
     """The compartments of the model."""
@@ -365,6 +526,9 @@ class BaseCompartmentModel(ABC):
 
     @property
     def quantities(self) -> Iterator[CompartmentDef | EdgeDef]:
+        """
+        All quantities from the model, compartments then edges, in definition order.
+        """
         yield from self.compartments
         yield from self.events
 
@@ -410,6 +574,7 @@ class BaseCompartmentModel(ABC):
 
     @property
     def select(self) -> "QuantitySelector":
+        """Make a quantity selection from this IPM."""
         return QuantitySelector(self)
 
     def diagram(
@@ -581,15 +746,27 @@ class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClas
     A compartment model definition and its corresponding metadata.
     Effectively, a collection of compartments, transitions between compartments,
     and the data parameters which are required to compute the transitions.
+
+    CompartmentModel is an abstract class. To create a custom IPM, you will
+    write an implementation of this class.
     """
 
     @abstractmethod
     def edges(self, symbols: ModelSymbols) -> Sequence[TransitionDef]:
         """
         When implementing a CompartmentModel, override this method
-        to build the transition edges between compartments. You are
-        given a reference to this model's symbols library so you can
-        build expressions for the transition rates.
+        to define the transition edges between compartments.
+
+        Parameters
+        ----------
+        symbols : ModelSymbols
+            An object containing the symbols in the model for use in
+            declaring edges. These include compartments and data requirements.
+
+        Returns
+        -------
+        Sequence[TransitionDef]
+            Defines transitions for the model.
         """
 
     _symbols: ModelSymbols
@@ -737,11 +914,31 @@ class MultiStrataModelSymbols(ModelSymbols):
 
 
 MetaEdgeBuilder = Callable[[MultiStrataModelSymbols], Sequence[TransitionDef]]
-"""A function for creating meta edges in a multistrata RUME."""
+"""
+The type of a function for creating meta edges in a multistrata RUME.
+
+`Callable[[MultiStrataModelSymbols], Sequence[TransitionDef]]`
+"""
 
 
 class CombinedCompartmentModel(BaseCompartmentModel):
-    """A CompartmentModel constructed by combining others."""
+    """
+    A CompartmentModel constructed by combining others
+    for use in multi-strata models. Typically you will not have
+    to create a CombinedCompartmentModel directly. Building a
+    MultiStrataRUME will combine the models for you.
+
+    Parameters
+    ----------
+    strata : Sequence[tuple[str, CompartmentModel]]
+        A list of pairs mapping strata names to the IPM
+        for the strata.
+        (Strata order is important, so we didn't use a dict for this.)
+    meta_requirements : Sequence[AttributeDef]
+        Additional requirement definitions for use in the combined model's meta edges.
+    meta_edges : MetaEdgeBuilder
+        A function which defines the combined model's meta edges.
+    """
 
     compartments: Sequence[CompartmentDef]
     """All compartments; renamed with strata."""
@@ -886,6 +1083,11 @@ class CombinedCompartmentModel(BaseCompartmentModel):
 #####################################################
 
 Quantity = CompartmentDef | EdgeDef
+"""
+The type of a quantity referenced by a QuantityStrategy.
+
+`CompartmentDef | EdgeDef`
+"""
 
 
 class QuantityGroupResult(NamedTuple):
@@ -959,14 +1161,36 @@ class QuantityGrouping(NamedTuple):
 
 
 QuantityAggMethod = Literal["sum"]
+"""
+The supported methods for aggregating IPM quantities.
+
+`Literal["sum"]`
+"""
 
 
 @dataclass(frozen=True)
 class QuantityStrategy:
-    """A strategy for dealing with the quantity axis, e.g., in processing results.
-    Quantities here are an IPM's compartments and events.
+    """
+    A strategy for dealing with the quantity axis, e.g., in processing results.
+    Quantities here are an IPM's compartments and events. Strategies can include
+    selection of a subset, grouping, and aggregation.
 
-    Strategies can include selection of a subset, grouping, and aggregation."""
+    Typically you will create one of these by calling methods on a
+    [`QuantitySelector`](`epymorph.compartment_model.QuantitySelector`) instance.
+
+    QuantityStrategy is a frozen dataclass.
+
+    Parameters
+    ----------
+    ipm: BaseCompartmentModel
+        The original IPM quantity information.
+    selection: NDArray[np.bool_]
+        A boolean mask for selection of a subset of quantities.
+    grouping: QuantityGrouping | None
+        A method for grouping IPM quantities.
+    aggregation: QuantityAggMethod | None
+        A method for aggregating the quantity groups.
+    """
 
     ipm: BaseCompartmentModel
     """The original IPM quantity information."""
@@ -1025,8 +1249,23 @@ class QuantityStrategy:
 
 @dataclass(frozen=True)
 class QuantitySelection(QuantityStrategy):
-    """Describe a sub-selection of IPM quantities, which are its
-    events and compartments (no grouping or aggregation)."""
+    """
+    A kind of [`QuantityStrategy`](`epymorph.compartment_model.QuantityStrategy`)
+    describing a sub-selection of IPM quantities (its events and compartments).
+    A selection performs no grouping or aggregation.
+
+    Typically you will create one of these by calling methods on a
+    [`QuantitySelector`](`epymorph.compartment_model.QuantitySelector`) instance.
+
+    QuantitySelection is a frozen dataclass.
+
+    Parameters
+    ----------
+    ipm: BaseCompartmentModel
+        The original IPM quantities information.
+    selection: NDArray[np.bool_]
+        A boolean mask for selection of a subset of IPM quantities.
+    """
 
     ipm: BaseCompartmentModel
     """The original IPM quantities information."""
@@ -1050,13 +1289,13 @@ class QuantitySelection(QuantityStrategy):
     @property
     def compartment_index(self) -> int:
         """Return the selected compartment index, if and only if there is exactly
-        one compartment in the selection. Otherwise, raises ValueError
-        See `compartment_indices()` if you want to select possibly multiple indices."""
+        one compartment in the selection. Otherwise, raises ValueError.
+        See `compartment_indices` if you want to select possibly multiple indices."""
         indices = self.compartment_indices
         if len(indices) != 1:
             err = (
                 "Your selection must contain exactly one compartment to use this "
-                "method. Use `compartment_indices()` if you want to select more."
+                "method. Use `compartment_indices` if you want to select more."
             )
             raise ValueError(err)
         return indices[0]
@@ -1073,12 +1312,12 @@ class QuantitySelection(QuantityStrategy):
     def event_index(self) -> int:
         """Return the selected event index, if and only if there is exactly
         one event in the selection. Otherwise, raises ValueError.
-        See `event_indices()` if you want to select possibly multiple indices."""
+        See `event_indices` if you want to select possibly multiple indices."""
         indices = self.event_indices
         if len(indices) != 1:
             err = (
                 "Your selection must contain exactly one event to use this "
-                "method. Use `event_indices()` if you want to select more."
+                "method. Use `event_indices` if you want to select more."
             )
             raise ValueError(err)
         return indices[0]
@@ -1116,6 +1355,18 @@ class QuantitySelection(QuantityStrategy):
         And if both options are True, we consider matches after removing both strata
         and subscript names -- effectively matching on the base compartment and
         event names.
+
+        Parameters
+        ----------
+        strata : bool, default: False
+            Whether or not to combine different strata.
+        subscript : bool, default: False
+            Whether or not the combine different subscripts.
+
+        Returns
+        -------
+        QuantityGroup
+            A grouping strategy object.
         """
         return QuantityGroup(
             self.ipm,
@@ -1126,8 +1377,24 @@ class QuantitySelection(QuantityStrategy):
 
 @dataclass(frozen=True)
 class QuantityGroup(QuantityStrategy):
-    """Describes a group operation on IPM quantities,
-    with an optional sub-selection."""
+    """
+    A kind of [`QuantityStrategy`](`epymorph.compartment_model.QuantityStrategy`)
+    describing a group operation on IPM quantities, with an optional sub-selection.
+
+    Typically you will create one of these by calling methods on a
+    [`QuantitySelector`](`epymorph.compartment_model.QuantitySelector`) instance.
+
+    QuantityGroup is a frozen dataclass.
+
+    Parameters
+    ----------
+    ipm: BaseCompartmentModel
+        The original IPM quantity information.
+    selection: NDArray[np.bool_]
+        A boolean mask for selection of a subset of quantities.
+    grouping: QuantityGrouping
+        A method for grouping IPM quantities.
+    """
 
     ipm: BaseCompartmentModel
     """The original IPM quantity information."""
@@ -1151,18 +1418,56 @@ class QuantityGroup(QuantityStrategy):
         return [g.name.full for g in groups]
 
     def agg(self, agg: Literal["sum"]) -> "QuantityAggregation":
-        """Combine grouped quantities using the named aggregation."""
+        """
+        Combine grouped quantities using the named aggregation.
+
+        Parameters
+        ----------
+        agg : Literal["sum"]
+            The aggregation method to use.
+
+        Returns
+        -------
+        QuantityAggregation
+            The aggregation strategy object.
+        """
         return QuantityAggregation(self.ipm, self.selection, self.grouping, agg)
 
     def sum(self) -> "QuantityAggregation":
-        """Combine grouped quantities by adding their values."""
+        """
+        Combine grouped quantities by adding their values.
+
+        Returns
+        -------
+        QuantityAggregation
+            The aggregation strategy object.
+        """
         return self.agg("sum")
 
 
 @dataclass(frozen=True)
 class QuantityAggregation(QuantityStrategy):
-    """Describes a group-and-aggregate operation on IPM quantities,
-    with an optional sub-selection."""
+    """
+    A kind of [`QuantityStrategy`](`epymorph.compartment_model.QuantityStrategy`)
+    describing a group-and-aggregate operation on IPM quantities,
+    with an optional sub-selection.
+
+    Typically you will create one of these by calling methods on a
+    [`QuantitySelector`](`epymorph.compartment_model.QuantitySelector`) instance.
+
+    QuantityAggregation is a frozen dataclass.
+
+    Parameters
+    ----------
+    ipm: BaseCompartmentModel
+        The original IPM quantity information.
+    selection: NDArray[np.bool_]
+        A boolean mask for selection of a subset of quantities.
+    grouping: QuantityGrouping
+        A method for grouping IPM quantities.
+    aggregation: QuantityAggMethod
+        A method for aggregating the quantity groups.
+    """
 
     ipm: BaseCompartmentModel
     """The original IPM quantity information."""
@@ -1190,7 +1495,12 @@ class QuantityAggregation(QuantityStrategy):
 
 
 class QuantitySelector:
-    """A utility class for selecting a subset of IPM quantities."""
+    """
+    A utility class for selecting a subset of IPM quantities.
+    Most of the time you obtain one of these using
+    [`CompartmentModel`](`epymorph.compartment_model.CompartmentModel`)'s
+    `select` property.
+    """
 
     _ipm: BaseCompartmentModel
     """The original IPM quantity information."""
@@ -1213,14 +1523,28 @@ class QuantitySelector:
         return m
 
     def all(self) -> "QuantitySelection":
-        """Select all compartments and events."""
+        """
+        Select all compartments and events.
+
+        Returns
+        -------
+        QuantitySelection
+            The selection object.
+        """
         m = self._mask()
         m[:] = True
         return QuantitySelection(self._ipm, m)
 
     def indices(self, *indices: int) -> "QuantitySelection":
-        """Select quantities by index (determined by IPM definition order:
-        all IPM compartments, all IPM events, and then meta edge events if any)."""
+        """
+        Select quantities by index (determined by IPM definition order:
+        all IPM compartments, all IPM events, and then meta edge events if any).
+
+        Returns
+        -------
+        QuantitySelection
+            The selection object.
+        """
         m = self._mask()
         m[indices] = True
         return QuantitySelection(self._ipm, m)
@@ -1259,10 +1583,23 @@ class QuantitySelector:
         compartments: str | Iterable[str] = (),
         events: str | Iterable[str] = (),
     ) -> "QuantitySelection":
-        """Select compartments and events by providing pattern strings for each.
+        """
+        Select compartments and events by providing pattern strings for each.
 
         Providing an empty sequence implies selecting none of that type.
         Multiple patterns are combined as though by boolean-or.
+
+        Parameters
+        ----------
+        compartments : str | Iterable[str] = ()
+            The compartment selection patterns.
+        events : str | Iterable[str] = ()
+            The event selection patterns.
+
+        Returns
+        -------
+        QuantitySelection
+            The selection object.
         """
         cs = [compartments] if isinstance(compartments, str) else [*compartments]
         es = [events] if isinstance(events, str) else [*events]
@@ -1271,7 +1608,8 @@ class QuantitySelector:
         return QuantitySelection(self._ipm, c_mask | e_mask)
 
     def compartments(self, *patterns: str) -> "QuantitySelection":
-        """Select compartments with zero or more pattern strings.
+        """
+        Select compartments with zero or more pattern strings.
 
         Specify no patterns to select all compartments.
         Pattern strings match against compartment names.
@@ -1279,6 +1617,16 @@ class QuantitySelector:
         Pattern strings can use asterisk as a wildcard character
         to match any (non-empty) part of a name besides underscores.
         For example, "I_*" would match events "I_abc" and "I_def".
+
+        Parameters
+        ----------
+        patterns : *str
+            The compartment selection patterns, as a var-arg.
+
+        Returns
+        -------
+        QuantitySelection
+            The selection object.
         """
         if len(patterns) == 0:
             # select all compartments
@@ -1300,7 +1648,8 @@ class QuantitySelector:
         return QuantitySelection(self._ipm, mask)
 
     def events(self, *patterns: str) -> "QuantitySelection":
-        """Select events with zero or more pattern strings.
+        """
+        Select events with zero or more pattern strings.
 
         Specify no patterns to select all events.
         Pattern strings match against event names which combine the source and
@@ -1313,6 +1662,16 @@ class QuantitySelector:
         to match any (non-empty) part of a name besides underscores.
         For example, "S->*" would match events "S->A" and "S->B".
         "S->I_*" would match "S->I_abc" and "S->I_def".
+
+        Parameters
+        ----------
+        patterns : *str
+            The event selection patterns, as a var-arg.
+
+        Returns
+        -------
+        QuantitySelection
+            The selection object.
         """
         if len(patterns) == 0:
             # select all events
