@@ -10,7 +10,7 @@ from epymorph.parameter_fitting.perturbation import Calvetti
 from epymorph.parameter_fitting.utils import utils
 from epymorph.parameter_fitting.utils.epymorph_simulation import EpymorphSimulation
 from epymorph.parameter_fitting.utils.observations import ModelLink
-from epymorph.parameter_fitting.utils.parameter_estimation import EstimateParameters
+from epymorph.parameter_fitting.utils.parameter_estimation import ForecastParameters
 from epymorph.parameter_fitting.utils.params_perturb import Perturb
 from epymorph.rume import RUME
 
@@ -27,7 +27,7 @@ class PropagateParticles:
         date: str,
         duration: int,
         model_link: ModelLink,
-        params_space: Dict[str, EstimateParameters],
+        params_space: Dict[str, ForecastParameters],
         rng: np.random.Generator,
     ) -> Tuple[List[Particle], List[np.ndarray]]:
         propagated_particles = []
@@ -35,7 +35,7 @@ class PropagateParticles:
 
         # Initialize perturbation handler
         params_perturb = Perturb(duration)
-        print("date = ", date)
+        # print("date = ", date)
         # Propagate each particle through the model
         for particle in particles:
             # Use the particle's state and parameters for propagation
@@ -68,16 +68,18 @@ class PropagateParticles:
         return propagated_particles, expected_observations
 
 
-class ForecastSiulation:
+class ForecastSimulation:
     def __init__(
         self,
-        initial_particles: List[Particle],
         rume: RUME,
-        params_space: Dict[str, EstimateParameters],
+        params_space: Dict[str, ForecastParameters],
         model_link: ModelLink,
         duration: int,
+        initial_particles: List[Particle],
+        # num_particles: Optional[int] = None,
     ):
         self.initial_particles = initial_particles
+        # self.num_particles = num_particles
         self.rume = rume
         self.params_space = params_space
         self.model_link = model_link
@@ -86,6 +88,21 @@ class ForecastSiulation:
         self.rng = np.random.default_rng()
         self.param_quantiles = {}
         self.param_values = {}
+
+        # Check if initial_particles is None, and generate if num is provided
+        # if self.initial_particles is None:
+        #     if self.num_particles is None:
+        #         raise ValueError(
+        #             "Either 'initial_particles' or 'num' must be provided."
+        #         )
+
+        #     initializer = ParticleInitializer(
+        #         self.num_particles, rume, params_space
+        #     )  # Generate particles if num is provided
+
+        #     rng = np.random.default_rng(seed=1)
+
+        #     self.initial_particles = initializer.initialize_particles(rng)
 
     def run(self):
         start_date = self.rume.time_frame.end_date

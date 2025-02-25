@@ -47,3 +47,27 @@ class PropagateParams:
     @classmethod
     def propagate_param(cls, approach: Literal["GBM"]):
         return None
+
+
+class ForecastParameters:
+    def __init__(
+        self,
+        dynamics: Dynamics | None,
+        perturbation: Perturbation | None,
+    ):
+        self.dynamics = dynamics
+        self.perturbation = perturbation
+
+    @classmethod
+    def TimeVarying(  # noqa: N802
+        cls,
+        dynamics: Dynamics,
+        perturbation: Perturbation | None = None,
+    ):
+        return cls(dynamics=dynamics, perturbation=perturbation)
+
+    @classmethod
+    def Static(  # noqa: N802
+        cls, perturbation: Perturbation | None = None
+    ):
+        return cls(dynamics=None, perturbation=perturbation)
