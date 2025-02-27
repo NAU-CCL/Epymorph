@@ -62,7 +62,7 @@ class WeightsResampling:
         for i in range(self.N):
             expected = expected_observations[i]
             try:
-                log_weights[i] = np.sum(
+                log_weights[i] = np.nansum(
                     np.log(self.likelihood_fn.compute(current_obs_data, expected))
                 )
             except (ValueError, FloatingPointError):
@@ -170,18 +170,27 @@ class ResamplingByNode(WeightsResampling):
         """
         n_nodes = expected_observations[0].shape[0]
         log_weights = np.zeros(shape=(n_nodes, self.N))
+        shifted_log_weights = np.zeros(shape=(n_nodes, self.N))
 
         for i_node in range(n_nodes):
-            for i_particle in range(self.N):
-                expected = expected_observations[i_particle][i_node]
+            if not np.isnan(current_obs_data[i_node]):
+                for i_particle in range(self.N):
+                    expected = expected_observations[i_particle][i_node]
+                    try:
+                        log_weights[i_node, i_particle] = np.log(
+                            self.likelihood_fn.compute(
+                                current_obs_data[i_node], expected
+                            )
+                        )
+                    except (ValueError, FloatingPointError):
+                        log_weights[i_node, i_particle] = -np.inf
                 try:
-                    log_weights[i_node, i_particle] = np.log(
-                        self.likelihood_fn.compute(current_obs_data[i_node], expected)
+                    shifted_log_weights[i_node, :] = log_weights[i_node, :] - np.max(
+                        log_weights[i_node, :], keepdims=True
                     )
-                except (ValueError, FloatingPointError):
-                    log_weights[i_node, i_particle] = -np.inf
+                except FloatingPointError:
+                    shifted_log_weights[i_node, :] = 0
 
-        shifted_log_weights = log_weights - np.max(log_weights, axis=1, keepdims=True)
         underflow_lower_bound = -(10**2)
         clipped_log_weights = np.clip(
             shifted_log_weights, a_min=underflow_lower_bound, a_max=None
