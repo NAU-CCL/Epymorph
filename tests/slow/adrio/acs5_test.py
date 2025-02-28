@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from epymorph.adrio import acs5, commuting_flows
-from epymorph.adrio.adrio import ADRIO
+from epymorph.adrio import acs5
+from epymorph.adrio.adrio import ADRIOPrototype as ADRIO  # noqa: N814
 from epymorph.data_shape import DataShape, DataShapeMatcher, Dimensions
 from epymorph.data_type import dtype_as_np
 from epymorph.geography.scope import GeoScope
@@ -39,13 +39,8 @@ _attributes_to_test: dict[str, tuple[ADRIO, type[int | float], DataShape]] = {
         float,
         Shapes.N,
     ),
-    "commuters": (
-        commuting_flows.Commuters(),
-        int,
-        Shapes.NxN,
-    ),
     "gini_index": (
-        acs5.GINIIndex(),
+        acs5.GiniIndex(),
         float,
         Shapes.N,
     ),
@@ -56,7 +51,7 @@ _attributes_to_test: dict[str, tuple[ADRIO, type[int | float], DataShape]] = {
     ),
     "median_income": (
         acs5.MedianIncome(),
-        float,
+        int,
         Shapes.N,
     ),
 }
@@ -87,7 +82,7 @@ _test_parameters = [
             ["35001000720", "35001000904", "35001000906", "04027011405", "04027011407"],
             year=2020,
         ),
-        ("commuters",),
+        (),
     ),
     # Test 4: CBG scope
     (
@@ -102,7 +97,7 @@ _test_parameters = [
             ],
             year=2020,
         ),
-        ("commuters", "dissimilarity_index"),
+        ("dissimilarity_index", "gini_index"),
     ),
 ]
 
