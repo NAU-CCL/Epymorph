@@ -48,13 +48,23 @@ def iso8601(value: date | str) -> date:
 
 @dataclass(frozen=True)
 class TimeFrame:
-    """The time frame of a simulation."""
+    """
+    Describes a time frame as a contiguous set of calendar dates,
+    primarily used to define the time frame of a simulation.
+    """
 
     @classmethod
     def of(cls, start_date: date | str, duration_days: int) -> Self:
         """
-        Alternate constructor for TimeFrame.
-        If a date is passed as a string, it will be parsed using ISO-8601 format.
+        Alternate constructor: start date and a given duration in days.
+
+        Parameters
+        ----------
+        start_date : date | str
+            The starting date.
+            If a date is passed as a string, it will be parsed using ISO-8601 format.
+        duration_days : int
+            The number of days in the time frame, including the first day.
         """
         start_date = iso8601(start_date)
         return cls(start_date, duration_days)
@@ -62,9 +72,16 @@ class TimeFrame:
     @classmethod
     def range(cls, start_date: date | str, end_date: date | str) -> Self:
         """
-        Alternate constructor for TimeFrame, comprising the
-        (endpoint inclusive) date range.
-        If a date is passed as a string, it will be parsed using ISO-8601 format.
+        Alternate constructor: start and end date (inclusive).
+
+        Parameters
+        ----------
+        start_date : date | str
+            The starting date.
+            If a date is passed as a string, it will be parsed using ISO-8601 format.
+        end_date : date | str
+            The final date included in the time frame.
+            If a date is passed as a string, it will be parsed using ISO-8601 format.
         """
         start_date = iso8601(start_date)
         end_date = iso8601(end_date)
@@ -74,9 +91,16 @@ class TimeFrame:
     @classmethod
     def rangex(cls, start_date: date | str, end_date_exclusive: date | str) -> Self:
         """
-        Alternate constructor for TimeFrame, comprising the
-        (endpoint exclusive) date range.
-        If a date is passed as a string, it will be parsed using ISO-8601 format.
+        Alternate constructor: start and end date (exclusive).
+
+        Parameters
+        ----------
+        start_date : date | str
+            The starting date.
+            If a date is passed as a string, it will be parsed using ISO-8601 format.
+        end_date_exclusive : date | str
+            The stop date, which is to say the first date not in the time frame.
+            If a date is passed as a string, it will be parsed using ISO-8601 format.
         """
         start_date = iso8601(start_date)
         end_date_exclusive = iso8601(end_date_exclusive)
@@ -85,15 +109,23 @@ class TimeFrame:
 
     @classmethod
     def year(cls, year: int) -> Self:
-        """Alternate constructor for TimeFrame, comprising one full calendar year."""
+        """
+        Alternate constructor: an entire calendar year.
+
+        Parameters
+        ----------
+        year : int
+            The year of the time frame, from January 1st through December 31st.
+            Includes 365 days, or 366 days on a leap year.
+        """
         return cls.rangex(date(year, 1, 1), date(year + 1, 1, 1))
 
     start_date: date
-    """The first date in the simulation."""
+    """The first date in the time frame."""
     duration_days: int
-    """The number of days for which to run the simulation."""
+    """The number of days for included in the time frame."""
     end_date: date = field(init=False)
-    """The last date included in the simulation."""
+    """The last date included in the time frame."""
 
     def __post_init__(self):
         if self.duration_days < 1:
@@ -106,7 +138,19 @@ class TimeFrame:
         object.__setattr__(self, "end_date", end_date)
 
     def is_subset(self, other: "TimeFrame") -> bool:
-        """Is the given TimeFrame a subset of this one?"""
+        """
+        Is the given TimeFrame a subset of this one?
+
+        Parameters
+        ----------
+        other : TimeFrame
+            The other time frame to consider.
+
+        Returns
+        -------
+        bool
+            True if the other time frame is a subset of this time frame.
+        """
         return self.start_date <= other.start_date and self.end_date >= other.end_date
 
     @property
@@ -125,7 +169,14 @@ class TimeFrame:
         return f"{self.start_date}/{self.end_date} ({self.duration_days}D)"
 
     def to_numpy(self) -> NDArray[np.datetime64]:
-        """Returns a numpy array of the dates in this time frame."""
+        """
+        Returns a numpy array of the dates in this time frame.
+
+        Returns
+        -------
+        NDArray[np.datetime64]
+            The array in `np.datetime64` format.
+        """
         return np.array(list(self), dtype=np.datetime64)
 
     @property
@@ -136,6 +187,11 @@ class TimeFrame:
         and so you should use a selection on the time frame used in the
         RUME that produced the result."""
         return TimeSelector(self)
+
+
+#############
+# Epi Weeks #
+#############
 
 
 class EpiWeek(NamedTuple):
@@ -200,8 +256,11 @@ class Dim(NamedTuple):
     i.e., after subselections and geo-grouping."""
 
     nodes: int
+    """The number of unique nodes or node-groups."""
     days: int
+    """The number of days, after any sub-selection."""
     tau_steps: int
+    """The number of tau steps per day."""
 
 
 class TimeGrouping(ABC, Generic[D]):

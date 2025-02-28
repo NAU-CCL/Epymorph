@@ -99,7 +99,10 @@ class GPM:
     init: Initializer
     """The initializer for the GPM."""
     params: Mapping[ModuleNamePattern, ParamValue] | None = field(default=None)
-    """Parameter values specific to this GPM."""
+    """
+    Parameter values specific to this GPM. When a GPM is used in a RUME, RUME parameters
+    will override GPM parameters if there's overlap.
+    """
 
     # NOTE: constructing a ModuleNamePattern object is a bit awkward from an interface
     # perspective; much more ergonomic to just be able to use strings -- but that
@@ -255,13 +258,15 @@ class RUME(ABC, Generic[GeoScopeT_co]):
     """
 
     strata: Sequence[GPM]
-    """The list of strata."""
+    """The list of strata expressed as GPMs."""
     ipm: BaseCompartmentModel
-    """The compartmental model."""
+    """The effective IPM for the RUME, made by combining all strata IPMs."""
     mms: OrderedDict[str, MovementModel]
-    """The movement models (by strata)."""
+    """The effective MMs for the RUME by strata. The MMs in this list represent
+    any modifications which must be made to the movement models so that they are
+    mutually compatible. (For example, adjusting to a common tau-step scheme.)"""
     scope: GeoScopeT_co
-    """The geo scope."""
+    """The geo scope. This is shared by all strata."""
     time_frame: TimeFrame
     """The simulation time frame."""
     params: Mapping[NamePattern, ParamValue]
@@ -294,7 +299,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
 
     @cached_property
     def requirements(self) -> Mapping[AbsoluteName, AttributeDef]:
-        """Returns the attributes required by the RUME."""
+        """The attributes required by the RUME."""
 
         def generate_items():
             # IPM attributes are already fully named.
@@ -347,8 +352,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         Masks that describe which compartments belong in the given strata.
         For example: if the model has three strata ('a', 'b', and 'c') with
         three compartments each,
-        `strata_compartment_mask('b')` returns `[0 0 0 1 1 1 0 0 0]`
-        (where 0 stands for False and 1 stands for True).
+        `strata_compartment_mask('b')` returns `[F F F T T T F F F]`.
         """
 
         def mask(length: int, true_slice: slice) -> NDArray[np.bool_]:
@@ -460,6 +464,11 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         Includes data which must be downloaded and how much will be added to the file
         cache. Provides a projected download time based on the given assumed maximum
         network bandwidth (defaults to 1 MB/s).
+
+        Parameters
+        ----------
+        max_bandwidth: int, default=1 MB/s
+            The assumed maximum network bandwidth in bytes per second.
         """
 
         estimates = [

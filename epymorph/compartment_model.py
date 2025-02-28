@@ -488,11 +488,47 @@ class ModelSymbols:
         self._rsymbols = dict(rs)
 
     def compartments(self, *names: str) -> Sequence[Symbol]:
-        """Select compartment symbols by name."""
+        """Select compartment symbols by name.
+
+        Parameters
+        ----------
+        *names : str
+            The names of the model's compartments to select.
+
+        Returns
+        -------
+        Sequence[sympy.core.symbol.Symbol]
+            The symbols representing the compartments in the order in which they're
+            named. Ideal for unpacking into variables.
+
+        Examples
+        --------
+        >>> [S, I, R] = symbols.compartments("S", "I", "R")
+        >>> print(f"{type(S)}: {S}")
+        <class 'sympy.core.symbol.Symbol'>: S
+        """
         return [self._csymbols[n] for n in names]
 
     def requirements(self, *names: str) -> Sequence[Symbol]:
-        """Select requirement symbols by name."""
+        """Select requirement symbols by name.
+
+        Parameters
+        ----------
+        *names : str
+            The names of the model's attributes to select.
+
+        Returns
+        -------
+        Sequence[sympy.core.symbol.Symbol]
+            The symbols representing the attributes in the order in which they're named.
+            Ideal for unpacking into variables.
+
+        Examples
+        --------
+        >>> [alpha, beta, gamma] = symbols.requirements("alpha", "beta", "gamma")
+        >>> print(f"{type(alpha)}: {alpha}")
+        <class 'sympy.core.symbol.Symbol'>: alpha
+        """
         return [self._rsymbols[n] for n in names]
 
 

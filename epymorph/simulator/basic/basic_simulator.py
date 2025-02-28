@@ -33,12 +33,15 @@ RUMEType = TypeVar("RUMEType", bound=RUME)
 class BasicSimulator(Generic[RUMEType]):
     """
     A simulator for running singular simulation passes and producing time-series output.
-    The most basic simulator!
+    The most basic simulator.
     """
 
     rume: RUMEType
+    """The RUME we will use for the simulation."""
     ipm_exec: IPMExecutor
+    """The class responsible for executing disease simulation."""
     mm_exec: MovementExecutor
+    """The class responsible for executing movement simulation."""
 
     def __init__(self, rume: RUMEType):
         self.rume = rume

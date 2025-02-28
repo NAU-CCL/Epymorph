@@ -61,7 +61,7 @@ def default_rng(
 ) -> Callable[[], np.random.Generator]:
     """
     Convenience constructor to create a factory function for a simulation's
-    random number generator, optionally with a given seed.
+    random number generator, optionally with a given random seed.
     """
     return lambda: np.random.default_rng(seed)
 
@@ -92,21 +92,34 @@ class Tick(NamedTuple):
 
 
 class TickIndex(NamedTuple):
-    """A zero-based index of the simulation tau steps."""
+    """
+    A zero-based index identifying a simulation tau step.
+    For example, if a RUME's movement model declares three tau steps,
+    of lengths 0.25, 0.60, and 0.15 respectively, then the 0.25-long step
+    is index 0, the 0.60-long step is index 1, and the 0.15-long step is index 2.
+    Indices 3 or more would be invalid for this RUME.
+    """
 
-    step: int  # which tau step within that day (zero-indexed)
+    step: int
+    """The index of the tau step."""
 
 
 class TickDelta(NamedTuple):
     """
     An offset relative to a Tick expressed as a number of days which should elapse,
     and the step on which to end up. In applying this delta, it does not matter which
-    step we start on. We need the Clock configuration to apply a TickDelta, so see
-    Clock for the relevant method.
+    step we start on.
+
+    See Also
+    --------
+    [`resolve_tick_delta`](`epymorph.simulation.resolve_tick_delta`) combines an
+    absolute tick with a relative delta to get another absolute tick.
     """
 
-    days: int  # number of whole days
-    step: int  # which tau step within that day (zero-indexed)
+    days: int
+    """The number of whole days."""
+    step: int
+    """Which tau step within that day (zero-indexed)."""
 
 
 NEVER = TickDelta(-1, -1)
@@ -117,7 +130,23 @@ Any Tick plus Never returns Never.
 
 
 def resolve_tick_delta(tau_steps_per_day: int, tick: Tick, delta: TickDelta) -> int:
-    """Add a delta to a tick to get the index of the resulting tick."""
+    """
+    Add a delta to a tick to get the index of the resulting tick.
+
+    Parameters
+    ----------
+    tau_steps_per_day : int
+        The number of simulation tau steps per day.
+    tick : Tick
+        The tick to start from.
+    delta : TickDelta
+        A delta to add to `tick`.
+
+    Returns
+    -------
+    int
+        The result of adding `delta` to `tick`, as a tick index.
+    """
     return (
         -1
         if delta.days == -1
@@ -129,7 +158,22 @@ def simulation_clock(
     time_frame: TimeFrame,
     tau_step_lengths: list[float],
 ) -> Iterable[Tick]:
-    """Generator for the sequence of ticks which makes up the simulation clock."""
+    """
+    Generates the sequence of ticks which makes up the simulation clock.
+
+    Parameters
+    ----------
+    time_frame : TimeFrame
+        A simulation's time frame.
+    tau_step_lengths : list[float]
+        The simulation tau steps as fractions of one day.
+
+    Returns
+    -------
+    Iterable[Tick]
+        The sequence of ticks as determined by the simulation's start date,
+        duration, and tau steps configuration.
+    """
     one_day = timedelta(days=1)
     tau_steps = list(enumerate(tau_step_lengths))
     curr_index = 0
