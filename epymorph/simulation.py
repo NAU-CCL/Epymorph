@@ -51,6 +51,7 @@ from epymorph.database import (
     ReqTree,
     is_recursive_value,
 )
+from epymorph.error import MissingContextError
 from epymorph.geography.scope import GeoScope
 from epymorph.time import TimeFrame
 from epymorph.util import are_instances, are_unique
@@ -232,30 +233,17 @@ A type alias which describes all acceptable input forms for parameter values:
 ########################
 
 
-class _Context(ABC):
+class Context(ABC):
     """
-    The evaluation context of a SimulationFunction. We want SimulationFunction
-    instances to be able to access properties of the simulation by using
-    various methods on `self`. But we also want to instantiate SimulationFunctions
-    before the simulation context exists! Hence this object starts out "empty"
-    and will be swapped for a "full" context when the function is evaluated in
-    a simulation context object. Partial contexts exist to allow easy one-off
-    evaluation of SimulationFunctions without a full RUME.
+    The evaluation context of a SimulationFunction.
     """
 
-    def _invalid_context(
-        self,
-        component: Literal["data", "scope", "time_frame", "ipm", "rng"],
-    ) -> TypeError:
-        err = (
-            "Missing function context during evaluation.\n"
-            "Simulation function tried to access "
-            f"'{component}' but this has not been provided. "
-            "Call `with_context()` first, providing all context that is required "
-            "by this function. Then call `evaluate()` on the returned object "
-            "to compute the value."
-        )
-        return TypeError(err)
+    # NOTE: We want SimulationFunction instances to be able to access properties of the
+    # simulation by using various methods on `self`. But we also want to instantiate
+    # SimulationFunctions before the simulation context exists! Hence this object
+    # starts out "empty" and will be swapped for a "full" context when the function
+    # is evaluated in a simulation context object. Partial contexts exist to allow easy
+    # one-off evaluation of SimulationFunctions without a full RUME.
 
     @property
     @abstractmethod
@@ -293,16 +281,15 @@ class _Context(ABC):
 
     @staticmethod
     def of(
-        name: AbsoluteName,
-        data: DataResolver | None,
-        scope: GeoScope | None,
-        time_frame: TimeFrame | None,
-        ipm: BaseCompartmentModel | None,
-        rng: np.random.Generator | None,
+        name: AbsoluteName = NAME_PLACEHOLDER,
+        data: DataResolver | None = None,
+        scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
+        ipm: BaseCompartmentModel | None = None,
+        rng: np.random.Generator | None = None,
     ) -> "_PartialContext | _FullContext":
         if (
-            name is None
-            or data is None
+            data is None
             or scope is None
             or time_frame is None
             or ipm is None
@@ -312,8 +299,12 @@ class _Context(ABC):
         else:
             return _FullContext(name, data, scope, time_frame, ipm, rng)
 
+    @abstractmethod
+    def with_scope(self, scope: GeoScope) -> "Context":
+        pass
 
-class _PartialContext(_Context):
+
+class _PartialContext(Context):
     _name: AbsoluteName
     _data: DataResolver | None
     _scope: GeoScope | None
@@ -343,6 +334,20 @@ class _PartialContext(_Context):
             C=ipm.num_compartments if ipm is not None else None,
             E=ipm.num_events if ipm is not None else None,
         )
+
+    def _invalid_context(
+        self,
+        component: Literal["data", "scope", "time_frame", "ipm", "rng"],
+    ) -> MissingContextError:
+        err = (
+            "Missing function context during evaluation.\n"
+            "Simulation function tried to access "
+            f"'{component}' but this has not been provided. "
+            "Call `with_context()` first, providing all context that is required "
+            "by this function. Then call `evaluate()` on the returned object "
+            "to compute the value."
+        )
+        return MissingContextError(err)
 
     @property
     def name(self) -> AbsoluteName:
@@ -388,11 +393,22 @@ class _PartialContext(_Context):
     def dim(self) -> Dimensions:
         return self._dim
 
+    @override
+    def with_scope(self, scope: GeoScope) -> "Context":
+        return Context.of(
+            name=self._name,
+            data=self._data,
+            scope=scope,
+            time_frame=self._time_frame,
+            ipm=self._ipm,
+            rng=self._rng,
+        )
+
 
 _EMPTY_CONTEXT = _PartialContext(NAME_PLACEHOLDER, None, None, None, None, None)
 
 
-class _FullContext(_Context):
+class _FullContext(Context):
     _name: AbsoluteName
     _data: DataResolver
     _scope: GeoScope
@@ -456,6 +472,17 @@ class _FullContext(_Context):
     @override
     def dim(self) -> Dimensions:
         return self._dim
+
+    @override
+    def with_scope(self, scope: GeoScope) -> "Context":
+        return Context.of(
+            name=self._name,
+            data=self._data,
+            scope=scope,
+            time_frame=self._time_frame,
+            ipm=self._ipm,
+            rng=self._rng,
+        )
 
 
 _TypeT = TypeVar("_TypeT")
@@ -678,7 +705,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         # 1. don't have to worry about cleaning up _ctx
         # 2. instances can use @cached_property without surprising results
         clone = deepcopy(self)
-        setattr(clone, "_ctx", _Context.of(name, data, scope, time_frame, ipm, rng))
+        setattr(clone, "_ctx", Context.of(name, data, scope, time_frame, ipm, rng))
         return clone
 
     @final
@@ -745,6 +772,12 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
                 "which you did not declare as a requirement."
             )
         return self._ctx.data(req)
+
+    @final
+    @property
+    def context(self) -> Context:
+        """The full context object."""
+        return self._ctx
 
     @final
     @property

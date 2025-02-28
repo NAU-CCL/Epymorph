@@ -14,6 +14,7 @@ from typing import Generator
 import humanize
 from humanize import naturalsize
 
+from epymorph.attribute import NAME_PLACEHOLDER
 from epymorph.event import ADRIOProgress, EventBus, OnStart, OnTick
 from epymorph.util import progress, subscriptions
 
@@ -91,7 +92,10 @@ def sim_messaging(
     def on_adrio_progress(e: ADRIOProgress) -> None:
         nonlocal last_progress_length
         if e.ratio_complete == 0:
-            print(f"Loading {e.attribute} ({e.adrio_name}):")
+            if e.attribute == NAME_PLACEHOLDER:
+                print(f"Loading {e.adrio_name}:")
+            else:
+                print(f"Loading {e.attribute} ({e.adrio_name}):")
         if not e.final:
             if e.download is None:
                 dl = ""
