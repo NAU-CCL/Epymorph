@@ -345,6 +345,11 @@ class StatesSummary(GranularitySummary):
         """Mapping from state FIPS code to postal code."""
         return dict(zip(self.geoid, self.code, strict=True))
 
+    @cached_property
+    def state_fips_to_name(self) -> Mapping[str, str]:
+        """Mapping from state FIPS code to full name."""
+        return dict(zip(self.geoid, self.name, strict=True))
+
     @override
     def interpret(self, identifiers: Sequence[str]) -> list[str]:
         """Permissively interprets the given set of identifiers as describing nodes,

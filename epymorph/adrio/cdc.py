@@ -1,781 +1,1289 @@
-"""ADRIOs that access data.cdc.gov website for various health data."""
-
-from dataclasses import dataclass
-from datetime import date
-from typing import Mapping
-from urllib.parse import quote, urlencode
-from warnings import warn
+import dataclasses
+import os
+from datetime import date, timedelta
+from typing import Callable, Literal, cast
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
-from pandas import DataFrame, concat, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
-from epymorph.error import DataResourceError
-from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import CensusScope
-from epymorph.geography.us_geography import STATE, CensusGranularityName
+import epymorph.adrio.soda as q
+from epymorph.adrio.adrio import (
+    ADRIOCommunicationError,
+    ADRIOContextError,
+    FetchADRIO,
+    ProcessResult,
+    ResultFormat,
+    range_mask_fn,
+    validate_time_frame,
+)
+from epymorph.adrio.processing import (
+    DataPipeline,
+    DateValueType,
+    Fill,
+    Fix,
+    PivotAxis,
+)
+from epymorph.data_shape import Shapes
+from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
+from epymorph.geography.us_geography import STATE
 from epymorph.geography.us_tiger import get_states
-from epymorph.time import TimeFrame
+from epymorph.simulation import Context
+from epymorph.time import DateRange, iso8601
 
 
-@dataclass(frozen=True)
-class DataSource:
-    url_base: str
-    date_col: str
-    fips_col: str
-    data_col: str
-    granularity: CensusGranularityName
-    """The geographic granularity of the source data."""
-    replace_sentinel: float | None
-    """If None, ignore sentinel values (-999999); otherwise, replace them with
-    the given value."""
-    map_geo_ids: Mapping[str, str] | None = None
-    """If None, use the scope node IDs as they are, otherwise use this mapping
-    to map them."""
-
-
-_SENTINEL = -999999
-"""A common sentinel value which represents values which have been redacted
-for privacy because there were less than 4 individuals in that data point."""
-
-
-def _api_query(
-    source: DataSource,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
+def healthdata_api_key() -> str | None:
     """
-    Composes URLs to query API and sends query requests. Limits each query to
-    10000 rows, combining several query results if this number is exceeded.
-    Returns Dataframe containing requested data sorted by date and location fips.
+    Loads the Socrata API key to use for healthdata.gov,
+    as environment variable 'API_KEY__healthdata.gov'.
     """
-    node_ids = (
-        [source.map_geo_ids[x] for x in scope.node_ids]
-        if source.map_geo_ids is not None
-        else scope.node_ids
-    )
-    if scope.granularity == "state" and source.granularity != "state":
-        # query county level data with state fips codes
-        location_clauses = [f"starts_with({source.fips_col}, '{x}')" for x in node_ids]
-    else:
-        # query with full fips codes
-        formatted_fips = ",".join(f"'{node}'" for node in node_ids)
-        location_clauses = [f"{source.fips_col} in ({formatted_fips})"]
-
-    date_clause = (
-        f"{source.date_col} "
-        f"between '{time_frame.start_date}T00:00:00' "
-        f"and '{time_frame.end_date}T00:00:00'"
-    )
-
-    processing_steps = len(location_clauses) + 1
-
-    def query_step(index, loc_clause) -> DataFrame:
-        step_result = _query_location(source, loc_clause, date_clause)
-        progress((index + 1) / processing_steps, None)
-        return step_result
-
-    cdc_df = concat(
-        [query_step(i, loc_clause) for i, loc_clause in enumerate(location_clauses)]
-    )
-
-    if source.replace_sentinel is not None:
-        num_sentinel = (cdc_df[source.data_col] == _SENTINEL).sum()
-        if num_sentinel > 0:
-            cdc_df = cdc_df.replace(_SENTINEL, source.replace_sentinel)
-            warn(
-                f"{num_sentinel} values < 4 were replaced with "
-                f"{source.replace_sentinel} in returned data."
-            )
-
-    if scope.granularity == "state" and source.granularity != "state":
-        # aggregate county data to state level
-        cdc_df[source.fips_col] = cdc_df[source.fips_col].map(STATE.truncate)
-        cdc_df = cdc_df.groupby([source.fips_col, source.date_col]).sum().reset_index()
-
-    return _as_numpy(
-        cdc_df.sort_values(by=[source.date_col, source.fips_col]).pivot_table(
-            index=source.date_col,
-            columns=source.fips_col,
-            values=source.data_col,
-        )
-    )
+    return os.environ.get("API_KEY__healthdata.gov", default=None)
 
 
-def _as_numpy(data_df: DataFrame) -> NDArray[np.float64]:
-    """Convert a DataFrame to a time-series by node numpy array where each value is a
-    tuple of date and data value. Note: this time-series is not necessarily the same
-    length as simulation T, because not all ADRIOs produce a daily value."""
-    dates = data_df.index.to_numpy(dtype="datetime64[D]")
-    return np.array(
-        [list(zip(dates, data_df[col], strict=True)) for col in data_df.columns],
-        dtype=[("date", "datetime64[D]"), ("data", np.float64)],
-    ).T
-
-
-def _fetch_cases(
-    attrib_name: str,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
+def data_cdc_api_key() -> str | None:
     """
-    Fetches data from HealthData dataset reporting COVID-19 cases per 100k population.
-    Available between 2/24/2022 and 5/4/2023 at state and county granularities.
-    https://healthdata.gov/dataset/United-States-COVID-19-Community-Levels-by-County/nn5b-j5u9/about_data
+    Loads the Socrata API key to use for data.cdc.gov,
+    as environment variable 'API_KEY__data.cdc.gov'.
     """
-    if time_frame.start_date < date(2022, 2, 24) or time_frame.end_date > date(
-        2023, 5, 4
-    ):
-        msg = "COVID cases data is only available between 2/24/2022 and 5/4/2023."
-        raise DataResourceError(msg)
-
-    source = DataSource(
-        url_base="https://data.cdc.gov/resource/3nnm-4jni.csv?",
-        date_col="date_updated",
-        fips_col="county_fips",
-        data_col=attrib_name,
-        granularity="county",
-        replace_sentinel=None,
-    )
-
-    return _api_query(source, scope, time_frame, progress)
+    return os.environ.get("API_KEY__data.cdc.gov", default=None)
 
 
-def _fetch_facility_hospitalization(
-    attrib_name: str,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    replace_sentinel: int,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
+############################
+# HEALTHDATA.GOV anag-cw7u #
+############################
+
+
+class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
     """
-    Fetches data from HealthData dataset reporting number of people hospitalized for
-    COVID-19 and other respiratory illnesses at facility level during manditory
-    reporting period.
-    Available between 12/13/2020 and 5/10/2023 at state and county granularities.
+    An abstract specialization of `FetchADRIO` for ADRIOs which fetch
+    data from healthdata.gov dataset anag-cw7u: a.k.a.
+    "COVID-19 Reported Patient Impact and Hospital Capacity by Facility".
     https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data
     """
-    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(
-        2023, 5, 10
-    ):
-        msg = (
-            "Facility level hospitalization data is only available between 12/13/2020 "
-            "and 5/10/2023."
-        )
-        raise DataResourceError(msg)
 
-    source = DataSource(
-        url_base="https://healthdata.gov/resource/anag-cw7u.csv?",
-        date_col="collection_week",
-        fips_col="fips_code",
-        data_col=attrib_name,
-        granularity="county",
-        replace_sentinel=replace_sentinel,
+    _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="anag-cw7u")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)
+    """The time range over which values are available."""
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
     )
+    """The format of results."""
 
-    return _api_query(source, scope, time_frame, progress)
+    _REDACTED_VALUE = np.int64(-999999)
+    """The value of redacted reports: between 1 and 3 cases."""
+
+    _fix_redacted: Fix[np.int64]
+    """The method to use to replace redacted values (-999999 in the data)."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        *,
+        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        try:
+            self._fix_redacted = Fix.of_int64(fix_redacted)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_redacted`")
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
+
+    @override
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope | CountyScope):
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+        # TODO: which county years work?
+        validate_time_frame(self, context, self._TIME_RANGE)
+
+    @override
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)
 
 
-def _fetch_state_hospitalization(
-    attrib_name: str,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
+class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
     """
-    Fetches data from CDC dataset reporting number of people hospitalized for COVID-19
-    and other respiratory illnesses at state level during manditory and voluntary
-    reporting periods.
-    Available from 1/4/2020 to present at state granularity.
-    Data reported voluntarily past 5/1/2024.
+    Loads COVID hospitalization data from HealthData.gov's
+    "COVID-19 Reported Patient Impact and Hospital Capacity by Facility"
+    dataset. The data were reported by healthcare facilities on a weekly basis,
+    starting 2019-12-29 and ending 2024-04-21, although the data is not complete
+    over this entire range, nor over the entire United States.
+
+    This ADRIO supports geo scopes at US State and County granularities. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    reported hospitalizations. The data contain sentinel values (-999999) which
+    represent values redacted for the sake of protecting patient privacy -- there
+    were between 1 and 3 cases reported by the facility on that date.
+
+    Parameters
+    ----------
+    fix_redacted : Fix[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to replace redacted values (-999999 in the data).
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data).
+    """  # noqa: E501
+
+    _ADULTS = "total_adult_patients_hospitalized_confirmed_covid_7_day_sum"
+    _PEDS = "total_pediatric_patients_hospitalized_confirmed_covid_7_day_sum"
+
+    _age_group: Literal["adult", "pediatric", "both"]
+
+    def __init__(
+        self,
+        *,
+        age_group: Literal["adult", "pediatric", "both"] = "both",
+        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        if age_group not in ("adult", "pediatric", "both"):
+            raise ValueError(f"Unsupported `age_group`: {age_group}")
+        self._age_group = age_group
+        super().__init__(fix_redacted=fix_redacted, fix_missing=fix_missing)
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        match self._age_group:
+            case "adult":
+                values = [q.Select(self._ADULTS, "int", as_name="value")]
+                not_nulls = [q.NotNull(self._ADULTS)]
+            case "pediatric":
+                values = [q.Select(self._PEDS, "int", as_name="value")]
+                not_nulls = [q.NotNull(self._PEDS)]
+            case "both":
+                values = [
+                    q.Select(self._ADULTS, "nullable_int", as_name="value_adult"),
+                    q.Select(self._PEDS, "nullable_int", as_name="value_ped"),
+                ]
+                not_nulls = []
+            case x:
+                raise ValueError(f"Unsupported `age_group`: {x}")
+
+        query = q.Query(
+            select=(
+                q.Select("collection_week", "date", as_name="date"),
+                q.Select("fips_code", "str", as_name="geoid"),
+                *values,
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "collection_week",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("fips_code", context.scope.node_ids),
+                *not_nulls,
+            ),
+            order_by=(
+                q.Ascending("collection_week"),
+                q.Ascending("fips_code"),
+                q.Ascending(":id"),
+            ),
+        )
+        try:
+            return q.query_csv(
+                resource=_HealthdataAnagCw7u._RESOURCE,
+                query=query,
+                api_token=healthdata_api_key(),
+            )
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
+
+    @override
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .strip_sentinel("redacted", self._REDACTED_VALUE, self._fix_redacted)
+            .finalize(self._fix_missing)
+        )
+
+        if self._age_group == "both":
+            # Age group is both adult and pediatric, so
+            # process the two columns separately and sum.
+            adult_df = (
+                data_df[["date", "geoid", "value_adult"]]
+                .rename(columns={"value_adult": "value"})
+                .dropna(subset="value")
+            )
+            adult_df["value"] = adult_df["value"].astype(np.int64)
+            adult_result = pipeline(adult_df)
+
+            ped_df = (
+                data_df[["date", "geoid", "value_ped"]]
+                .rename(columns={"value_ped": "value"})
+                .dropna(subset="value")
+            )
+            ped_df["value"] = ped_df["value"].astype(np.int64)
+            ped_result = pipeline(ped_df)
+
+            result = ProcessResult.sum(
+                adult_result,
+                ped_result,
+                left_prefix="adult_",
+                right_prefix="pediatric_",
+            )
+        else:
+            # Age group is just adult or pediatric, so process as normal
+            result = pipeline(data_df)
+        return result.to_date_value(time_series)
+
+
+class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
+    """
+    Loads influenza hospitalization data from HealthData.gov's
+    "COVID-19 Reported Patient Impact and Hospital Capacity by Facility"
+    dataset. The data were reported by healthcare facilities on a weekly basis,
+    starting 2019-12-29 and ending 2024-04-21, although the data is not complete
+    over this entire range, nor over the entire United States.
+
+    This ADRIO supports geo scopes at US State and County granularities. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    reported hospitalizations. The data contain sentinel values (-999999) which
+    represent values redacted for the sake of protecting patient privacy -- there
+    were between 1 and 3 cases reported by the facility on that date.
+
+    Parameters
+    ----------
+    fix_redacted : Fix[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to replace redacted values (-999999 in the data).
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data).
+    """  # noqa: E501
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        query = q.Query(
+            select=(
+                q.Select("collection_week", "date", as_name="date"),
+                q.Select("fips_code", "str", as_name="geoid"),
+                q.Select(
+                    "total_patients_hospitalized_confirmed_influenza_7_day_sum",
+                    dtype="int",
+                    as_name="value",
+                ),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "collection_week",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("fips_code", context.scope.node_ids),
+            ),
+            order_by=(
+                q.Ascending("collection_week"),
+                q.Ascending("fips_code"),
+                q.Ascending(":id"),
+            ),
+        )
+        try:
+            return q.query_csv(
+                resource=_HealthdataAnagCw7u._RESOURCE,
+                query=query,
+                api_token=healthdata_api_key(),
+            )
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
+
+    @override
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .strip_sentinel(
+                "redacted",
+                self._REDACTED_VALUE,
+                self._fix_redacted,
+            )
+            .finalize(self._fix_missing)
+        )
+        return pipeline(data_df).to_date_value(time_series)
+
+
+##########################
+# DATA.CDC.GOV 3nnm-4jni #
+##########################
+
+
+class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
+    """
+    Loads COVID case data from data.cdc.gov's dataset named
+    "United States COVID-19 Community Levels by County".
+
+    The data were reported starting 2022-02-24 and ending 2023-05-11, and aggregated
+    by CDC to the US County level.
+
+    This ADRIO supports geo scopes at US State and County granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    cases, calculated by multiplying the per-100k rates by the county population and rounding
+    (via banker's rounding).
+
+    Parameters
+    ----------
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Public-Health-Surveillance/United-States-COVID-19-Community-Levels-by-County/3nnm-4jni/about_data).
+    """  # noqa: E501
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="3nnm-4jni")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange(iso8601("2022-02-24"), iso8601("2023-05-11"), step=7)
+    """The time range over which values are available."""
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
+    )
+    """The format of results."""
+
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        *,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
+
+    @override
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope | CountyScope):
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+        # TODO: which county years work?
+        validate_time_frame(self, context, self._TIME_RANGE)
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        counties = cast(CensusScope, context.scope).as_granularity("county")
+        query = q.Query(
+            select=(
+                q.Select("date_updated", "date", as_name="date"),
+                q.Select("county_fips", "str", as_name="geoid"),
+                q.SelectExpression(
+                    "`covid_cases_per_100k` * (`county_population` / 100000)",
+                    "float",
+                    as_name="value",
+                ),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "date_updated",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("county_fips", counties.node_ids),
+            ),
+            order_by=(
+                q.Ascending("date_updated"),
+                q.Ascending("county_fips"),
+                q.Ascending(":id"),
+            ),
+        )
+        try:
+            return q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
+
+    @override
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .map_column(
+                "geoid",
+                map_fn=STATE.truncate
+                if isinstance(context.scope, StateScope)
+                else None,
+                dtype=np.str_,
+            )
+            .map_series("value", map_fn=lambda xs: xs.round())
+            .finalize(self._fix_missing)
+        )
+        return pipeline(data_df).to_date_value(time_series)
+
+    @override
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)
+
+
+##########################
+# DATA.CDC.GOV aemt-mg7g #
+##########################
+# TODO: is it worth keeping these states ADRIOs, or are the facility ADRIOs sufficient?
+# (given that we can roll it up to state)
+# compare results from each and see how far off they are, and if
+# the time frame and geo availability are comparable.
+
+
+class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
+    """
+    An abstract specialization of `FetchADRIO` for ADRIOs which fetch
+    data from cdc.gov dataset aemt-mg7g: a.k.a.
+    "Weekly United States Hospitalization Metrics by Jurisdiction, During Mandatory
+    Reporting Period from August 1, 2020 to April 30, 2024, and for Data Reported
+    Voluntarily Beginning May 1, 2024, National Healthcare Safety Network
+    (NHSN) - ARCHIVED".
     https://data.cdc.gov/Public-Health-Surveillance/Weekly-United-States-Hospitalization-Metrics-by-Ju/aemt-mg7g/about_data
     """
-    if scope.granularity != "state":
-        msg = (
-            "State level hospitalization data can only be retrieved for state "
-            "granularity."
-        )
-        raise DataResourceError(msg)
-    if time_frame.start_date < date(2020, 1, 4):
-        msg = "State level hospitalization data is only available starting 1/4/2020."
-        raise DataResourceError(msg)
-    if time_frame.end_date > date(2024, 5, 1):
-        warn("State level hospitalization data is voluntary past 5/1/2024.")
 
-    source = DataSource(
-        url_base="https://data.cdc.gov/resource/aemt-mg7g.csv?",
-        date_col="week_end_date",
-        fips_col="jurisdiction",
-        data_col=attrib_name,
-        granularity="state",
-        replace_sentinel=None,
-        map_geo_ids=get_states(scope.year).state_fips_to_code,
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="aemt-mg7g")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange(iso8601("2020-08-08"), iso8601("2024-10-26"), step=7)
+    """The time range over which values are available."""
+
+    _VOLUNTARY_TIME_RANGE = DateRange(
+        iso8601("2024-05-04"), iso8601("2024-10-26"), step=7
     )
+    """The time range over which values were reported voluntarily."""
 
-    return _api_query(source, scope, time_frame, progress)
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
+    )
+    """The format of results."""
 
+    _column: str
+    """The name of the data source column to fetch for this ADRIO."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+    _allow_voluntary: bool
 
-def _fetch_vaccination(
-    attrib_name: str,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
-    """
-    Fetches data from CDC dataset reporting total COVID-19 vaccination numbers.
-    Available between 12/13/2020 and 5/10/2024 at state and county granularities.
-    https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh/about_data
-    """
-    if time_frame.start_date < date(2020, 12, 13) or time_frame.end_date > date(
-        2024, 5, 10
+    def __init__(
+        self,
+        *,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        allow_voluntary: bool = True,
     ):
-        msg = "Vaccination data is only available between 12/13/2020 and 5/10/2024."
-        raise DataResourceError(msg)
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+        self._allow_voluntary = allow_voluntary
 
-    source = DataSource(
-        url_base="https://data.cdc.gov/resource/8xkx-amqh.csv?",
-        date_col="date",
-        fips_col="fips",
-        data_col=attrib_name,
-        granularity="county",
-        replace_sentinel=None,
-    )
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
 
-    return _api_query(source, scope, time_frame, progress)
+    @override
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope):
+            err = "US State geo scope required."
+            raise ADRIOContextError(self, context, err)
+        validate_time_frame(self, context, self._TIME_RANGE)
 
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        scope = cast(StateScope, self.context.scope)
+        state_info = get_states(scope.year)
+        to_postal = state_info.state_fips_to_code
+        to_fips = state_info.state_code_to_fips
 
-def _fetch_deaths_county(
-    attrib_name: str,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
-    """
-    Fetches data from CDC dataset reporting number of deaths from COVID-19.
-    Available between 1/4/2020 and 4/5/2024 at state and county granularities.
-    https://data.cdc.gov/NCHS/AH-COVID-19-Death-Counts-by-County-and-Week-2020-p/ite7-j2w7/about_data
-    """
-    if (
-        time_frame.start_date < date(2020, 1, 4)  #
-        or time_frame.end_date > date(2024, 4, 5)
-    ):
-        msg = (
-            "County level deaths data is only available between 1/4/2020 and 4/5/2024."
-        )
-        raise DataResourceError(msg)
-
-    if scope.granularity == "state":
-        source = DataSource(
-            url_base="https://data.cdc.gov/resource/ite7-j2w7.csv?",
-            date_col="week_ending_date",
-            fips_col="stfips",
-            data_col=attrib_name,
-            granularity="state",
-            replace_sentinel=None,
-        )
-    else:
-        source = DataSource(
-            url_base="https://data.cdc.gov/resource/ite7-j2w7.csv?",
-            date_col="week_ending_date",
-            fips_col="fips_code",
-            data_col=attrib_name,
-            granularity="county",
-            replace_sentinel=None,
-        )
-
-    return _api_query(source, scope, time_frame, progress)
-
-
-def _fetch_deaths_state(
-    attrib_name: str,
-    scope: CensusScope,
-    time_frame: TimeFrame,
-    progress: ProgressCallback,
-) -> NDArray[np.float64]:
-    """
-    Fetches data from CDC dataset reporting number of deaths from COVID-19 and other
-    respiratory illnesses.
-    Available from 1/4/2020 to present at state granularity.
-    https://data.cdc.gov/NCHS/Provisional-COVID-19-Death-Counts-by-Week-Ending-D/r8kw-7aab/about_data
-    """
-    if time_frame.start_date < date(2020, 1, 4):
-        msg = "State level deaths data is only available starting 1/4/2020."
-        raise DataResourceError(msg)
-
-    states = get_states(scope.year)
-    state_mapping = dict(zip(states.geoid, states.name, strict=True))
-
-    source = DataSource(
-        url_base="https://data.cdc.gov/resource/r8kw-7aab.csv?",
-        date_col="end_date",
-        fips_col="state",
-        data_col=attrib_name,
-        granularity="state",
-        replace_sentinel=None,
-        map_geo_ids=state_mapping,
-    )
-
-    return _api_query(source, scope, time_frame, progress)
-
-
-def _query_location(info: DataSource, loc_clause: str, date_clause: str) -> DataFrame:
-    """
-    Helper function for _api_query() that builds and sends queries for
-    individual locations.
-    """
-    current_return = 10000
-    total_returned = 0
-    cdc_df = DataFrame()
-
-    group_col = ""
-    group_filter = ""
-    group_filter = (
-        "AND `group`='By Week'"
-        if info.url_base == "https://data.cdc.gov/resource/r8kw-7aab.csv?"
-        else ""
-    )
-
-    while current_return == 10000:
-        url = info.url_base + urlencode(
-            quote_via=quote,
-            safe=",()'$:",
-            query={
-                "$select": (
-                    f"{info.date_col},{info.fips_col},{info.data_col}{group_col}"
+        query = q.Query(
+            select=(
+                q.Select("week_end_date", "date", as_name="date"),
+                q.Select("jurisdiction", "str", as_name="geoid"),
+                q.Select(self._column, "int", as_name="value"),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "week_end_date",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
                 ),
-                "$where": f"{loc_clause} AND {date_clause}{group_filter}",
-                "$limit": 10000,
-                "$offset": total_returned,
-            },
+                q.In("jurisdiction", [to_postal[x] for x in scope.node_ids]),
+                q.NotNull(self._column),
+            ),
+            order_by=(
+                q.Ascending("week_end_date"),
+                q.Ascending("jurisdiction"),
+                q.Ascending(":id"),
+            ),
         )
-
-        cdc_df = concat([cdc_df, read_csv(url, dtype={info.fips_col: str})])
-
-        current_return = len(cdc_df.index) - total_returned
-        total_returned += current_return
-
-    return cdc_df
-
-
-def _validate_scope(scope: GeoScope) -> CensusScope:
-    if not isinstance(scope, CensusScope):
-        msg = "Census scope is required for CDC attributes."
-        raise DataResourceError(msg)
-    return scope
-
-
-@adrio_cache
-class CovidCasesPer100k(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of COVID-19 cases per 100k population.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+        try:
+            result_df = q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+            result_df["geoid"] = result_df["geoid"].apply(lambda x: to_fips[x])
+            return result_df
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_cases(
-            "covid_cases_per_100k",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = DataPipeline(
+            axes=(
+                PivotAxis("date", time_series),
+                PivotAxis("geoid", context.scope.node_ids),
+            ),
+            ndims=2,
+            dtype=self.result_format.value_dtype,
+            rng=context,
+        ).finalize(self._fix_missing)
+        result = pipeline(data_df)
 
+        # If we don't allow voluntary reported data and if the time series overlaps
+        # the voluntary period, add a data issue with the voluntary dates masked.
+        vtr = self._VOLUNTARY_TIME_RANGE
+        if (
+            not self._allow_voluntary
+            and (voluntary := vtr.overlap(context.time_frame)) is not None
+        ):
+            mask = np.isin(time_series, voluntary.to_numpy(), assume_unique=True)
+            mask = np.broadcast_to(
+                mask[:, np.newaxis],
+                shape=(len(time_series), context.scope.nodes),
+            )
+            result = dataclasses.replace(
+                result,
+                issues={**result.issues, "voluntary": mask},
+            )
 
-@adrio_cache
-class CovidHospitalizationsPer100k(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    number of COVID-19 hospitalizations per 100k population.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
-
-    @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_cases(
-            "covid_hospital_admissions_per_100k",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-@adrio_cache
-class CovidHospitalizationAvgFacility(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly averages of COVID-19 hospitalizations from the facility level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-    replace_sentinel: int
-    """The integer value in range 0-3 to replace sentinel values with."""
-
-    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
-        if replace_sentinel not in range(4):
-            msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceError(msg)
-        self.replace_sentinel = replace_sentinel
-        self.override_time_frame = time_frame
+        return result.to_date_value(time_series)
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization(
-            "total_adult_patients_hospitalized_confirmed_covid_7_day_avg",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.replace_sentinel,
-            self.progress,
-        )
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)
 
 
-@adrio_cache
-class CovidHospitalizationSumFacility(ADRIO[np.float64]):
+class COVIDStateHospitalization(_DataCDCAemtMg7g):
     """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly sums of all COVID-19 hospitalizations from the facility level dataset.
+    Loads COVID hospitalization data from data.cdc.gov's dataset named
+    "Weekly United States Hospitalization Metrics by Jurisdiction, During Mandatory
+    Reporting Period from August 1, 2020 to April 30, 2024, and for Data Reported
+    Voluntarily Beginning May 1, 2024, National Healthcare Safety Network
+    (NHSN) - ARCHIVED".
+
+    The data were reported by healthcare facilities on a weekly basis to CDC's
+    National Healthcare Safety Network with reporting dates starting 2020-08-08
+    and ending 2024-10-26. The data were aggregated by CDC to the US State level.
+    While reporting was initially federally required, beginning May 2024
+    reporting became entirely voluntary and as such may include fewer responses.
+
+    This ADRIO supports geo scopes at US State granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    reported hospitalizations.
+
+    Parameters
+    ----------
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+    allow_voluntary : bool, default=True
+        Whether or not to accept voluntary data. If False and if the simulation time
+        frame overlaps the voluntary period, such data will be masked.
+        Set this to False if you want to be sure you are only using data during the
+        required reporting period.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Public-Health-Surveillance/Weekly-United-States-Hospitalization-Metrics-by-Ju/aemt-mg7g/about_data).
+    """  # noqa: E501
+
+    _column = "total_admissions_all_covid_confirmed"
+
+
+class FluStateHospitalization(_DataCDCAemtMg7g):
     """
+    Loads influenza hospitalization data from data.cdc.gov's dataset named
+    "Weekly United States Hospitalization Metrics by Jurisdiction, During Mandatory
+    Reporting Period from August 1, 2020 to April 30, 2024, and for Data Reported
+    Voluntarily Beginning May 1, 2024, National Healthcare Safety Network
+    (NHSN) - ARCHIVED".
 
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-    replace_sentinel: int
-    """The integer value in range 0-3 to replace sentinel values with."""
+    The data were reported by healthcare facilities on a weekly basis to CDC's
+    National Healthcare Safety Network with reporting dates starting 2020-08-08
+    and ending 2024-10-26. The data were aggregated by CDC to the US State level.
+    While reporting was initially federally required, beginning May 2024
+    reporting became entirely voluntary and as such may include fewer responses.
 
-    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
-        if replace_sentinel not in range(4):
-            msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceError(msg)
-        self.replace_sentinel = replace_sentinel
-        self.override_time_frame = time_frame
+    This ADRIO supports geo scopes at US State granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    reported hospitalizations.
+
+    Parameters
+    ----------
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+    allow_voluntary : bool, default=True
+        Whether or not to accept voluntary data. If False and if the simulation time
+        frame overlaps the voluntary period, such data will be masked.
+        Set this to False if you want to be sure you are only using data during the
+        required reporting period.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Public-Health-Surveillance/Weekly-United-States-Hospitalization-Metrics-by-Ju/aemt-mg7g/about_data).
+    """  # noqa: E501
+
+    _column = "total_admissions_all_influenza_confirmed"
+
+
+##########################
+# DATA.CDC.GOV 8xkx-amqh #
+##########################
+
+
+class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
+    """
+    Loads COVID hospitalization data from data.cdc.gov's dataset named
+    "COVID-19 Vaccinations in the United States,County".
+
+    The data were reported on a daily basis, starting 2020-12-13 and ending 2023-05-10.
+
+    This ADRIO supports geo scopes at US State and County granularity. The data appears
+    to have been compiled using 2019 Census delineations, so for best results, use
+    a geo scope for that year. The data loaded will be matched to the simulation time
+    frame. The result is a 2D matrix where the first axis represents reporting dates
+    during the time frame and the second axis is geo scope nodes. Values are integer
+    numbers of people who have had the requested vaccine dosage.
+
+    Parameters
+    ----------
+    vaccine_status : Literal["at least one dose", "full series", "full series and booster"]
+        The dataset breaks down vaccination status by how many doses individuals have
+        received. Use this to specify which status you're interested in.
+        "at least one dose" includes people who have received at least one COVID vaccine
+        dose; "full series" includes people who have received at least either
+        two doses of a two-dose vaccine or one dose of a one-dose vaccine;
+        "full series and booster" includes people who have received the full series
+        and at least one booster dose.
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh/about_data).
+    """  # noqa: E501
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="8xkx-amqh")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange(iso8601("2020-12-13"), iso8601("2023-05-10"), step=1)
+    """The time range over which values are available."""
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.TxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=False,
+    )
+    """The format of results."""
+
+    _vaccine_status: Literal[
+        "at least one dose", "full series", "full series and booster"
+    ]
+    """The datapoint to fetch for this ADRIO."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        vaccine_status: Literal[
+            "at least one dose", "full series", "full series and booster"
+        ],
+        *,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        if vaccine_status not in (
+            "at least one dose",
+            "full series",
+            "full series and booster",
+        ):
+            raise ValueError(f"Invalid value for `vaccine_status`: {vaccine_status}")
+        self._vaccine_status = vaccine_status
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization(
-            "total_adult_patients_hospitalized_confirmed_covid_7_day_sum",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.replace_sentinel,
-            self.progress,
-        )
-
-
-@adrio_cache
-class InfluenzaHosptializationAvgFacility(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly averages of influenza hospitalizations from the facility level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-    replace_sentinel: int
-    """The integer value in range 0-3 to replace sentinel values with."""
-
-    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
-        if replace_sentinel not in range(4):
-            msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceError(msg)
-        self.replace_sentinel = replace_sentinel
-        self.override_time_frame = time_frame
+    def validate_context(self, context: Context):
+        scope = context.scope
+        if not isinstance(scope, StateScope | CountyScope):
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+        # NOTE: Alaska geography is a minor issue.
+        # 2019 has county 02261 which is gone in 2020, and
+        # 2020 has counties 02063 and 02066 which aren't in the data.
+        # I'm not making this an error though.
+        # Using a scope with a mismatched year may result in more missing data,
+        # so users can deal with it that way.
+        validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization(
-            "total_patients_hospitalized_confirmed_influenza_7_day_avg",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.replace_sentinel,
-            self.progress,
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        if isinstance(context.scope, StateScope):
+            to_postal = get_states(context.scope.year).state_fips_to_code
+            postal_codes = [to_postal[x] for x in context.scope.node_ids]
+            loc_where = q.In("Recip_State", postal_codes)
+        elif isinstance(context.scope, CountyScope):
+            loc_where = q.In("fips", context.scope.node_ids)
+        else:
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+
+        match self._vaccine_status:
+            case "at least one dose":
+                column = "administered_dose1_recip"
+            case "full series":
+                column = "series_complete_yes"
+            case "full series and booster":
+                column = "booster_doses"
+
+        query = q.Query(
+            select=(
+                q.Select("date", "date", as_name="date"),
+                q.Select("fips", "str", as_name="geoid"),
+                q.Select(column, "nullable_int", as_name="value"),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "date",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                loc_where,
+                q.NotNull(column),
+            ),
+            order_by=(
+                q.Ascending("date"),
+                q.Ascending("fips"),
+                q.Ascending(":id"),
+            ),
         )
-
-
-@adrio_cache
-class InfluenzaHospitalizationSumFacility(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly sums of influenza hospitalizations from the facility level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-    replace_sentinel: int
-    """The integer value in range 0-3 to replace sentinel values with."""
-
-    def __init__(self, replace_sentinel: int, time_frame: TimeFrame | None = None):
-        if replace_sentinel not in range(4):
-            msg = "Sentinel substitute value must be in range 0-3."
-            raise DataResourceError(msg)
-        self.replace_sentinel = replace_sentinel
-        self.override_time_frame = time_frame
+        try:
+            return q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_facility_hospitalization(
-            "total_patients_hospitalized_confirmed_influenza_7_day_sum",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.replace_sentinel,
-            self.progress,
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[np.int64]:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .map_column(
+                "geoid",
+                map_fn=STATE.truncate
+                if isinstance(context.scope, StateScope)
+                else None,
+                dtype=np.str_,
+            )
+            .finalize(self._fix_missing)
         )
+        return pipeline(data_df)
 
 
-@adrio_cache
-class CovidHospitalizationAvgState(ADRIO[np.float64]):
+##########################
+# DATA.CDC.GOV ite7-j2w7 #
+##########################
+
+
+class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
     """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly averages of COVID-19 hospitalizations from the state level dataset.
-    """
+    Loads COVID and total deaths data from data.cdc.gov's dataset named
+    "AH COVID-19 Death Counts by County and Week, 2020-present".
 
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
+    The data were reported starting 2020-01-04 and ending 2023-04-01, and aggregated
+    by CDC to the US County level.
 
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+    This ADRIO supports geo scopes at US State and County granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    deaths.
+
+    Parameters
+    ----------
+    cause_of_death : Literal["all", "COVID-19"]
+        The cause of death.
+    fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix redacted values.
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/NCHS/AH-COVID-19-Death-Counts-by-County-and-Week-2020-p/ite7-j2w7/about_data).
+    """  # noqa: E501
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="ite7-j2w7")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange(iso8601("2020-01-04"), iso8601("2023-04-01"), step=7)
+    """The time range over which values are available."""
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
+    )
+    """The format of results."""
+
+    _cause_of_death: Literal["all", "COVID-19"]
+    """The cause of death."""
+    _fix_redacted: Fix[np.int64]
+    """The method to use to replace redacted values (N/A in the data)."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        cause_of_death: Literal["all", "COVID-19"],
+        *,
+        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        if cause_of_death not in ("all", "COVID-19"):
+            err = f"Unsupported cause of death: {cause_of_death}"
+            raise ValueError(err)
+        self._cause_of_death = cause_of_death
+        try:
+            self._fix_redacted = Fix.of_int64(fix_redacted)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_redacted`")
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization(
-            "avg_admissions_all_covid_confirmed",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-@adrio_cache
-class CovidHospitalizationSumState(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly sums of COVID-19 hospitalizations from the state level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope | CountyScope):
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+        validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization(
-            "total_admissions_all_covid_confirmed",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        counties = cast(CensusScope, context.scope).as_granularity("county")
+        # Data represents county-level FIPS codes as numbers,
+        # so we have to strip leading zeros when querying (???) and
+        # left-pad with zero to get back to five characters in the result.
+
+        match self._cause_of_death:
+            case "all":
+                value_column = "total_deaths"
+            case "COVID-19":
+                value_column = "covid_19_deaths"
+
+        query = q.Query(
+            select=(
+                q.Select("week_ending_date", "date", as_name="date"),
+                q.Select("fips_code", "str", as_name="geoid"),
+                q.SelectExpression(
+                    value_column,
+                    "nullable_int",
+                    as_name="value",
+                ),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "week_ending_date",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("fips_code", counties.node_ids),
+            ),
+            order_by=(
+                q.Ascending("week_ending_date"),
+                q.Ascending("fips_code"),
+                q.Ascending(":id"),
+            ),
         )
-
-
-@adrio_cache
-class InfluenzaHospitalizationAvgState(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly averages of influenza hospitalizations from the state level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+        try:
+            result_df = q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+            result_df["geoid"] = result_df["geoid"].str.rjust(5, "0")
+            return result_df
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization(
-            "avg_admissions_all_influenza_confirmed",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .map_column(
+                "geoid",
+                map_fn=STATE.truncate
+                if isinstance(context.scope, StateScope)
+                else None,
+                dtype=np.str_,
+            )
+            # insert our own sentinel value: nulls in these data mean "redacted"
+            # but we can't have null values for the finalize step
+            .strip_na_as_sentinel(
+                sentinel_name="redacted",
+                sentinel_value=-999999,
+                fix=self._fix_redacted,
+            )
+            .finalize(self._fix_missing)
         )
-
-
-@adrio_cache
-class InfluenzaHospitalizationSumState(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly sums of influenza hospitalizations from the state level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+        return pipeline(data_df).to_date_value(time_series)
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_state_hospitalization(
-            "total_admissions_all_influenza_confirmed",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)
+
+
+##########################
+# DATA.CDC.GOV r8kw-7aab #
+##########################
+
+
+class StateDeaths(FetchADRIO[DateValueType, np.int64]):
+    """
+    Loads deaths data (COVID-19, influenza, pneumonia, and total) from data.cdc.gov's dataset named
+    "Provisional COVID-19 Death Counts by Week Ending Date and State".
+
+    The data were reported starting 2020-01-04 and aggregated by CDC to the US State level.
+
+    This ADRIO supports geo scopes at US State granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    deaths.
+
+    Parameters
+    ----------
+    cause_of_death : Literal["all", "COVID-19", "influenza", "pneumonia"]
+        The cause of death.
+    fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix redacted values.
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/NCHS/Provisional-COVID-19-Death-Counts-by-Week-Ending-D/r8kw-7aab/about_data).
+    """  # noqa: E501
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="r8kw-7aab")
+    """The Socrata API endpoint."""
+
+    @staticmethod
+    def _time_range() -> DateRange:
+        """The time range over which values are available."""
+        # There's about a one week lag in the data.
+        # On a Thursday they seem to post data up to the previous Saturday,
+        # so this config handles that.
+        return DateRange.until_date(
+            iso8601("2020-01-04"),
+            date.today() - timedelta(days=7),
+            step=7,
         )
 
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
+    )
+    """The format of results."""
 
-@adrio_cache
-class FullCovidVaccinations(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    cumulative total number of individuals fully vaccinated for COVID-19.
-    """
+    _cause_of_death: Literal["all", "COVID-19", "influenza", "pneumonia"]
+    """The cause of death."""
+    _fix_redacted: Fix[np.int64]
+    """The method to use to replace redacted values (N/A in the data)."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
 
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
+    def __init__(
+        self,
+        cause_of_death: Literal["all", "COVID-19", "influenza", "pneumonia"],
+        *,
+        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        if cause_of_death not in ("all", "COVID-19", "influenza", "pneumonia"):
+            err = f"Unsupported cause of death: {cause_of_death}"
+            raise ValueError(err)
+        self._cause_of_death = cause_of_death
+        try:
+            self._fix_redacted = Fix.of_int64(fix_redacted)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_redacted`")
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
 
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_vaccination(
-            "series_complete_yes",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-@adrio_cache
-class OneDoseCovidVaccinations(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    cumulative total number of individuals with at least one dose of COVID-19
-    vaccination.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope):
+            err = "US State geo scope required."
+            raise ADRIOContextError(self, context, err)
+        validate_time_frame(self, context, self._time_range())
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_vaccination(
-            "administered_dose1_recip",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        # Data contains state names, so create mappings to and from.
+        scope = cast(StateScope, context.scope)
+        to_state = get_states(year=scope.year).state_fips_to_name
+        to_fips = {to_state[x]: x for x in scope.node_ids}
+        states = to_fips.keys()
+
+        match self._cause_of_death:
+            case "all":
+                value_column = "total_deaths"
+            case "COVID-19":
+                value_column = "covid_19_deaths"
+            case "influenza":
+                value_column = "influenza_deaths"
+            case "pneumonia":
+                value_column = "pneumonia_deaths"
+
+        query = q.Query(
+            select=(
+                q.Select("week_ending_date", "date", as_name="date"),
+                q.Select("state", "str", as_name="geoid"),
+                q.SelectExpression(
+                    value_column,
+                    "nullable_int",
+                    as_name="value",
+                ),
+            ),
+            where=q.And(
+                q.Equals("group", "By Week"),
+                q.DateBetween(
+                    "week_ending_date",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("state", states),
+            ),
+            order_by=(
+                q.Ascending("week_ending_date"),
+                q.Ascending("state"),
+                q.Ascending(":id"),
+            ),
         )
-
-
-@adrio_cache
-class CovidBoosterDoses(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    cumulative total number of COVID-19 booster doses administered.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+        try:
+            result_df = q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+            geoid = result_df["geoid"].apply(lambda x: to_fips[x])
+            return result_df.assign(geoid=geoid)
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_vaccination(
-            "booster_doses",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        time_series = self._time_range().overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            # insert our own sentinel value: nulls in these data mean "redacted"
+            # but we can't have null values for the finalize step
+            .strip_na_as_sentinel(
+                sentinel_name="redacted",
+                sentinel_value=-999999,
+                fix=self._fix_redacted,
+            )
+            .finalize(self._fix_missing)
         )
-
-
-@adrio_cache
-class CovidDeathsCounty(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly total of COVID-19 deaths from the county level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
+        return pipeline(data_df).to_date_value(time_series)
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_deaths_county(
-            "covid_19_deaths",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-@adrio_cache
-class CovidDeathsState(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly total of COVID-19 deaths from the state level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
-
-    @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_deaths_state(
-            "covid_19_deaths",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
-
-
-@adrio_cache
-class InfluenzaDeathsState(ADRIO[np.float64]):
-    """
-    Creates a TxN matrix of tuples, containing a date and a float representing the
-    weekly total of influenza deaths from the state level dataset.
-    """
-
-    override_time_frame: TimeFrame | None
-    """The time period the data encompasses."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self.override_time_frame = time_frame
-
-    @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        scope = _validate_scope(self.scope)
-        return _fetch_deaths_state(
-            "influenza_deaths",
-            scope,
-            self.override_time_frame or self.time_frame,
-            self.progress,
-        )
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_series = self._time_range().overlap_or_raise(context.time_frame)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)

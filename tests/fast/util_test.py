@@ -2,89 +2,135 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from epymorph import util
 from epymorph.data_shape import DataShapeMatcher, Dimensions, Shapes
-from epymorph.util import Event, progress, subscriptions
+from epymorph.util import (
+    Event,
+    extract_date_value,
+    is_date_value_array,
+    is_numeric,
+    progress,
+    subscriptions,
+    to_date_value_array,
+)
 from epymorph.util import match as m
 
+######################
+# FUNCTION UTILITIES #
+######################
 
-class TestUtil(unittest.TestCase):
-    def test_identity(self):
-        tests = [1, "hey", [1, 2, 3], {"foo": "bar"}]
-        for t in tests:
-            self.assertEqual(t, util.identity(t))
 
-    def test_filter_unique(self):
-        act = util.filter_unique(["a", "b", "b", "c", "a"])
-        exp = ["a", "b", "c"]
-        self.assertListEqual(act, exp)
+@pytest.mark.parametrize("test_input", [1, "hey", [1, 2, 3], {"foo": "bar"}])
+def test_identity(test_input):
+    assert test_input == util.identity(test_input)
 
-    def test_list_not_none(self):
-        act = util.list_not_none(["a", None, "b", None, None, "c", None])
-        exp = ["a", "b", "c"]
-        self.assertListEqual(act, exp)
 
-    def test_check_ndarray_01(self):
-        # None of these should raise NumpyTypeError
-        arr = np.array([1, 2, 3], dtype=np.int64)
+########################
+# COLLECTION UTILITIES #
+########################
 
-        dim = Dimensions.of(T=10, N=3)
 
-        util.check_ndarray(arr)
-        util.check_ndarray(arr, dtype=m.dtype(np.int64))
-        util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.N, dim))
-        util.check_ndarray(
-            arr,
-            dtype=m.dtype(np.int64),
-            shape=DataShapeMatcher(
-                Shapes.N,
-                dim,
-            ),
+def test_filter_unique():
+    act = util.filter_unique(["a", "b", "b", "c", "a"])
+    exp = ["a", "b", "c"]
+    assert act == exp
+
+
+def test_list_not_none():
+    act = util.list_not_none(["a", None, "b", None, None, "c", None])
+    exp = ["a", "b", "c"]
+    assert act == exp
+
+
+###################
+# NUMPY UTILITIES #
+###################
+
+
+def test_is_numeric():
+    assert is_numeric(np.array([1, 2, 3]))
+    assert is_numeric(np.array([1.0, 2.0, 3.0]))
+    assert is_numeric(np.array([1, 2.0, 3]))  # mixed type: float
+    assert not is_numeric(np.array([1 + 1j, 2 + 2j, 3 + 3j]))
+    assert not is_numeric(np.array(["a", "b", "c"]))
+    assert not is_numeric(np.array([True, False, True]))
+    assert not is_numeric(np.array([1, "a", 3]))  # mixed type: object
+    assert not is_numeric(  # structured types not allowed
+        np.array(
+            [(1.0, 1.0), (2.0, 2.0)],
+            dtype=[("a", np.float64), ("b", np.float64)],
         )
-        util.check_ndarray(
-            arr,
-            dtype=m.dtype(np.int64, np.float64),
-            shape=DataShapeMatcher(Shapes.N, dim),
-        )
-        util.check_ndarray(
-            arr,
-            dtype=m.dtype(np.float64, np.int64),
-            shape=DataShapeMatcher(Shapes.N, dim, exact=True),
-        )
-        util.check_ndarray(
-            arr,
-            dtype=m.dtype(np.int64, np.float64),
-            shape=DataShapeMatcher(
-                Shapes.TxN,
-                dim,
-            ),
-        )
+    )
+    # NOTE: empty arrays default to float so this would pass:
+    #   `assert is_numeric(np.array([]))`
+    # but we don't need to encode numpy quirks into our tests
 
-    def test_check_ndarray_02(self):
-        # Raises exception for anything that's not a numpy array
-        with self.assertRaises(util.NumpyTypeError):
-            util.check_ndarray(None)
-        with self.assertRaises(util.NumpyTypeError):
-            util.check_ndarray(1)
-        with self.assertRaises(util.NumpyTypeError):
-            util.check_ndarray([1, 2, 3])
-        with self.assertRaises(util.NumpyTypeError):
-            util.check_ndarray("foofaraw")
 
-    def test_check_ndarray_03(self):
-        arr = np.arange(12).reshape((3, 4))
+def test_check_ndarray_01():
+    # None of these should raise NumpyTypeError
+    arr = np.array([1, 2, 3], dtype=np.int64)
 
-        # Doesn't raise...
-        dim1 = Dimensions.of(T=3, N=4)
-        util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim1))
+    dim = Dimensions.of(T=10, N=3)
 
-        # Does raise...
-        with self.assertRaises(util.NumpyTypeError):
-            dim2 = Dimensions.of(T=4, N=3)
-            util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim2))
-        with self.assertRaises(util.NumpyTypeError):
-            util.check_ndarray(arr, dtype=m.dtype(np.str_))
+    util.check_ndarray(arr)
+    util.check_ndarray(arr, dtype=m.dtype(np.int64))
+    util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.N, dim))
+    util.check_ndarray(
+        arr,
+        dtype=m.dtype(np.int64),
+        shape=DataShapeMatcher(
+            Shapes.N,
+            dim,
+        ),
+    )
+    util.check_ndarray(
+        arr,
+        dtype=m.dtype(np.int64, np.float64),
+        shape=DataShapeMatcher(Shapes.N, dim),
+    )
+    util.check_ndarray(
+        arr,
+        dtype=m.dtype(np.float64, np.int64),
+        shape=DataShapeMatcher(Shapes.N, dim, exact=True),
+    )
+    util.check_ndarray(
+        arr,
+        dtype=m.dtype(np.int64, np.float64),
+        shape=DataShapeMatcher(
+            Shapes.TxN,
+            dim,
+        ),
+    )
+
+
+def test_check_ndarray_02():
+    # Raises exception for anything that's not a numpy array
+    with pytest.raises(util.NumpyTypeError):
+        util.check_ndarray(None)
+    with pytest.raises(util.NumpyTypeError):
+        util.check_ndarray(1)
+    with pytest.raises(util.NumpyTypeError):
+        util.check_ndarray([1, 2, 3])
+    with pytest.raises(util.NumpyTypeError):
+        util.check_ndarray("foofaraw")
+
+
+def test_check_ndarray_03():
+    arr = np.arange(12).reshape((3, 4))
+
+    # Doesn't raise...
+    dim1 = Dimensions.of(T=3, N=4)
+    util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim1))
+
+    # Does raise...
+    dim2 = Dimensions.of(T=4, N=3)
+    with pytest.raises(util.NumpyTypeError):
+        util.check_ndarray(arr, shape=DataShapeMatcher(Shapes.TxN, dim2))
+
+    with pytest.raises(util.NumpyTypeError):
+        util.check_ndarray(arr, dtype=m.dtype(np.str_))
 
 
 class TestHaversine(unittest.TestCase):
@@ -157,6 +203,163 @@ class TestHaversine(unittest.TestCase):
             util.pairwise_haversine([1, 2, 3])  # type: ignore
 
 
+####################
+# DATE/VALUE TYPES #
+####################
+
+
+def test_to_date_value_array():
+    # Test with 1D values array
+    dates = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]")
+    values = np.array([10, 20], dtype=np.int64)
+    actual = to_date_value_array(dates, values)
+    expected = np.array(
+        [("2021-01-01", 10), ("2021-01-02", 20)],
+        dtype=[("date", "datetime64[D]"), ("value", np.int64)],
+    )
+    np.testing.assert_array_equal(actual, expected)
+
+    # Test with 2D values array
+    dates = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]")
+    values = np.array([[10, 20, 30], [40, 50, 60]], dtype=np.int64)
+    actual = to_date_value_array(dates, values)
+    expected = np.array(
+        [
+            [("2021-01-01", 10), ("2021-01-01", 20), ("2021-01-01", 30)],
+            [("2021-01-02", 40), ("2021-01-02", 50), ("2021-01-02", 60)],
+        ],
+        dtype=[("date", "datetime64[D]"), ("value", np.int64)],
+    )
+    np.testing.assert_array_equal(actual, expected)
+
+    # Test with 3D values array
+    dates = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]")
+    values = np.array(
+        [[[10, 20, 30], [40, 50, 60]], [[70, 80, 90], [100, 110, 120]]],
+        dtype=np.int64,
+    )
+    actual = to_date_value_array(dates, values)
+    expected = np.array(
+        [
+            [
+                [("2021-01-01", 10), ("2021-01-01", 20), ("2021-01-01", 30)],
+                [("2021-01-01", 40), ("2021-01-01", 50), ("2021-01-01", 60)],
+            ],
+            [
+                [("2021-01-02", 70), ("2021-01-02", 80), ("2021-01-02", 90)],
+                [("2021-01-02", 100), ("2021-01-02", 110), ("2021-01-02", 120)],
+            ],
+        ],
+        dtype=[("date", "datetime64[D]"), ("value", np.int64)],
+    )
+    np.testing.assert_array_equal(actual, expected)
+
+    # Error: mismatched number of dates
+    with pytest.raises(ValueError):  # noqa: PT011
+        to_date_value_array(
+            np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]"),
+            np.array([10, 20, 30], dtype=np.int64),
+        )
+
+    # Error: 2D array of dates
+    with pytest.raises(ValueError):  # noqa: PT011
+        to_date_value_array(
+            np.array(
+                [["2021-01-01", "2021-01-02"], ["2021-01-03", "2021-01-04"]],
+                dtype="datetime64[D]",
+            ),
+            np.array([10, 20, 30], dtype=np.int64),
+        )
+
+
+def test_is_date_value_array():  #
+    # Test with valid date/value array - int64 values
+    array = np.array(
+        [("2021-01-01", 10), ("2021-01-02", 20)],
+        dtype=[("date", "datetime64[D]"), ("value", np.int64)],
+    )
+    assert is_date_value_array(array)
+    assert is_date_value_array(array, value_dtype=np.int64)
+    assert not is_date_value_array(array, value_dtype=np.str_)
+
+    # Test with valid date/value array - str_ values
+    array = np.array(
+        [("2021-01-01", "10"), ("2021-01-02", "20")],
+        dtype=[("date", "datetime64[D]"), ("value", np.str_)],
+    )
+    assert is_date_value_array(array)
+    assert is_date_value_array(array, value_dtype=np.str_)
+    assert not is_date_value_array(array, value_dtype=np.int64)
+
+    # Test incorrect date dtype
+    array = np.array(
+        [("2021-01-01T11:11:11", 10), ("2021-01-02T12:13:14", 20)],
+        dtype=[("date", "datetime64[ns]"), ("value", np.int64)],
+    )
+    assert not is_date_value_array(array)
+
+    # Test incorrect field names
+    array = np.array(
+        [("2021-01-01", 10), ("2021-01-02", 20)],
+        dtype=[
+            ("a_field_formerly_known_as_date", "datetime64[D]"),
+            ("value", np.int64),
+        ],
+    )
+    assert not is_date_value_array(array)
+
+    # Test non-structured types
+    assert not is_date_value_array(np.arange(9))
+    assert not is_date_value_array(np.array([]))
+    assert not is_date_value_array(np.int64(42))  # type: ignore
+
+
+def test_extract_date_value():
+    # Test 1D data
+    date_values = np.array(
+        [("2021-01-01", 10), ("2021-01-02", 20)],
+        dtype=[("date", "datetime64[D]"), ("value", np.int64)],
+    )
+    exp_dates = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]")
+    exp_values = np.array([10, 20])
+
+    dates, values = extract_date_value(date_values, value_dtype=np.int64)
+    np.testing.assert_array_equal(dates, exp_dates)
+    np.testing.assert_array_equal(values, exp_values)
+
+    dates, values = extract_date_value(date_values)
+    np.testing.assert_array_equal(dates, exp_dates)
+    np.testing.assert_array_equal(values, exp_values)
+
+    # Test 2D data
+    date_values = np.array(
+        [
+            [("2021-01-01", 10), ("2021-01-01", 20)],
+            [("2021-01-02", 30), ("2021-01-02", 40)],
+        ],
+        dtype=[("date", "datetime64[D]"), ("value", np.int64)],
+    )
+    exp_dates = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]")
+    exp_values = np.array([[10, 20], [30, 40]])
+
+    dates, values = extract_date_value(date_values)
+    np.testing.assert_array_equal(dates, exp_dates)
+    np.testing.assert_array_equal(values, exp_values)
+
+    # Test non-matching value_dtype
+    date_values = np.array(
+        [("2021-01-01", 10), ("2021-01-02", 20)],
+        dtype=[("date", "datetime64[D]"), ("value", np.int64)],
+    )
+    with pytest.raises(ValueError, match="values did not match expected dtype"):
+        extract_date_value(date_values, value_dtype=np.float64)
+
+
+#######################
+# CONSOLE DECORATIONS #
+#######################
+
+
 class TestProgress(unittest.TestCase):
     def test_zero_percent(self):
         self.assertEqual(progress(0), "|                    | 0% ")
@@ -188,6 +391,11 @@ class TestProgress(unittest.TestCase):
         """Test with invalid length (less than 1)."""
         with self.assertRaises(ValueError):
             progress(0.5, 0)
+
+
+##################
+# PUB-SUB EVENTS #
+##################
 
 
 class TestEvent(unittest.TestCase):

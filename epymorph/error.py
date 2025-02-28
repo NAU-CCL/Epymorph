@@ -5,6 +5,8 @@ A common exception framework for epymorph.
 from contextlib import contextmanager
 from textwrap import dedent
 
+from typing_extensions import deprecated
+
 
 class ExternalDependencyError(Exception):
     """Exception when a native program is required but not found."""
@@ -41,6 +43,14 @@ class DataAttributeErrorGroup(ExceptionGroup, DataAttributeError):  # noqa: N818
     """Multiple exceptions encountered handling data attributes."""
 
 
+class MissingContextError(Exception):
+    """
+    Exception during simulation function evaluation, where the function required
+    context elements that were not provided.
+    """
+
+
+@deprecated("Prefer using something in the ADRIOError hierarchy.")
 class DataResourceError(Exception):
     """Exception during resource loading from ADRIOs."""
 

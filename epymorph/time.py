@@ -21,22 +21,90 @@ class DateRange:
 
     start_date: date
     """The first date in the range."""
-    stop_date: date | None = field(default=None)
-    """The optional end of the date range (not included in the range)."""
-    step: int | None = field(default=None)
+    end_date: date
+    """The last date in the range."""
+    step: int = field(default=1)
     """The step between dates in the range, as a number of days.
     Must be 1 or greater."""
 
-    def __post_init__(self):
-        if self.step is not None and self.step < 1:
-            raise ValueError("step must be 1 or greater")
+    @classmethod
+    def until_date(cls, start_date: date, max_end_date: date, step: int) -> Self:
+        diff = (max_end_date - start_date).days % step
+        end_date = max_end_date - timedelta(days=diff)
+        return cls(start_date, end_date, step)
 
-    def __iter__(self) -> Iterator[date]:
-        step = timedelta(days=(self.step or 1))
-        curr = self.start_date
-        while self.stop_date is None or curr < self.stop_date:
-            yield curr
-            curr += step
+    def __post_init__(self):
+        if self.start_date >= self.end_date:
+            raise ValueError("`start_date` must be before or equal to `end_date`")
+        if self.step < 1:
+            raise ValueError("`step` must be 1 or greater")
+        if (self.end_date - self.start_date).days % self.step != 0:
+            err = "`end_date` must be a multiple of `step` days from `start_date`"
+            raise ValueError(err)
+
+    def _next_date(self, from_date: date) -> date | None:
+        """
+        If from_date is in the range, return it.
+        Otherwise return the next date that is in the range.
+        Returns None if no date satisfies these conditions.
+        """
+        s = self.step
+        diff = (s - (from_date - self.start_date).days % s) % s
+        result = max(self.start_date, from_date + timedelta(days=diff))
+        return result if result <= self.end_date else None
+
+    def _prev_date(self, from_date: date) -> date | None:
+        """
+        If from_date is in the range, return it.
+        Otherwise return the most recent date that is in the range.
+        Returns None if no date satisfies these conditions.
+        """
+        diff = (from_date - self.start_date).days % self.step
+        result = min(self.end_date, from_date - timedelta(days=diff))
+        return result if result >= self.start_date else None
+
+    def between(self, min_date: date, max_date: date) -> "DateRange | None":
+        if min_date > max_date:
+            raise ValueError("`min_date` must be before or equal to `max_date`")
+        new_start_date = self._next_date(min_date)
+        new_end_date = self._prev_date(max_date)
+        if (
+            new_start_date is None
+            or new_end_date is None
+            or new_start_date > new_end_date
+        ):
+            return None
+        return DateRange(new_start_date, new_end_date, self.step)
+
+    def overlap(self, time_frame: "TimeFrame") -> "DateRange | None":
+        return self.between(time_frame.start_date, time_frame.end_date)
+
+    def overlap_or_raise(self, time_frame: "TimeFrame") -> "DateRange":
+        if (date_range := self.overlap(time_frame)) is None:
+            err = "There is no overlap between the date range and time frame."
+            raise ValueError(err)
+        return date_range
+
+    def __len__(self) -> int:
+        delta_days = (self.end_date - self.start_date).days
+        return (delta_days // self.step) + 1
+
+    def to_pandas(self) -> pd.DatetimeIndex:
+        return pd.date_range(
+            start=self.start_date,
+            end=self.end_date,
+            freq=timedelta(days=self.step),
+            inclusive="both",
+        )
+
+    def to_numpy(self) -> NDArray[np.datetime64]:
+        step = timedelta(days=self.step)
+        return np.arange(
+            start=self.start_date,
+            stop=self.end_date + step,
+            step=step,
+            dtype=np.datetime64,
+        )
 
 
 def iso8601(value: date | str) -> date:
@@ -163,8 +231,11 @@ class TimeFrame:
 
     def __iter__(self) -> Iterator[date]:
         """Iterates over the sequence of dates which are part of this time frame."""
-        stop_date = self.start_date + timedelta(days=self.duration_days)
-        yield from DateRange(self.start_date, stop_date)
+        step = timedelta(days=1)
+        curr = self.start_date
+        for _ in range(self.duration_days):
+            yield curr
+            curr += step
 
     def __str__(self) -> str:
         if self.duration_days == 1:

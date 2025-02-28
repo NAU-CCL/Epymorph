@@ -427,6 +427,11 @@ def is_square(arr: NDArray) -> bool:
     return arr.ndim == 2 and arr.shape[0] == arr.shape[1]
 
 
+def is_numeric(arr: NDArray) -> TypeGuard[NDArray[np.integer | np.floating]]:
+    """Is this numpy array a numeric (non-complex) type?"""
+    return np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating)
+
+
 def shape_matches(arr: NDArray, expected: tuple[int | Literal["?"], ...]) -> bool:
     """
     Does the shape of the given array match this expression?
@@ -454,6 +459,159 @@ def dtype_name(d: np.dtype) -> str:
     if d.isbuiltin:
         return d.name
     return str(d)
+
+
+####################
+# DATE/VALUE TYPES #
+####################
+
+
+DataT = TypeVar("DataT", bound=np.generic)
+
+DateValueType = np.void
+"""
+The numpy dtype used for structured arrays of date and value.
+numpy doesn't let us type these very explicitly, so this alias
+is used to express intention, but know it comes with few guarantees.
+
+So basically it implies: `[("date", "datetime64[D]"), ("value", DataT)]`
+"""
+
+
+def to_date_value_array(
+    dates: NDArray[np.datetime64],
+    values: NDArray[DataT],
+) -> NDArray[DateValueType]:
+    """
+    Combine separate arrays of dates and values to create a structured date/value array
+    with named fields. The given dates will be broadcast against the given values,
+    so they must have the same first-dimension.
+
+    Parameters
+    ----------
+    dates : NDArray[np.datetime64]
+        An 1D array of dates.
+    values : NDArray[DataT]
+        An array of values corresponding to the dates,
+        the first dimension of this array must be equal to the number of dates.
+
+    Returns
+    -------
+    NDArray[DateValueType]
+        A structured array with fields 'date' and 'value'.
+
+    Raises
+    ------
+    ValueError
+        If the dimensionality of the arrays is not compatible.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> dates = np.array(['2021-01-01', '2021-01-02'], dtype='datetime64[D]')
+    >>> values = np.array([10, 20])
+    >>> to_date_value_array(dates, values)
+    array([('2021-01-01', 10), ('2021-01-02', 20)],
+          dtype=[('date', 'datetime64[D]'), ('value', '<i8')])
+    """
+    if dates.ndim != 1:
+        raise ValueError("`dates` must be a 1D array.")
+    if dates.shape[0] != values.shape[0]:
+        err = "The first axis of `dates` and `values` must be the same length."
+        raise ValueError(err)
+    value_dtype = np.dtype(values.dtype).type
+    result = np.empty(
+        values.shape,
+        dtype=[("date", "datetime64[D]"), ("value", value_dtype)],
+    )
+    result["date"] = dates.reshape(dates.shape + (1,) * (values.ndim - 1))
+    result["value"] = values
+    return result
+
+
+def is_date_value_array(
+    array: NDArray,
+    value_dtype: type[DataT] | None = None,
+) -> TypeGuard[NDArray[DateValueType]]:
+    """
+    Check if the given array is a structured array with 'date' and 'value' fields.
+
+    Parameters
+    ----------
+    array : NDArray
+        The array to check.
+    value_dtype : type[DataT], optional
+        The optional expected dtype of the 'value' field. If None (default),
+        the dtype of the 'value' field is not checked.
+
+    Returns
+    -------
+    TypeGuard[NDArray[DateValueType]]
+        True if the array is a date/value array, false otherwise.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> array = np.array([('2021-01-01', 10), ('2021-01-02', 20)],
+                         dtype=[('date', 'datetime64[D]'), ('value', np.int64)])
+    >>> is_date_value_array(array)
+    True
+    >>> is_date_value_array(array, value_dtype=np.int64)
+    True
+    """
+    dtype = np.dtype(array.dtype)
+    if getattr(dtype, "names", None) != ("date", "value"):
+        return False
+    if dtype["date"] != np.dtype("datetime64[D]"):
+        return False
+    if value_dtype and dtype["value"] != np.dtype(value_dtype):
+        return False
+    return True
+
+
+def extract_date_value(
+    date_values: NDArray[DateValueType],
+    value_dtype: type[DataT] | None = None,
+) -> tuple[NDArray[np.datetime64], NDArray[DataT]]:
+    """
+    Extract separate arrays of dates and values from a structured date/value array.
+
+    Parameters
+    ----------
+    date_values : NDArray[DateValueType]
+        A structured array with fields 'date' and 'value'.
+    value_dtype : type[DataT], optional
+        The expected dtype of the 'value' field. If None (default),
+        the dtype of the 'value' field is not checked.
+
+    Returns
+    -------
+    tuple[NDArray[np.datetime64], NDArray[DataT]]
+        A tuple containing two arrays: dates and values.
+
+    Raises
+    ------
+    ValueError
+        If `value_dtype` is provided and the dtype of the 'value' field does not match.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> date_values = np.array([('2021-01-01', 10), ('2021-01-02', 20)],
+                               dtype=[('date', 'datetime64[D]'), ('value', np.int64)])
+    >>> extract_date_value(date_values)
+    (array(['2021-01-01', '2021-01-02'], dtype='datetime64[D]'),
+     array([10, 20]))
+    """
+    # For dates: get the first axis and then the 0th element of all other axes
+    # in other words, `[:, 0, 0, 0]` for however many 0s are necessary
+    date_slice = np.index_exp[:] + np.index_exp[0] * (date_values.ndim - 1)
+    dates = np.ma.getdata(date_values["date"][date_slice])
+    values = date_values["value"]
+    if value_dtype and np.dtype(values.dtype) != np.dtype(value_dtype):
+        err = "Date/value array's values did not match expected dtype."
+        raise ValueError(err)
+    return dates, values
 
 
 # Matchers

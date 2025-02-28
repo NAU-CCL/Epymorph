@@ -1,11 +1,11 @@
 # ruff: noqa: PT009,PT027
 import unittest
 from datetime import date
-from itertools import islice
 from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
+import pytest
 from numpy.testing import assert_array_equal
 
 from epymorph.time import (
@@ -17,6 +17,103 @@ from epymorph.time import (
     epi_week,
     epi_year_first_day,
 )
+
+#############
+# DateRange #
+#############
+
+
+def test_date_range_invalid():
+    with pytest.raises(
+        ValueError,
+        match="`start_date` must be before or equal to `end_date`",
+    ):
+        DateRange(date(2021, 1, 1), date(2020, 1, 9), step=2)
+
+    with pytest.raises(
+        ValueError,
+        match="`step` must be 1 or greater",
+    ):
+        DateRange(date(2020, 1, 1), date(2020, 1, 9), step=-1)
+
+    with pytest.raises(
+        ValueError,
+        match="`end_date` must be a multiple of `step` days from `start_date`",
+    ):
+        DateRange(date(2020, 1, 1), date(2020, 1, 10), step=2)
+
+
+def test_date_range_len():
+    d = DateRange(date(2020, 1, 1), date(2020, 1, 9), step=2)
+    assert len(d) == 5
+
+
+def test_date_range_to_numpy():
+    d = DateRange(date(2020, 1, 1), date(2020, 1, 9), step=2)
+    actual = d.to_numpy()
+    expected = np.array(
+        [
+            "2020-01-01",
+            "2020-01-03",
+            "2020-01-05",
+            "2020-01-07",
+            "2020-01-09",
+        ],
+        dtype=np.datetime64,
+    )
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_date_range_to_pandas():
+    d = DateRange(date(2020, 1, 1), date(2020, 1, 9), step=2)
+    actual = d.to_pandas()
+    expected = pd.date_range(date(2020, 1, 1), date(2020, 1, 9), freq="2D")
+    pd.testing.assert_index_equal(actual, expected)
+
+
+def test_date_range_between_within_step():
+    d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
+    actual = d.between(min_date=date(2025, 1, 8), max_date=date(2025, 1, 22))
+    assert actual is not None
+    assert actual.start_date == date(2025, 1, 8)
+    assert actual.end_date == date(2025, 1, 22)
+
+
+def test_date_range_between_outside_step():
+    d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
+    actual = d.between(min_date=date(2025, 1, 5), max_date=date(2025, 1, 24))
+    assert actual is not None
+    assert actual.start_date == date(2025, 1, 8)
+    assert actual.end_date == date(2025, 1, 22)
+
+
+def test_date_range_between_no_change():
+    d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
+    actual = d.between(min_date=date(2020, 1, 1), max_date=date(2030, 1, 1))
+    assert actual is not None
+    assert actual.start_date == date(2025, 1, 1)
+    assert actual.end_date == date(2025, 1, 29)
+
+
+def test_date_range_between_min_date_after_max_date():
+    d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
+    with pytest.raises(
+        ValueError,
+        match="`min_date` must be before or equal to `max_date`",
+    ):
+        d.between(min_date=date(2025, 1, 25), max_date=date(2025, 1, 20))
+
+
+def test_date_range_between_resulting_invalid_range():
+    d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
+    actual = d.between(min_date=date(2025, 1, 25), max_date=date(2025, 1, 27))
+    assert actual is None
+
+
+def test_date_range_between_no_overlap():
+    d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
+    actual = d.between(min_date=date(2025, 2, 1), max_date=date(2025, 2, 10))
+    assert actual is None
 
 
 class TestTimeFrame(unittest.TestCase):
@@ -83,29 +180,6 @@ class TestTimeFrame(unittest.TestCase):
         self.assertFalse(a.is_subset(d))
         self.assertFalse(a.is_subset(e))
         self.assertFalse(a.is_subset(f))
-
-
-class DateRangeTest(unittest.TestCase):
-    def test_date_range_01(self):
-        d = DateRange(date(2020, 1, 1))
-        self.assertEqual(
-            list(islice(d, 0, 4)),
-            [date(2020, 1, 1), date(2020, 1, 2), date(2020, 1, 3), date(2020, 1, 4)],
-        )
-
-    def test_date_range_02(self):
-        d = DateRange(date(2020, 1, 1), date(2020, 1, 5))
-        self.assertEqual(
-            list(d),
-            [date(2020, 1, 1), date(2020, 1, 2), date(2020, 1, 3), date(2020, 1, 4)],
-        )
-
-    def test_date_range_03(self):
-        d = DateRange(date(2020, 1, 1), date(2020, 1, 12), 3)
-        self.assertEqual(
-            list(d),
-            [date(2020, 1, 1), date(2020, 1, 4), date(2020, 1, 7), date(2020, 1, 10)],
-        )
 
 
 class EpiWeeksTest(unittest.TestCase):
