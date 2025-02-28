@@ -23,20 +23,20 @@ class DateRange:
     """The first date in the range."""
     stop_date: date | None = field(default=None)
     """The optional end of the date range (not included in the range)."""
-    step: timedelta | None = field(default=None)
-    """The optional interval between dates in the range (default, 1 day)."""
+    step: int | None = field(default=None)
+    """The step between dates in the range, as a number of days.
+    Must be 1 or greater."""
+
+    def __post_init__(self):
+        if self.step is not None and self.step < 1:
+            raise ValueError("step must be 1 or greater")
 
     def __iter__(self) -> Iterator[date]:
-        step = self.step or timedelta(days=1)
+        step = timedelta(days=(self.step or 1))
         curr = self.start_date
-        if self.stop_date is None:
-            while True:
-                yield curr
-                curr += step
-        else:
-            while curr < self.stop_date:
-                yield curr
-                curr += step
+        while self.stop_date is None or curr < self.stop_date:
+            yield curr
+            curr += step
 
 
 def iso8601(value: date | str) -> date:
@@ -206,6 +206,12 @@ class EpiWeek(NamedTuple):
     def __str__(self) -> str:
         return f"{self.year}-{self.week}"
 
+    @property
+    def start(self) -> pd.Timestamp:
+        """Returns the first date in a given epi week."""
+        day1 = epi_year_first_day(self.year)
+        return day1 + pd.offsets.Week(n=self.week - 1)
+
 
 def epi_year_first_day(year: int) -> pd.Timestamp:
     """Calculates the first day in an epi-year."""
@@ -235,12 +241,6 @@ def epi_week(check_date: date) -> EpiWeek:
         origin = this_year_day1
         year = d.year
     return EpiWeek(year, (d - origin).days // 7 + 1)
-
-
-def epi_week_start(epi_week: EpiWeek) -> pd.Timestamp:
-    """Returns the first date in a given epi week."""
-    day1 = epi_year_first_day(epi_week.year)
-    return day1 + pd.offsets.Week(n=epi_week.week - 1)
 
 
 #####################################
