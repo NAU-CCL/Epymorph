@@ -36,7 +36,10 @@ class ParticleFilterOutput:
     param_values: Dict[str, List[float]]
     true_data: np.ndarray
     model_data: np.ndarray
+    model_data_quantiles: List
     particles: List[Particle]
+    req_model_data: np.ndarray
+    req_model_data_quantiles: np.ndarray
 
     def __str__(self) -> str:
         output = []

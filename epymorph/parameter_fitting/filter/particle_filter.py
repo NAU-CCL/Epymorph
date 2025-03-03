@@ -68,7 +68,7 @@ class ParticleFilter(BaseFilter):
         model_link: ModelLink,
         params_space: Dict[str, EstimateParameters],
         rng: np.random.Generator,
-    ) -> Tuple[List[Particle], List[np.ndarray]]:
+    ) -> Tuple[List[Particle], List[np.ndarray], List[np.ndarray]]:
         """
         Propagates particles through the simulation model.
 
@@ -97,6 +97,7 @@ class ParticleFilter(BaseFilter):
         """
         propagated_particles = []
         expected_observations = []
+        req_observations = []
 
         # Initialize perturbation handler
         params_perturb = Perturb(duration)
@@ -104,7 +105,7 @@ class ParticleFilter(BaseFilter):
         # Propagate each particle through the model
         for particle in particles:
             # Use the particle's state and parameters for propagation
-            new_state, observation = simulation.propagate(
+            new_state, observation, req_observation = simulation.propagate(
                 particle.state,
                 particle.parameters,
                 rume,
@@ -112,6 +113,7 @@ class ParticleFilter(BaseFilter):
                 duration,
                 model_link,
                 rng,
+                None,
             )
 
             # Update the parameters using their dynamics
@@ -130,7 +132,9 @@ class ParticleFilter(BaseFilter):
 
             expected_observations.append(observation)
 
-        return propagated_particles, expected_observations
+            req_observations.append(req_observation)
+
+        return propagated_particles, expected_observations, req_observations
 
     def run(
         self,
@@ -197,6 +201,7 @@ class ParticleFilter(BaseFilter):
             self.param_values[key] = []
 
         model_data = []
+        model_data_quantiles = []
 
         # Iterate through each time step and perform filtering
         for t in range(num_observations):
@@ -207,15 +212,17 @@ class ParticleFilter(BaseFilter):
                 duration = 1
 
             # Propagate particles and update their states
-            propagated_particles, expected_observations = self.propagate_particles(
-                particles,
-                rume,
-                simulation,
-                dates[t].strftime("%Y-%m-%d"),
-                duration,
-                model_link,
-                params_space,
-                rng,
+            propagated_particles, expected_observations, req_observations = (
+                self.propagate_particles(
+                    particles,
+                    rume,
+                    simulation,
+                    dates[t].strftime("%Y-%m-%d"),
+                    duration,
+                    model_link,
+                    params_space,
+                    rng,
+                )
             )
 
             # Append model data (mean of particle states) for this time step
@@ -224,6 +231,10 @@ class ParticleFilter(BaseFilter):
                     [obs for obs in expected_observations],
                     axis=0,
                 ).astype(int)  # Ensure the final mean is also an integer
+            )
+
+            model_data_quantiles.append(
+                utils.quantiles(np.array(expected_observations))
             )
 
             if np.all(np.isnan(data[t, ...])):
@@ -291,7 +302,10 @@ class ParticleFilter(BaseFilter):
             self.param_values,
             true_data=np.array(data),
             model_data=np.array(model_data),
+            model_data_quantiles=model_data_quantiles,
             particles=particles,
+            req_model_data=np.ndarray(0),
+            req_model_data_quantiles=np.ndarray(0),
         )
 
         return out

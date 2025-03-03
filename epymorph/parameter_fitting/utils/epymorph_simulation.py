@@ -7,7 +7,7 @@ and propagating simulations based on provided observations and parameters.
 """
 
 import dataclasses
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -54,7 +54,8 @@ class EpymorphSimulation:
         duration: int,
         model_link: ModelLink,
         rng: np.random.Generator,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        req_model_data_link,
+    ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
         """
         Propagates the simulation for a specified duration and returns the final state.
 
@@ -116,4 +117,21 @@ class EpymorphSimulation:
         # Return the final propagated state as an integer array
         propagated_x = np.array(output.compartments[-1, ...], dtype=np.int64)
 
-        return propagated_x, expected_observation
+        if req_model_data_link is not None:
+            req_data_df = munge(
+                output,
+                geo=req_model_data_link.geo,
+                time=dataclasses.replace(
+                    req_model_data_link.time, time_frame=rume_propagate.time_frame
+                ),
+                quantity=req_model_data_link.quantity,
+            )
+
+            req_expected_observation = req_data_df.iloc[
+                -rume.scope.nodes :, -1
+            ].to_numpy()
+
+            return propagated_x, expected_observation, req_expected_observation
+
+        else:
+            return propagated_x, expected_observation, expected_observation
