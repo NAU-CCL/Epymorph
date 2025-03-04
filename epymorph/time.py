@@ -51,6 +51,9 @@ class TimeFrame:
     """
     Describes a time frame as a contiguous set of calendar dates,
     primarily used to define the time frame of a simulation.
+
+    TimeFrame is a frozen dataclass. TimeFrame is iterable, and produces
+    the sequence of dates in the time frame.
     """
 
     @classmethod
@@ -195,8 +198,15 @@ class TimeFrame:
 
 
 class EpiWeek(NamedTuple):
-    """A CDC-defined system for labeling weeks of the year.
-    See: https://www.cmmcp.org/mosquito-surveillance-data/pages/epi-week-calendars-2008-2024"""
+    """
+    A CDC-defined system for labeling weeks of the year.
+
+    EpiWeek is a NamedTuple.
+
+    See Also
+    --------
+    [This reference on epi weeks.](https://www.cmmcp.org/mosquito-surveillance-data/pages/epi-week-calendars-2008-2024)
+    """
 
     year: int
     """Four-digit year"""
@@ -208,13 +218,25 @@ class EpiWeek(NamedTuple):
 
     @property
     def start(self) -> pd.Timestamp:
-        """Returns the first date in a given epi week."""
+        """The first date in this epi week."""
         day1 = epi_year_first_day(self.year)
         return day1 + pd.offsets.Week(n=self.week - 1)
 
 
 def epi_year_first_day(year: int) -> pd.Timestamp:
-    """Calculates the first day in an epi-year."""
+    """
+    Calculates the first day in an epi-year.
+
+    Parameters
+    ----------
+    year : int
+        The year to consider.
+
+    Returns
+    -------
+    pd.Timestamp
+        The first day of the first epi week in the given year.
+    """
     first_saturday = pd.Timestamp(year, 1, 1) + pd.offsets.Week(weekday=5)
     if first_saturday.day < 4:
         first_saturday = first_saturday + pd.offsets.Week(weekday=5)
@@ -223,7 +245,19 @@ def epi_year_first_day(year: int) -> pd.Timestamp:
 
 
 def epi_week(check_date: date) -> EpiWeek:
-    """Calculates which epi week the given date belongs to."""
+    """
+    Calculates which epi week the given date belongs to.
+
+    Parameters
+    ----------
+    check_date : date
+        The date to consider.
+
+    Returns
+    -------
+    EpiWeek
+        The EpiWeek that contains the given date.
+    """
     d = pd.Timestamp(check_date.year, check_date.month, check_date.day)
     last_year_day1 = epi_year_first_day(d.year - 1)
     this_year_day1 = epi_year_first_day(d.year)
@@ -248,12 +282,16 @@ def epi_week(check_date: date) -> EpiWeek:
 #####################################
 
 
-D = TypeVar("D", bound=np.generic)
+GroupKeyType = TypeVar("GroupKeyType", bound=np.generic)
 
 
 class Dim(NamedTuple):
-    """Describes data dimensions for a time-grouping operation;
-    i.e., after subselections and geo-grouping."""
+    """
+    Describes data dimensions for a time-grouping operation;
+    i.e., after subselections and geo-grouping.
+
+    Dim is a NamedTuple.
+    """
 
     nodes: int
     """The number of unique nodes or node-groups."""
@@ -263,10 +301,19 @@ class Dim(NamedTuple):
     """The number of tau steps per day."""
 
 
-class TimeGrouping(ABC, Generic[D]):
-    """Defines a time-axis grouping scheme. This is essentially a function that maps
+class TimeGrouping(ABC, Generic[GroupKeyType]):
+    """
+    Defines a time-axis grouping scheme. This is essentially a function that maps
     the simulation time axis info (ticks and dates) into a new series which describes
-    the group membership of each time axis row."""
+    the group membership of each time axis row.
+
+    TimeGrouping is an abstract class.
+
+    TimeGrouping is generic in the type of the key it uses for its
+    time groups (`GroupKeyType`) -- e.g., a grouping that groups weeks
+    using the Monday of the week is datetime64 typed, while a grouping that groups
+    days into arbitrary buckets might use integers to identify groups.
+    """
 
     group_format: Literal["date", "tick", "day", "other"]
     """What scale describes the result of the grouping?
@@ -279,8 +326,9 @@ class TimeGrouping(ABC, Generic[D]):
         dim: Dim,
         ticks: NDArray[np.int64],
         dates: NDArray[np.datetime64],
-    ) -> NDArray[D]:
-        """Produce a column that describes the group membership of each "row",
+    ) -> NDArray[GroupKeyType]:
+        """
+        Produce a column that describes the group membership of each "row",
         where each entry of `ticks` and `dates` describes a row of the time series.
         This column will be used as the basis of a `groupby` operation.
 
@@ -293,11 +341,31 @@ class TimeGrouping(ABC, Generic[D]):
         Values will be in order, but each tick will be represented `nodes` times,
         and each date will be represented `nodes * tau_steps` times.
         Since we may be grouping a slice of the simulation time frame, ticks may start
-        after 0 and end before the last tick of the simulation."""
+        after 0 and end before the last tick of the simulation.
+
+        Parameters
+        ----------
+        dim : Dim
+            The simulation dimensions for time grouping.
+        ticks : NDArray[np.int64]
+            The series of simulation ticks.
+        dates : NDArray[np.datetime64]
+            The series of calendar dates corresponding to simulation ticks.
+
+        Returns
+        -------
+        NDArray[GroupKeyType]
+            The group membership of each tick. For example, if the first three
+            ticks were in group 0 and the next three ticks were in group 1, etc.,
+            the returned array would contain `[0,0,0,1,1,1,...]`.
+        """
 
 
 class ByTick(TimeGrouping[np.int64]):
-    """Group by simulation tick. (Effectively the same as no grouping.)"""
+    """
+    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
+    Group by simulation tick. (Effectively the same as no grouping.)
+    """
 
     group_format = "tick"
 
@@ -307,7 +375,10 @@ class ByTick(TimeGrouping[np.int64]):
 
 
 class ByDate(TimeGrouping[np.datetime64]):
-    """Group by date."""
+    """
+    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
+    Group by date.
+    """
 
     group_format = "date"
 
@@ -317,7 +388,17 @@ class ByDate(TimeGrouping[np.datetime64]):
 
 
 class ByWeek(TimeGrouping[np.datetime64]):
-    """Group by week, using the given start of the week."""
+    """
+    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
+    Group by week, using the given start of the week.
+
+    Parameters
+    ----------
+    start_of_week : int, default=0
+        Which day of the week is the begins each weekly group?
+        This uses the Python standard numbering for week days,
+        so 0=Monday and 6=Sunday.
+    """
 
     _NP_START_OF_WEEK: int = 3
     """Numpy starts its weeks on Thursday, because the unix epoch 0
@@ -341,7 +422,10 @@ class ByWeek(TimeGrouping[np.datetime64]):
 
 
 class ByMonth(TimeGrouping[np.datetime64]):
-    """Group by month, using the first day of the month."""
+    """
+    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
+    Group by month, using the first day of the month.
+    """
 
     group_format = "date"
 
@@ -351,7 +435,15 @@ class ByMonth(TimeGrouping[np.datetime64]):
 
 
 class EveryNDays(TimeGrouping[np.datetime64]):
-    """Group every 'n' days from the start of the time range."""
+    """
+    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
+    Group every 'n' days from the start of the time range.
+
+    Parameters
+    ----------
+    days : int
+        How many days should be in each group?
+    """
 
     group_format = "date"
 
@@ -369,11 +461,20 @@ class EveryNDays(TimeGrouping[np.datetime64]):
 
 
 class NBins(TimeGrouping[np.int64]):
-    """Group the time series into a number of bins where bin boundaries
+    """
+    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
+    Group the time series into a number of bins where bin boundaries
     must align with simulation days.
+
     If the time series is not evenly divisible into the given number of bins,
     you may get more bins than requested (data will not be truncated).
-    You will never get more than one bin per day."""
+    You will never get more than one bin per day.
+
+    Parameters
+    ----------
+    bins : int
+        Approximately how many bins should be in the result?
+    """
 
     group_format = "other"
 
@@ -390,7 +491,10 @@ class NBins(TimeGrouping[np.int64]):
 
 
 class ByEpiWeek(TimeGrouping[np.str_]):
-    """Group the time series by epi week."""
+    """
+    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
+    Group the time series by epi week.
+    """
 
     group_format = "other"
 
@@ -400,15 +504,25 @@ class ByEpiWeek(TimeGrouping[np.str_]):
 
 
 _AggMethod = Literal["sum", "max", "min", "mean", "median", "last", "first"]
-"""A method for aggregating time series data."""
+"""
+A method for aggregating time series data.
+
+`Literal["sum", "max", "min", "mean", "median", "last", "first"]`
+"""
 
 
 class TimeAggMethod(NamedTuple):
-    """A time-axis aggregation scheme. There may be one aggregation method for
-    compartments and another for events."""
+    """
+    A time-axis aggregation scheme. There may be one aggregation method for
+    compartments and another for events.
+
+    TimeAggMethod is a NamedTuple.
+    """
 
     compartments: _AggMethod
+    """The method for aggregating compartment values."""
     events: _AggMethod
+    """The method for aggregating event values."""
 
 
 DEFAULT_TIME_AGG = TimeAggMethod("last", "sum")
@@ -418,9 +532,28 @@ and 'sum' for events."""
 
 @dataclass(frozen=True)
 class TimeStrategy:
-    """A strategy for dealing with the time axis, e.g., in processing results.
+    """
+    A strategy for dealing with the time axis, e.g., in processing results.
+    Strategies can include selection of a subset, grouping, and aggregation.
 
-    Strategies can include selection of a subset, grouping, and aggregation."""
+    Typically you will create one of these by calling methods on a
+    [`TimeSelector`](`epymorph.time.TimeSelector`) instance.
+
+    TimeStrategy is a frozen dataclass.
+
+    Parameters
+    ----------
+    time_frame: TimeFrame
+        The original simulation time frame.
+    selection: tuple[slice, int | None]
+        The selected subset of the time frame: described as a date slice
+        and an optional tau step index.
+    grouping: TimeGrouping | None
+        A method for grouping the time series data.
+    aggregation: TimeAggMethod | None
+        A method for aggregating the time series data
+        (if no grouping is specified, the time series is reduced to a scalar).
+    """
 
     time_frame: TimeFrame
     """The original time frame."""
@@ -494,6 +627,21 @@ class _CanAggregate(TimeStrategy):
         compartments: _AggMethod = "last",
         events: _AggMethod = "sum",
     ) -> "TimeAggregation":
+        """
+        Aggregates the time series using the specified methods.
+
+        Paramters
+        ---------
+        compartments : Literal["sum", "max", "min", "mean", "median", "last", "first"], default="last"
+            The method to use to aggregate compartment values.
+        events : Literal["sum", "max", "min", "mean", "median", "last", "first"], default="sum"
+            The method to use to aggregate event values.
+
+        Returns
+        -------
+        TimeAggregation
+            The aggregation strategy object.
+        """  # noqa: E501
         return TimeAggregation(
             self.time_frame,
             self.selection,
@@ -504,8 +652,24 @@ class _CanAggregate(TimeStrategy):
 
 @dataclass(frozen=True)
 class TimeSelection(_CanAggregate, TimeStrategy):
-    """Describes a sub-selection operation on a time frame
-    (no grouping or aggregation)."""
+    """
+    A kind of [`TimeStrategy`](`epymorph.time.TimeStrategy`)
+    describing a sub-selection of a time frame.
+    A selection performs no grouping or aggregation.
+
+    Typically you will create one of these by calling methods on a
+    [`TimeSelector`](`epymorph.time.TimeSelector`) instance.
+
+    TimeSelection is a frozen dataclass.
+
+    Parameters
+    ----------
+    time_frame: TimeFrame
+        The original simulation time frame.
+    selection: tuple[slice, int | None]
+        The selected subset of the time frame: described as a date slice
+        and an optional tau step index.
+    """
 
     time_frame: TimeFrame
     """The original time frame."""
@@ -538,10 +702,16 @@ class TimeSelection(_CanAggregate, TimeStrategy):
             or you can provide a TimeGrouping instance to perform custom grouping.
 
             The shortcut values are:
-            - "day": equivalent to epymorph.time.ByDate()
-            - "week": equivalent to epymorph.time.ByWeek()
-            - "epiweek": equivalent to epymorph.time.ByEpiWeek()
-            - "month": equivalent to epymorph.time.ByMonth()
+
+            - "day": equivalent to [`ByDate`](`epymorph.time.ByDate`)
+            - "week": equivalent to [`ByWeek`](`epymorph.time.ByWeek`)
+            - "epiweek": equivalent to [`ByEpiWeek`](`epymorph.time.ByEpiWeek`)
+            - "month": equivalent to [`ByMonth`](`epymorph.time.ByMonth`)
+
+        Returns
+        -------
+        TimeGroup
+            The grouping strategy object.
         """
         match grouping:
             # String-based short-cuts:
@@ -561,8 +731,25 @@ class TimeSelection(_CanAggregate, TimeStrategy):
 
 @dataclass(frozen=True)
 class TimeGroup(_CanAggregate, TimeStrategy):
-    """Describes a grouping operation on a time frame,
-    with an optional sub-selection."""
+    """
+    A kind of [`TimeStrategy`](`epymorph.time.TimeStrategy`)
+    describing a group operation on a time frame, with an optional sub-selection.
+
+    Typically you will create one of these by calling methods on a
+    [`TimeSelection`](`epymorph.time.TimeSelection`) instance.
+
+    TimeGroup is a frozen dataclass.
+
+    Parameters
+    ----------
+    time_frame: TimeFrame
+        The original simulation time frame.
+    selection: tuple[slice, int | None]
+        The selected subset of the time frame: described as a date slice
+        and an optional tau step index.
+    grouping: TimeGrouping
+        A method for grouping the time series data.
+    """
 
     time_frame: TimeFrame
     """The original time frame."""
@@ -583,8 +770,30 @@ class TimeGroup(_CanAggregate, TimeStrategy):
 
 @dataclass(frozen=True)
 class TimeAggregation(TimeStrategy):
-    """Describes a group-and-aggregate operation on a time frame,
-    with an optional sub-selection."""
+    """
+    A kind of [`TimeStrategy`](`epymorph.time.TimeStrategy`)
+    describing a group-and-aggregate operation on a time frame,
+    with an optional sub-selection.
+
+    Typically you will create one of these by calling methods on a
+    [`TimeSelection`](`epymorph.time.TimeSelection`) or
+    [`TimeGroup`](`epymorph.time.TimeGroup`) instance.
+
+    TimeAggregation is a frozen dataclass.
+
+    Parameters
+    ----------
+    time_frame: TimeFrame
+        The original simulation time frame.
+    selection: tuple[slice, int | None]
+        The selected subset of the time frame: described as a date slice
+        and an optional tau step index.
+    grouping: TimeGrouping | None
+        A method for grouping the time series data.
+    aggregation: TimeAggMethod
+        A method for aggregating the time series data
+        (if no grouping is specified, the time series is reduced to a scalar).
+    """
 
     time_frame: TimeFrame
     """The original time frame."""
@@ -605,7 +814,11 @@ class TimeAggregation(TimeStrategy):
 
 @dataclass(frozen=True)
 class TimeSelector:
-    """A utility class for selecting a subset of a time frame."""
+    """
+    A utility class for selecting a subset of a time frame.
+    Most of the time you obtain one of these using
+    [`TimeFrame`](`epymorph.time.TimeFrame`)'s `select` property.
+    """
 
     time_frame: TimeFrame
     """The original time frame."""
@@ -626,6 +839,10 @@ class TimeSelector:
         other: TimeFrame,
         step: int | None = None,
     ) -> TimeSelection:
+        """
+        Use a TimeFrame object (which must be a subset of the base TimeFrame)
+        to create a TimeSelection.
+        """
         if not self.time_frame.is_subset(other):
             err = "When selecting part of a time frame you must specify a subset."
             raise ValueError(err)
@@ -651,6 +868,11 @@ class TimeSelector:
         step : int, optional
             if given, narrow the selection to a specific tau step (by index) within
             the date range; by default include all steps
+
+        Returns
+        -------
+        TimeSelection
+            The selection strategy object.
         """
         return TimeSelection(self.time_frame, (slice(from_day, to_day), step))
 
@@ -671,6 +893,11 @@ class TimeSelector:
         step : int, optional
             if given, narrow the selection to a specific tau step (by index) within
             the date range; by default include all steps
+
+        Returns
+        -------
+        TimeSelection
+            The selection strategy object.
         """
         other = TimeFrame.range(from_date, to_date)
         return self._to_selection(other, step)
@@ -693,6 +920,11 @@ class TimeSelector:
         step : int, optional
             if given, narrow the selection to a specific tau step (by index) within
             the date range; by default include all steps
+
+        Returns
+        -------
+        TimeSelection
+            The selection strategy object.
         """
         other = TimeFrame.rangex(from_date, until_date)
         return self._to_selection(other, step)
@@ -711,6 +943,11 @@ class TimeSelector:
         step : int, optional
             if given, narrow the selection to a specific tau step (by index) within
             the date range; by default include all steps
+
+        Returns
+        -------
+        TimeSelection
+            The selection strategy object.
         """
         other = TimeFrame.year(year)
         return self._to_selection(other, step)

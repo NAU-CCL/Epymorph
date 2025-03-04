@@ -1418,7 +1418,7 @@ class QuantityGroup(QuantityStrategy):
     describing a group operation on IPM quantities, with an optional sub-selection.
 
     Typically you will create one of these by calling methods on a
-    [`QuantitySelector`](`epymorph.compartment_model.QuantitySelector`) instance.
+    [`QuantitySelection`](`epymorph.compartment_model.QuantitySelection`) instance.
 
     QuantityGroup is a frozen dataclass.
 
