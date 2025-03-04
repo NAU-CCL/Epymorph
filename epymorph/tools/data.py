@@ -70,7 +70,7 @@ def _validate(
     if quantity.ipm is not output.rume.ipm:
         err = (
             "When applying an IPM quantity selection to an output, both selection and "
-            "output must reference the same IPM instance.\n"
+            "output must reference the same CompartmentModel instance.\n"
             "In this case:\n"
             f"  selection references {object.__repr__(quantity.ipm)}\n"
             f"     output references {object.__repr__(output.rume.ipm)}\n"
