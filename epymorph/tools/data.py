@@ -47,20 +47,35 @@ def _validate(
     # try to render a table using a selection on a completely different scope.
     if geo.scope is not output.rume.scope:
         err = (
-            "When applying a geo selection, please create that selection "
-            "from the same scope you are applying it to."
+            "When applying a geo selection to an output, both selection and "
+            "output must reference the same GeoScope instance.\n"
+            "In this case:\n"
+            f"  selection references {object.__repr__(geo.scope)}\n"
+            f"     output references {object.__repr__(output.rume.scope)}\n"
+            "You might fix this by selecting from the output's RUME's scope, "
+            "e.g.: `out.rume.scope.select.all()`"
         )
         raise ValueError(err)
     if time.time_frame is not output.rume.time_frame:
         err = (
-            "When applying a time selection, please create that selection "
-            "from the same time frame you are applying it to."
+            "When applying a time frame selection to an output, both selection and "
+            "output must reference the same TimeFrame instance.\n"
+            "In this case:\n"
+            f"  selection references {object.__repr__(time.time_frame)}\n"
+            f"     output references {object.__repr__(output.rume.time_frame)}\n"
+            "You might fix this by selecting from the output's RUME's time frame, "
+            "e.g.: `out.rume.time_frame.select.all()`"
         )
         raise ValueError(err)
     if quantity.ipm is not output.rume.ipm:
         err = (
-            "When applying an IPM quantity selection, please create that selection "
-            "from the same IPM you are applying it to."
+            "When applying an IPM quantity selection to an output, both selection and "
+            "output must reference the same CompartmentModel instance.\n"
+            "In this case:\n"
+            f"  selection references {object.__repr__(quantity.ipm)}\n"
+            f"     output references {object.__repr__(output.rume.ipm)}\n"
+            "You might fix this by selecting from the output's RUME's IPM, "
+            "e.g.: `out.rume.ipm.select.events()`"
         )
         raise ValueError(err)
 

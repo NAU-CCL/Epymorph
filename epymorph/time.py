@@ -874,7 +874,7 @@ class TimeSelector:
         TimeSelection
             The selection strategy object.
         """
-        return TimeSelection(self.time_frame, (slice(from_day, to_day), step))
+        return TimeSelection(self.time_frame, (slice(from_day, to_day + 1), step))
 
     def range(
         self,
