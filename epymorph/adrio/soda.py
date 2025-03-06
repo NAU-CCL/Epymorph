@@ -52,9 +52,16 @@ class Select:
     """Column name."""
     dtype: Literal["str", "int", "float", "date"]
     """The data type of the column."""
+    as_name: str | None = field(default=None)
 
     def __str__(self) -> str:
+        if self.as_name is not None:
+            return f"{_col(self.name)} AS {_col(self.as_name)}"
         return _col(self.name)
+
+    @property
+    def result_name(self) -> str:
+        return self.as_name or self.name
 
     @property
     def dtype_as_np(self) -> DTypeLike:
@@ -120,7 +127,11 @@ class And(WhereClause):
     """The clauses to join with an 'AND'."""
 
     def __init__(self, *args: WhereClause | Sequence[WhereClause]):
-        clauses = list(chain.from_iterable(args))  # type: ignore
+        clauses = list(
+            chain.from_iterable(
+                ([x] if isinstance(x, WhereClause) else x for x in args)
+            )
+        )
         object.__setattr__(self, "clauses", clauses)
 
     def __str__(self) -> str:
@@ -137,6 +148,14 @@ class And(WhereClause):
 class Or(WhereClause):
     clauses: Sequence[WhereClause]
     """The clauses to join with an 'OR'."""
+
+    def __init__(self, *args: WhereClause | Sequence[WhereClause]):
+        clauses = list(
+            chain.from_iterable(
+                ([x] if isinstance(x, WhereClause) else x for x in args)
+            )
+        )
+        object.__setattr__(self, "clauses", clauses)
 
     def __str__(self) -> str:
         match len(self.clauses):
@@ -199,17 +218,27 @@ def query_csv(
     soql = urlencode(quote_via=quote, safe=",()'$:", query=query)
     query_url = f"{resource.url}?{soql}"
 
-    column_dtypes = {x.name: x.dtype_as_np for x in select if x.dtype != "date"}
-    column_parsedates = [i for i, x in enumerate(select) if x.dtype == "date"]
+    # TODO: this handling of types is rudimentary --
+    # type conversion is essentially non-existent, e.g., '3.0' will raise an error
+    # if specified to be an int column.
+    # Okay for now, but definitely something that could be improved
+    # and we'll want to at least catch errors helpfully.
+
+    column_dtypes = {x.result_name: x.dtype_as_np for x in select if x.dtype != "date"}
+    column_parsedates = [x.result_name for x in select if x.dtype == "date"]
     req_headers = None if api_token is None else {"X-App-Token": api_token}
 
     def query_frames(offset: int = 0) -> Generator[pd.DataFrame, None, None]:
-        frame_df = pd.read_csv(
-            f"{query_url}&$offset={offset}",
-            dtype=column_dtypes,  # type: ignore
-            parse_dates=column_parsedates,
-            storage_options=req_headers,
-        )
+        try:
+            frame_df = pd.read_csv(
+                f"{query_url}&$offset={offset}",
+                dtype=column_dtypes,  # type: ignore
+                parse_dates=column_parsedates,
+                storage_options=req_headers,
+            )
+        except ValueError as e:
+            # TODO
+            raise e
         yield frame_df
 
         if (frame_size := len(frame_df.index)) >= limit:
