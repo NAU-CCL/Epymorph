@@ -10,13 +10,14 @@ from abc import ABC
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date
-from itertools import chain
-from typing import Generator, Iterable, Literal, Sequence
+from typing import Callable, Generator, Iterable, Literal, Sequence, TypeVar
 from urllib.parse import quote, urlencode
 
 import numpy as np
 import pandas as pd
 from numpy.typing import DTypeLike
+
+T_co = TypeVar("T_co", covariant=True)
 
 
 def _parens(s: str) -> str:
@@ -35,6 +36,27 @@ def _date(d: date) -> str:
     return f"'{d}T00:00:00'"
 
 
+def _list(xs: Iterable[T_co], to_string: Callable[[T_co], str] = str) -> str:
+    return ",".join([to_string(x) for x in xs])
+
+
+ColumnType = Literal["str", "int", "float", "date", "bool"]
+
+
+def dtype_as_np(col_type: ColumnType) -> DTypeLike:
+    match col_type:
+        case "str":
+            return np.str_
+        case "int":
+            return np.int64
+        case "float":
+            return np.float64
+        case "date":
+            return np.datetime64
+        case "bool":
+            return np.bool_
+
+
 @dataclass(frozen=True)
 class SocrataResource:
     domain: str
@@ -50,9 +72,10 @@ class SocrataResource:
 class Select:
     name: str
     """Column name."""
-    dtype: Literal["str", "int", "float", "date"]
+    dtype: ColumnType
     """The data type of the column."""
     as_name: str | None = field(default=None)
+    """Define a new name for the column; the 'AS' statement."""
 
     def __str__(self) -> str:
         if self.as_name is not None:
@@ -65,15 +88,7 @@ class Select:
 
     @property
     def dtype_as_np(self) -> DTypeLike:
-        match self.dtype:
-            case "str":
-                return np.str_
-            case "int":
-                return np.int64
-            case "float":
-                return np.float64
-            case "date":
-                return np.datetime64
+        return dtype_as_np(self.dtype)
 
 
 class WhereClause(ABC):
@@ -104,8 +119,7 @@ class In(WhereClause):
             object.__setattr__(self, "values", values)
 
     def __str__(self) -> str:
-        values_list = ",".join([_txt(x) for x in self.values])
-        return f"{_col(self.column)} IN ({values_list})"
+        return f"{_col(self.column)} IN ({_list(self.values, _txt)})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,12 +140,7 @@ class And(WhereClause):
     clauses: Sequence[WhereClause]
     """The clauses to join with an 'AND'."""
 
-    def __init__(self, *args: WhereClause | Sequence[WhereClause]):
-        clauses = list(
-            chain.from_iterable(
-                ([x] if isinstance(x, WhereClause) else x for x in args)
-            )
-        )
+    def __init__(self, *clauses: WhereClause):
         object.__setattr__(self, "clauses", clauses)
 
     def __str__(self) -> str:
@@ -149,12 +158,7 @@ class Or(WhereClause):
     clauses: Sequence[WhereClause]
     """The clauses to join with an 'OR'."""
 
-    def __init__(self, *args: WhereClause | Sequence[WhereClause]):
-        clauses = list(
-            chain.from_iterable(
-                ([x] if isinstance(x, WhereClause) else x for x in args)
-            )
-        )
+    def __init__(self, *clauses: WhereClause):
         object.__setattr__(self, "clauses", clauses)
 
     def __str__(self) -> str:
@@ -198,6 +202,17 @@ class Descending(OrderClause):
         return f"{_col(self.column)} DESC"
 
 
+def build_soql(
+    select: Sequence[Select],
+    where: WhereClause,
+    order_by: Sequence[OrderClause] | None,
+) -> str:
+    soql = f"SELECT {_list(select)} WHERE {where}"
+    if order_by is not None and len(order_by) > 0:
+        return f"{soql} ORDER BY {_list(order_by)}"
+    return soql
+
+
 def query_csv(
     resource: SocrataResource,
     select: Sequence[Select],
@@ -207,41 +222,53 @@ def query_csv(
     limit: int = 10000,
     api_token: str | None = None,
 ) -> pd.DataFrame:
-    query = {
-        "$select": ",".join([str(x) for x in select]),
-        "$where": str(where),
-        "$limit": limit,
-    }
-    if order_by is not None and len(order_by) > 0:
-        query["$order"] = ",".join([str(x) for x in order_by])
+    return query_csv_soql(
+        resource=resource,
+        soql=build_soql(select, where, order_by),
+        column_types=[(x.result_name, x.dtype) for x in select],
+        limit=limit,
+        api_token=api_token,
+    )
 
-    soql = urlencode(quote_via=quote, safe=",()'$:", query=query)
-    query_url = f"{resource.url}?{soql}"
 
+def query_csv_soql(
+    resource: SocrataResource,
+    soql: str,
+    column_types: Sequence[tuple[str, ColumnType]],
+    *,
+    limit: int = 10000,
+    api_token: str | None = None,
+) -> pd.DataFrame:
     # TODO: this handling of types is rudimentary --
     # type conversion is essentially non-existent, e.g., '3.0' will raise an error
     # if specified to be an int column.
     # Okay for now, but definitely something that could be improved
     # and we'll want to at least catch errors helpfully.
 
-    column_dtypes = {x.result_name: x.dtype_as_np for x in select if x.dtype != "date"}
-    column_parsedates = [x.result_name for x in select if x.dtype == "date"]
+    column_dtypes = {n: dtype_as_np(t) for n, t in column_types if t != "date"}
+    column_parsedates = [n for n, t in column_types if t == "date"]
     req_headers = None if api_token is None else {"X-App-Token": api_token}
 
-    def query_frames(offset: int = 0) -> Generator[pd.DataFrame, None, None]:
+    def query_pages(offset: int = 0) -> Generator[pd.DataFrame, None, None]:
+        page_soql = f"{soql} LIMIT {limit} OFFSET {offset}"
+        query_string = urlencode(
+            quote_via=quote,
+            safe=",()'$:",
+            query={"$query": page_soql},
+        )
         try:
-            frame_df = pd.read_csv(
-                f"{query_url}&$offset={offset}",
+            page_df = pd.read_csv(
+                f"{resource.url}?{query_string}",
                 dtype=column_dtypes,  # type: ignore
                 parse_dates=column_parsedates,
                 storage_options=req_headers,
             )
-        except ValueError as e:
-            # TODO
+        except Exception as e:
+            # TODO: deal with fetch errors
             raise e
-        yield frame_df
+        yield page_df
 
-        if (frame_size := len(frame_df.index)) >= limit:
-            yield from query_frames(offset + frame_size)
+        if (page_size := len(page_df.index)) >= limit:
+            yield from query_pages(offset + page_size)
 
-    return pd.concat(query_frames())
+    return pd.concat(query_pages())
