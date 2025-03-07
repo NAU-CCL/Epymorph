@@ -61,7 +61,18 @@ def default_rng(
 ) -> Callable[[], np.random.Generator]:
     """
     Convenience constructor to create a factory function for a simulation's
-    random number generator, optionally with a given random seed.
+    random number generator.
+
+    Parameters
+    ----------
+    seed : int | SeedSequence, optional
+        Construct a generate with this random seed. By default, the generator will be
+        "unseeded", that is seeded in an unpredictable way.
+
+    Returns
+    -------
+    Callable[[], np.random.Generator]
+        A function that creates a random number generator.
     """
     return lambda: np.random.default_rng(seed)
 
@@ -73,10 +84,13 @@ def default_rng(
 
 class Tick(NamedTuple):
     """
-    A Tick bundles related time-step information.
+    A Tick represents a single time-step in a simulation.
+    This object bundles the related information for a single tick.
     For instance, each time step corresponds to a calendar day,
     a numeric day (i.e., relative to the start of the simulation),
     which tau step this corresponds to, and so on.
+
+    Tick is a NamedTuple.
     """
 
     sim_index: int
@@ -93,11 +107,12 @@ class Tick(NamedTuple):
 
 class TickIndex(NamedTuple):
     """
-    A zero-based index identifying a simulation tau step.
+    An index identifying tau steps within a day.
     For example, if a RUME's movement model declares three tau steps,
-    of lengths 0.25, 0.60, and 0.15 respectively, then the 0.25-long step
-    is index 0, the 0.60-long step is index 1, and the 0.15-long step is index 2.
+    the first six tick indices will be 0, 1, 2, 0, 1, 2.
     Indices 3 or more would be invalid for this RUME.
+
+    TickIndex is a NamedTuple.
     """
 
     step: int
@@ -124,7 +139,7 @@ class TickDelta(NamedTuple):
 
 NEVER = TickDelta(-1, -1)
 """
-A special TickDelta value which expresses an event that should never happen.
+A special TickDelta which expresses an event that should never happen.
 Any Tick plus Never returns Never.
 """
 
@@ -199,7 +214,17 @@ ParamValue = Union[
     Expr,
     NDArray[ScalarDType | StructDType],
 ]
-"""All acceptable input forms for parameter values."""
+"""
+A type alias which describes all acceptable input forms for parameter values:
+
+- scalars (according to [`ScalarValue`](`epymorph.data_type.ScalarValue`))
+- tuples (single structured values, according to
+    [`StructValue`](`epymorph.data_type.StructValue`))
+- Python lists of scalars or tuples, which may be nested
+- Numpy arrays
+- [`SimulationFunctions`](`epymorph.simulation.SimulationFunction`)
+- [`sympy expressions`](`sympy.core.expr.Expr`)
+"""
 
 
 ########################
@@ -521,6 +546,21 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     A function which runs in the context of a simulation to produce a value
     (as a numpy array). This base class exists to share functionality without
     limiting the function signature of evaluate().
+
+    Instances may access the context in which they are being evaluated using
+    attributes and methods present on "self":
+    `name`, `data`, `scope`, `time_frame`, `ipm`, `rng`, and `dim`, and may use
+    methods like `defer` to pass their context on to another function for
+    direct evaluation.
+
+    BaseSimulationFunction is an abstract class.
+
+    See Also
+    --------
+    Refer to
+    [`SimulationFunction`](`epymorph.simulation.SimulationFunction`) and
+    [`SimulationTickFunction`](`epymorph.simulation.SimulationTickFunction`)
+    for more concrete subclasses.
     """
 
     requirements: Sequence[AttributeDef] | property = ()
@@ -544,9 +584,16 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         return f"{self.__class__.__module__}.{self.__class__.__qualname__}"
 
     def validate(self, result: ResultT) -> None:
-        """Override this method to validate the evaluation result.
+        """
+        Override this method to validate the function evaluation result.
         Implementations should raise an appropriate error if results
-        are not valid."""
+        are not valid.
+
+        Parameters
+        ----------
+        result : ResultT
+            The result produced from function evaluation.
+        """
 
     @final
     def with_context(
@@ -558,7 +605,37 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         ipm: BaseCompartmentModel | None = None,
         rng: np.random.Generator | None = None,
     ) -> Self:
-        """Constructs a clone of this instance which has access to the given context."""
+        """
+        Constructs a clone of this instance which has access to the given context.
+
+        All elements of the context are optional, allowing users who wish to
+        quickly evaluate a function in a one-off situation to provide only the
+        partial context that is strictly necessary. (It's very tedious to create
+        fake context when it isn't strictly needed.) For example, a function
+        might be able to calculate a result knowing only the geo scope and time frame.
+        If the function tries to use a part of the context that hasn't been provided,
+        an exception will be raised.
+
+        During normal function evaluation, such as when running a simulation,
+        the full context is always provided and available.
+
+        Parameters
+        ----------
+        name : AbsoluteName, default=NAME_PLACEHOLDER
+            The name used for the value this function produces, according
+            to the evaluation context. Defaults to a generic placeholder
+            name.
+        params : Mapping[str, ParamValue], optional
+            Additional parameter values we may need to evaluate this function.
+        scope : GeoScope, optional
+            The geo scope.
+        time_frame : TimeFrame, optional
+            The time frame.
+        ipm : BaseCompartmentModel, optional
+            The IPM.
+        rng : np.random.Generator, optional
+            A random number generator instance.
+        """
         # This version allows users to specify data using strings for names.
         # epymorph should use `with_context_internal()` whenever possible.
 
@@ -591,7 +668,12 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         ipm: BaseCompartmentModel | None = None,
         rng: np.random.Generator | None = None,
     ) -> Self:
-        """Constructs a clone of this instance which has access to the given context."""
+        """
+        Constructs a clone of this instance which has access to the given context.
+
+        This method is intended for usage internal to epymorph's systems.
+        Typical usage will use `with_context` instead.
+        """
         # clone this instance, then run evaluate on that; accomplishes two things:
         # 1. don't have to worry about cleaning up _ctx
         # 2. instances can use @cached_property without surprising results
@@ -606,7 +688,12 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         scope: GeoScope | None = None,
         time_frame: TimeFrame | None = None,
     ) -> _DeferFunctionT:
-        """Defer processing to another instance of a SimulationFunction."""
+        """
+        Defer processing to another instance of a SimulationFunction.
+
+        This method is intended for usage internal to epymorph's system.
+        Typical usage will use `defer` instead.
+        """
         return other.with_context_internal(
             name=self._ctx._name,
             data=self._ctx._data,
@@ -624,7 +711,27 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
 
     @final
     def data(self, attribute: AttributeDef | str) -> NDArray:
-        """Retrieve the value of a specific attribute."""
+        """
+        Retrieve the value of a requirement. You must declare
+        the attribute in this function's `requirements` list.
+
+        Parameters
+        ----------
+        attribute : AttributeDef | str
+            The attribute to get, identified either by its name (string) or
+            its definition object.
+
+        Returns
+        -------
+        NDArray
+            The attribute value.
+
+        Raises
+        ------
+        ValueError
+            If the attribute is not in the function's requirements
+            declaration.
+        """
         if isinstance(attribute, str):
             name = attribute
             req = next((r for r in self.requirements if r.name == attribute), None)
@@ -666,6 +773,11 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     @final
     @property
     def dim(self) -> Dimensions:
+        """
+        The simulation's dimensional information.
+        This is a re-packaging of information contained
+        in other context elements, like the geo scope.
+        """
         return self._ctx.dim
 
 
@@ -676,10 +788,22 @@ def _(value: BaseSimulationFunction) -> TypeGuard[RecursiveValue]:
 
 class SimulationFunction(BaseSimulationFunction[ResultT]):
     """
-    A function which runs in the context of a simulation to produce a value
-    (as a numpy array).
-    Implement a SimulationFunction by extending this class and overriding the
-    `evaluate()` method.
+    A function which runs in the context of a RUME to produce a value
+    (as a numpy array). The value must be independent of the simulation state,
+    and they will often be evaluated before the simulation starts.
+
+    SimulationFunction is an abstract class. In typical usage you will not
+    implement a SimulationFunction directly, but rather one of its
+    more-specific child classes.
+
+    SimulationFunction is generic in the type of result it produces (`ResultT`).
+
+    See Also
+    --------
+    Notable child classes of SimulationFunction include
+    [`Initializers`](`epymorph.initializer.Initializer`),
+    [`ADRIOs`](`epymorph.adrio.adrio.ADRIO`), and
+    [`ParamFunctions`](`epymorph.params.ParamFunction`).
     """
 
     @abstractmethod
@@ -688,6 +812,13 @@ class SimulationFunction(BaseSimulationFunction[ResultT]):
         Implement this method to provide logic for the function.
         Use self methods and properties to access the simulation context or defer
         processing to another function.
+
+        evaluate is an abstract method.
+
+        Returns
+        -------
+        ResultT
+            The result value.
         """
 
     @final
@@ -699,6 +830,9 @@ class SimulationFunction(BaseSimulationFunction[ResultT]):
     ) -> _DeferResultT:
         """Defer processing to another instance of a SimulationFunction, returning
         the result of evaluation.
+
+        This function is generic in the type of result returned by the function
+        to which we are deferring.
 
         Parameters
         ----------
@@ -714,9 +848,19 @@ class SimulationFunction(BaseSimulationFunction[ResultT]):
 
 class SimulationTickFunction(BaseSimulationFunction[ResultT]):
     """
-    A function which runs in the context of a simulation to produce a sim-time-specific
-    value (as a numpy array). Implement a SimulationTickFunction by extending this class
-    and overriding the `evaluate()` method.
+    A function which runs in the context of a RUME to produce a value
+    (as a numpy array) which is expected to vary over the run of a simulation.
+
+    SimulationTickFunction is an abstract class. In typical usage you will not
+    implement a SimulationTickFunction directly, but rather one of its
+    more-specific child classes.
+
+    SimulationTickFunction is generic in the type of result it produces (`ResultT`).
+
+    See Also
+    --------
+    The only notable child class of SimulationTickFunction is
+    the movement model [`MovementClause`](`epymorph.movement_model.MovementClause`).
     """
 
     @abstractmethod
@@ -725,6 +869,18 @@ class SimulationTickFunction(BaseSimulationFunction[ResultT]):
         Implement this method to provide logic for the function.
         Use self methods and properties to access the simulation context or defer
         processing to another function.
+
+        evaluate is an abstract method.
+
+        Parameters
+        ----------
+        tick : Tick
+            The simulation tick being evaluated.
+
+        Returns
+        -------
+        ResultT
+            The result value.
         """
 
     @final
