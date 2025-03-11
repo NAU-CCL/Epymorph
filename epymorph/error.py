@@ -41,6 +41,13 @@ class DataAttributeErrorGroup(ExceptionGroup, DataAttributeError):  # noqa: N818
     """Multiple exceptions encountered handling data attributes."""
 
 
+class MissingContextError(Exception):
+    """
+    Exception during simulation function evaluation, where the function required
+    context elements that were not provided.
+    """
+
+
 class DataResourceError(Exception):
     """Exception during resource loading from ADRIOs."""
 

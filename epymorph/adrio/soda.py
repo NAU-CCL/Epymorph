@@ -61,11 +61,10 @@ def dtype_as_np(col_type: ColumnType) -> DTypeLike:
 class SocrataResource:
     domain: str
     id: str
-    format: Literal["csv"] = field(default="csv")
 
     @property
     def url(self) -> str:
-        return f"https://{self.domain}/resource/{self.id}.{self.format}"
+        return f"https://{self.domain}/resource/{self.id}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,30 +201,30 @@ class Descending(OrderClause):
         return f"{_col(self.column)} DESC"
 
 
-def build_soql(
-    select: Sequence[Select],
-    where: WhereClause,
-    order_by: Sequence[OrderClause] | None,
-) -> str:
-    soql = f"SELECT {_list(select)} WHERE {where}"
-    if order_by is not None and len(order_by) > 0:
-        return f"{soql} ORDER BY {_list(order_by)}"
-    return soql
+@dataclass(frozen=True, slots=True)
+class Query:
+    select: Sequence[Select]
+    where: WhereClause
+    order_by: Sequence[OrderClause] | None = field(default=None)
+
+    def __str__(self) -> str:
+        soql = f"SELECT {_list(self.select)} WHERE {self.where}"
+        if self.order_by is not None and len(self.order_by) > 0:
+            return f"{soql} ORDER BY {_list(self.order_by)}"
+        return soql
 
 
 def query_csv(
     resource: SocrataResource,
-    select: Sequence[Select],
-    where: WhereClause,
+    query: Query,
     *,
-    order_by: Sequence[OrderClause] | None = None,
     limit: int = 10000,
     api_token: str | None = None,
 ) -> pd.DataFrame:
     return query_csv_soql(
         resource=resource,
-        soql=build_soql(select, where, order_by),
-        column_types=[(x.result_name, x.dtype) for x in select],
+        soql=str(query),
+        column_types=[(x.result_name, x.dtype) for x in query.select],
         limit=limit,
         api_token=api_token,
     )
@@ -258,7 +257,7 @@ def query_csv_soql(
         )
         try:
             page_df = pd.read_csv(
-                f"{resource.url}?{query_string}",
+                f"{resource.url}.csv?{query_string}",
                 dtype=column_dtypes,  # type: ignore
                 parse_dates=column_parsedates,
                 storage_options=req_headers,
