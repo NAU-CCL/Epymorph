@@ -456,6 +456,63 @@ def dtype_name(d: np.dtype) -> str:
     return str(d)
 
 
+####################
+# DATE/VALUE TYPES #
+####################
+
+
+DataT = TypeVar("DataT", bound=np.generic)
+
+DateValueType = np.void
+"""
+The numpy dtype used for structured arrays of date and value.
+numpy doesn't let us type these very explicitly, so this alias
+is used to express intention, but know it comes with few guarantees.
+
+So basically it implies: `[("date", "datetime64[D]"), ("value", DataT)]`
+"""
+
+
+def to_date_value_array(
+    dates: NDArray[np.datetime64],
+    values: NDArray[DataT],
+) -> NDArray[DateValueType]:
+    value_dtype = np.dtype(values.dtype).type
+    result = np.empty(
+        values.shape,
+        dtype=[("date", "datetime64[D]"), ("value", value_dtype)],
+    )
+    result["date"] = np.expand_dims(dates, axis=1)
+    result["value"] = values
+    return result
+
+
+def is_date_value_array(
+    array: NDArray,
+    value_dtype: type[DataT] | None = None,
+) -> TypeGuard[NDArray[DateValueType]]:
+    dtype = np.dtype(array.dtype)
+    if getattr(dtype, "names", None) != ("date", "value"):
+        return False
+    if dtype["date"] != np.dtype("datetime64[D]"):
+        return False
+    if value_dtype and dtype["value"] != np.dtype(value_dtype):
+        return False
+    return True
+
+
+def extract_date_value(
+    date_values: NDArray[DateValueType],
+    value_dtype: type[DataT] | None = None,
+) -> tuple[NDArray[np.datetime64], NDArray[DataT]]:
+    dates = np.ma.getdata(date_values["date"][:, 0])
+    values = date_values["value"]
+    if value_dtype and np.dtype(values.dtype) != np.dtype(value_dtype):
+        err = "Date/value array's values did not match expected dtype."
+        raise ValueError(err)
+    return dates, values
+
+
 # Matchers
 
 

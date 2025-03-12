@@ -17,6 +17,7 @@ from epymorph.adrio.adrio import (
     range_mask_fn,
 )
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
+from epymorph.data_shape import DataShape, Shapes
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.simulation import Context
@@ -121,7 +122,7 @@ _CONFIG = [
 """All supported ACS Comm Flow products."""
 
 
-class Commuters(ADRIOPrototype[np.int64]):
+class Commuters(ADRIOPrototype[np.int64, np.int64]):
     """
     Loads data from the US Census Bureau's ACS Commuting Flows product.
     This product uses answers to the American Community Survey over a five year period
@@ -166,6 +167,16 @@ class Commuters(ADRIOPrototype[np.int64]):
             self._fix_missing = Fill.of_int64(fix_missing)
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def value_dtype(self) -> type[np.int64]:
+        return np.int64
+
+    @property
+    @override
+    def result_shape(self) -> DataShape:
+        return Shapes.NxN
 
     def _get_config(self, context: Context) -> tuple[_Config, StateScope | CountyScope]:
         scope = context.scope
@@ -289,6 +300,6 @@ class Commuters(ADRIOPrototype[np.int64]):
             err = "result was an invalid shape"
             raise ADRIOProcessingError(self, context, err)
 
-        if np.dtype(result.dtype) != np.dtype(np.int64):
+        if np.dtype(result.dtype) != np.dtype(self.value_dtype):
             err = "result was not the expected data type"
             raise ADRIOProcessingError(self, context, err)

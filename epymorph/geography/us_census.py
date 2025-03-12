@@ -264,6 +264,15 @@ class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
     year: int
     granularity: Literal["county"] = field(init=False, default="county")
 
+    @classmethod
+    def all(cls, year: int) -> Self:
+        """Create a scope including all US counties and county-equivalents."""
+        return cls(
+            includes_granularity="county",
+            includes=tuple(get_counties(year).geoid),
+            year=year,
+        )
+
     def raise_granularity(self) -> StateScope:
         """Create and return StateScope object with identical properties."""
         if self.includes_granularity == "county":

@@ -19,12 +19,13 @@ from epymorph.adrio.adrio import (
     ProcessResult,
     process_txn,
     range_mask_fn,
-    validate_date_value_dtype,
     validate_time_frame,
 )
+from epymorph.data_shape import DataShape, Shapes
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.simulation import Context
 from epymorph.time import DateRange, iso8601
+from epymorph.util import is_date_value_array
 
 
 def healthdata_api_key() -> str | None:
@@ -35,7 +36,7 @@ def healthdata_api_key() -> str | None:
     return os.environ.get("API_KEY__healthdata.gov", default=None)
 
 
-class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType]):
+class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType, np.int64]):
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="anag-cw7u")
     """The Socrata API endpoint."""
     _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)
@@ -66,6 +67,16 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType]):
             self._fix_missing = Fill.of_int64(fix_missing)
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def value_dtype(self) -> type[np.int64]:
+        return np.int64
+
+    @property
+    @override
+    def result_shape(self) -> DataShape:
+        return Shapes.AxN
 
     @override
     def _validate_context(self, context: Context):
@@ -133,7 +144,9 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType]):
 
     @override
     def _validate_result(
-        self, context: Context, result: NDArray[DateValueType]
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
     ) -> None:
         # NOTE: validation only checks non-masked values
         is_valid = _HealthdataAnagCw7u._VALUE_RANGE
@@ -148,7 +161,7 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType]):
             err = "result was an invalid shape"
             raise ADRIOProcessingError(self, context, err)
 
-        if not validate_date_value_dtype(result, np.int64):
+        if not is_date_value_array(result, self.value_dtype):
             err = "result was not the expected data type"
             raise ADRIOProcessingError(self, context, err)
 
@@ -166,7 +179,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
     where the first axis represents reporting weeks during the time frame and the
     second axis is geo scope nodes. Values are tuples of date and the integer number of
     reported hospitalizations. The data contain sentinel values (-999999) which
-    rrepresent values redacted for the sake of protecting patient privacy -- there
+    represent values redacted for the sake of protecting patient privacy -- there
     were between 1 and 3 cases reported by the facility on that date.
 
     Parameters
@@ -199,7 +212,7 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
     where the first axis represents reporting weeks during the time frame and the
     second axis is geo scope nodes. Values are tuples of date and the integer number of
     reported hospitalizations. The data contain sentinel values (-999999) which
-    rrepresent values redacted for the sake of protecting patient privacy -- there
+    represent values redacted for the sake of protecting patient privacy -- there
     were between 1 and 3 cases reported by the facility on that date.
 
     Parameters

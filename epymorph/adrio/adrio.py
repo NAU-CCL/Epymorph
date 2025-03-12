@@ -15,6 +15,7 @@ from typing import (
     Literal,
     NamedTuple,
     Sequence,
+    TypeGuard,
     TypeVar,
     cast,
     final,
@@ -23,11 +24,12 @@ from typing import (
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from sparklines import sparklines
 from typing_extensions import override
 
 from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
 from epymorph.compartment_model import BaseCompartmentModel
-from epymorph.data_shape import Shapes
+from epymorph.data_shape import DataShape, Shapes
 from epymorph.data_type import AttributeArray
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
 from epymorph.database import DataResolver, evaluate_param
@@ -35,6 +37,13 @@ from epymorph.event import ADRIOProgress, DownloadActivity, EventBus
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import Context, SimulationFunction
 from epymorph.time import DateRange, TimeFrame
+from epymorph.util import (
+    DateValueType,
+    dtype_name,
+    extract_date_value,
+    is_date_value_array,
+    to_date_value_array,
+)
 
 ResultDType = TypeVar("ResultDType", bound=np.generic)
 """The result type of an Adrio."""
@@ -229,6 +238,8 @@ class ADRIOProcessingError(ADRIOError):
 
 
 DataT = TypeVar("DataT", bound=np.generic)
+ResultT = TypeVar("ResultT", bound=np.generic)
+ValueT = TypeVar("ValueT", bound=np.generic)
 
 
 @dataclass(frozen=True)
@@ -246,12 +257,115 @@ class ProcessResult(Generic[DataT]):
         )
 
 
-class ADRIOPrototype(SimulationFunction[NDArray[DataT]]):
+def _is_numeric(arr: NDArray) -> TypeGuard[NDArray[np.integer | np.floating]]:
+    return np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating)
+
+
+@dataclass(frozen=True)
+class InspectResult(Generic[ResultT, ValueT]):
+    adrio: "ADRIOPrototype"
+    source: pd.DataFrame
+    result: NDArray[ResultT]
+    dtype: type[ValueT]
+    shape: DataShape
+    issues: Sequence[tuple[str, NDArray[np.bool_]]]
+
+    @property
+    def values(self) -> NDArray[ValueT]:
+        values = self.result
+        if is_date_value_array(values, self.dtype):
+            _, values = extract_date_value(values, self.dtype)
+        return values  # type: ignore
+
+    @property
+    def quantify(self) -> Sequence[tuple[str, float]]:
+        vs = self.values
+        size = vs.size
+        quant = []
+        if _is_numeric(vs):
+            quant.append(("zero", (vs == self.dtype(0)).sum() / size))
+        for name, mask in self.issues:
+            quant.append((name, mask.sum() / size))
+        quant.append(("unmasked", np.ma.count(vs) / size))
+        return quant
+
+    def __str__(self) -> str:
+        extra_info = []
+        if not is_date_value_array(self.result):
+            # calc display values for simple value data (not date/value)
+            vs = self.result
+            dtname = dtype_name(np.dtype(self.dtype))
+        else:
+            # calc display values for date/value data
+            dates, vs = extract_date_value(self.result, self.dtype)
+            dtname = f"date/value ({dtype_name(np.dtype(self.dtype))})"
+            match len(dates):
+                case 1:
+                    extra_info.append(f"  Date range: {dates[0]}")
+                case x if x > 1:
+                    deltas = np.unique((dates[1:] - dates[:-1]))
+                    period = str(deltas[0]) if len(deltas) == 1 else "irregular"
+                    extra_info.append(
+                        f"  Date range: {dates.min()} to {dates.max()}"
+                        f", period: {period}"
+                    )
+                case _:
+                    # might happen if there are zero data points
+                    pass
+
+        minimum = vs.min()
+        maximum = vs.max()
+
+        spark = sparklines(
+            np.histogram(vs, bins=20, range=(minimum, maximum))[0],
+            num_lines=1,
+        )[0]
+
+        # Value statistics only possible on numeric data.
+        stats = []
+        if _is_numeric(vs):
+            # stats methods don't really support masked arrays
+            stats_vs = vs if not np.ma.is_masked(vs) else np.ma.compressed(vs)
+            qs = np.quantile(stats_vs, [0.25, 0.50, 0.75])
+            qs_str = ", ".join(f"{q:.1f}" for q in qs)
+            stats.extend(
+                [
+                    f"    quartiles: {qs_str} (IQR: {(qs[-1] - qs[0]):.1f})",
+                    f"    std dev: {np.std(stats_vs):.1f}",
+                ]
+            )
+
+        lines = [
+            f"ADRIO inspection for {self.adrio.class_name}:",
+            f"  Result shape: {self.shape} {vs.shape}; dtype: {dtname}; size: {vs.size}",  # noqa: E501
+            *extra_info,
+            "  Values:",
+            f"    histogram: {minimum} {spark} {maximum}",
+            *stats,
+            *[
+                f"    percent {issue}: {percent:.1%}"
+                for issue, percent in self.quantify
+            ],
+        ]
+        return "\n".join(lines)
+
+
+class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
     """
     ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
     to load data from external sources for epymorph simulations. This may be from
     web APIs, local files or database, or anything imaginable.
     """
+
+    @property
+    @abstractmethod
+    def value_dtype(self) -> type[ValueT]:
+        pass
+
+    @property
+    @abstractmethod
+    def result_shape(self) -> DataShape:
+        pass
 
     @abstractmethod
     def _validate_context(self, context: Context) -> None:
@@ -262,20 +376,27 @@ class ADRIOPrototype(SimulationFunction[NDArray[DataT]]):
         pass
 
     @abstractmethod
-    def _process(self, context: Context, data_df: pd.DataFrame) -> ProcessResult[DataT]:
+    def _process(
+        self, context: Context, data_df: pd.DataFrame
+    ) -> ProcessResult[ResultT]:
         pass
 
-    def _format(self, context: Context, data: ProcessResult[DataT]) -> NDArray[DataT]:
+    def _format(
+        self, context: Context, data: ProcessResult[ResultT]
+    ) -> NDArray[ResultT]:
         if len(data.issues) > 0:
-            mask = reduce(np.logical_and, [m for _, m in data.issues])
+            mask = reduce(np.logical_or, [m for _, m in data.issues])
             return np.ma.masked_array(data.raw, mask)
         return data.raw
 
     @abstractmethod
-    def _validate_result(self, context: Context, result: NDArray[DataT]) -> None:
+    def _validate_result(self, context: Context, result: NDArray[ResultT]) -> None:
         pass
 
-    def evaluate(self) -> NDArray[DataT]:
+    def evaluate(self) -> NDArray[ResultT]:
+        return self.inspect().result
+
+    def inspect(self) -> InspectResult[ResultT, ValueT]:
         ctx = self.context
         try:
             self._validate_context(ctx)
@@ -305,7 +426,15 @@ class ADRIOPrototype(SimulationFunction[NDArray[DataT]]):
 
         t1 = perf_counter()
         self.report_complete(t1 - t0)
-        return result_np
+
+        return InspectResult[ResultT, ValueT](
+            self,
+            source_df,
+            result_np,
+            self.value_dtype,
+            self.result_shape,
+            proc_res.issues,
+        )
 
     def estimate_data(self) -> DataEstimate:
         """Estimate the data usage for this ADRIO in a RUME.
@@ -792,57 +921,6 @@ def process_nxn(
         issues.append(("missing", missing_mask))
 
     return ProcessResult(data_np, issues)
-
-
-####################
-# DATE/VALUE TYPES #
-####################
-
-
-DateValueType = np.void
-"""
-The numpy dtype used for structured arrays of date and value.
-numpy doesn't let us type these very explicitly, so this alias
-is used to express intention, but know it comes with few guarantees.
-
-So basically it implies: `[("date", "datetime64[D]"), ("value", DataT)]`
-"""
-
-
-def to_date_value_array(
-    dates: NDArray[np.datetime64],
-    values: NDArray[DataT],
-) -> NDArray[DateValueType]:
-    value_dtype = np.dtype(values.dtype).type
-    result = np.empty(
-        values.shape,
-        dtype=[("date", "datetime64[D]"), ("value", value_dtype)],
-    )
-    result["date"] = np.expand_dims(dates, axis=1)
-    result["value"] = values
-    return result
-
-
-def validate_date_value_dtype(
-    date_values: NDArray[DateValueType],
-    value_dtype: type[np.generic],
-) -> bool:
-    dtype = np.dtype(date_values.dtype)
-    if getattr(dtype, "names", None) != ("date", "value"):
-        return False
-    if dtype["date"] != np.dtype("datetime64[D]"):
-        return False
-    if dtype["value"] != np.dtype(value_dtype):
-        return False
-    return True
-
-
-def extract_date_value(
-    date_values: NDArray[DateValueType],
-) -> tuple[NDArray[np.datetime64], NDArray]:
-    dates = np.ma.getdata(date_values["date"][:, 0])
-    values = date_values["value"]
-    return dates, values
 
 
 ##################
