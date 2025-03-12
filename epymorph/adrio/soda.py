@@ -255,16 +255,13 @@ def query_csv_soql(
             safe=",()'$:",
             query={"$query": page_soql},
         )
-        try:
-            page_df = pd.read_csv(
-                f"{resource.url}.csv?{query_string}",
-                dtype=column_dtypes,  # type: ignore
-                parse_dates=column_parsedates,
-                storage_options=req_headers,
-            )
-        except Exception as e:
-            # TODO: deal with fetch errors
-            raise e
+        page_df = pd.read_csv(
+            f"{resource.url}.csv?{query_string}",
+            dtype=column_dtypes,  # type: ignore
+            parse_dates=column_parsedates,
+            storage_options=req_headers,
+            date_format="ISO8601",
+        )
         yield page_df
 
         if (page_size := len(page_df.index)) >= limit:

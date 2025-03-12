@@ -73,6 +73,12 @@ class DateRange:
     def overlap(self, time_frame: "TimeFrame") -> "DateRange | None":
         return self.between(time_frame.start_date, time_frame.end_date)
 
+    def overlap_or_raise(self, time_frame: "TimeFrame") -> "DateRange":
+        if (date_range := self.overlap(time_frame)) is None:
+            err = "There is no overlap between the date range and time frame."
+            raise ValueError(err)
+        return date_range
+
     def __len__(self) -> int:
         delta_days = (self.end_date - self.start_date).days
         return (delta_days // self.step) + 1

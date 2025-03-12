@@ -5,6 +5,8 @@ A common exception framework for epymorph.
 from contextlib import contextmanager
 from textwrap import dedent
 
+from typing_extensions import deprecated
+
 
 class ExternalDependencyError(Exception):
     """Exception when a native program is required but not found."""
@@ -48,6 +50,7 @@ class MissingContextError(Exception):
     """
 
 
+@deprecated("Prefer using something in the ADRIOError hierarchy.")
 class DataResourceError(Exception):
     """Exception during resource loading from ADRIOs."""
 

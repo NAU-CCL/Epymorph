@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable, Literal, Mapping, NamedTuple
+from typing import Callable, Literal, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -7,6 +7,9 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.adrio.adrio import (
+    ADRIOCommunicationError,
+    ADRIOContextError,
+    ADRIOProcessingError,
     ADRIOPrototype,
     Fill,
     ProcessResult,
@@ -15,33 +18,45 @@ from epymorph.adrio.adrio import (
 )
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceError
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.simulation import Context
-from epymorph.time import DateRange, iso8601
 
 _COMMFLOWS_CACHE_PATH = module_cache_path(__name__)
 
-_ValidYear = Literal[2010, 2015, 2020]
-_ValidGranularity = Literal["state", "county"]
-
 
 class _Config(NamedTuple):
-    year: _ValidYear
+    """Configuration for an ACS Comm Flows product."""
+
+    year: int
+    """The nominal year of the survey results."""
+    geo_year: int
+    """The Census vintage used in the data."""
     url: str
+    """The URL for the source file."""
     header: int
+    """How many header rows?"""
     footer: int
+    """How many footer rows?"""
     cols: list[str]
+    """Column names."""
     estimate: int
+    """Estimated file size in bytes."""
 
     @property
     def cache_path(self) -> Path:
+        """The path to where the source data should be cached."""
         return _COMMFLOWS_CACHE_PATH / f"{self.year}.xlsx"
 
+    @property
+    def cache_key(self) -> str:
+        """The cache key to use for this result."""
+        return f"commflows:{self.year}"
 
-_CONFIG: Mapping[_ValidYear, _Config] = {
-    2010: _Config(
+
+_CONFIG = [
+    _Config(
         year=2010,
+        geo_year=2010,
         url="https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2010/commuting-employment-2010/table1.xlsx",
         header=4,
         footer=3,
@@ -59,8 +74,9 @@ _CONFIG: Mapping[_ValidYear, _Config] = {
         ],
         estimate=7_200_000,
     ),
-    2015: _Config(
+    _Config(
         year=2015,
+        geo_year=2015,
         url="https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2015/commuting-flows-2015/table1.xlsx",
         header=6,
         footer=2,
@@ -78,8 +94,12 @@ _CONFIG: Mapping[_ValidYear, _Config] = {
         ],
         estimate=6_700_000,
     ),
-    2020: _Config(
+    _Config(
         year=2020,
+        geo_year=2022,
+        # yes, the 2020 results use 2022 geography, which is when the Census officially
+        # switched to using planning regions instead of counties for Connecticut.
+        # The footer of this document says as much.
         url="https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2020/commuting-flows-2020/table1.xlsx",
         header=7,
         footer=4,
@@ -97,61 +117,84 @@ _CONFIG: Mapping[_ValidYear, _Config] = {
         ],
         estimate=5_800_000,
     ),
-}
-
-# TODO: check what's going on with connecticut data
-# https://developer.ap.org/ap-elections-api/docs/CT_FIPS_Codes_forPlanningRegions.htm
-# Oh no...
-# 2020 Comm Flows uses 2022 CT planning regions, which is when they officially changed
-# from counties; should we enforce that 2020 Comm Flows uses 2022 geography?
-# Is that valid for the other states? Or do we need a wacky Frankenstein geo just for
-# 2020 comm flows?
-# This is documented in the footer of the spreadsheet:
-# "This table uses county equivalents (planning regions) for Connecticut."  # noqa: E501, ERA001
+]
+"""All supported ACS Comm Flow products."""
 
 
 class Commuters(ADRIOPrototype[np.int64]):
-    _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)
-    _VALUE_RANGE = range_mask_fn(minimum=np.int64(0), maximum=None)
+    """
+    Loads data from the US Census Bureau's ACS Commuting Flows product.
+    This product uses answers to the American Community Survey over a five year period
+    to estimate the number of workers aggregated by where they live and where they work.
+    It is a useful estimate of regular commuting activity between locations.
 
-    fix_missing: Fill[np.int64]
+    The product aggregates to the US-County-equivalent granularity, so this ADRIO
+    can work with county or state scopes. Because the data are presented using
+    FIPS codes, we must be certain to use a compatible scope -- therefore the
+    data vintage loaded by this ADRIO is based on the geo scope year and not the
+    simulation time frame. Available data years are nominally 2010, 2015, and 2020,
+    however note that the 2020 data year was compiled using 2022 geography.
+
+    The result is an NxN matrix of integers, with residency location on the first axis
+    and work location on the second axis.
+
+    Parameters
+    ----------
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=0
+        The method to use to fix missing values. Missing values are common in this dataset,
+        which simply omits pairs of locations for which there were no recorded workers.
+        Therefore the default is to fill with zero.
+
+    See Also
+    --------
+    The [ACS Commuting Flows documentation](https://www.census.gov/topics/employment/commuting/guidance/flows.html)
+    from the US Census.
+    """  # noqa: E501
+
+    _VALUE_RANGE = range_mask_fn(minimum=np.int64(0), maximum=None)
+    """The expected range of valid values."""
+
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
 
     def __init__(
         self,
         *,
-        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = 0,
     ):
         try:
-            self.fix_missing = Fill.of_int64(fix_missing)
+            self._fix_missing = Fill.of_int64(fix_missing)
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
 
-    def _validate_context_internal(
-        self,
-        context: Context,
-    ) -> tuple[_ValidGranularity, _ValidYear]:
+    def _get_config(self, context: Context) -> tuple[_Config, StateScope | CountyScope]:
         scope = context.scope
         if not isinstance(scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
-            raise DataResourceError(err)
+            raise ADRIOContextError(self, context, err)
 
-        year = scope.year
-        if year not in [2010, 2015, 2020]:
-            err = "Commuters data is only available for 2010, 2015, and 2020 geography."
-            raise DataResourceError(err)
+        config = next((x for x in _CONFIG if x.geo_year == scope.year), None)
+        if config is None:
+            all_years = [str(x.geo_year) for x in _CONFIG]
+            err = (
+                "Commuters loads data according to your geo scope year "
+                "because it is sensitive to changes in geography. "
+                "Data is only available for these geo years: "
+                f"{','.join(all_years)}"
+            )
+            raise ADRIOContextError(self, context, err)
 
-        return scope.granularity, year  # type: ignore
+        return config, scope
 
     @override
     def estimate_data(self) -> DataEstimate:
-        _, year = self._validate_context_internal(self.context)
-        config = _CONFIG[year]
+        config, _ = self._get_config(self.context)
         in_cache = check_file_in_cache(config.cache_path)
         total_bytes = config.estimate
         new_bytes = total_bytes if not in_cache else 0
         return AvailableDataEstimate(
             name=self.class_name,
-            cache_key=f"commflows:{year}",
+            cache_key=config.cache_key,
             new_network_bytes=new_bytes,
             new_cache_bytes=new_bytes,
             total_cache_bytes=total_bytes,
@@ -159,19 +202,18 @@ class Commuters(ADRIOPrototype[np.int64]):
         )
 
     @override
-    def _validate_context(self, context: Context):
-        self._validate_context_internal(context)
+    def _validate_context(self, context: Context) -> None:
+        self._get_config(context)
 
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
-        granularity, year = self._validate_context_internal(context)
-        config = _CONFIG[year]
+        config, scope = self._get_config(context)
 
+        # Get and read data file.
         try:
             commuter_file = load_or_fetch_url(config.url, config.cache_path)
         except Exception as e:
-            err = "Unable to fetch commuting flows data."
-            raise DataResourceError(err) from e
+            raise ADRIOCommunicationError(self, context) from e
 
         data_df = pd.read_excel(
             commuter_file,
@@ -194,16 +236,17 @@ class Commuters(ADRIOPrototype[np.int64]):
             },
         )
 
+        # Filter out destinations which are not US states and fix two-digit state codes.
         data_df = data_df.loc[data_df["wrk_state_code"].str.startswith("0", na=False)]
         data_df = data_df.assign(wrk_state_code=data_df["wrk_state_code"].str.slice(1))
 
-        if granularity == "state":
+        # Reformat to combine geoid columns according to result granularity.
+        if scope.granularity == "state":
             geoid_src = data_df["res_state_code"]
             geoid_dst = data_df["wrk_state_code"]
         else:
             geoid_src = data_df["res_state_code"] + data_df["res_county_code"]
             geoid_dst = data_df["wrk_state_code"] + data_df["wrk_county_code"]
-
         data_df = pd.DataFrame(
             {
                 "geoid_src": geoid_src,
@@ -212,11 +255,13 @@ class Commuters(ADRIOPrototype[np.int64]):
             }
         )
 
+        # Filter for the geographies in our scope.
         src_in = data_df["geoid_src"].isin(context.scope.node_ids)
         dst_in = data_df["geoid_dst"].isin(context.scope.node_ids)
         data_df = data_df.loc[src_in & dst_in]
 
-        if granularity == "state":
+        # Aggregate results if our result granularity requires it. Fix indexing.
+        if scope.granularity == "state":
             data_df = data_df.groupby(["geoid_src", "geoid_dst"]).sum().reset_index()
         else:
             data_df = data_df.reset_index(drop=True)
@@ -226,7 +271,7 @@ class Commuters(ADRIOPrototype[np.int64]):
     def _process(self, context: Context, data_df: pd.DataFrame) -> ProcessResult:
         return process_nxn(
             sentinels=[],
-            fix_missing=self.fix_missing,
+            fix_missing=self._fix_missing,
             dtype=np.int64,
             context=context,
             data_df=data_df,
@@ -236,11 +281,14 @@ class Commuters(ADRIOPrototype[np.int64]):
     def _validate_result(self, context: Context, result: NDArray[np.int64]) -> None:
         # NOTE: validation only checks non-masked values
         if not Commuters._VALUE_RANGE(result).all():
-            raise ValueError("invalid values")  # TODO
+            err = "result contains invalid values"
+            raise ADRIOProcessingError(self, context, err)
 
         expected_shape = (context.scope.nodes, context.scope.nodes)
         if result.shape != expected_shape:
-            raise ValueError("invalid shape")  # TODO
+            err = "result was an invalid shape"
+            raise ADRIOProcessingError(self, context, err)
 
         if np.dtype(result.dtype) != np.dtype(np.int64):
-            raise ValueError("invalid dtype")  # TODO
+            err = "result was not the expected data type"
+            raise ADRIOProcessingError(self, context, err)

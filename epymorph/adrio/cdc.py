@@ -8,33 +8,47 @@ from typing_extensions import override
 
 import epymorph.adrio.soda as q
 from epymorph.adrio.adrio import (
+    ADRIOCommunicationError,
+    ADRIOContextError,
+    ADRIOProcessingError,
     ADRIOPrototype,
+    DateValueType,
     Fill,
     Fix,
     FixSentinel,
     ProcessResult,
     process_txn,
     range_mask_fn,
+    validate_date_value_dtype,
     validate_time_frame,
 )
-from epymorph.error import DataResourceError
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.simulation import Context
 from epymorph.time import DateRange, iso8601
 
 
 def healthdata_api_key() -> str | None:
+    """
+    Loads the Socrata API key to use for healthdata.gov,
+    as environment variable 'API_KEY__healthdata.gov'.
+    """
     return os.environ.get("API_KEY__healthdata.gov", default=None)
 
 
-class InfluenzaFacilityHospitalization(ADRIOPrototype[np.int64]):
+class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType]):
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="anag-cw7u")
+    """The Socrata API endpoint."""
     _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)
+    """The time range over which values are available."""
     _VALUE_RANGE = range_mask_fn(minimum=np.int64(0), maximum=None)
+    """The range of valid values."""
     _REDACTED_VALUE = np.int64(-999999)
+    """The value of redacted reports: between 1 and 3 cases."""
 
-    fix_redacted: Fix[np.int64]
-    fix_missing: Fill[np.int64]
+    _fix_redacted: Fix[np.int64]
+    """The method to use to replace redacted values (-999999 in the data)."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
 
     def __init__(
         self,
@@ -43,11 +57,11 @@ class InfluenzaFacilityHospitalization(ADRIOPrototype[np.int64]):
         fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
     ):
         try:
-            self.fix_redacted = Fix.of_int64(fix_redacted)
+            self._fix_redacted = Fix.of_int64(fix_redacted)
         except ValueError:
             raise ValueError("Invalid value for `fix_redacted`")
         try:
-            self.fix_missing = Fill.of_int64(fix_missing)
+            self._fix_missing = Fill.of_int64(fix_missing)
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
 
@@ -55,21 +69,16 @@ class InfluenzaFacilityHospitalization(ADRIOPrototype[np.int64]):
     def _validate_context(self, context: Context):
         if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
-            raise DataResourceError(err)
+            raise ADRIOContextError(self, context, err)
 
-        validate_time_frame(
-            InfluenzaFacilityHospitalization._TIME_RANGE,
-            context.time_frame,
-        )
+        validate_time_frame(self, context, _HealthdataAnagCw7u._TIME_RANGE)
 
-    @override
-    def _fetch(self, context: Context) -> pd.DataFrame:
-        value_col = "total_patients_hospitalized_confirmed_influenza_7_day_sum"
+    def _fetch_column(self, context: Context, column: str) -> pd.DataFrame:
         query = q.Query(
             select=(
                 q.Select("collection_week", "date", as_name="date"),
                 q.Select("fips_code", "str", as_name="geoid"),
-                q.Select(value_col, "int", as_name="value"),
+                q.Select(column, "int", as_name="value"),
             ),
             where=q.And(
                 q.In("fips_code", context.scope.node_ids),
@@ -85,44 +94,130 @@ class InfluenzaFacilityHospitalization(ADRIOPrototype[np.int64]):
                 q.Ascending(":id"),
             ),
         )
-        return q.query_csv(
-            resource=InfluenzaFacilityHospitalization._RESOURCE,
-            query=query,
-            api_token=healthdata_api_key(),
-        )
+        try:
+            return q.query_csv(
+                resource=_HealthdataAnagCw7u._RESOURCE,
+                query=query,
+                api_token=healthdata_api_key(),
+            )
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
 
     @override
-    def _process(self, context: Context, data_df: pd.DataFrame) -> ProcessResult:
-        return process_txn(
-            data_availability=InfluenzaFacilityHospitalization._TIME_RANGE,
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        time_range = _HealthdataAnagCw7u._TIME_RANGE
+        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
+        result = process_txn(
             sentinels=[
                 FixSentinel(
                     "redacted",
-                    InfluenzaFacilityHospitalization._REDACTED_VALUE,
-                    self.fix_redacted,
-                )
+                    _HealthdataAnagCw7u._REDACTED_VALUE,
+                    self._fix_redacted,
+                ),
             ],
-            fix_missing=self.fix_missing,
+            fix_missing=self._fix_missing,
             dtype=np.int64,
             context=context,
             data_df=data_df,
+            time_series=time_series,
         )
+        return result.to_date_value(time_series)
 
     @override
-    def _validate_result(self, context: Context, result: NDArray[np.int64]) -> None:
+    def _validate_result(
+        self, context: Context, result: NDArray[DateValueType]
+    ) -> None:
         # NOTE: validation only checks non-masked values
-        is_valid = InfluenzaFacilityHospitalization._VALUE_RANGE
-        if not is_valid(result).all():
-            raise ValueError("invalid values")  # TODO
+        is_valid = _HealthdataAnagCw7u._VALUE_RANGE
+        if not is_valid(result["value"]).all():
+            err = "result contains invalid values"
+            raise ADRIOProcessingError(self, context, err)
 
-        time_series = InfluenzaFacilityHospitalization._TIME_RANGE.overlap(
-            context.time_frame
-        )
-        if time_series is None:
-            raise ValueError("this should really be caught ealier")  # TODO
+        time_range = _HealthdataAnagCw7u._TIME_RANGE
+        time_series = time_range.overlap_or_raise(context.time_frame)
         expected_shape = (len(time_series), context.scope.nodes)
         if result.shape != expected_shape:
-            raise ValueError("invalid shape")  # TODO
+            err = "result was an invalid shape"
+            raise ADRIOProcessingError(self, context, err)
 
-        if np.dtype(result.dtype) != np.dtype(np.int64):
-            raise ValueError("invalid dtype")  # TODO
+        if not validate_date_value_dtype(result, np.int64):
+            err = "result was not the expected data type"
+            raise ADRIOProcessingError(self, context, err)
+
+
+class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
+    """
+    Loads COVID hospitalization data from HealthData.gov's
+    "COVID-19 Reported Patient Impact and Hospital Capacity by Facility"
+    dataset. The data were reported by healthcare facilities on a weekly basis,
+    starting 2019-12-29 and ending 2024-04-21, although the data is not complete
+    over this entire range, nor over the entire United States.
+
+    This ADRIO supports geo scopes at US State and County granularities. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    reported hospitalizations. The data contain sentinel values (-999999) which
+    rrepresent values redacted for the sake of protecting patient privacy -- there
+    were between 1 and 3 cases reported by the facility on that date.
+
+    Parameters
+    ----------
+    fix_redacted : Fix[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to replace redacted values (-999999 in the data).
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data).
+    """  # noqa: E501
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        return self._fetch_column(
+            context,
+            column="total_adult_patients_hospitalized_confirmed_covid_7_day_sum",
+        )
+
+    # TODO: should we include pediatric hospitalized?
+
+
+class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
+    """
+    Loads influenza hospitalization data from HealthData.gov's
+    "COVID-19 Reported Patient Impact and Hospital Capacity by Facility"
+    dataset. The data were reported by healthcare facilities on a weekly basis,
+    starting 2019-12-29 and ending 2024-04-21, although the data is not complete
+    over this entire range, nor over the entire United States.
+
+    This ADRIO supports geo scopes at US State and County granularities. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    reported hospitalizations. The data contain sentinel values (-999999) which
+    rrepresent values redacted for the sake of protecting patient privacy -- there
+    were between 1 and 3 cases reported by the facility on that date.
+
+    Parameters
+    ----------
+    fix_redacted : Fix[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to replace redacted values (-999999 in the data).
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data).
+    """  # noqa: E501
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        return self._fetch_column(
+            context,
+            column="total_patients_hospitalized_confirmed_influenza_7_day_sum",
+        )

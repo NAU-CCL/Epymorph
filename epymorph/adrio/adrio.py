@@ -6,7 +6,6 @@ ADRIO implementations.
 import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import timedelta
 from functools import partial, reduce
 from time import perf_counter
 from typing import (
@@ -32,7 +31,6 @@ from epymorph.data_shape import Shapes
 from epymorph.data_type import AttributeArray
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
 from epymorph.database import DataResolver, evaluate_param
-from epymorph.error import DataResourceError
 from epymorph.event import ADRIOProgress, DownloadActivity, EventBus
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import Context, SimulationFunction
@@ -179,6 +177,57 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
 ######################
 
 
+class ADRIOError(Exception):
+    """Exception while loading or processing data with an ADRIO."""
+
+    def _name(self, adrio: "ADRIOPrototype", context: Context) -> str:
+        if context.name == NAME_PLACEHOLDER:
+            return adrio.class_name
+        else:
+            return f"{context.name} ({adrio.name})"
+
+
+class ADRIOContextError(ADRIOError):
+    """The simulation context is invalid for using the ADRIO."""
+
+    def __init__(
+        self,
+        adrio: "ADRIOPrototype",
+        context: Context,
+        message: str | None = None,
+    ):
+        if message is None:
+            message = "the ADRIO encountered an unexpected error"
+        err = f"Invalid context for {self._name(adrio, context)}: {message}"
+        super().__init__(err)
+
+
+class ADRIOCommunicationError(ADRIOError):
+    """The ADRIO could not communicate with the external resource."""
+
+    def __init__(self, adrio: "ADRIOPrototype", context: Context):
+        err = (
+            f"Error loading {self._name(adrio, context)}: "
+            f"the ADRIO was unable to communicate with the external resource"
+        )
+        super().__init__(err)
+
+
+class ADRIOProcessingError(ADRIOError):
+    """An unexpected error occurred while processing ADRIO data."""
+
+    def __init__(
+        self,
+        adrio: "ADRIOPrototype",
+        context: Context,
+        message: str | None = None,
+    ):
+        if message is None:
+            message = "the ADRIO encountered an unexpected error processing results"
+        err = f"Error loading {self._name(adrio, context)}: {message}"
+        super().__init__(err)
+
+
 DataT = TypeVar("DataT", bound=np.generic)
 
 
@@ -186,6 +235,15 @@ DataT = TypeVar("DataT", bound=np.generic)
 class ProcessResult(Generic[DataT]):
     raw: NDArray[DataT]
     issues: Sequence[tuple[str, NDArray[np.bool_]]]
+
+    def to_date_value(
+        self,
+        dates: NDArray[np.datetime64],
+    ) -> "ProcessResult[DateValueType]":
+        return ProcessResult(
+            raw=to_date_value_array(dates, self.raw),
+            issues=self.issues,
+        )
 
 
 class ADRIOPrototype(SimulationFunction[NDArray[DataT]]):
@@ -218,15 +276,34 @@ class ADRIOPrototype(SimulationFunction[NDArray[DataT]]):
         pass
 
     def evaluate(self) -> NDArray[DataT]:
-        context = self.context
-        self._validate_context(context)
+        ctx = self.context
+        try:
+            self._validate_context(ctx)
+        except ADRIOError:
+            raise
+        except Exception as e:
+            raise ADRIOContextError(self, ctx) from e
+
         self.report_progress(0.0)
         t0 = perf_counter()
-        source_df = self._fetch(context)
-        proc_res = self._process(context, source_df)
-        result_np = self._format(context, proc_res)
+
+        try:
+            source_df = self._fetch(ctx)
+        except ADRIOError:
+            raise
+        except Exception as e:
+            raise ADRIOProcessingError(self, ctx) from e
+
+        try:
+            proc_res = self._process(ctx, source_df)
+            result_np = self._format(ctx, proc_res)
+            self._validate_result(ctx, result_np)
+        except ADRIOError:
+            raise
+        except Exception as e:
+            raise ADRIOProcessingError(self, ctx) from e
+
         t1 = perf_counter()
-        self._validate_result(context, result_np)
         self.report_complete(t1 - t0)
         return result_np
 
@@ -291,14 +368,19 @@ def range_mask_fn(
 
 
 def validate_time_frame(
+    adrio: ADRIOPrototype,
+    context: Context,
     time_range: DateRange,
-    time_frame: TimeFrame,
 ) -> None:
     start = time_range.start_date
     end = time_range.end_date
-    if time_frame.start_date < start or time_frame.end_date > end:
+    tf = context.time_frame
+    if tf.start_date < start or tf.end_date > end:
         err = f"This ADRIO is only valid for time frames between {start} and {end}."
-        raise DataResourceError(err)
+        raise ADRIOContextError(adrio, context, err)
+    if time_range.overlap(tf) is None:
+        err = "The supplied time frame does not include any available dates."
+        raise ADRIOContextError(adrio, context, err)
 
 
 def strip_sentinel_txn(
@@ -652,21 +734,13 @@ class FixSentinel(NamedTuple, Generic[DataT]):
 
 def process_txn(
     *,
-    data_availability: DateRange,
     sentinels: list[FixSentinel],
     fix_missing: Fill[DataT],
     dtype: type[DataT],
     context: Context,
     data_df: pd.DataFrame,
+    time_series: NDArray[np.datetime64],
 ) -> ProcessResult[DataT]:
-    time_series_dr = data_availability.between(
-        context.time_frame.start_date,
-        context.time_frame.end_date - timedelta(days=1),
-    )
-    if time_series_dr is None:
-        raise ValueError("Invalid time frame for this data.")
-    time_series = time_series_dr.to_numpy()
-
     issues = []
     work_df = data_df
 
@@ -718,6 +792,57 @@ def process_nxn(
         issues.append(("missing", missing_mask))
 
     return ProcessResult(data_np, issues)
+
+
+####################
+# DATE/VALUE TYPES #
+####################
+
+
+DateValueType = np.void
+"""
+The numpy dtype used for structured arrays of date and value.
+numpy doesn't let us type these very explicitly, so this alias
+is used to express intention, but know it comes with few guarantees.
+
+So basically it implies: `[("date", "datetime64[D]"), ("value", DataT)]`
+"""
+
+
+def to_date_value_array(
+    dates: NDArray[np.datetime64],
+    values: NDArray[DataT],
+) -> NDArray[DateValueType]:
+    value_dtype = np.dtype(values.dtype).type
+    result = np.empty(
+        values.shape,
+        dtype=[("date", "datetime64[D]"), ("value", value_dtype)],
+    )
+    result["date"] = np.expand_dims(dates, axis=1)
+    result["value"] = values
+    return result
+
+
+def validate_date_value_dtype(
+    date_values: NDArray[DateValueType],
+    value_dtype: type[np.generic],
+) -> bool:
+    dtype = np.dtype(date_values.dtype)
+    if getattr(dtype, "names", None) != ("date", "value"):
+        return False
+    if dtype["date"] != np.dtype("datetime64[D]"):
+        return False
+    if dtype["value"] != np.dtype(value_dtype):
+        return False
+    return True
+
+
+def extract_date_value(
+    date_values: NDArray[DateValueType],
+) -> tuple[NDArray[np.datetime64], NDArray]:
+    dates = np.ma.getdata(date_values["date"][:, 0])
+    values = date_values["value"]
+    return dates, values
 
 
 ##################
