@@ -45,6 +45,8 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType]):
     _REDACTED_VALUE = np.int64(-999999)
     """The value of redacted reports: between 1 and 3 cases."""
 
+    _column: str
+    """The name of the data source column to fetch for this ADRIO."""
     _fix_redacted: Fix[np.int64]
     """The method to use to replace redacted values (-999999 in the data)."""
     _fix_missing: Fill[np.int64]
@@ -73,20 +75,22 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType]):
 
         validate_time_frame(self, context, _HealthdataAnagCw7u._TIME_RANGE)
 
-    def _fetch_column(self, context: Context, column: str) -> pd.DataFrame:
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
         query = q.Query(
             select=(
                 q.Select("collection_week", "date", as_name="date"),
                 q.Select("fips_code", "str", as_name="geoid"),
-                q.Select(column, "int", as_name="value"),
+                q.Select(self._column, "int", as_name="value"),
             ),
             where=q.And(
-                q.In("fips_code", context.scope.node_ids),
                 q.DateBetween(
                     "collection_week",
                     context.time_frame.start_date,
                     context.time_frame.end_date,
                 ),
+                q.In("fips_code", context.scope.node_ids),
+                q.NotNull(self._column),
             ),
             order_by=(
                 q.Ascending("collection_week"),
@@ -177,12 +181,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
     [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data).
     """  # noqa: E501
 
-    @override
-    def _fetch(self, context: Context) -> pd.DataFrame:
-        return self._fetch_column(
-            context,
-            column="total_adult_patients_hospitalized_confirmed_covid_7_day_sum",
-        )
+    _column = "total_adult_patients_hospitalized_confirmed_covid_7_day_sum"
 
     # TODO: should we include pediatric hospitalized?
 
@@ -215,9 +214,4 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
     [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data).
     """  # noqa: E501
 
-    @override
-    def _fetch(self, context: Context) -> pd.DataFrame:
-        return self._fetch_column(
-            context,
-            column="total_patients_hospitalized_confirmed_influenza_7_day_sum",
-        )
+    _column = "total_patients_hospitalized_confirmed_influenza_7_day_sum"

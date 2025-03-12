@@ -95,6 +95,15 @@ class WhereClause(ABC):
 
 
 @dataclass(frozen=True, slots=True)
+class NotNull(WhereClause):
+    column: str
+    """Column name."""
+
+    def __str__(self) -> str:
+        return f"{_col(self.column)} IS NOT NULL"
+
+
+@dataclass(frozen=True, slots=True)
 class Equals(WhereClause):
     column: str
     """Column name."""
