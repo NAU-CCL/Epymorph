@@ -550,6 +550,84 @@ def validate_time_frame(
         raise ADRIOContextError(adrio, context, err)
 
 
+def strip_sentinel_n(
+    context: Context,
+    result_df: pd.DataFrame,
+    sentinel: int,
+    value_name: str,
+) -> tuple[pd.DataFrame, NDArray[np.bool_]]:
+    is_sentinel = result_df[value_name] == sentinel
+    sentinel_df = result_df.loc[is_sentinel]
+    stripped_df = result_df.loc[~is_sentinel]
+    if sentinel_df.empty:
+        sentinel_mask = np.array([], dtype=np.bool_)
+    else:
+        sentinel_mask = cast(
+            NDArray[np.bool_],
+            (
+                # pivot_table serves to group and agg duplicate geoids, if any
+                sentinel_df.pivot_table(
+                    index="geoid",
+                    values=value_name,
+                    aggfunc=lambda _: True,
+                    fill_value=False,
+                )
+                .reindex(
+                    index=context.scope.node_ids,
+                    fill_value=False,
+                )
+                .to_numpy(dtype=np.bool_)[:, 0]
+            ),
+        )
+    return stripped_df, sentinel_mask
+
+
+# TODO: this makes it clear to me that there is a difference between
+# processing pipelines where pivot is needed to do group-and-aggregate
+# vs those where group-and-aggregate are expected to be unnecessary.
+#
+# CDC facility data contains more than one value per place per column
+# (because there are very frequently more than one facility in a place).
+# We must fix-or-strip sentinels before we pivot, or else sentinels
+# will get aggregated in before we can remove them.
+#
+# On the other hand ACS will never produce more than one value per place
+# for a single var; pivot is not needed. We could deal with sentinels
+# after the final shape has been tabulated.
+# An alternative would be to convert the dataframe that ACS returns into
+# long format: geoid, variable, value -- then we could handle sentinels
+# in the same way... but would that be a performance hit? Needs testing.
+
+
+def strip_sentinel_nxa(
+    context: Context,
+    result_df: pd.DataFrame,
+    sentinel: int,
+    value_names: list[str],
+) -> tuple[pd.DataFrame, NDArray[np.bool_]]:
+    is_sentinel = result_df[value_name] == sentinel
+    sentinel_df = result_df.loc[is_sentinel]
+    stripped_df = result_df.loc[~is_sentinel]
+    sentinel_mask = cast(
+        NDArray[np.bool_],
+        (
+            # pivot_table serves to group and agg duplicate geoids, if any
+            sentinel_df.pivot_table(
+                index="geoid",
+                values=value_names,
+                aggfunc=lambda _: True,
+                fill_value=False,
+            )
+            .reindex(
+                index=context.scope.node_ids,
+                fill_value=False,
+            )
+            .to_numpy(dtype=np.bool_)
+        ),
+    )
+    return stripped_df, sentinel_mask
+
+
 def strip_sentinel_txn(
     time_series: NDArray[np.datetime64],
     context: Context,
@@ -631,6 +709,20 @@ class Fix(ABC, Generic[DataT]):
             return ConstantFix[np.int64](fix)  # type: ignore
         elif callable(fix):
             return FunctionFix[np.int64](fix)  # type: ignore
+        raise ValueError("Not a valid fix.")
+
+    @staticmethod
+    def of_float64(
+        fix: "Fix[np.float64] | float | Callable[[], float] | Literal[False]",
+    ) -> "Fix[np.float64]":
+        if fix is False:
+            return DontFix()
+        elif isinstance(fix, Fix):
+            return fix  # for convenience, no-op if arg is a Fix
+        elif isinstance(fix, float):
+            return ConstantFix[np.float64](fix)  # type: ignore
+        elif callable(fix):
+            return FunctionFix[np.float64](fix)  # type: ignore
         raise ValueError("Not a valid fix.")
 
 
@@ -737,6 +829,22 @@ class Fill(ABC, Generic[DataT]):
             return FunctionFill[np.int64](fill)  # type: ignore
         raise ValueError("Not a valid fill.")
 
+    @staticmethod
+    def of_float64(
+        fill: "Fill[np.float64] | float | Callable[[], float] | Literal[False]",
+    ) -> "Fill[np.float64]":
+        if fill is False:
+            return DontFill()
+        elif isinstance(fill, Fill):
+            return fill  # for convenience, no-op if arg is a Fill
+        elif fill == 0:
+            return AlreadyFilled[np.float64]()
+        elif isinstance(fill, float):
+            return ConstantFill[np.float64](fill)  # type: ignore
+        elif callable(fill):
+            return FunctionFill[np.float64](fill)  # type: ignore
+        raise ValueError("Not a valid fill.")
+
 
 @dataclass(frozen=True)
 class AlreadyFilled(Fill[DataT]):
@@ -794,6 +902,98 @@ class DontFill(Fill[DataT]):
         missing_mask: NDArray[np.bool_],
     ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
         return data_np, missing_mask
+
+
+def tabulate_data_n(
+    context: Context,
+    result_df: pd.DataFrame,
+    dtype: type[DataT],
+    value_name: str,
+) -> tuple[NDArray[DataT], NDArray[np.bool_]]:
+    # result_df must be a long data frame with columns
+    # geoid and `value_name`
+    # sentinel values have been removed
+    # groups will be aggregated by sum
+    data = cast(
+        NDArray[DataT],
+        (
+            # pivot_table serves to group and agg duplicate geoids, if any
+            result_df.pivot_table(
+                index="geoid",
+                values=value_name,
+                aggfunc="sum",
+                fill_value=0,
+            )
+            .reindex(
+                index=context.scope.node_ids,
+                fill_value=0,
+            )
+            .to_numpy(dtype=dtype)
+        ),
+    )
+    missing_mask = cast(
+        NDArray[np.bool_],
+        (
+            result_df.assign(value=False)
+            .pivot_table(
+                index="geoid",
+                values=value_name,
+                aggfunc=lambda _: False,
+                fill_value=True,
+            )
+            .reindex(
+                index=context.scope.node_ids,
+                fill_value=True,
+            )
+        ).to_numpy(dtype=np.bool_),
+    )
+    return data[:, 0], missing_mask[:, 0]
+
+
+def tabulate_data_nxa(
+    context: Context,
+    result_df: pd.DataFrame,
+    dtype: type[DataT],
+    value_names: list[str],
+) -> tuple[NDArray[DataT], NDArray[np.bool_]]:
+    # result_df must be a long data frame with columns
+    # geoid and `value_name`
+    # sentinel values have been removed
+    # groups will be aggregated by sum
+    data = cast(
+        NDArray[DataT],
+        (
+            # pivot_table serves to group and agg duplicate geoids, if any
+            result_df.pivot_table(
+                index="geoid",
+                values=value_names,
+                aggfunc="sum",
+                fill_value=0,
+            )
+            .reindex(
+                index=context.scope.node_ids,
+                fill_value=0,
+            )
+            .to_numpy(dtype=dtype)
+        ),
+    )
+    missing_mask = cast(
+        NDArray[np.bool_],
+        (
+            result_df.assign(value=False)
+            .pivot_table(
+                index="geoid",
+                values=value_names,
+                aggfunc=lambda _: False,
+                fill_value=True,
+            )
+            .reindex(
+                index=context.scope.node_ids,
+                fill_value=True,
+            )
+        ).to_numpy(dtype=np.bool_),
+    )
+    return data, missing_mask
 
 
 def tabulate_data_txn(
@@ -897,6 +1097,70 @@ class FixSentinel(NamedTuple, Generic[DataT]):
     name: str
     value: DataT
     fix: Fix[DataT]
+
+
+def process_n(
+    *,
+    sentinels: list[FixSentinel],
+    fix_missing: Fill[DataT],
+    dtype: type[DataT],
+    context: Context,
+    data_df: pd.DataFrame,
+    value_name: str = "value",
+) -> ProcessResult[DataT]:
+    issues = []
+    work_df = data_df
+
+    for sentinel_name, sentinel_value, fix_sentinel in sentinels:
+        work_df = fix_sentinel(context, sentinel_value, data_df)
+        work_df, mask = strip_sentinel_n(
+            context,
+            work_df,
+            sentinel_value,
+            value_name=value_name,
+        )
+        if mask is not None and mask.any():
+            issues.append((sentinel_name, mask))
+
+    tab_np, missing_mask = tabulate_data_n(context, work_df, dtype, value_name)
+    data_np, missing_mask = fix_missing(context, tab_np, missing_mask)
+
+    if missing_mask is not None and missing_mask.any():
+        issues.append(("missing", missing_mask))
+
+    return ProcessResult(data_np, issues)
+
+
+def process_nxa(
+    *,
+    sentinels: list[FixSentinel],
+    fix_missing: Fill[DataT],
+    dtype: type[DataT],
+    context: Context,
+    data_df: pd.DataFrame,
+    value_names: list[str],
+) -> ProcessResult[DataT]:
+    issues = []
+    work_df = data_df
+
+    for sentinel_name, sentinel_value, fix_sentinel in sentinels:
+        work_df = fix_sentinel(context, sentinel_value, data_df)
+        work_df, mask = strip_sentinel_nxa(
+            context,
+            work_df,
+            sentinel_value,
+            value_names=value_names,
+        )
+        if mask is not None and mask.any():
+            issues.append((sentinel_name, mask))
+
+    tab_np, missing_mask = tabulate_data_nxa(context, work_df, dtype, value_names)
+    data_np, missing_mask = fix_missing(context, tab_np, missing_mask)
+
+    if missing_mask is not None and missing_mask.any():
+        issues.append(("missing", missing_mask))
+
+    return ProcessResult(data_np, issues)
 
 
 def process_txn(
