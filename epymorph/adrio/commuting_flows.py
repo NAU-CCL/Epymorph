@@ -3,21 +3,20 @@ from typing import Callable, Literal, NamedTuple
 
 import numpy as np
 import pandas as pd
-from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.adrio.adrio import (
     ADRIOCommunicationError,
     ADRIOContextError,
-    ADRIOProcessingError,
     ADRIOPrototype,
     Fill,
     ProcessResult,
+    ResultFormat,
     process_nxn,
     range_mask_fn,
 )
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
-from epymorph.data_shape import DataShape, Shapes
+from epymorph.data_shape import Shapes
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.simulation import Context
@@ -152,8 +151,12 @@ class Commuters(ADRIOPrototype[np.int64, np.int64]):
     from the US Census.
     """  # noqa: E501
 
-    _VALUE_RANGE = range_mask_fn(minimum=np.int64(0), maximum=None)
-    """The expected range of valid values."""
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.NxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+    )
+    """The format of results."""
 
     _fix_missing: Fill[np.int64]
     """The method to use to fix missing values."""
@@ -170,13 +173,8 @@ class Commuters(ADRIOPrototype[np.int64, np.int64]):
 
     @property
     @override
-    def value_dtype(self) -> type[np.int64]:
-        return np.int64
-
-    @property
-    @override
-    def result_shape(self) -> DataShape:
-        return Shapes.NxN
+    def result_format(self) -> ResultFormat[np.int64]:
+        return Commuters._RESULT_FORMAT
 
     def _get_config(self, context: Context) -> tuple[_Config, StateScope | CountyScope]:
         scope = context.scope
@@ -213,7 +211,7 @@ class Commuters(ADRIOPrototype[np.int64, np.int64]):
         )
 
     @override
-    def _validate_context(self, context: Context) -> None:
+    def validate_context(self, context: Context) -> None:
         self._get_config(context)
 
     @override
@@ -287,19 +285,3 @@ class Commuters(ADRIOPrototype[np.int64, np.int64]):
             context=context,
             data_df=data_df,
         )
-
-    @override
-    def _validate_result(self, context: Context, result: NDArray[np.int64]) -> None:
-        # NOTE: validation only checks non-masked values
-        if not Commuters._VALUE_RANGE(result).all():
-            err = "result contains invalid values"
-            raise ADRIOProcessingError(self, context, err)
-
-        expected_shape = (context.scope.nodes, context.scope.nodes)
-        if result.shape != expected_shape:
-            err = "result was an invalid shape"
-            raise ADRIOProcessingError(self, context, err)
-
-        if np.dtype(result.dtype) != np.dtype(self.value_dtype):
-            err = "result was not the expected data type"
-            raise ADRIOProcessingError(self, context, err)

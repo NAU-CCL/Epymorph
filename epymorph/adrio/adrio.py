@@ -5,7 +5,7 @@ ADRIO implementations.
 
 import functools
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial, reduce
 from time import perf_counter
 from typing import (
@@ -15,7 +15,6 @@ from typing import (
     Literal,
     NamedTuple,
     Sequence,
-    TypeGuard,
     TypeVar,
     cast,
     final,
@@ -42,6 +41,7 @@ from epymorph.util import (
     dtype_name,
     extract_date_value,
     is_date_value_array,
+    is_numeric,
     to_date_value_array,
 )
 
@@ -257,10 +257,6 @@ class ProcessResult(Generic[DataT]):
         )
 
 
-def _is_numeric(arr: NDArray) -> TypeGuard[NDArray[np.integer | np.floating]]:
-    return np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating)
-
-
 @dataclass(frozen=True)
 class InspectResult(Generic[ResultT, ValueT]):
     adrio: "ADRIOPrototype"
@@ -282,7 +278,7 @@ class InspectResult(Generic[ResultT, ValueT]):
         vs = self.values
         size = vs.size
         quant = []
-        if _is_numeric(vs):
+        if is_numeric(vs):
             quant.append(("zero", (vs == self.dtype(0)).sum() / size))
         for name, mask in self.issues:
             quant.append((name, mask.sum() / size))
@@ -323,7 +319,7 @@ class InspectResult(Generic[ResultT, ValueT]):
 
         # Value statistics only possible on numeric data.
         stats = []
-        if _is_numeric(vs):
+        if is_numeric(vs):
             # stats methods don't really support masked arrays
             stats_vs = vs if not np.ma.is_masked(vs) else np.ma.compressed(vs)
             qs = np.quantile(stats_vs, [0.25, 0.50, 0.75])
@@ -350,6 +346,17 @@ class InspectResult(Generic[ResultT, ValueT]):
         return "\n".join(lines)
 
 
+ArrayValidation = Callable[[NDArray[ValueT]], NDArray[np.bool_]]
+
+
+@dataclass(frozen=True)
+class ResultFormat(Generic[ValueT]):
+    shape: DataShape
+    value_dtype: type[ValueT]
+    validation: ArrayValidation[ValueT]
+    is_date_value: bool = field(default=False)
+
+
 class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
     """
     ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
@@ -359,16 +366,11 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
 
     @property
     @abstractmethod
-    def value_dtype(self) -> type[ValueT]:
-        pass
-
-    @property
-    @abstractmethod
-    def result_shape(self) -> DataShape:
+    def result_format(self) -> ResultFormat[ValueT]:
         pass
 
     @abstractmethod
-    def _validate_context(self, context: Context) -> None:
+    def validate_context(self, context: Context) -> None:
         pass
 
     @abstractmethod
@@ -389,9 +391,44 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
             return np.ma.masked_array(data.raw, mask)
         return data.raw
 
-    @abstractmethod
-    def _validate_result(self, context: Context, result: NDArray[ResultT]) -> None:
-        pass
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[ResultT],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        if not isinstance(result, np.ndarray):
+            err = "result was not a numpy array"
+            raise ADRIOProcessingError(self, context, err)
+
+        if expected_shape is None:
+            expected_shape = self.result_format.shape.to_tuple(context.dim)
+        if -1 in expected_shape:
+            err = (
+                "cannot check result shape for arbitrary axes; the ADRIO should "
+                "override `_validate_result` and provide the expected shape"
+            )
+            raise ADRIOProcessingError(self, context, err)
+
+        fmt = self.result_format
+        if fmt.is_date_value and is_date_value_array(result):
+            _, values = extract_date_value(result, fmt.value_dtype)
+        else:
+            values = cast(NDArray[ValueT], result)
+
+        # NOTE: validation only checks non-masked values
+        if not fmt.validation(values).all():
+            err = "result contains invalid values"
+            raise ADRIOProcessingError(self, context, err)
+
+        if result.shape != expected_shape:
+            err = "result was an invalid shape"
+            raise ADRIOProcessingError(self, context, err)
+
+        if np.dtype(values.dtype) != np.dtype(fmt.value_dtype):
+            err = "result was not the expected data type"
+            raise ADRIOProcessingError(self, context, err)
 
     def evaluate(self) -> NDArray[ResultT]:
         return self.inspect().result
@@ -399,7 +436,7 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
     def inspect(self) -> InspectResult[ResultT, ValueT]:
         ctx = self.context
         try:
-            self._validate_context(ctx)
+            self.validate_context(ctx)
         except ADRIOError:
             raise
         except Exception as e:
@@ -427,12 +464,13 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
         t1 = perf_counter()
         self.report_complete(t1 - t0)
 
+        result_format = self.result_format
         return InspectResult[ResultT, ValueT](
             self,
             source_df,
             result_np,
-            self.value_dtype,
-            self.result_shape,
+            result_format.value_dtype,
+            result_format.shape,
             proc_res.issues,
         )
 

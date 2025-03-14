@@ -10,22 +10,21 @@ import epymorph.adrio.soda as q
 from epymorph.adrio.adrio import (
     ADRIOCommunicationError,
     ADRIOContextError,
-    ADRIOProcessingError,
     ADRIOPrototype,
     DateValueType,
     Fill,
     Fix,
     FixSentinel,
     ProcessResult,
+    ResultFormat,
     process_txn,
     range_mask_fn,
     validate_time_frame,
 )
-from epymorph.data_shape import DataShape, Shapes
+from epymorph.data_shape import Shapes
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.simulation import Context
 from epymorph.time import DateRange, iso8601
-from epymorph.util import is_date_value_array
 
 
 def healthdata_api_key() -> str | None:
@@ -41,8 +40,13 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType, np.int64]):
     """The Socrata API endpoint."""
     _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)
     """The time range over which values are available."""
-    _VALUE_RANGE = range_mask_fn(minimum=np.int64(0), maximum=None)
-    """The range of valid values."""
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
+    )
+    """The format of results."""
     _REDACTED_VALUE = np.int64(-999999)
     """The value of redacted reports: between 1 and 3 cases."""
 
@@ -70,16 +74,11 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType, np.int64]):
 
     @property
     @override
-    def value_dtype(self) -> type[np.int64]:
-        return np.int64
-
-    @property
-    @override
-    def result_shape(self) -> DataShape:
-        return Shapes.AxN
+    def result_format(self) -> ResultFormat[np.int64]:
+        return _HealthdataAnagCw7u._RESULT_FORMAT
 
     @override
-    def _validate_context(self, context: Context):
+    def validate_context(self, context: Context):
         if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
@@ -147,23 +146,13 @@ class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType, np.int64]):
         self,
         context: Context,
         result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
     ) -> None:
-        # NOTE: validation only checks non-masked values
-        is_valid = _HealthdataAnagCw7u._VALUE_RANGE
-        if not is_valid(result["value"]).all():
-            err = "result contains invalid values"
-            raise ADRIOProcessingError(self, context, err)
-
         time_range = _HealthdataAnagCw7u._TIME_RANGE
         time_series = time_range.overlap_or_raise(context.time_frame)
-        expected_shape = (len(time_series), context.scope.nodes)
-        if result.shape != expected_shape:
-            err = "result was an invalid shape"
-            raise ADRIOProcessingError(self, context, err)
-
-        if not is_date_value_array(result, self.value_dtype):
-            err = "result was not the expected data type"
-            raise ADRIOProcessingError(self, context, err)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)
 
 
 class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
