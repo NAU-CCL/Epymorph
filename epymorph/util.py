@@ -513,7 +513,7 @@ def to_date_value_array(
         values.shape,
         dtype=[("date", "datetime64[D]"), ("value", value_dtype)],
     )
-    result["date"] = np.broadcast_to(dates, values.shape).T
+    result["date"] = np.broadcast_to(dates[:, np.newaxis], values.shape)
     result["value"] = values
     return result
 

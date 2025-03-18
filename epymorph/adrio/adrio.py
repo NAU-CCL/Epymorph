@@ -4,16 +4,13 @@ ADRIO implementations.
 """
 
 import functools
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
-from functools import partial, reduce
+from functools import reduce
 from time import perf_counter
 from typing import (
-    Any,
     Callable,
     Generic,
-    Literal,
-    NamedTuple,
     Sequence,
     TypeVar,
     cast,
@@ -26,6 +23,7 @@ from numpy.typing import NDArray
 from sparklines import sparklines
 from typing_extensions import override
 
+from epymorph.adrio.processing import ProcessResult
 from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import DataShape, Shapes
@@ -37,12 +35,10 @@ from epymorph.geography.scope import GeoScope
 from epymorph.simulation import Context, SimulationFunction
 from epymorph.time import DateRange, TimeFrame
 from epymorph.util import (
-    DateValueType,
     dtype_name,
     extract_date_value,
     is_date_value_array,
     is_numeric,
-    to_date_value_array,
 )
 
 ResultDType = TypeVar("ResultDType", bound=np.generic)
@@ -237,34 +233,27 @@ class ADRIOProcessingError(ADRIOError):
         super().__init__(err)
 
 
-DataT = TypeVar("DataT", bound=np.generic)
 ResultT = TypeVar("ResultT", bound=np.generic)
 ValueT = TypeVar("ValueT", bound=np.generic)
 
 
 @dataclass(frozen=True)
-class ProcessResult(Generic[DataT]):
-    raw: NDArray[DataT]
-    issues: Sequence[tuple[str, NDArray[np.bool_]]]
-
-    def to_date_value(
-        self,
-        dates: NDArray[np.datetime64],
-    ) -> "ProcessResult[DateValueType]":
-        return ProcessResult(
-            raw=to_date_value_array(dates, self.raw),
-            issues=self.issues,
-        )
-
-
-@dataclass(frozen=True)
 class InspectResult(Generic[ResultT, ValueT]):
     adrio: "ADRIOPrototype"
-    source: pd.DataFrame
+    source: pd.DataFrame | NDArray
     result: NDArray[ResultT]
     dtype: type[ValueT]
     shape: DataShape
     issues: Sequence[tuple[str, NDArray[np.bool_]]]
+
+    def __post_init__(self):
+        for issue_name, mask in self.issues:
+            if mask.shape != self.result.shape:
+                err = (
+                    f"The shape of the mask for '{issue_name}' {mask.shape} did "
+                    f"not match the shape of the result data {self.result.shape}."
+                )
+                raise ValueError(err)
 
     @property
     def values(self) -> NDArray[ValueT]:
@@ -358,12 +347,6 @@ class ResultFormat(Generic[ValueT]):
 
 
 class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
-    """
-    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
-    to load data from external sources for epymorph simulations. This may be from
-    web APIs, local files or database, or anything imaginable.
-    """
-
     @property
     @abstractmethod
     def result_format(self) -> ResultFormat[ValueT]:
@@ -372,24 +355,6 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
     @abstractmethod
     def validate_context(self, context: Context) -> None:
         pass
-
-    @abstractmethod
-    def _fetch(self, context: Context) -> pd.DataFrame:
-        pass
-
-    @abstractmethod
-    def _process(
-        self, context: Context, data_df: pd.DataFrame
-    ) -> ProcessResult[ResultT]:
-        pass
-
-    def _format(
-        self, context: Context, data: ProcessResult[ResultT]
-    ) -> NDArray[ResultT]:
-        if len(data.issues) > 0:
-            mask = reduce(np.logical_or, [m for _, m in data.issues])
-            return np.ma.masked_array(data.raw, mask)
-        return data.raw
 
     def _validate_result(
         self,
@@ -433,46 +398,9 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
     def evaluate(self) -> NDArray[ResultT]:
         return self.inspect().result
 
+    @abstractmethod
     def inspect(self) -> InspectResult[ResultT, ValueT]:
-        ctx = self.context
-        try:
-            self.validate_context(ctx)
-        except ADRIOError:
-            raise
-        except Exception as e:
-            raise ADRIOContextError(self, ctx) from e
-
-        self.report_progress(0.0)
-        t0 = perf_counter()
-
-        try:
-            source_df = self._fetch(ctx)
-        except ADRIOError:
-            raise
-        except Exception as e:
-            raise ADRIOProcessingError(self, ctx) from e
-
-        try:
-            proc_res = self._process(ctx, source_df)
-            result_np = self._format(ctx, proc_res)
-            self._validate_result(ctx, result_np)
-        except ADRIOError:
-            raise
-        except Exception as e:
-            raise ADRIOProcessingError(self, ctx) from e
-
-        t1 = perf_counter()
-        self.report_complete(t1 - t0)
-
-        result_format = self.result_format
-        return InspectResult[ResultT, ValueT](
-            self,
-            source_df,
-            result_np,
-            result_format.value_dtype,
-            result_format.shape,
-            proc_res.issues,
-        )
+        pass
 
     def estimate_data(self) -> DataEstimate:
         """Estimate the data usage for this ADRIO in a RUME.
@@ -518,24 +446,109 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
         )
 
 
+@evaluate_param.register
+def _(
+    value: ADRIOPrototype,
+    name: AbsoluteName,
+    data: DataResolver,
+    scope: GeoScope | None,
+    time_frame: TimeFrame | None,
+    ipm: BaseCompartmentModel | None,
+    rng: np.random.Generator | None,
+) -> AttributeArray:
+    # depth-first evaluation guarantees `data` has our dependencies.
+    sim_func = value.with_context_internal(name, data, scope, time_frame, ipm, rng)
+    return sim_func.evaluate()
+
+
+class FetchADRIO(ADRIOPrototype[ResultT, ValueT]):
+    """
+    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
+    to load data from external sources for epymorph simulations. This may be from
+    web APIs, local files or database, or anything imaginable.
+    """
+
+    @abstractmethod
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
+    def _process(
+        self, context: Context, data_df: pd.DataFrame
+    ) -> ProcessResult[ResultT]:
+        pass
+
+    def _format(
+        self, context: Context, data: ProcessResult[ResultT]
+    ) -> NDArray[ResultT]:
+        if len(data.issues) > 0:
+            mask = reduce(np.logical_or, [m for _, m in data.issues])
+            return np.ma.masked_array(data.raw, mask)
+        return data.raw
+
+    def evaluate(self) -> NDArray[ResultT]:
+        return self.inspect().result
+
+    def inspect(self) -> InspectResult[ResultT, ValueT]:
+        ctx = self.context
+        try:
+            self.validate_context(ctx)
+        except ADRIOError:
+            raise
+        except Exception as e:
+            raise ADRIOContextError(self, ctx) from e
+
+        self.report_progress(0.0)
+        t0 = perf_counter()
+
+        try:
+            source_df = self._fetch(ctx)
+        except ADRIOError:
+            raise
+        except Exception as e:
+            raise ADRIOProcessingError(self, ctx) from e
+
+        try:
+            proc_res = self._process(ctx, source_df)
+            result_np = self._format(ctx, proc_res)
+            self._validate_result(ctx, result_np)
+        except ADRIOError:
+            raise
+        except Exception as e:
+            raise ADRIOProcessingError(self, ctx) from e
+
+        t1 = perf_counter()
+        self.report_complete(t1 - t0)
+
+        result_format = self.result_format
+        return InspectResult[ResultT, ValueT](
+            self,
+            source_df,
+            result_np,
+            result_format.value_dtype,
+            result_format.shape,
+            proc_res.issues,
+        )
+
+
 def range_mask_fn(
     *,
-    minimum: DataT | None,
-    maximum: DataT | None,
-) -> Callable[[NDArray[DataT]], NDArray[np.bool_]]:
+    minimum: ValueT | None,
+    maximum: ValueT | None,
+) -> Callable[[NDArray[ValueT]], NDArray[np.bool_]]:
     match (minimum, maximum):
         case (None, None):
             return lambda xs: np.ones_like(xs, dtype=np.bool_)
         case (minimum, None):
             return lambda xs: xs >= minimum
         case (None, maximum):
-            return lambda xs: xs < maximum
+            return lambda xs: xs <= maximum
         case (minimum, maximum):
-            return lambda xs: xs >= minimum & xs < maximum
+            return lambda xs: (xs >= minimum) & (xs <= maximum)
 
 
 def validate_time_frame(
-    adrio: ADRIOPrototype,
+    adrio: FetchADRIO,
     context: Context,
     time_range: DateRange,
 ) -> None:
@@ -548,681 +561,6 @@ def validate_time_frame(
     if time_range.overlap(tf) is None:
         err = "The supplied time frame does not include any available dates."
         raise ADRIOContextError(adrio, context, err)
-
-
-def strip_sentinel_n(
-    context: Context,
-    result_df: pd.DataFrame,
-    sentinel: int,
-    value_name: str,
-) -> tuple[pd.DataFrame, NDArray[np.bool_]]:
-    is_sentinel = result_df[value_name] == sentinel
-    sentinel_df = result_df.loc[is_sentinel]
-    stripped_df = result_df.loc[~is_sentinel]
-    if sentinel_df.empty:
-        sentinel_mask = np.array([], dtype=np.bool_)
-    else:
-        sentinel_mask = cast(
-            NDArray[np.bool_],
-            (
-                # pivot_table serves to group and agg duplicate geoids, if any
-                sentinel_df.pivot_table(
-                    index="geoid",
-                    values=value_name,
-                    aggfunc=lambda _: True,
-                    fill_value=False,
-                )
-                .reindex(
-                    index=context.scope.node_ids,
-                    fill_value=False,
-                )
-                .to_numpy(dtype=np.bool_)[:, 0]
-            ),
-        )
-    return stripped_df, sentinel_mask
-
-
-# TODO: this makes it clear to me that there is a difference between
-# processing pipelines where pivot is needed to do group-and-aggregate
-# vs those where group-and-aggregate are expected to be unnecessary.
-#
-# CDC facility data contains more than one value per place per column
-# (because there are very frequently more than one facility in a place).
-# We must fix-or-strip sentinels before we pivot, or else sentinels
-# will get aggregated in before we can remove them.
-#
-# On the other hand ACS will never produce more than one value per place
-# for a single var; pivot is not needed. We could deal with sentinels
-# after the final shape has been tabulated.
-# An alternative would be to convert the dataframe that ACS returns into
-# long format: geoid, variable, value -- then we could handle sentinels
-# in the same way... but would that be a performance hit? Needs testing.
-
-
-def strip_sentinel_nxa(
-    context: Context,
-    result_df: pd.DataFrame,
-    sentinel: int,
-    value_names: list[str],
-) -> tuple[pd.DataFrame, NDArray[np.bool_]]:
-    is_sentinel = result_df[value_name] == sentinel
-    sentinel_df = result_df.loc[is_sentinel]
-    stripped_df = result_df.loc[~is_sentinel]
-    sentinel_mask = cast(
-        NDArray[np.bool_],
-        (
-            # pivot_table serves to group and agg duplicate geoids, if any
-            sentinel_df.pivot_table(
-                index="geoid",
-                values=value_names,
-                aggfunc=lambda _: True,
-                fill_value=False,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                fill_value=False,
-            )
-            .to_numpy(dtype=np.bool_)
-        ),
-    )
-    return stripped_df, sentinel_mask
-
-
-def strip_sentinel_txn(
-    time_series: NDArray[np.datetime64],
-    context: Context,
-    result_df: pd.DataFrame,
-    sentinel: int,
-) -> tuple[pd.DataFrame, NDArray[np.bool_]]:
-    is_sentinel = result_df["value"] == sentinel
-    sentinel_df = result_df.loc[is_sentinel]
-    stripped_df = result_df.loc[~is_sentinel]
-    sentinel_mask = cast(
-        NDArray[np.bool_],
-        (
-            sentinel_df.pivot_table(
-                index="date",
-                columns="geoid",
-                values="value",
-                aggfunc=lambda _: True,
-                fill_value=False,
-            )
-            .reindex(
-                index=time_series,
-                columns=context.scope.node_ids,
-                fill_value=False,
-            )
-            .to_numpy(dtype=np.bool_)
-        ),
-    )
-    return stripped_df, sentinel_mask
-
-
-def strip_sentinel_nxn(
-    context: Context,
-    result_df: pd.DataFrame,
-    sentinel: int,
-) -> tuple[pd.DataFrame, NDArray[np.bool_]]:
-    is_sentinel = result_df["value"] == sentinel
-    sentinel_df = result_df.loc[is_sentinel]
-    stripped_df = result_df.loc[~is_sentinel]
-    sentinel_mask = cast(
-        NDArray[np.bool_],
-        (
-            sentinel_df.pivot_table(
-                index="geoid_src",
-                columns="geoid_dst",
-                values="value",
-                aggfunc=lambda _: True,
-                fill_value=False,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                columns=context.scope.node_ids,
-                fill_value=False,
-            )
-            .to_numpy(dtype=np.bool_)
-        ),
-    )
-    return stripped_df, sentinel_mask
-
-
-class Fix(ABC, Generic[DataT]):
-    @abstractmethod
-    def __call__(
-        self,
-        context: Context,
-        replace: DataT,
-        data_df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        pass
-
-    @staticmethod
-    def of_int64(
-        fix: "Fix[np.int64] | int | Callable[[], int] | Literal[False]",
-    ) -> "Fix[np.int64]":
-        if fix is False:
-            return DontFix()
-        elif isinstance(fix, Fix):
-            return fix  # for convenience, no-op if arg is a Fix
-        elif isinstance(fix, int):
-            return ConstantFix[np.int64](fix)  # type: ignore
-        elif callable(fix):
-            return FunctionFix[np.int64](fix)  # type: ignore
-        raise ValueError("Not a valid fix.")
-
-    @staticmethod
-    def of_float64(
-        fix: "Fix[np.float64] | float | Callable[[], float] | Literal[False]",
-    ) -> "Fix[np.float64]":
-        if fix is False:
-            return DontFix()
-        elif isinstance(fix, Fix):
-            return fix  # for convenience, no-op if arg is a Fix
-        elif isinstance(fix, float):
-            return ConstantFix[np.float64](fix)  # type: ignore
-        elif callable(fix):
-            return FunctionFix[np.float64](fix)  # type: ignore
-        raise ValueError("Not a valid fix.")
-
-
-@dataclass(frozen=True)
-class ConstantFix(Fix[DataT]):
-    with_value: DataT
-
-    @override
-    def __call__(
-        self,
-        context: Context,
-        replace: DataT,
-        data_df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        to_replace = {replace: self.with_value}
-        values = data_df["value"].replace(to_replace)
-        return data_df.assign(value=values)
-
-
-@dataclass(frozen=True)
-class FunctionFix(Fix[DataT]):
-    with_function: Callable[[], DataT]
-
-    @override
-    def __call__(
-        self,
-        context: Context,
-        replace: DataT,
-        data_df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        return FunctionFix.apply(context, data_df, replace, self.with_function)
-
-    @staticmethod
-    def apply(
-        context: Context,
-        data_df: pd.DataFrame,
-        replace: DataT,
-        with_function: Callable[[], DataT],
-    ) -> pd.DataFrame:
-        is_replace = data_df["value"] == replace
-        num_replace = is_replace.sum()
-        replacements = np.array([with_function() for _ in range(num_replace)])
-        values = data_df["value"].copy()
-        values[is_replace] = replacements
-        return data_df.assign(value=values)
-
-
-@dataclass(frozen=True)
-class RandomFix(Fix[DataT]):
-    with_random: Callable[[np.random.Generator], DataT]
-
-    @override
-    def __call__(
-        self,
-        context: Context,
-        replace: DataT,
-        data_df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        random_fn = partial(self.with_random, context.rng)
-        return FunctionFix.apply(context, data_df, replace, random_fn)
-
-    @staticmethod
-    def from_range(low: int, high: int) -> "RandomFix[np.int64]":
-        return RandomFix(
-            lambda rng: rng.integers(low, high, endpoint=True),  # type: ignore
-        )
-
-
-@dataclass(frozen=True)
-class DontFix(Fix[Any]):
-    @override
-    def __call__(
-        self,
-        context: Context,
-        replace: Any,
-        data_df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        return data_df
-
-
-class Fill(ABC, Generic[DataT]):
-    @abstractmethod
-    def __call__(
-        self,
-        context: Context,
-        data_np: NDArray[DataT],
-        missing_mask: NDArray[np.bool_],
-    ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
-        pass
-
-    @staticmethod
-    def of_int64(
-        fill: "Fill[np.int64] | int | Callable[[], int] | Literal[False]",
-    ) -> "Fill[np.int64]":
-        if fill is False:
-            return DontFill()
-        elif isinstance(fill, Fill):
-            return fill  # for convenience, no-op if arg is a Fill
-        elif fill == 0:
-            return AlreadyFilled[np.int64]()
-        elif isinstance(fill, int):
-            return ConstantFill[np.int64](fill)  # type: ignore
-        elif callable(fill):
-            return FunctionFill[np.int64](fill)  # type: ignore
-        raise ValueError("Not a valid fill.")
-
-    @staticmethod
-    def of_float64(
-        fill: "Fill[np.float64] | float | Callable[[], float] | Literal[False]",
-    ) -> "Fill[np.float64]":
-        if fill is False:
-            return DontFill()
-        elif isinstance(fill, Fill):
-            return fill  # for convenience, no-op if arg is a Fill
-        elif fill == 0:
-            return AlreadyFilled[np.float64]()
-        elif isinstance(fill, float):
-            return ConstantFill[np.float64](fill)  # type: ignore
-        elif callable(fill):
-            return FunctionFill[np.float64](fill)  # type: ignore
-        raise ValueError("Not a valid fill.")
-
-
-@dataclass(frozen=True)
-class AlreadyFilled(Fill[DataT]):
-    @override
-    def __call__(
-        self,
-        context: Context,
-        data_np: NDArray[DataT],
-        missing_mask: NDArray[np.bool_],
-    ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
-        return data_np, None
-
-
-@dataclass(frozen=True)
-class ConstantFill(Fill[DataT]):
-    with_value: DataT
-
-    @override
-    def __call__(
-        self,
-        context: Context,
-        data_np: NDArray[DataT],
-        missing_mask: NDArray[np.bool_],
-    ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
-        result_np = data_np.copy()
-        result_np[missing_mask] = self.with_value
-        return result_np, None
-
-
-@dataclass(frozen=True)
-class FunctionFill(Fill[DataT]):
-    with_function: Callable[[], DataT]
-
-    @override
-    def __call__(
-        self,
-        context: Context,
-        data_np: NDArray[DataT],
-        missing_mask: NDArray[np.bool_],
-    ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
-        num_replace = missing_mask.sum()
-        replacements = np.array([self.with_function() for _ in range(num_replace)])
-        result_np = data_np.copy()
-        result_np[missing_mask] = replacements
-        return result_np, None
-
-
-@dataclass(frozen=True)
-class DontFill(Fill[DataT]):
-    @override
-    def __call__(
-        self,
-        context: Context,
-        data_np: NDArray[DataT],
-        missing_mask: NDArray[np.bool_],
-    ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
-        return data_np, missing_mask
-
-
-def tabulate_data_n(
-    context: Context,
-    result_df: pd.DataFrame,
-    dtype: type[DataT],
-    value_name: str,
-) -> tuple[NDArray[DataT], NDArray[np.bool_]]:
-    # result_df must be a long data frame with columns
-    # geoid and `value_name`
-    # sentinel values have been removed
-    # groups will be aggregated by sum
-    data = cast(
-        NDArray[DataT],
-        (
-            # pivot_table serves to group and agg duplicate geoids, if any
-            result_df.pivot_table(
-                index="geoid",
-                values=value_name,
-                aggfunc="sum",
-                fill_value=0,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                fill_value=0,
-            )
-            .to_numpy(dtype=dtype)
-        ),
-    )
-    missing_mask = cast(
-        NDArray[np.bool_],
-        (
-            result_df.assign(value=False)
-            .pivot_table(
-                index="geoid",
-                values=value_name,
-                aggfunc=lambda _: False,
-                fill_value=True,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                fill_value=True,
-            )
-        ).to_numpy(dtype=np.bool_),
-    )
-    return data[:, 0], missing_mask[:, 0]
-
-
-def tabulate_data_nxa(
-    context: Context,
-    result_df: pd.DataFrame,
-    dtype: type[DataT],
-    value_names: list[str],
-) -> tuple[NDArray[DataT], NDArray[np.bool_]]:
-    # result_df must be a long data frame with columns
-    # geoid and `value_name`
-    # sentinel values have been removed
-    # groups will be aggregated by sum
-    data = cast(
-        NDArray[DataT],
-        (
-            # pivot_table serves to group and agg duplicate geoids, if any
-            result_df.pivot_table(
-                index="geoid",
-                values=value_names,
-                aggfunc="sum",
-                fill_value=0,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                fill_value=0,
-            )
-            .to_numpy(dtype=dtype)
-        ),
-    )
-    missing_mask = cast(
-        NDArray[np.bool_],
-        (
-            result_df.assign(value=False)
-            .pivot_table(
-                index="geoid",
-                values=value_names,
-                aggfunc=lambda _: False,
-                fill_value=True,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                fill_value=True,
-            )
-        ).to_numpy(dtype=np.bool_),
-    )
-    return data, missing_mask
-
-
-def tabulate_data_txn(
-    time_series: NDArray[np.datetime64],
-    context: Context,
-    result_df: pd.DataFrame,
-    dtype: type[DataT],
-) -> tuple[NDArray[DataT], NDArray[np.bool_]]:
-    # result_df must be a long data frame with columns
-    # date, geoid, and value
-    # sentinel values have been removed
-    # groups will be aggregated by sum
-    data = cast(
-        NDArray[DataT],
-        (
-            result_df.pivot_table(
-                index="date",
-                columns="geoid",
-                values="value",
-                aggfunc="sum",
-                fill_value=0,
-            )
-            .reindex(
-                index=time_series,
-                columns=context.scope.node_ids,
-                fill_value=0,
-            )
-            .to_numpy(dtype=dtype)
-        ),
-    )
-    missing_mask = cast(
-        NDArray[np.bool_],
-        (
-            result_df.assign(value=False)
-            .pivot_table(
-                index="date",
-                columns="geoid",
-                values="value",
-                aggfunc=lambda _: False,
-                fill_value=True,
-            )
-            .reindex(
-                index=time_series,
-                columns=context.scope.node_ids,
-                fill_value=True,
-            )
-        ).to_numpy(dtype=np.bool_),
-    )
-    return data, missing_mask
-
-
-def tabulate_data_nxn(
-    context: Context,
-    result_df: pd.DataFrame,
-    dtype: type[DataT],
-) -> tuple[NDArray[DataT], NDArray[np.bool_]]:
-    # result_df must be a long data frame with columns
-    # geoid_src, geoid_dst, and value
-    # sentinel values have been removed
-    # groups will be aggregated by sum
-    data = cast(
-        NDArray[DataT],
-        (
-            result_df.pivot_table(
-                index="geoid_src",
-                columns="geoid_dst",
-                values="value",
-                aggfunc="sum",
-                fill_value=0,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                columns=context.scope.node_ids,
-                fill_value=0,
-            )
-            .to_numpy(dtype=dtype)
-        ),
-    )
-    missing_mask = cast(
-        NDArray[np.bool_],
-        (
-            result_df.assign(value=False)
-            .pivot_table(
-                index="geoid_src",
-                columns="geoid_dst",
-                values="value",
-                aggfunc=lambda _: False,
-                fill_value=True,
-            )
-            .reindex(
-                index=context.scope.node_ids,
-                columns=context.scope.node_ids,
-                fill_value=True,
-            )
-        ).to_numpy(dtype=np.bool_),
-    )
-    return data, missing_mask
-
-
-class FixSentinel(NamedTuple, Generic[DataT]):
-    name: str
-    value: DataT
-    fix: Fix[DataT]
-
-
-def process_n(
-    *,
-    sentinels: list[FixSentinel],
-    fix_missing: Fill[DataT],
-    dtype: type[DataT],
-    context: Context,
-    data_df: pd.DataFrame,
-    value_name: str = "value",
-) -> ProcessResult[DataT]:
-    issues = []
-    work_df = data_df
-
-    for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
-        work_df, mask = strip_sentinel_n(
-            context,
-            work_df,
-            sentinel_value,
-            value_name=value_name,
-        )
-        if mask is not None and mask.any():
-            issues.append((sentinel_name, mask))
-
-    tab_np, missing_mask = tabulate_data_n(context, work_df, dtype, value_name)
-    data_np, missing_mask = fix_missing(context, tab_np, missing_mask)
-
-    if missing_mask is not None and missing_mask.any():
-        issues.append(("missing", missing_mask))
-
-    return ProcessResult(data_np, issues)
-
-
-def process_nxa(
-    *,
-    sentinels: list[FixSentinel],
-    fix_missing: Fill[DataT],
-    dtype: type[DataT],
-    context: Context,
-    data_df: pd.DataFrame,
-    value_names: list[str],
-) -> ProcessResult[DataT]:
-    issues = []
-    work_df = data_df
-
-    for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
-        work_df, mask = strip_sentinel_nxa(
-            context,
-            work_df,
-            sentinel_value,
-            value_names=value_names,
-        )
-        if mask is not None and mask.any():
-            issues.append((sentinel_name, mask))
-
-    tab_np, missing_mask = tabulate_data_nxa(context, work_df, dtype, value_names)
-    data_np, missing_mask = fix_missing(context, tab_np, missing_mask)
-
-    if missing_mask is not None and missing_mask.any():
-        issues.append(("missing", missing_mask))
-
-    return ProcessResult(data_np, issues)
-
-
-def process_txn(
-    *,
-    sentinels: list[FixSentinel],
-    fix_missing: Fill[DataT],
-    dtype: type[DataT],
-    context: Context,
-    data_df: pd.DataFrame,
-    time_series: NDArray[np.datetime64],
-) -> ProcessResult[DataT]:
-    issues = []
-    work_df = data_df
-
-    for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
-        work_df, mask = strip_sentinel_txn(
-            time_series,
-            context,
-            work_df,
-            sentinel_value,
-        )
-        if mask is not None and mask.any():
-            issues.append((sentinel_name, mask))
-
-    tab_np, missing_mask = tabulate_data_txn(time_series, context, work_df, dtype)
-    data_np, missing_mask = fix_missing(context, tab_np, missing_mask)
-
-    if missing_mask is not None and missing_mask.any():
-        issues.append(("missing", missing_mask))
-
-    return ProcessResult(data_np, issues)
-
-
-def process_nxn(
-    *,
-    sentinels: list[FixSentinel],
-    fix_missing: Fill[DataT],
-    dtype: type[DataT],
-    context: Context,
-    data_df: pd.DataFrame,
-) -> ProcessResult[DataT]:
-    issues = []
-    work_df = data_df
-
-    for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
-        work_df, mask = strip_sentinel_nxn(
-            context,
-            work_df,
-            sentinel_value,
-        )
-        if mask is not None and mask.any():
-            issues.append((sentinel_name, mask))
-
-    tab_np, missing_mask = tabulate_data_nxn(context, work_df, dtype)
-    data_np, missing_mask = fix_missing(context, tab_np, missing_mask)
-
-    if missing_mask is not None and missing_mask.any():
-        issues.append(("missing", missing_mask))
-
-    return ProcessResult(data_np, issues)
 
 
 ##################

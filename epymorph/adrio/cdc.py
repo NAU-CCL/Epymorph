@@ -10,16 +10,18 @@ import epymorph.adrio.soda as q
 from epymorph.adrio.adrio import (
     ADRIOCommunicationError,
     ADRIOContextError,
-    ADRIOPrototype,
+    FetchADRIO,
+    ProcessResult,
+    ResultFormat,
+    range_mask_fn,
+    validate_time_frame,
+)
+from epymorph.adrio.processing import (
     DateValueType,
     Fill,
     Fix,
     FixSentinel,
-    ProcessResult,
-    ResultFormat,
     process_txn,
-    range_mask_fn,
-    validate_time_frame,
 )
 from epymorph.data_shape import Shapes
 from epymorph.geography.us_census import CountyScope, StateScope
@@ -35,7 +37,7 @@ def healthdata_api_key() -> str | None:
     return os.environ.get("API_KEY__healthdata.gov", default=None)
 
 
-class _HealthdataAnagCw7u(ADRIOPrototype[DateValueType, np.int64]):
+class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="anag-cw7u")
     """The Socrata API endpoint."""
     _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)

@@ -8,13 +8,12 @@ from typing_extensions import override
 from epymorph.adrio.adrio import (
     ADRIOCommunicationError,
     ADRIOContextError,
-    ADRIOPrototype,
-    Fill,
+    FetchADRIO,
     ProcessResult,
     ResultFormat,
-    process_nxn,
     range_mask_fn,
 )
+from epymorph.adrio.processing import Fill, process_nxn
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
@@ -121,7 +120,7 @@ _CONFIG = [
 """All supported ACS Comm Flow products."""
 
 
-class Commuters(ADRIOPrototype[np.int64, np.int64]):
+class Commuters(FetchADRIO[np.int64, np.int64]):
     """
     Loads data from the US Census Bureau's ACS Commuting Flows product.
     This product uses answers to the American Community Survey over a five year period

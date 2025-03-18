@@ -274,6 +274,10 @@ class Context(ABC):
         else:
             return _FullContext(name, data, scope, time_frame, ipm, rng)
 
+    @abstractmethod
+    def with_scope(self, scope: GeoScope) -> "Context":
+        pass
+
 
 class _PartialContext(Context):
     _name: AbsoluteName
@@ -364,6 +368,17 @@ class _PartialContext(Context):
     def dim(self) -> Dimensions:
         return self._dim
 
+    @override
+    def with_scope(self, scope: GeoScope) -> "Context":
+        return Context.of(
+            name=self._name,
+            data=self._data,
+            scope=scope,
+            time_frame=self._time_frame,
+            ipm=self._ipm,
+            rng=self._rng,
+        )
+
 
 _EMPTY_CONTEXT = _PartialContext(NAME_PLACEHOLDER, None, None, None, None, None)
 
@@ -432,6 +447,17 @@ class _FullContext(Context):
     @override
     def dim(self) -> Dimensions:
         return self._dim
+
+    @override
+    def with_scope(self, scope: GeoScope) -> "Context":
+        return Context.of(
+            name=self._name,
+            data=self._data,
+            scope=scope,
+            time_frame=self._time_frame,
+            ipm=self._ipm,
+            rng=self._rng,
+        )
 
 
 _TypeT = TypeVar("_TypeT")
