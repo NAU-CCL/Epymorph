@@ -58,6 +58,8 @@ def census_api_key() -> str | None:
     """
     Loads the API key to use for census.gov,
     as environment variable 'API_KEY__census.gov'.
+    If that's not found we fall back to 'CENSUS_API_KEY',
+    as a legacy form.
     """
     key = os.environ.get("API_KEY__census.gov", default=None)
     if key is None:
@@ -66,24 +68,31 @@ def census_api_key() -> str | None:
 
 
 # fmt:off
-ACS5Year = Literal[2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022]  # noqa: E501
+ACS5Year = Literal[2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]  # noqa: E501
 """A supported ACS5 data year."""
 
-ACS5_YEARS: Sequence[ACS5Year] = (2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022)  # noqa: E501
+ACS5_YEARS: Sequence[ACS5Year] = (2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023)  # noqa: E501
 """All supported ACS5 data years."""
 # fmt: on
 
 _ACS5_CACHE_PATH = module_cache_path(__name__)
+"""
+For caching ACS5. At the moment, the only thing that is cached is variables metadata.
+"""
 
 
 class ACS5Client:
+    """Methods for interacting with the Census API for ACS5 data."""
+
     @staticmethod
     def url(year: int) -> str:
+        """The base request URL for a given ACS5 year."""
         return f"https://api.census.gov/data/{year}/acs/acs5"
 
     @cache
     @staticmethod
     def get_vars(year: int) -> dict[str, dict]:
+        """Loads (and caches) ACS5 variable metadata."""
         try:
             vars_url = f"{ACS5Client.url(year)}/variables.json"
             cache_path = _ACS5_CACHE_PATH / f"variables-{year}.json"
@@ -96,7 +105,8 @@ class ACS5Client:
     @cache
     @staticmethod
     def get_group_vars(year: int, group: str) -> list[tuple[str, dict]]:
-        return sorted(
+        """Retrieves the variables metadata for a specific group of variables."""
+        variables = sorted(
             (
                 (name, attrs)
                 for name, attrs in ACS5Client.get_vars(year).items()
@@ -104,15 +114,26 @@ class ACS5Client:
             ),
             key=lambda x: x[0],
         )
+        if len(variables) == 0:
+            raise ValueError(f"ACS5 variable group '{group}' not found in year {year}.")
+        return variables
 
     @cache
     @staticmethod
     def get_group_var_names(year: int, group: str) -> list[str]:
+        """Like `get_group_vars` but just returns the variable names in the group."""
         return [var for var, _ in ACS5Client.get_group_vars(year, group)]
 
     @staticmethod
     def make_queries(scope: CensusScope) -> list[dict[str, str]]:
-        """Creates census API queries that cover the given scope."""
+        """
+        Creates one or more Census API query predicates for the given scope.
+        These may involve the "for" and "in" request parameters.
+        Depending on your scope and the limitations of the API, multiple queries
+        may be required, especially when your scope represents a disjoint spatial
+        selection or one that otherwise can't be neatly expressed in a form like
+        "all counties within state X".
+        """
         match scope:
             case StateScope(includes_granularity="state", includes=includes):
                 if scope.is_all_states():
@@ -236,8 +257,13 @@ class ACS5Client:
         scope: CensusScope,
         variables: list[str],
         value_dtype: type[np.generic],
-        report_progress: Callable[[float], None],
+        report_progress: Callable[[float], None] | None = None,
     ) -> pd.DataFrame:
+        """
+        Requests `variables` from the Census API for the given `scope`.
+        Returns a DataFrame in "long" format, with columns: geoid, variable, and value.
+        Geoid and variable are strings and value will be converted to the given dtype.
+        """
         url = ACS5Client.url(scope.year)
         params = {
             "key": census_api_key(),
@@ -274,12 +300,18 @@ class ACS5Client:
                 result_df["value"] = result_df["value"].astype(value_dtype)
 
                 results.append(result_df)
-                report_progress((i + 1) / processing_steps)
+                if report_progress:
+                    report_progress((i + 1) / processing_steps)
 
             return pd.concat(results).sort_index()
 
 
 def _get_scope(adrio: ADRIOPrototype, context: Context) -> CensusScope:
+    """
+    Validate and retrieve the CensusScope from `context`.
+    ACS5 ADRIOs really only work on Census geography, so this is a commonly-useful
+    validation function.
+    """
     if not isinstance(context.scope, CensusScope):
         err = "US Census geo scope required."
         raise ADRIOContextError(adrio, context, err)
@@ -290,14 +322,23 @@ def _get_scope(adrio: ADRIOPrototype, context: Context) -> CensusScope:
 
 
 class _FetchACS5(FetchADRIO[ValueT, ValueT]):
+    """
+    An abstract specialization of `FetchADRIO` for ADRIOs which fetch
+    data from the ACS5 API. At a minimum, implementors will need to
+    override `result_format` and `_variables`, and that is sufficient for
+    simple cases.
+    """
+
     @property
     @abstractmethod
     def _variables(self) -> list[str]:
         """The ACS variables to fetch for this ADRIO."""
 
+    _census_scope: CensusScope | None = None
+
     @override
     def validate_context(self, context: Context):
-        _get_scope(self, context)
+        self._census_scope = _get_scope(self, context)
         if census_api_key() is None:
             err = (
                 "Census API key is required for accessing ACS5 data. "
@@ -305,11 +346,21 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
             )
             raise ADRIOContextError(self, context, err)
 
+    @property
+    def census_scope(self) -> CensusScope:
+        """
+        Gets the context scope type-narrowed to CensusScope.
+        If for any reason this has not yet been verified, it first validates this fact.
+        """
+        if self._census_scope is None:
+            self._census_scope = _get_scope(self, self.context)
+        return self._census_scope
+
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
         try:
             return ACS5Client.fetch(
-                scope=_get_scope(self, context),
+                scope=self.census_scope,
                 variables=self._variables,
                 value_dtype=self.result_format.value_dtype,
                 report_progress=self.report_progress,
@@ -324,6 +375,12 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
         data_df: pd.DataFrame,
     ) -> ProcessResult[ValueT]:
         vrbs = self._variables
+
+        # If we're loading a group variable, expand it.
+        if len(vrbs) == 1 and (m := re.match(r"^group\((.*?)\)$", vrbs[0])):
+            group_name = m.group(1)
+            vrbs = ACS5Client.get_group_var_names(self.census_scope.year, group_name)
+
         if len(vrbs) == 1:
             return process_n(
                 sentinels=[],
@@ -345,6 +402,23 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
 
 
 class Population(_FetchACS5[np.int64]):
+    """
+    Loads population data from the US Census ACS 5-Year Data (variable B01001_001E).
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    according to the scope's year, from 2009 to 2023.
+
+    The result is an N-shaped array of integers.
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census.
+    """
+
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
         value_dtype=np.int64,
@@ -364,6 +438,29 @@ class Population(_FetchACS5[np.int64]):
 
 
 class PopulationByAgeTable(_FetchACS5[np.int64]):
+    """
+    Loads a table of population categorized by Census-defined age brackets from the
+    US Census ACS 5-Year Data (group B01001). This table is most useful as the source
+    data for one or more [`PopulationByAge`](`epymorph.adrio.acs5.PopulationByAge`)
+    ADRIOs, which knows how to select, group, and aggregate the data for simulations.
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    according to the scope's year, from 2009 to 2023.
+
+    The result is an NxA-shaped array of integers where A is the number of variables
+    included in the table. For example, in 2023 there are 49 variables: 23 age brackets
+    for male, 23 age brackets for female, the male all-ages total, the female all-ages
+    total, and a grand total.
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census, and [an example of this table for 2023](https://data.census.gov/table/ACSDT5Y2023.B01001).
+    """
+
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.NxA,
         value_dtype=np.int64,
@@ -389,9 +486,8 @@ class PopulationByAgeTable(_FetchACS5[np.int64]):
         *,
         expected_shape: tuple[int, ...] | None = None,
     ) -> None:
-        scope = _get_scope(self, context)
-        num_vars = len(ACS5Client.get_group_var_names(scope.year, "B01001"))
-        shp = (context.scope.nodes, num_vars)
+        vrbs = ACS5Client.get_group_var_names(self.census_scope.year, "B01001")
+        shp = (context.scope.nodes, len(vrbs))
         super()._validate_result(context, result, expected_shape=shp)
 
 
@@ -407,13 +503,28 @@ class AgeRange(NamedTuple):
     Unlike Python integer ranges, the `end` of the this range is inclusive.
     `end` can also be None which models the "and over" part of ranges
     like "85 years and over".
+
+    AgeRange is a NamedTuple.
     """
 
     start: int
+    """The youngest age included in the range."""
     end: int | None
+    """The oldest age included in the range, or None to indicate an unbounded range."""
 
     def contains(self, other: "AgeRange") -> bool:
-        """Is the `other` range fully contained in (or coincident with) this range?"""
+        """
+        Is the `other` range fully contained in (or coincident with) this range?
+
+        Parameters
+        ----------
+        other : AgeRange
+            The other age range to consider.
+
+        Returns
+        -------
+        bool
+        """
         if self.start > other.start:
             return False
         if self.end is None:
@@ -427,6 +538,16 @@ class AgeRange(NamedTuple):
         """
         Parse the age range of an ACS field label;
         e.g.: `Estimate!!Total:!!Male:!!22 to 24 years`
+
+        Parameters
+        ----------
+        label : str
+            A census variable label.
+
+        Returns
+        -------
+        AgeRange | None
+            The AgeRange object if parsing is successful, None if not.
         """
         parts = label.split("!!")
         if len(parts) != 4:
@@ -450,6 +571,41 @@ class AgeRange(NamedTuple):
 
 
 class PopulationByAge(ADRIOPrototype[np.int64, np.int64]):
+    """
+    Processes a population-by-age table to extract the population of a specified age
+    bracket, as limited by the age brackets defined by the US Census ACS 5-Year Data
+    (group B01001). This ADRIO does not fetch data on its own, but requires you to
+    provide another attribute named "population_by_age_table" for it to parse.
+    Most often, this will be provided by a
+    [`PopulationByAgeTable`](`epymorph.adrio.acs5.PopulationByAgeTable`) instance.
+    This allows the table to be reused in case you need to calculate more than one
+    population bracket (as is common in a multi-strata model).
+
+    The result is an N-shaped array of integers.
+
+    Parameters
+    ----------
+    age_range_start : int
+        The youngest age to include in the age bracket.
+    age_range_end : int | None
+        The oldest age to include in the age bracket, or None to indicate an unbounded
+        range (include all ages greater than or equal to `age_range_start`).
+
+    Raises
+    ------
+    ValueError
+        If the given age range does not line up with those ranges which are available
+        in the source data. For instance, the Census defines an age bracket of 20-to-24
+        years. This makes it impossible for 21, 22, or 23 to be either the start or end
+        of an age range. You can view the available age ranges on
+        [data.census.gov](https://data.census.gov/table/ACSDT5Y2023.B01001).
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census, and [an example of this table for 2023](https://data.census.gov/table/ACSDT5Y2023.B01001).
+    """
+
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
         value_dtype=np.int64,
@@ -464,24 +620,14 @@ class PopulationByAge(ADRIOPrototype[np.int64, np.int64]):
     # (e.g., three different PopByAge)
 
     POP_BY_AGE_TABLE = AttributeDef("population_by_age_table", int, Shapes.NxA)
+    """Defines the population-by-age-table requirement of this ADRIO."""
 
     requirements = (POP_BY_AGE_TABLE,)
 
     _age_range: AgeRange
+    """The age range to load with this ADRIO."""
 
     def __init__(self, age_range_start: int, age_range_end: int | None):
-        """
-        Initializes the population by age array with a starting age and an end age to
-        define the total age range.
-
-        Parameters
-        ----------
-        age_range_start : int
-            The starting age for the age range to retrieve from the population table.
-        age_range_end : int | None
-            The inclusive ending age for the age range to retrieve from the population
-            table. If None, the range includes all ages at and above age_range_start.
-        """
         self._age_range = AgeRange(age_range_start, age_range_end)
 
     @property
@@ -528,11 +674,90 @@ class PopulationByAge(ADRIOPrototype[np.int64, np.int64]):
         )
 
 
+# fmt: off
+RaceCategory = Literal["White", "Black", "Native", "Asian", "Pacific Islander", "Other", "Multiple"]  # noqa: E501
+"""
+A racial category defined by ACS5.
+
+`Literal["White", "Black", "Native", "Asian", "Pacific Islander", "Other", "Multiple"]`
+"""
+# fmt: on
+
+
+class PopulationByRace(_FetchACS5[np.int64]):
+    """
+    Loads population by race from the US Census ACS 5-Year Data (group B02001).
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    according to the scope's year, from 2009 to 2023.
+
+    The result is an N-shaped array of integers.
+
+    Parameters
+    ----------
+    race : RaceCategory
+        The Census-defined race category to load.
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census.
+    """
+
+    _RACE_VARIABLES: dict[RaceCategory, str] = {
+        "White": "B02001_002E",
+        "Black": "B02001_003E",
+        "Native": "B02001_004E",
+        "Asian": "B02001_005E",
+        "Pacific Islander": "B02001_006E",
+        "Other": "B02001_007E",
+        "Multiple": "B02001_008E",
+    }
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.N,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=False,
+    )
+
+    _race: RaceCategory
+    """The race category to load."""
+
+    def __init__(self, race: RaceCategory):
+        self._race = race
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return PopulationByRace._RESULT_FORMAT
+
+    @property
+    @override
+    def _variables(self) -> list[str]:
+        return [PopulationByRace._RACE_VARIABLES[self._race]]
+
+
 class AverageHouseholdSize(_FetchACS5[np.float64]):
     """
-    Retrieves an N-shaped array of floats representing the average number of people
-    living in each household for every geographic node.
-    Data is retrieved from Census table variable B25010_001 using ACS5 5-year estimates.
+    Loads average household size data, based on the number of people living in a
+    household, from the US Census ACS 5-Year Data (variable B25010_001E).
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    according to the scope's year, from 2009 to 2023.
+
+    The result is an N-shaped array of floats.
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census.
     """
 
     _RESULT_FORMAT = ResultFormat(
@@ -555,9 +780,20 @@ class AverageHouseholdSize(_FetchACS5[np.float64]):
 
 class MedianAge(_FetchACS5[np.float64]):
     """
-    Retrieves an N-shaped array of floats representing the median age in
-    each geographic node. Data is retrieved from Census table variable
-    B01002_001 using ACS 5-year estimates.
+    Loads median age data from the US Census ACS 5-Year Data (variable B01002_001E).
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    according to the scope's year, from 2009 to 2023.
+
+    The result is an N-shaped array of floats.
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census.
     """
 
     _RESULT_FORMAT = ResultFormat(
@@ -578,23 +814,35 @@ class MedianAge(_FetchACS5[np.float64]):
         return ["B01002_001E"]
 
 
-class MedianIncome(_FetchACS5[np.float64]):
+class MedianIncome(_FetchACS5[np.int64]):
     """
-    Retrieves an N-shaped array of floats representing the median yearly income in
-    each geographic node. Data is retrieved from Census table variable B19013_001
-    using ACS 5-year estimates.
+    Loads median income data in whole dollars from the US Census ACS 5-Year Data
+    (variable B19013_001E), which is adjusted for inflation to the year of the data.
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    according to the scope's year, from 2009 to 2023.
+
+    The result is an N-shaped array of integers.
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census.
     """
 
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
-        value_dtype=np.float64,
-        validation=range_mask_fn(minimum=np.float64(0), maximum=None),
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
         is_date_value=False,
     )
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.float64]:
+    def result_format(self) -> ResultFormat[np.int64]:
         return MedianIncome._RESULT_FORMAT
 
     @property
@@ -605,10 +853,22 @@ class MedianIncome(_FetchACS5[np.float64]):
 
 class GiniIndex(_FetchACS5[np.float64]):
     """
-    Retrieves an N-shaped array of floats representing the amount of income inequality
-    on a scale of 0 (perfect equality) to 1 (perfect inequality) for each
-    geographic node. Data is retrieved from Census table variable B19083_001 using
-    ACS 5-year estimates.
+    Loads Gini Index data from the US Census ACS 5-Year Data (variable B19083_001E).
+    This is a measure of income inequality on a scale from 0 (perfect equality)
+    to 1 (perfect inequality).
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    according to the scope's year, from 2009 to 2023.
+
+    The result is an N-shaped array of floats.
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census, and [general info on the Gini index](https://en.wikipedia.org/wiki/Gini_coefficient).
     """
 
     # NOTE: the Gini index is named after its inventor, Corrado Gini, so this is the
@@ -692,73 +952,42 @@ class GiniIndex(_FetchACS5[np.float64]):
         )
 
 
-# fmt: off
-RaceCategory = Literal["White", "Black", "Native", "Asian", "Pacific Islander", "Other", "Multiple"]  # noqa: E501
-"""
-A racial category as defined by ACS5.
-
-`Literal["White", "Black", "Native", "Asian", "Pacific Islander", "Other", "Multiple"]`
-"""
-# fmt: on
-
-
-class PopulationByRace(_FetchACS5[np.int64]):
-    """
-    TODO
-
-    Parameters
-    ----------
-    race : RaceCategory
-        The Census-defined race category to load.
-    """
-
-    _RACE_VARIABLES: dict[RaceCategory, str] = {
-        "White": "B02001_002E",
-        "Black": "B02001_003E",
-        "Native": "B02001_004E",
-        "Asian": "B02001_005E",
-        "Pacific Islander": "B02001_006E",
-        "Other": "B02001_007E",
-        "Multiple": "B02001_008E",
-    }
-
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=False,
-    )
-
-    _race: RaceCategory
-    """The race category to load."""
-
-    def __init__(self, race: RaceCategory):
-        self._race = race
-
-    @property
-    @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return PopulationByRace._RESULT_FORMAT
-
-    @property
-    @override
-    def _variables(self) -> list[str]:
-        return [PopulationByRace._RACE_VARIABLES[self._race]]
-
-
 class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
     """
-    TODO
+    Calculates the Dissimilarity Index using US Census ACS 5-Year Data (group B02001).
+    The dissimilarity index is a measure of segregation comparing two races.
+    Typically one compares a majority to a minority race and so the names of parameters
+    reflect this, but this relationship between races involved isn't strictly necessary.
+    The numerical result can be interpreted as the percentage of "minority" individuals
+    that would have to move in order for the geographic distribution of individuals
+    within subdivisions of a location to match the distribution of individuals in the
+    location as a whole.
+    ACS5 data is compiled from surveys taken during a rolling five year period, and
+    as such are estimates.
+
+    Data is available using CensusScope geographies, from StateScope down to
+    TractScope. Data is loaded according to the scope's year, from 2009 to 2023.
+    This ADRIO does not support BlockGroupScope because we the calculation of the index
+    requires loading data at a finer granularity than the target granularity, and
+    there is no ACS5 data below block groups.
+
+    The result is an N-shaped array of floats.
 
     Parameters
     ----------
     majority_pop : RaceCategory
         The race category representing the majority population for the amount of
         segregation.
-
     minority_pop : RaceCategory
         The race category representing the minority population within the
         segregation analysis.
+
+
+    See Also
+    --------
+    The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
+    from the US Census, and
+    [general information about the dissimilarity index](https://en.wikipedia.org/wiki/Index_of_dissimilarity).
     """
 
     _RESULT_FORMAT = ResultFormat(
@@ -796,23 +1025,27 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
 
     @override
     def inspect(self) -> InspectResult[np.float64, np.float64]:
+        # Load populations at the coarse-granularity scope (coarse nodes)
         high_scope = _get_scope(self, self.context)
         high_majority = self.defer(PopulationByRace(self._majority_pop))
         high_minority = self.defer(PopulationByRace(self._minority_pop))
 
+        # Load populations at the fine-granularity scope (fine nodes)
         low_scope = high_scope.lower_granularity()
         low_majority = self.defer(PopulationByRace(self._majority_pop), scope=low_scope)
         low_minority = self.defer(PopulationByRace(self._minority_pop), scope=low_scope)
 
+        # Which fine nodes belong to which coarse nodes?
         as_high = np.vectorize(CensusGranularity.of(high_scope.granularity).truncate)
         nodes_high = high_scope.node_ids
         nodes_low = as_high(low_scope.node_ids)
 
-        # disaggregate high scope population to get the total for each low scope node
+        # disaggregate coarse node population to get the total to use for each fine node
         high_low_index_map = np.searchsorted(nodes_high, nodes_low)
         maj_total = high_majority[high_low_index_map]
         min_total = high_minority[high_low_index_map]
 
+        # If coarse population is unavailable or zero, we can't compute DI
         issues = []
         if np.ma.is_masked(maj_total):
             issues.append(("majority_total_unavailable", np.ma.getmask(maj_total)))
@@ -823,7 +1056,7 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
         if np.any(min_zeros := (min_total == 0)):
             issues.append(("minority_total_zero", min_zeros))
 
-        # compute subscores where masked values are not involved
+        # Compute scores for fine nodes (excluding where masked values are involved)
         low_mask = reduce(np.logical_or, [m for _, m in issues], np.ma.nomask)
         unmasked = ~low_mask
         subscore_np = np.zeros(shape=low_scope.nodes, dtype=np.float64)
@@ -831,9 +1064,10 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
         b = low_majority[unmasked] / maj_total[unmasked]
         subscore_np[unmasked] = np.abs(a - b)
 
-        # aggregate subscores back to high scope
+        # Aggregate fine scores to coarse scores
         result_np = 0.5 * np.bincount(high_low_index_map, weights=subscore_np)
 
+        # Aggregate fine masks to coarse masks
         def aggregate_mask(mask):
             return np.bincount(high_low_index_map, weights=mask).astype(np.bool_)
 

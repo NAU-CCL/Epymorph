@@ -38,6 +38,12 @@ def healthdata_api_key() -> str | None:
 
 
 class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
+    """
+    An abstract specialization of `FetchADRIO` for ADRIOs which fetch
+    data from healthdata.gov dataset anag-cw7u: a.k.a.
+    "COVID-19 Reported Patient Impact and Hospital Capacity by Facility".
+    """
+
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="anag-cw7u")
     """The Socrata API endpoint."""
     _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)
