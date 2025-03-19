@@ -221,12 +221,12 @@ def test_to_date_value_array():
 
     # Test with 2D values array
     dates = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]")
-    values = np.array([[10, 20], [30, 40]], dtype=np.int64)
+    values = np.array([[10, 20, 30], [40, 50, 60]], dtype=np.int64)
     actual = to_date_value_array(dates, values)
     expected = np.array(
         [
-            [("2021-01-01", 10), ("2021-01-01", 20)],
-            [("2021-01-02", 30), ("2021-01-02", 40)],
+            [("2021-01-01", 10), ("2021-01-01", 20), ("2021-01-01", 30)],
+            [("2021-01-02", 40), ("2021-01-02", 50), ("2021-01-02", 60)],
         ],
         dtype=[("date", "datetime64[D]"), ("value", np.int64)],
     )
@@ -234,25 +234,45 @@ def test_to_date_value_array():
 
     # Test with 3D values array
     dates = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]")
-    values = np.array([[[10, 20], [30, 40]], [[50, 60], [70, 80]]], dtype=np.int64)
+    values = np.array(
+        [[[10, 20, 30], [40, 50, 60]], [[70, 80, 90], [100, 110, 120]]],
+        dtype=np.int64,
+    )
     actual = to_date_value_array(dates, values)
     expected = np.array(
         [
             [
-                [("2021-01-01", 10), ("2021-01-01", 20)],
-                [("2021-01-01", 30), ("2021-01-01", 40)],
+                [("2021-01-01", 10), ("2021-01-01", 20), ("2021-01-01", 30)],
+                [("2021-01-01", 40), ("2021-01-01", 50), ("2021-01-01", 60)],
             ],
             [
-                [("2021-01-02", 50), ("2021-01-02", 60)],
-                [("2021-01-02", 70), ("2021-01-02", 80)],
+                [("2021-01-02", 70), ("2021-01-02", 80), ("2021-01-02", 90)],
+                [("2021-01-02", 100), ("2021-01-02", 110), ("2021-01-02", 120)],
             ],
         ],
         dtype=[("date", "datetime64[D]"), ("value", np.int64)],
     )
     np.testing.assert_array_equal(actual, expected)
 
+    # Error: mismatched number of dates
+    with pytest.raises(ValueError):  # noqa: PT011
+        to_date_value_array(
+            np.array(["2021-01-01", "2021-01-02"], dtype="datetime64[D]"),
+            np.array([10, 20, 30], dtype=np.int64),
+        )
 
-def test_is_date_value_array():
+    # Error: 2D array of dates
+    with pytest.raises(ValueError):  # noqa: PT011
+        to_date_value_array(
+            np.array(
+                [["2021-01-01", "2021-01-02"], ["2021-01-03", "2021-01-04"]],
+                dtype="datetime64[D]",
+            ),
+            np.array([10, 20, 30], dtype=np.int64),
+        )
+
+
+def test_is_date_value_array():  #
     # Test with valid date/value array - int64 values
     array = np.array(
         [("2021-01-01", 10), ("2021-01-02", 20)],

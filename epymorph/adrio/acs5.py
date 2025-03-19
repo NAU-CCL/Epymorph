@@ -1,10 +1,10 @@
 import os
 import re
 from abc import abstractmethod
-from collections import defaultdict
 from functools import cache, reduce
+from itertools import groupby
 from json import load as load_json
-from typing import Callable, Literal, NamedTuple, Sequence, TypeGuard
+from typing import Callable, Iterable, Literal, NamedTuple, Sequence, TypeGuard
 
 import numpy as np
 import pandas as pd
@@ -46,7 +46,6 @@ from epymorph.geography.us_census import (
 from epymorph.geography.us_geography import (
     BLOCK_GROUP,
     COUNTY,
-    STATE,
     TRACT,
     CensusGranularity,
 )
@@ -134,6 +133,10 @@ class ACS5Client:
         selection or one that otherwise can't be neatly expressed in a form like
         "all counties within state X".
         """
+
+        def to_list(group: Iterable[tuple[str, ...]]) -> str:
+            return ",".join(map(lambda x: x[-1], group))
+
         match scope:
             case StateScope(includes_granularity="state", includes=includes):
                 if scope.is_all_states():
@@ -150,12 +153,12 @@ class ACS5Client:
                 ]
 
             case CountyScope(includes_granularity="county", includes=includes):
-                counties_by_state: dict[str, list[str]] = defaultdict(list)
-                for state, county in map(COUNTY.decompose, includes):
-                    counties_by_state[state].append(county)
                 return [
-                    {"for": f"county:{','.join(cs)}", "in": f"state:{s}"}
-                    for s, cs in counties_by_state.items()
+                    {"for": f"county:{to_list(group)}", "in": f"state:{state}"}
+                    for (state,), group in groupby(
+                        map(COUNTY.decompose, includes),
+                        key=lambda x: x[0:-1],
+                    )
                 ]
 
             case TractScope(includes_granularity="state", includes=includes):
@@ -167,86 +170,68 @@ class ACS5Client:
                 ]
 
             case TractScope(includes_granularity="county", includes=includes):
-                counties_by_state: dict[str, list[str]] = defaultdict(list)
-                for state, county in map(COUNTY.decompose, includes):
-                    counties_by_state[state].append(county)
                 return [
-                    {"for": "tract:*", "in": f"state:{s} county:{','.join(cs)}"}
-                    for s, cs in counties_by_state.items()
+                    {"for": "tract:*", "in": f"state:{state} county:{to_list(group)}"}
+                    for (state,), group in groupby(
+                        map(COUNTY.decompose, includes),
+                        key=lambda x: x[0:-1],
+                    )
                 ]
 
             case TractScope(includes_granularity="tract", includes=includes):
-                tracts_by_county: dict[str, list[str]] = defaultdict(list)
-
-                for state, county, tract in map(TRACT.decompose, includes):
-                    tracts_by_county[state + county].append(tract)
-
                 return [
                     {
-                        "for": f"tract:{','.join(tracts_by_county[state + county])}",
+                        "for": f"tract:{to_list(group)}",
                         "in": f"state:{state} county:{county}",
                     }
-                    for state, county in [
-                        COUNTY.decompose(c) for c in tracts_by_county.keys()
-                    ]
+                    for (state, county), group in groupby(
+                        map(TRACT.decompose, includes),
+                        key=lambda x: x[0:-1],
+                    )
                 ]
 
             case BlockGroupScope(includes_granularity="state", includes=includes):
                 # This wouldn't normally need to be multiple queries,
                 # but Census API won't let you fetch CBGs for multiple states.
-                states = {STATE.extract(x) for x in includes}
                 return [
-                    {"for": "block group:*", "in": f"state:{s} county:* tract:*"}
-                    for s in states
+                    {"for": "block group:*", "in": f"state:{state} county:* tract:*"}
+                    for state in includes
                 ]
 
             case BlockGroupScope(includes_granularity="county", includes=includes):
-                counties_by_state: dict[str, list[str]] = defaultdict(list)
-                for state, county in map(COUNTY.decompose, includes):
-                    counties_by_state[state].append(county)
                 return [
                     {
                         "for": "block group:*",
-                        "in": f"state:{s} county:{','.join(cs)} tract:*",
+                        "in": f"state:{state} county:{to_list(group)} tract:*",
                     }
-                    for s, cs in counties_by_state.items()
+                    for (state,), group in groupby(
+                        map(COUNTY.decompose, includes),
+                        key=lambda x: x[0:-1],
+                    )
                 ]
 
             case BlockGroupScope(includes_granularity="tract", includes=includes):
-                tracts_by_county: dict[str, list[str]] = defaultdict(list)
-
-                for state, county, tract in map(TRACT.decompose, includes):
-                    tracts_by_county[state + county].append(tract)
-
                 return [
                     {
                         "for": "block group:*",
-                        "in": (
-                            f"state:{state} county:{county} "
-                            f"tract:{','.join(tracts_by_county[state + county])}"
-                        ),
+                        "in": f"state:{state} county:{county} tract:{to_list(group)}",
                     }
-                    for state, county in [
-                        COUNTY.decompose(c) for c in tracts_by_county.keys()
-                    ]
+                    for (state, county), group in groupby(
+                        map(TRACT.decompose, includes),
+                        key=lambda x: x[0:-1],
+                    )
                 ]
 
             case BlockGroupScope(includes_granularity="block group", includes=includes):
-                block_groups_by_tract: dict[str, list[str]] = defaultdict(list)
-
-                for state, county, tract, block_group in map(
-                    BLOCK_GROUP.decompose, includes
-                ):
-                    block_groups_by_tract[state + county + tract].append(block_group)
-
                 return [
                     {
-                        "for": f"block group:{'.'.join(block_groups_by_tract[state + county + tract])}",  # noqa: E501
+                        "for": f"block group:{to_list(group)}",
                         "in": f"state:{state} county:{county} tract:{tract}",
                     }
-                    for state, county, tract in [
-                        TRACT.decompose(t) for t in block_groups_by_tract.keys()
-                    ]
+                    for (state, county, tract), group in groupby(
+                        map(BLOCK_GROUP.decompose, includes),
+                        key=lambda x: x[0:-1],
+                    )
                 ]
 
             case _:

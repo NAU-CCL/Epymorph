@@ -65,6 +65,12 @@ class CensusScope(ABC, GeoScope):
     _node_ids: NDArray[np.str_] = field(init=False, compare=False, hash=False)
 
     def __post_init__(self):
+        # NOTE: functionality depends on `includes` being sorted and unique.
+        # Messing this up would be quite bad and hard to debug so I think it's
+        # worth the overhead to verify it.
+        xs = self.includes
+        if not all(xs[i] < xs[i + 1] for i in range(len(xs) - 1)):
+            raise ValueError("CensusScope.includes is not a sorted and unique list.")
         node_ids = self._compute_node_ids()
         object.__setattr__(self, "_node_ids", node_ids)
 

@@ -490,14 +490,20 @@ def to_date_value_array(
     Parameters
     ----------
     dates : NDArray[np.datetime64]
-        An array of dates.
+        An 1D array of dates.
     values : NDArray[DataT]
-        An array of values corresponding to the dates.
+        An array of values corresponding to the dates,
+        the first dimension of this array must be equal to the number of dates.
 
     Returns
     -------
     NDArray[DateValueType]
         A structured array with fields 'date' and 'value'.
+
+    Raises
+    ------
+    ValueError
+        If the dimensionality of the arrays is not compatible.
 
     Examples
     --------
@@ -508,12 +514,17 @@ def to_date_value_array(
     array([('2021-01-01', 10), ('2021-01-02', 20)],
           dtype=[('date', 'datetime64[D]'), ('value', '<i8')])
     """
+    if dates.ndim != 1:
+        raise ValueError("`dates` must be a 1D array.")
+    if dates.shape[0] != values.shape[0]:
+        err = "The first axis of `dates` and `values` must be the same length."
+        raise ValueError(err)
     value_dtype = np.dtype(values.dtype).type
     result = np.empty(
         values.shape,
         dtype=[("date", "datetime64[D]"), ("value", value_dtype)],
     )
-    result["date"] = np.broadcast_to(dates[:, np.newaxis], values.shape)
+    result["date"] = dates.reshape(dates.shape + (1,) * (values.ndim - 1))
     result["value"] = values
     return result
 
