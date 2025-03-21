@@ -85,19 +85,19 @@ class ForecastSimulation:
         duration: int,
         initial_particles: Optional[List[Particle]] = None,
         num_particles: Optional[int] = None,
-        req_data: Optional[dict] = None,
+        request_data: Optional[dict] = None,
     ):
         self.num_particles = num_particles
         self.rume = rume
         self.params_space = params_space
         self.model_link = model_link
         self.duration = duration
-        self.req_data = req_data
+        self.req_data = request_data
         self.propagation = PropagateParticles()
         self.rng = np.random.default_rng()
         self.param_quantiles = {}
         self.param_values = {}
-        self.req_model_data_link = (None,)
+        self.req_model_data_link = None
         self.req_particle_cloud_dates = None
 
         # Check if initial_particles is None, and generate if num is provided
@@ -129,13 +129,7 @@ class ForecastSimulation:
             self.initial_particles = initial_particles
 
         if self.req_data is not None:
-            for k, v in self.req_data.items():
-                if k == "quantity":
-                    self.req_model_data_link = v
-                if k == "particle_cloud":
-                    self.req_particle_cloud_dates = v
-                else:
-                    raise ValueError(f"Invalid attribute for request_data: {k}")
+            self.req_model_data_link = self.req_data["quantity"]
 
     def run(self):
         if self.num_particles is None:
@@ -161,6 +155,7 @@ class ForecastSimulation:
 
         for t in range(self.duration):
             start_date = start_date + timedelta(days=7)
+            print(f"start: {start_date}---particles: {particles[0].state}")
             # Propagate particles and update their states
             propagated_particles, expected_observations, req_observations = (
                 self.propagation.propagate_particles(

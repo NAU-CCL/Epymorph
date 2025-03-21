@@ -65,9 +65,3 @@ class ForecastParameters:
         perturbation: Perturbation | None = None,
     ):
         return cls(dynamics=dynamics, perturbation=perturbation)
-
-    @classmethod
-    def Static(  # noqa: N802
-        cls, perturbation: Perturbation | None = None
-    ):
-        return cls(dynamics=None, perturbation=perturbation)
