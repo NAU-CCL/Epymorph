@@ -266,12 +266,13 @@ class InspectResult(Generic[ResultT, ValueT]):
     def quantify(self) -> Sequence[tuple[str, float]]:
         vs = self.values
         size = vs.size
+        unmasked_count = np.ma.count(vs)
         quant = []
-        if is_numeric(vs):
+        if unmasked_count > 0 and is_numeric(vs):
             quant.append(("zero", (vs == self.dtype(0)).sum() / size))
         for name, mask in self.issues:
             quant.append((name, mask.sum() / size))
-        quant.append(("unmasked", np.ma.count(vs) / size))
+        quant.append(("unmasked", unmasked_count / size))
         return quant
 
     def __str__(self) -> str:
@@ -298,17 +299,21 @@ class InspectResult(Generic[ResultT, ValueT]):
                     # might happen if there are zero data points
                     pass
 
-        minimum = vs.min()
-        maximum = vs.max()
-
-        spark = sparklines(
-            np.histogram(vs, bins=20, range=(minimum, maximum))[0],
-            num_lines=1,
-        )[0]
+        unmasked_count = np.ma.count(vs)
+        if unmasked_count == 0:
+            histogram = "N/A (all values are masked)"
+        else:
+            minimum = vs.min()
+            maximum = vs.max()
+            spark = sparklines(
+                np.histogram(vs, bins=20, range=(minimum, maximum))[0],
+                num_lines=1,
+            )[0]
+            histogram = f"{minimum} {spark} {maximum}"
 
         # Value statistics only possible on numeric data.
         stats = []
-        if is_numeric(vs):
+        if unmasked_count > 0 and is_numeric(vs):
             # stats methods don't really support masked arrays
             stats_vs = vs if not np.ma.is_masked(vs) else np.ma.compressed(vs)
             qs = np.quantile(stats_vs, [0.25, 0.50, 0.75])
@@ -325,7 +330,7 @@ class InspectResult(Generic[ResultT, ValueT]):
             f"  Result shape: {self.shape} {vs.shape}; dtype: {dtname}; size: {vs.size}",  # noqa: E501
             *extra_info,
             "  Values:",
-            f"    histogram: {minimum} {spark} {maximum}",
+            f"    histogram: {histogram}",
             *stats,
             *[
                 f"    percent {issue}: {percent:.1%}"
@@ -383,16 +388,26 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
             values = cast(NDArray[ValueT], result)
 
         # NOTE: validation only checks non-masked values
-        if not fmt.validation(values).all():
-            err = "result contains invalid values"
+        invalid_values = ~fmt.validation(values)
+        if np.any(invalid_values):
+            err = (
+                "result contains invalid values\n"
+                f"e.g., {np.sort(values[invalid_values].flatten())}"
+            )
             raise ADRIOProcessingError(self, context, err)
 
         if result.shape != expected_shape:
-            err = "result was an invalid shape"
+            err = (
+                "result was an invalid shape:\n"
+                f"got {result.shape}, expected {expected_shape}"
+            )
             raise ADRIOProcessingError(self, context, err)
 
         if np.dtype(values.dtype) != np.dtype(fmt.value_dtype):
-            err = "result was not the expected data type"
+            err = (
+                "result was not the expected data type\n"
+                f"got {np.dtype(values.dtype)}, expected {(np.dtype(fmt.value_dtype))}"
+            )
             raise ADRIOProcessingError(self, context, err)
 
     def evaluate(self) -> NDArray[ResultT]:
