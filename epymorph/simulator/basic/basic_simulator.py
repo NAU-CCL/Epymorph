@@ -87,13 +87,14 @@ class BasicSimulator(Generic[RUMEType]):
             try:
                 data = rume.evaluate_params(override_params=params, rng=rng)
             except DataAttributeError as e:
-                msg = f"RUME attribute requirements were not met. See errors:\n- {e}"
-                raise SimValidationError(msg) from None
-            except ExceptionGroup as e:
-                msg = "RUME attribute requirements were not met. See errors:" + "".join(
-                    f"\n- {e}" for e in e.exceptions
+                sub_es = e.exceptions if isinstance(e, ExceptionGroup) else (e,)
+                err = "\n".join(
+                    [
+                        "RUME attribute requirements were not met. See errors:",
+                        *(f"- {e}" for e in sub_es),
+                    ]
                 )
-                raise SimValidationError(msg) from None
+                raise SimValidationError(err) from None
 
         with error_gate("initializing the simulation", InitError):
             initial_values = rume.initialize(data, rng)
