@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from functools import partial
+from functools import partial, reduce
 from typing import (
     Any,
     Callable,
@@ -253,6 +253,43 @@ class ProcessResult(Generic[DataT]):
             raw=to_date_value_array(dates, self.raw),
             issues=self.issues,
         )
+
+    @staticmethod
+    def sum(
+        left: "ProcessResult[DataT]",
+        right: "ProcessResult[DataT]",
+        *,
+        left_prefix: str,
+        right_prefix: str,
+    ) -> "ProcessResult[DataT]":
+        """
+        Combines two ProcessResults by summing unmasked data values.
+        The result will include both lists of data issues by prefixing the issue names.
+        """
+        if left.raw.shape != right.raw.shape:
+            err = "When summing ProcessResults, their data shapes must be the same."
+            raise ValueError(err)
+        if np.dtype(left.raw.dtype) != np.dtype(right.raw.dtype):
+            err = "When summing ProcessResults, their dtypes must be the same."
+            raise ValueError(err)
+        if not (
+            np.issubdtype(left.raw.dtype, np.integer)
+            or np.issubdtype(left.raw.dtype, np.floating)
+        ):
+            err = (
+                "When summing ProcessResults, their dtypes must be integer or "
+                "floating point numbers."
+            )
+            raise ValueError(err)
+
+        new_issues = [
+            *[(f"{left_prefix}{iss}", m) for iss, m in left.issues],
+            *[(f"{right_prefix}{iss}", m) for iss, m in right.issues],
+        ]
+        unmasked = ~reduce(np.logical_or, [m for _, m in new_issues], np.ma.nomask)
+        new_raw = np.zeros_like(left.raw)
+        new_raw[unmasked] = left.raw[unmasked] + right.raw[unmasked]
+        return ProcessResult(raw=new_raw, issues=new_issues)
 
 
 class PivotAxis(NamedTuple):
@@ -572,11 +609,15 @@ def process_n(
     data_df: pd.DataFrame,
     value_name: str,
 ) -> ProcessResult[DataT]:
+    if pd.isna(data_df["value"]).any():
+        err = "Please remove all NA-like values prior to processing."
+        raise ValueError(err)
+
     issues = []
     work_df = data_df
 
     for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
+        work_df = fix_sentinel(context, sentinel_value, work_df)
         work_df, mask = strip_sentinel_n(
             context,
             work_df,
@@ -604,11 +645,15 @@ def process_nxa(
     data_df: pd.DataFrame,
     value_names: list[str],
 ) -> ProcessResult[DataT]:
+    if pd.isna(data_df["value"]).any():
+        err = "Please remove all NA-like values prior to processing."
+        raise ValueError(err)
+
     issues = []
     work_df = data_df
 
     for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
+        work_df = fix_sentinel(context, sentinel_value, work_df)
         work_df, mask = strip_sentinel_nxa(
             context,
             work_df,
@@ -636,11 +681,15 @@ def process_txn(
     data_df: pd.DataFrame,
     time_series: NDArray[np.datetime64],
 ) -> ProcessResult[DataT]:
+    if pd.isna(data_df["value"]).any():
+        err = "Please remove all NA-like values prior to processing."
+        raise ValueError(err)
+
     issues = []
     work_df = data_df
 
     for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
+        work_df = fix_sentinel(context, sentinel_value, work_df)
         work_df, mask = strip_sentinel_txn(
             time_series,
             context,
@@ -667,11 +716,15 @@ def process_nxn(
     context: Context,
     data_df: pd.DataFrame,
 ) -> ProcessResult[DataT]:
+    if pd.isna(data_df["value"]).any():
+        err = "Please remove all NA-like values prior to processing."
+        raise ValueError(err)
+
     issues = []
     work_df = data_df
 
     for sentinel_name, sentinel_value, fix_sentinel in sentinels:
-        work_df = fix_sentinel(context, sentinel_value, data_df)
+        work_df = fix_sentinel(context, sentinel_value, work_df)
         work_df, mask = strip_sentinel_nxn(
             context,
             work_df,
