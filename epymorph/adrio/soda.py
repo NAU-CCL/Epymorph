@@ -40,15 +40,18 @@ def _list(xs: Iterable[T_co], to_string: Callable[[T_co], str] = str) -> str:
     return ",".join([to_string(x) for x in xs])
 
 
-ColumnType = Literal["str", "int", "float", "date", "bool"]
+ColumnType = Literal["str", "int", "nullable_int", "float", "date", "bool"]
 
 
-def dtype_as_np(col_type: ColumnType) -> DTypeLike:
+def to_pandas_type(col_type: ColumnType) -> DTypeLike:
     match col_type:
         case "str":
             return np.str_
         case "int":
             return np.int64
+        case "nullable_int":
+            # allow integer columns to use Pandas' nullable integer type
+            return "Int64"
         case "float":
             return np.float64
         case "date":
@@ -85,10 +88,6 @@ class Select:
     def result_name(self) -> str:
         return self.as_name or self.name
 
-    @property
-    def dtype_as_np(self) -> DTypeLike:
-        return dtype_as_np(self.dtype)
-
 
 @dataclass(frozen=True, slots=True)
 class SelectExpression:
@@ -106,10 +105,6 @@ class SelectExpression:
     @property
     def result_name(self) -> str:
         return self.as_name
-
-    @property
-    def dtype_as_np(self) -> DTypeLike:
-        return dtype_as_np(self.dtype)
 
 
 SelectStatements = Select | SelectExpression
@@ -278,7 +273,7 @@ def query_csv_soql(
     # Okay for now, but definitely something that could be improved
     # and we'll want to at least catch errors helpfully.
 
-    column_dtypes = {n: dtype_as_np(t) for n, t in column_types if t != "date"}
+    column_dtypes = {n: to_pandas_type(t) for n, t in column_types if t != "date"}
     column_parsedates = [n for n, t in column_types if t == "date"]
     req_headers = None if api_token is None else {"X-App-Token": api_token}
 
