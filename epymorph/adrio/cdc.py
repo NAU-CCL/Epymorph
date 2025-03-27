@@ -735,3 +735,171 @@ class FluStateHospitalization(_DataCDCAemtMg7g):
     """  # noqa: E501
 
     _column = "total_admissions_all_influenza_confirmed"
+
+
+##########################
+# DATA.CDC.GOV 8xkx-amqh #
+##########################
+
+
+class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
+    """
+    Loads COVID hospitalization data from data.cdc.gov's dataset named
+    "COVID-19 Vaccinations in the United States,County".
+
+    The data were reported on a daily basis, starting 2020-12-13 and ending 2023-05-10.
+
+    This ADRIO supports geo scopes at US State and County granularity. The data appears
+    to have been compiled using 2019 Census delineations, so for best results, use
+    a geo scope for that year. The data loaded will be matched to the simulation time
+    frame. The result is a 2D matrix where the first axis represents reporting dates
+    during the time frame and the second axis is geo scope nodes. Values are integer
+    numbers of people who have had the requested vaccine dosage.
+
+    Parameters
+    ----------
+    vaccine_status : Literal["at least one dose", "full series", "full series and booster"]
+        The dataset breaks down vaccination status by how many doses individuals have
+        received. Use this to specify which status you're interested in.
+        "at least one dose" includes people who have received at least one COVID vaccine
+        dose; "full series" includes people who have received at least either
+        two doses of a two-dose vaccine or one dose of a one-dose vaccine;
+        "full series and booster" includes people who have received the full series
+        and at least one booster dose.
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh/about_data).
+    """  # noqa: E501
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="8xkx-amqh")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange(iso8601("2020-12-13"), iso8601("2023-05-10"), step=1)
+    """The time range over which values are available."""
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.TxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=False,
+    )
+    """The format of results."""
+
+    _vaccine_status: Literal[
+        "at least one dose", "full series", "full series and booster"
+    ]
+    """The datapoint to fetch for this ADRIO."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        vaccine_status: Literal[
+            "at least one dose", "full series", "full series and booster"
+        ],
+        *,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        if vaccine_status not in (
+            "at least one dose",
+            "full series",
+            "full series and booster",
+        ):
+            raise ValueError(f"Invalid value for `vaccine_status`: {vaccine_status}")
+        self._vaccine_status = vaccine_status
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
+
+    @override
+    def validate_context(self, context: Context):
+        scope = context.scope
+        if not isinstance(scope, StateScope | CountyScope):
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+        # NOTE: Alaska geography is a minor issue.
+        # 2019 has county 02261 which is gone in 2020, and
+        # 2020 has counties 02063 and 02066 which aren't in the data.
+        # I'm not making this an error though.
+        # Using a scope with a mismatched year may result in more missing data,
+        # so users can deal with it that way.
+        validate_time_frame(self, context, self._TIME_RANGE)
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        if isinstance(context.scope, StateScope):
+            to_postal = get_states(context.scope.year).state_fips_to_code
+            postal_codes = [to_postal[x] for x in context.scope.node_ids]
+            loc_where = q.In("Recip_State", postal_codes)
+        elif isinstance(context.scope, CountyScope):
+            loc_where = q.In("fips", context.scope.node_ids)
+        else:
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+
+        match self._vaccine_status:
+            case "at least one dose":
+                column = "administered_dose1_recip"
+            case "full series":
+                column = "series_complete_yes"
+            case "full series and booster":
+                column = "booster_doses"
+
+        query = q.Query(
+            select=(
+                q.Select("date", "date", as_name="date"),
+                q.Select("fips", "str", as_name="geoid"),
+                q.Select(column, "nullable_int", as_name="value"),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "date",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                loc_where,
+                q.NotNull(column),
+            ),
+            order_by=(
+                q.Ascending("date"),
+                q.Ascending("fips"),
+                q.Ascending(":id"),
+            ),
+        )
+        try:
+            return q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
+
+    @override
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[np.int64]:
+        if isinstance(context.scope, StateScope):
+            data_df["geoid"] = data_df["geoid"].apply(STATE.truncate)
+
+        time_range = self._TIME_RANGE
+        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
+        return process_txn(
+            sentinels=[],
+            fix_missing=self._fix_missing,
+            dtype=np.int64,
+            context=context,
+            data_df=data_df,
+            time_series=time_series,
+        )
