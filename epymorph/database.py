@@ -359,6 +359,58 @@ class DataResolver:
             True if `name` is in this resolver"""
         return name in self._raw_values
 
+    def get_raw(self, name: str | NamePattern | AbsoluteName) -> AttributeArray:
+        """
+        Retrieve a raw value that matches the given name.
+
+        Parameters
+        ----------
+        name : str | NamePattern | AbsoluteName
+            The name of the value to retrieve. This can be an AbsoluteName,
+            a NamePattern, or a string. A string will be parsed as an
+            AbsoluteName if possible, and fall back to parsing it as a NamePattern.
+            In any case, the name must match exactly one value in order to
+            return successfully.
+
+        Returns
+        -------
+        AttributeArray
+            The requested value.
+
+        Raises
+        ------
+        ValueError
+            If the name is not present in the resolver, or if the name
+            is ambiguous and matches more than one value.
+        """
+        if isinstance(name, str):
+            # if we can parse string as an absolute name, do that
+            # otherwise, parse it as a name pattern
+            try:
+                name = AbsoluteName.parse(name)
+            except ValueError:
+                name = NamePattern.parse(name)
+
+        if isinstance(name, NamePattern):
+            # if we have a name pattern, find matching absolute names
+            # if there is exactly one match we can proceed
+            matches = [x for x in self._raw_values if name.match(x)]
+            match len(matches):
+                case 0:
+                    err = f"Name '{name}' does not match any values."
+                    raise ValueError(err)
+                case 1:
+                    name = matches[0]
+                case _:
+                    err = f"Name '{name}' matches more than one value."
+                    raise ValueError(err)
+
+        # at this point we must have an absolute name, try to fetch it
+        if name not in self._raw_values:
+            err = f"Name '{name}' does not match any values."
+            raise ValueError(err)
+        return self._raw_values[name]
+
     def add(self, name: AbsoluteName, value: AttributeArray) -> None:
         """Adds a value to this resolver. You may not overwrite an existing name.
 
