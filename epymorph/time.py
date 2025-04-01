@@ -27,6 +27,12 @@ class DateRange:
     """The step between dates in the range, as a number of days.
     Must be 1 or greater."""
 
+    @classmethod
+    def until_date(cls, start_date: date, max_end_date: date, step: int) -> Self:
+        diff = (max_end_date - start_date).days % step
+        end_date = max_end_date - timedelta(days=diff)
+        return cls(start_date, end_date, step)
+
     def __post_init__(self):
         if self.start_date >= self.end_date:
             raise ValueError("`start_date` must be before or equal to `end_date`")
