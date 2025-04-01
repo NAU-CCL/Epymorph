@@ -612,6 +612,12 @@ def process_n(
     if pd.isna(data_df["value"]).any():
         err = "Please remove all NA-like values prior to processing."
         raise ValueError(err)
+    if data_df["value"].dtype == "Int64":
+        err = (
+            "Please convert Int64 (nullable) columns to (non-nullable) int64 columns "
+            "prior to processing."
+        )
+        raise ValueError(err)
 
     issues = []
     work_df = data_df
@@ -647,6 +653,12 @@ def process_nxa(
 ) -> ProcessResult[DataT]:
     if pd.isna(data_df["value"]).any():
         err = "Please remove all NA-like values prior to processing."
+        raise ValueError(err)
+    if data_df["value"].dtype == "Int64":
+        err = (
+            "Please convert Int64 (nullable) columns to (non-nullable) int64 columns "
+            "prior to processing."
+        )
         raise ValueError(err)
 
     issues = []
@@ -684,6 +696,12 @@ def process_txn(
     if pd.isna(data_df["value"]).any():
         err = "Please remove all NA-like values prior to processing."
         raise ValueError(err)
+    if data_df["value"].dtype == "Int64":
+        err = (
+            "Please convert Int64 (nullable) columns to (non-nullable) int64 columns "
+            "prior to processing."
+        )
+        raise ValueError(err)
 
     issues = []
     work_df = data_df
@@ -718,6 +736,12 @@ def process_nxn(
 ) -> ProcessResult[DataT]:
     if pd.isna(data_df["value"]).any():
         err = "Please remove all NA-like values prior to processing."
+        raise ValueError(err)
+    if data_df["value"].dtype == "Int64":
+        err = (
+            "Please convert Int64 (nullable) columns to (non-nullable) int64 columns "
+            "prior to processing."
+        )
         raise ValueError(err)
 
     issues = []

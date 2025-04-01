@@ -1,5 +1,6 @@
 import dataclasses
 import os
+from datetime import date, timedelta
 from functools import partial
 from typing import Callable, Literal, cast
 
@@ -473,9 +474,14 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
         data_df: pd.DataFrame,
     ) -> ProcessResult[DateValueType]:
         if isinstance(context.scope, StateScope):
-            data_df["geoid"] = data_df["geoid"].apply(STATE.truncate)
-            data_df = data_df.groupby(["date", "geoid"]).sum().reset_index()
-        data_df["value"] = np.round(data_df["value"])
+            geoid = data_df["geoid"].apply(STATE.truncate)
+            data_df = (
+                data_df.assign(geoid=geoid)
+                .groupby(["date", "geoid"])
+                .sum()
+                .reset_index()
+            )
+        data_df = data_df.assign(value=data_df["value"].round())
 
         time_range = self._TIME_RANGE
         time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
@@ -891,7 +897,8 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
         data_df: pd.DataFrame,
     ) -> ProcessResult[np.int64]:
         if isinstance(context.scope, StateScope):
-            data_df["geoid"] = data_df["geoid"].apply(STATE.truncate)
+            geoid = data_df["geoid"].apply(STATE.truncate)
+            data_df = data_df.assign(geoid=geoid)
 
         time_range = self._TIME_RANGE
         time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
@@ -903,3 +910,341 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
             data_df=data_df,
             time_series=time_series,
         )
+
+
+##########################
+# DATA.CDC.GOV ite7-j2w7 #
+##########################
+# county-level deaths: COVID, Total
+# 2020-01-04 through 2023-04-01 (not active)
+# Suppresses counts in range [1,9] (as null)
+# TODO: other fields?
+
+
+class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
+    """
+    Loads COVID and total deaths data from data.cdc.gov's dataset named
+    "AH COVID-19 Death Counts by County and Week, 2020-present".
+
+    The data were reported starting 2020-01-04 and ending 2023-04-01, and aggregated
+    by CDC to the US County level.
+
+    This ADRIO supports geo scopes at US State and County granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    deaths.
+
+    Parameters
+    ----------
+    fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix redacted values.
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/NCHS/AH-COVID-19-Death-Counts-by-County-and-Week-2020-p/ite7-j2w7/about_data).
+    """  # noqa: E501
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="ite7-j2w7")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange(iso8601("2020-01-04"), iso8601("2023-04-01"), step=7)
+    """The time range over which values are available."""
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
+    )
+    """The format of results."""
+
+    _fix_redacted: Fix[np.int64]
+    """The method to use to replace redacted values (N/A in the data)."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        *,
+        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        try:
+            self._fix_redacted = Fix.of_int64(fix_redacted)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_redacted`")
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
+
+    @override
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope | CountyScope):
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
+        validate_time_frame(self, context, self._TIME_RANGE)
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        counties = cast(CensusScope, context.scope).as_granularity("county")
+        # Data represents county-level FIPS codes as numbers,
+        # so we have to strip leading zeros when querying (???) and
+        # left-pad with zero to get back to five characters in the result.
+
+        query = q.Query(
+            select=(
+                q.Select("week_ending_date", "date", as_name="date"),
+                q.Select("fips_code", "str", as_name="geoid"),
+                q.SelectExpression(
+                    "covid_19_deaths",
+                    "nullable_int",
+                    as_name="value",
+                ),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "week_ending_date",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("fips_code", counties.node_ids),
+            ),
+            order_by=(
+                q.Ascending("week_ending_date"),
+                q.Ascending("fips_code"),
+                q.Ascending(":id"),
+            ),
+        )
+        try:
+            result_df = q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+            result_df["geoid"] = result_df["geoid"].str.rjust(5, "0")
+            return result_df
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
+
+    @override
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        if isinstance(context.scope, StateScope):
+            geoid = data_df["geoid"].apply(STATE.truncate).astype(np.str_)
+            data_df = data_df.assign(geoid=geoid)
+
+        # insert our own sentinel value: nulls in these data mean "redacted"
+        # but we can't have null values for the processing step
+        value = data_df["value"].fillna(-999999).astype(np.int64)
+        data_df = data_df.assign(value=value)
+
+        time_range = self._TIME_RANGE
+        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
+        result = process_txn(
+            sentinels=[
+                FixSentinel("redacted", np.int64(-999999), self._fix_redacted),
+            ],
+            fix_missing=self._fix_missing,
+            dtype=np.int64,
+            context=context,
+            data_df=data_df,
+            time_series=time_series,
+        )
+        return result.to_date_value(time_series)
+
+    @override
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_range = self._TIME_RANGE
+        time_series = time_range.overlap_or_raise(context.time_frame)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)
+
+
+##########################
+# DATA.CDC.GOV r8kw-7aab #
+##########################
+# state-level deaths: COVID, Total, Pct Expected, PNA, PNA + COVID, Flu, PNA + COVID + Flu  # noqa: E501
+# 2020-01-04 through 2025-03-22 (active, updates weekly)
+# Suppresses counts in range [1,9] (as null)
+# TODO: other fields?
+
+
+class StateDeaths(FetchADRIO[DateValueType, np.int64]):
+    """
+    Loads COVID and total deaths data from data.cdc.gov's dataset named
+    "Provisional COVID-19 Death Counts by Week Ending Date and State".
+
+    The data were reported starting 2020-01-04 and aggregated by CDC to the US State level.
+
+    This ADRIO supports geo scopes at US State granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Values are tuples of date and the integer number of
+    deaths.
+
+    Parameters
+    ----------
+    fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix redacted values.
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/NCHS/Provisional-COVID-19-Death-Counts-by-Week-Ending-D/r8kw-7aab/about_data).
+    """  # noqa: E501
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="r8kw-7aab")
+    """The Socrata API endpoint."""
+
+    @staticmethod
+    def _time_range() -> DateRange:
+        """The time range over which values are available."""
+        # There's about a one week lag in the data.
+        # On a Thursday they seem to post data up to the previous Saturday,
+        # so this config handles that.
+        return DateRange.until_date(
+            iso8601("2020-01-04"),
+            date.today() - timedelta(days=7),
+            step=7,
+        )
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.AxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+        is_date_value=True,
+    )
+    """The format of results."""
+
+    _fix_redacted: Fix[np.int64]
+    """The method to use to replace redacted values (N/A in the data)."""
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        *,
+        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        try:
+            self._fix_redacted = Fix.of_int64(fix_redacted)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_redacted`")
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return self._RESULT_FORMAT
+
+    @override
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope):
+            err = "US State geo scope required."
+            raise ADRIOContextError(self, context, err)
+        validate_time_frame(self, context, self._time_range())
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        # Data contains state names, so create mappings to and from.
+        scope = cast(StateScope, context.scope)
+        to_state = get_states(year=scope.year).state_fips_to_name
+        to_fips = {to_state[x]: x for x in scope.node_ids}
+        states = to_fips.keys()
+
+        query = q.Query(
+            select=(
+                q.Select("week_ending_date", "date", as_name="date"),
+                q.Select("state", "str", as_name="geoid"),
+                q.SelectExpression(
+                    "covid_19_deaths",
+                    "nullable_int",
+                    as_name="value",
+                ),
+            ),
+            where=q.And(
+                q.Equals("group", "By Week"),
+                q.DateBetween(
+                    "week_ending_date",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("state", states),
+            ),
+            order_by=(
+                q.Ascending("week_ending_date"),
+                q.Ascending("state"),
+                q.Ascending(":id"),
+            ),
+        )
+        try:
+            result_df = q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+            geoid = result_df["geoid"].apply(lambda x: to_fips[x])
+            return result_df.assign(geoid=geoid)
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
+
+    @override
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> ProcessResult[DateValueType]:
+        # insert our own sentinel value: nulls in these data mean "redacted"
+        # but we can't have null values for the processing step
+        value = data_df["value"].fillna(-999999).astype(np.int64)
+        data_df = data_df.assign(value=value)
+
+        time_range = self._time_range()
+        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
+        result = process_txn(
+            sentinels=[
+                FixSentinel("redacted", np.int64(-999999), self._fix_redacted),
+            ],
+            fix_missing=self._fix_missing,
+            dtype=np.int64,
+            context=context,
+            data_df=data_df,
+            time_series=time_series,
+        )
+        return result.to_date_value(time_series)
+
+    @override
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_range = self._time_range()
+        time_series = time_range.overlap_or_raise(context.time_frame)
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)

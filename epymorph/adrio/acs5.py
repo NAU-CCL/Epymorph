@@ -15,7 +15,6 @@ from typing_extensions import override
 from epymorph.adrio.adrio import (
     ADRIOCommunicationError,
     ADRIOContextError,
-    ADRIOError,
     ADRIOProcessingError,
     ADRIOPrototype,
     FetchADRIO,
@@ -99,7 +98,7 @@ class ACS5Client:
             return load_json(file)["variables"]
         except Exception as e:
             err = "Unable to load ACS5 variables."
-            raise ADRIOError(err) from e
+            raise Exception(err) from e
 
     @cache
     @staticmethod
@@ -235,7 +234,8 @@ class ACS5Client:
                 ]
 
             case _:
-                raise ADRIOError("Unsupported geo scope.")
+                err = "Unsupported geo scope."
+                raise Exception(err)
 
     @staticmethod
     def fetch(

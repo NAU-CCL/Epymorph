@@ -16,6 +16,7 @@ from typing import (
     cast,
     final,
 )
+from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,7 @@ from epymorph.data_shape import DataShape, Shapes
 from epymorph.data_type import AttributeArray
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
 from epymorph.database import DataResolver, evaluate_param
+from epymorph.error import MissingContextError
 from epymorph.event import ADRIOProgress, DownloadActivity, EventBus
 from epymorph.geography.scope import GeoScope
 from epymorph.simulation import Context, SimulationFunction
@@ -182,14 +184,25 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
 ######################
 
 
+def _adrio_name(adrio: "ADRIOPrototype", context: Context) -> str:
+    if context.name == NAME_PLACEHOLDER:
+        return adrio.class_name
+    else:
+        return f"{context.name} ({adrio.name})"
+
+
 class ADRIOError(Exception):
     """Exception while loading or processing data with an ADRIO."""
 
-    def _name(self, adrio: "ADRIOPrototype", context: Context) -> str:
-        if context.name == NAME_PLACEHOLDER:
-            return adrio.class_name
-        else:
-            return f"{context.name} ({adrio.name})"
+    adrio: "ADRIOPrototype"
+    context: Context
+
+    def __init__(self, adrio: "ADRIOPrototype", context: Context, message: str):
+        self.adrio = adrio
+        self.context = context
+        # If message contains "{adrio_name}", fill it in.
+        message = message.format(adrio_name=_adrio_name(adrio, context))
+        super().__init__(message)
 
 
 class ADRIOContextError(ADRIOError):
@@ -203,19 +216,23 @@ class ADRIOContextError(ADRIOError):
     ):
         if message is None:
             message = "the ADRIO encountered an unexpected error"
-        err = f"Invalid context for {self._name(adrio, context)}: {message}"
-        super().__init__(err)
+        message = "Invalid context for {adrio_name}: " + message
+        super().__init__(adrio, context, message)
 
 
 class ADRIOCommunicationError(ADRIOError):
     """The ADRIO could not communicate with the external resource."""
 
-    def __init__(self, adrio: "ADRIOPrototype", context: Context):
-        err = (
-            f"Error loading {self._name(adrio, context)}: "
-            f"the ADRIO was unable to communicate with the external resource"
-        )
-        super().__init__(err)
+    def __init__(
+        self,
+        adrio: "ADRIOPrototype",
+        context: Context,
+        message: str | None = None,
+    ):
+        if message is None:
+            message = "the ADRIO was unable to communicate with the external resource"
+        message = "Error loading {adrio_name}: " + message
+        super().__init__(adrio, context, message)
 
 
 class ADRIOProcessingError(ADRIOError):
@@ -229,8 +246,8 @@ class ADRIOProcessingError(ADRIOError):
     ):
         if message is None:
             message = "the ADRIO encountered an unexpected error processing results"
-        err = f"Error loading {self._name(adrio, context)}: {message}"
-        super().__init__(err)
+        message = "Error processing {adrio_name}: " + message
+        super().__init__(adrio, context, message)
 
 
 ResultT = TypeVar("ResultT", bound=np.generic)
@@ -510,6 +527,8 @@ class FetchADRIO(ADRIOPrototype[ResultT, ValueT]):
             self.validate_context(ctx)
         except ADRIOError:
             raise
+        except MissingContextError as e:
+            raise ADRIOContextError(self, ctx, str(e))
         except Exception as e:
             raise ADRIOContextError(self, ctx) from e
 
@@ -518,8 +537,21 @@ class FetchADRIO(ADRIOPrototype[ResultT, ValueT]):
 
         try:
             source_df = self._fetch(ctx)
+        except ADRIOCommunicationError as e:
+            e2 = e.__cause__
+            if isinstance(e2, HTTPError) and e2.code == 414:
+                err = (
+                    "the attempted request URI was too long to send. "
+                    "The root cause for this can vary, but it usually suggests "
+                    "your query involves too many locations."
+                )
+                raise ADRIOCommunicationError(e.adrio, e.context, err) from e2
+            else:
+                raise e
         except ADRIOError:
             raise
+        except MissingContextError as e:
+            raise ADRIOContextError(self, ctx, str(e))
         except Exception as e:
             raise ADRIOProcessingError(self, ctx) from e
 
@@ -529,6 +561,8 @@ class FetchADRIO(ADRIOPrototype[ResultT, ValueT]):
             self._validate_result(ctx, result_np)
         except ADRIOError:
             raise
+        except MissingContextError as e:
+            raise ADRIOContextError(self, ctx, str(e))
         except Exception as e:
             raise ADRIOProcessingError(self, ctx) from e
 
