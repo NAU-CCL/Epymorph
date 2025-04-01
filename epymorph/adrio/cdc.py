@@ -915,10 +915,6 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
 ##########################
 # DATA.CDC.GOV ite7-j2w7 #
 ##########################
-# county-level deaths: COVID, Total
-# 2020-01-04 through 2023-04-01 (not active)
-# Suppresses counts in range [1,9] (as null)
-# TODO: other fields?
 
 
 class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
@@ -937,6 +933,8 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
 
     Parameters
     ----------
+    cause_of_death : Literal["all", "COVID-19"]
+        The cause of death.
     fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
         The method to use to fix redacted values.
     fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
@@ -961,6 +959,8 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
     )
     """The format of results."""
 
+    _cause_of_death: Literal["all", "COVID-19"]
+    """The cause of death."""
     _fix_redacted: Fix[np.int64]
     """The method to use to replace redacted values (N/A in the data)."""
     _fix_missing: Fill[np.int64]
@@ -968,10 +968,15 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
 
     def __init__(
         self,
+        cause_of_death: Literal["all", "COVID-19"],
         *,
         fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
         fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
     ):
+        if cause_of_death not in ("all", "COVID-19"):
+            err = f"Unsupported cause of death: {cause_of_death}"
+            raise ValueError(err)
+        self._cause_of_death = cause_of_death
         try:
             self._fix_redacted = Fix.of_int64(fix_redacted)
         except ValueError:
@@ -1000,12 +1005,18 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
         # so we have to strip leading zeros when querying (???) and
         # left-pad with zero to get back to five characters in the result.
 
+        match self._cause_of_death:
+            case "all":
+                value_column = "total_deaths"
+            case "COVID-19":
+                value_column = "covid_19_deaths"
+
         query = q.Query(
             select=(
                 q.Select("week_ending_date", "date", as_name="date"),
                 q.Select("fips_code", "str", as_name="geoid"),
                 q.SelectExpression(
-                    "covid_19_deaths",
+                    value_column,
                     "nullable_int",
                     as_name="value",
                 ),
@@ -1081,15 +1092,11 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
 ##########################
 # DATA.CDC.GOV r8kw-7aab #
 ##########################
-# state-level deaths: COVID, Total, Pct Expected, PNA, PNA + COVID, Flu, PNA + COVID + Flu  # noqa: E501
-# 2020-01-04 through 2025-03-22 (active, updates weekly)
-# Suppresses counts in range [1,9] (as null)
-# TODO: other fields?
 
 
 class StateDeaths(FetchADRIO[DateValueType, np.int64]):
     """
-    Loads COVID and total deaths data from data.cdc.gov's dataset named
+    Loads deaths data (COVID-19, influenza, pneumonia, and total) from data.cdc.gov's dataset named
     "Provisional COVID-19 Death Counts by Week Ending Date and State".
 
     The data were reported starting 2020-01-04 and aggregated by CDC to the US State level.
@@ -1102,6 +1109,8 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
 
     Parameters
     ----------
+    cause_of_death : Literal["all", "COVID-19", "influenza", "pneumonia"]
+        The cause of death.
     fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
         The method to use to fix redacted values.
     fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
@@ -1135,6 +1144,8 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
     )
     """The format of results."""
 
+    _cause_of_death: Literal["all", "COVID-19", "influenza", "pneumonia"]
+    """The cause of death."""
     _fix_redacted: Fix[np.int64]
     """The method to use to replace redacted values (N/A in the data)."""
     _fix_missing: Fill[np.int64]
@@ -1142,10 +1153,15 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
 
     def __init__(
         self,
+        cause_of_death: Literal["all", "COVID-19", "influenza", "pneumonia"],
         *,
         fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
         fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
     ):
+        if cause_of_death not in ("all", "COVID-19", "influenza", "pneumonia"):
+            err = f"Unsupported cause of death: {cause_of_death}"
+            raise ValueError(err)
+        self._cause_of_death = cause_of_death
         try:
             self._fix_redacted = Fix.of_int64(fix_redacted)
         except ValueError:
@@ -1175,12 +1191,22 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
         to_fips = {to_state[x]: x for x in scope.node_ids}
         states = to_fips.keys()
 
+        match self._cause_of_death:
+            case "all":
+                value_column = "total_deaths"
+            case "COVID-19":
+                value_column = "covid_19_deaths"
+            case "influenza":
+                value_column = "influenza_deaths"
+            case "pneumonia":
+                value_column = "pneumonia_deaths"
+
         query = q.Query(
             select=(
                 q.Select("week_ending_date", "date", as_name="date"),
                 q.Select("state", "str", as_name="geoid"),
                 q.SelectExpression(
-                    "covid_19_deaths",
+                    value_column,
                     "nullable_int",
                     as_name="value",
                 ),
