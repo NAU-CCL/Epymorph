@@ -25,12 +25,11 @@ from epymorph.adrio.adrio import (
     range_mask_fn,
 )
 from epymorph.adrio.processing import (
+    DataPipeline,
     DontFill,
     Fill,
     Fix,
-    FixSentinel,
-    process_n,
-    process_nxa,
+    PivotAxis,
 )
 from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
@@ -366,24 +365,17 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
             group_name = m.group(1)
             vrbs = ACS5Client.get_group_var_names(self.census_scope.year, group_name)
 
-        if len(vrbs) == 1:
-            return process_n(
-                sentinels=[],
-                fix_missing=DontFill(),
-                dtype=self.result_format.value_dtype,
-                context=context,
-                data_df=data_df,
-                value_name=vrbs[0],
-            )
-        else:
-            return process_nxa(
-                sentinels=[],
-                fix_missing=DontFill(),
-                dtype=self.result_format.value_dtype,
-                context=context,
-                data_df=data_df,
-                value_names=vrbs,
-            )
+        result, issues = DataPipeline(
+            context=context,
+            data_df=data_df,
+            axes=(
+                PivotAxis("geoid", context.scope.node_ids),
+                PivotAxis("variable", vrbs),
+            ),
+            ndims=1 if len(vrbs) == 1 else 2,
+            dtype=self.result_format.value_dtype,
+        ).finalize(fill_missing=DontFill())
+        return ProcessResult(result, list(issues.items()))  # TODO: streamline
 
 
 class Population(_FetchACS5[np.int64]):
@@ -921,20 +913,25 @@ class GiniIndex(_FetchACS5[np.float64]):
         data_df: pd.DataFrame,
     ) -> ProcessResult[np.float64]:
         vrbs = data_df["variable"].unique().tolist()
-        return process_n(
-            sentinels=[
-                FixSentinel(
-                    "insufficient_data",
-                    np.float64(-666666666),
-                    self._fix_insufficient_data,
+        result, issues = (
+            DataPipeline(
+                context=context,
+                data_df=data_df,
+                axes=(
+                    PivotAxis("geoid", context.scope.node_ids),
+                    PivotAxis("variable", vrbs),
                 ),
-            ],
-            fix_missing=self._fix_missing,
-            dtype=self.result_format.value_dtype,
-            context=context,
-            data_df=data_df,
-            value_name=vrbs[0],
+                ndims=1,
+                dtype=self.result_format.value_dtype,
+            )
+            .strip_sentinel(
+                "insufficient_data",
+                np.float64(-666666666),
+                self._fix_insufficient_data,
+            )
+            .finalize(self._fix_missing)
         )
+        return ProcessResult(result, list(issues.items()))  # TODO: streamline
 
 
 class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
