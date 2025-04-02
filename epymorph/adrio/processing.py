@@ -1,12 +1,15 @@
+import dataclasses
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial, reduce
 from typing import (
     Any,
     Callable,
     Generic,
     Literal,
+    Mapping,
     NamedTuple,
+    Self,
     Sequence,
     TypeVar,
     cast,
@@ -295,6 +298,152 @@ class ProcessResult(Generic[DataT]):
 class PivotAxis(NamedTuple):
     column: str
     values: list | NDArray
+
+
+class PipelineResult(NamedTuple):
+    result: NDArray
+    issues: Mapping[str, NDArray[np.bool_]]
+
+
+@dataclass(frozen=True)
+class DataPipeline:  # TODO: Generic[DataT] ?
+    context: Context  # TODO: do we really need context now, or is rng sufficient?
+    data_df: pd.DataFrame
+    axes: tuple[PivotAxis, PivotAxis]
+    ndims: Literal[1, 2]
+    dtype: type[np.generic]
+    issues: Mapping[str, NDArray[np.bool_]] = field(default_factory=dict)
+
+    def _add_issue(
+        self,
+        issue_name: str,
+        issue_mask: NDArray[np.bool_] | None,
+    ) -> Mapping[str, NDArray[np.bool_]]:
+        if issue_mask is not None and issue_mask.any():
+            return {**self.issues, issue_name: issue_mask}
+        return self.issues
+
+    def map_column(
+        self,
+        column: str,
+        dtype: type[np.generic] | None,
+        map_fn: Callable[[Any], Any] | None,
+    ) -> Self:
+        if map_fn is None and dtype is None:
+            return self
+        series = self.data_df[column]
+        if map_fn is not None:
+            series = series.apply(map_fn)
+        if dtype is not None:
+            series = series.astype(dtype)
+        data_df = self.data_df.assign(**{column: series})
+        return dataclasses.replace(self, data_df=data_df)
+
+    def strip_sentinel(
+        self,
+        sentinel_name: str,
+        sentinel_value: Any,
+        fix: "Fix",
+    ) -> Self:
+        # Apply fix.
+        work_df = fix(self.context, sentinel_value, self.data_df)
+
+        # Compute the mask for any remaining sentinels.
+        is_sentinel = work_df["value"] == sentinel_value
+        mask = (
+            work_df.pivot_table(
+                index=self.axes[0].column,
+                columns=self.axes[1].column,
+                values="value",
+                aggfunc=lambda _: True,
+                fill_value=False,
+            )
+            .reindex(
+                index=self.axes[0].values,
+                columns=self.axes[1].values,
+                fill_value=False,
+            )
+            .to_numpy(dtype=np.bool_)
+        )
+        if self.ndims == 1:
+            mask = mask[:, 0]
+
+        # Strip out sentinel values.
+        work_df = work_df.loc[~is_sentinel]
+        return dataclasses.replace(
+            self,
+            data_df=work_df,
+            issues=self._add_issue(sentinel_name, mask),
+        )
+
+    def strip_na_as_sentinel(
+        self,
+        sentinel_name: str,
+        sentinel_value: Any,
+        fix: "Fix",
+    ) -> Self:
+        # TODO: if value already contains the proposed sentinel,
+        # maybe we should raise an error
+        value = self.data_df["value"].fillna(sentinel_value).astype(np.int64)
+        work_df = self.data_df.assign(value=value)
+        pipeline = dataclasses.replace(self, data_df=work_df)
+        return pipeline.strip_sentinel(sentinel_name, sentinel_value, fix)
+
+    def finalize(self, fill_missing: "Fill") -> PipelineResult:
+        # Tabulate data.
+        result_np = cast(
+            NDArray,  # [DataT],
+            (
+                self.data_df.pivot_table(
+                    index=self.axes[0].column,
+                    columns=self.axes[1].column,
+                    values="value",
+                    aggfunc="sum",
+                    fill_value=0,
+                )
+                .reindex(
+                    index=self.axes[0].values,
+                    columns=self.axes[1].values,
+                    fill_value=0,
+                )
+                .to_numpy(dtype=self.dtype)
+            ),
+        )
+        mask = cast(
+            NDArray[np.bool_],
+            (
+                self.data_df.assign(value=False)
+                .pivot_table(
+                    index=self.axes[0].column,
+                    columns=self.axes[1].column,
+                    values="value",
+                    aggfunc=lambda _: False,
+                    fill_value=True,
+                )
+                .reindex(
+                    index=self.axes[0].values,
+                    columns=self.axes[1].values,
+                    fill_value=True,
+                )
+            ).to_numpy(dtype=np.bool_),
+        )
+        if self.ndims == 1:
+            result_np = result_np[:, 0]
+            mask = mask[:, 0]
+
+        # Discover and fill missing data.
+        result_np, mask = fill_missing(self.context, result_np, mask)
+
+        return PipelineResult(result_np, self._add_issue("missing", mask))
+
+    def finalize_as_date_value(
+        self,
+        fill_missing: "Fill",
+        dates: NDArray[np.datetime64],
+    ) -> PipelineResult:
+        result_np, issues = self.finalize(fill_missing)
+        result_np = to_date_value_array(dates, result_np)
+        return PipelineResult(result_np, issues)
 
 
 def _mask_pivot(
