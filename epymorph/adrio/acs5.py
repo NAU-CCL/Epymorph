@@ -365,17 +365,16 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
             group_name = m.group(1)
             vrbs = ACS5Client.get_group_var_names(self.census_scope.year, group_name)
 
-        result, issues = DataPipeline(
-            context=context,
-            data_df=data_df,
+        pipeline = DataPipeline(
             axes=(
                 PivotAxis("geoid", context.scope.node_ids),
                 PivotAxis("variable", vrbs),
             ),
             ndims=1 if len(vrbs) == 1 else 2,
             dtype=self.result_format.value_dtype,
+            rng=context,
         ).finalize(fill_missing=DontFill())
-        return ProcessResult(result, list(issues.items()))  # TODO: streamline
+        return pipeline(data_df)
 
 
 class Population(_FetchACS5[np.int64]):
@@ -647,7 +646,7 @@ class PopulationByAge(ADRIOPrototype[np.int64, np.int64]):
             result=result_np,
             dtype=self.result_format.value_dtype,
             shape=self.result_format.shape,
-            issues=[],
+            issues={},
         )
 
 
@@ -913,16 +912,15 @@ class GiniIndex(_FetchACS5[np.float64]):
         data_df: pd.DataFrame,
     ) -> ProcessResult[np.float64]:
         vrbs = data_df["variable"].unique().tolist()
-        result, issues = (
+        pipeline = (
             DataPipeline(
-                context=context,
-                data_df=data_df,
                 axes=(
                     PivotAxis("geoid", context.scope.node_ids),
                     PivotAxis("variable", vrbs),
                 ),
                 ndims=1,
                 dtype=self.result_format.value_dtype,
+                rng=context,
             )
             .strip_sentinel(
                 "insufficient_data",
@@ -931,7 +929,7 @@ class GiniIndex(_FetchACS5[np.float64]):
             )
             .finalize(self._fix_missing)
         )
-        return ProcessResult(result, list(issues.items()))  # TODO: streamline
+        return pipeline(data_df)
 
 
 class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
@@ -1028,7 +1026,7 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
         min_total = high_minority[high_low_index_map]
 
         # If coarse population is unavailable or zero, we can't compute DI
-        issues = []
+        issues: list[tuple[str, NDArray[np.bool_]]] = []
         if np.ma.is_masked(maj_total):
             issues.append(("majority_total_unavailable", np.ma.getmask(maj_total)))
         if np.ma.is_masked(min_total):
@@ -1063,5 +1061,5 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
             result=result_np,
             dtype=self.result_format.value_dtype,
             shape=self.result_format.shape,
-            issues=issues,
+            issues={k: v for k, v in issues},
         )
