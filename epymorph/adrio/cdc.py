@@ -1,7 +1,6 @@
 import dataclasses
 import os
 from datetime import date, timedelta
-from functools import partial
 from typing import Callable, Literal, cast
 
 import numpy as np
@@ -20,11 +19,11 @@ from epymorph.adrio.adrio import (
     validate_time_frame,
 )
 from epymorph.adrio.processing import (
+    DataPipeline,
     DateValueType,
     Fill,
     Fix,
-    FixSentinel,
-    process_txn,
+    PivotAxis,
 )
 from epymorph.data_shape import Shapes
 from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
@@ -110,6 +109,7 @@ class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
         if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
+        # TODO: which county years work?
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
@@ -120,8 +120,7 @@ class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
         *,
         expected_shape: tuple[int, ...] | None = None,
     ) -> None:
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame)
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
         shp = (len(time_series), context.scope.nodes)
         super()._validate_result(context, result, expected_shape=shp)
 
@@ -225,22 +224,19 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
         context: Context,
         data_df: pd.DataFrame,
     ) -> ProcessResult[DateValueType]:
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
-        processor = partial(
-            process_txn,
-            sentinels=[
-                FixSentinel(
-                    "redacted",
-                    self._REDACTED_VALUE,
-                    self._fix_redacted,
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
                 ),
-            ],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            # data_df unspecified
-            time_series=time_series,
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .strip_sentinel("redacted", self._REDACTED_VALUE, self._fix_redacted)
+            .finalize(self._fix_missing)
         )
 
         if self._age_group == "both":
@@ -252,7 +248,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
                 .dropna(subset="value")
             )
             adult_df["value"] = adult_df["value"].astype(np.int64)
-            adult_result = processor(data_df=adult_df)
+            adult_result = pipeline(adult_df)
 
             ped_df = (
                 data_df[["date", "geoid", "value_ped"]]
@@ -260,7 +256,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
                 .dropna(subset="value")
             )
             ped_df["value"] = ped_df["value"].astype(np.int64)
-            ped_result = processor(data_df=ped_df)
+            ped_result = pipeline(ped_df)
 
             result = ProcessResult.sum(
                 adult_result,
@@ -270,7 +266,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
             )
         else:
             # Age group is just adult or pediatric, so process as normal
-            result = processor(data_df=data_df)
+            result = pipeline(data_df)
         return result.to_date_value(time_series)
 
 
@@ -343,23 +339,25 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
         context: Context,
         data_df: pd.DataFrame,
     ) -> ProcessResult[DateValueType]:
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
-        result = process_txn(
-            sentinels=[
-                FixSentinel(
-                    "redacted",
-                    self._REDACTED_VALUE,
-                    self._fix_redacted,
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
                 ),
-            ],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            data_df=data_df,
-            time_series=time_series,
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .strip_sentinel(
+                "redacted",
+                self._REDACTED_VALUE,
+                self._fix_redacted,
+            )
+            .finalize(self._fix_missing)
         )
-        return result.to_date_value(time_series)
+        return pipeline(data_df).to_date_value(time_series)
 
 
 ##########################
@@ -429,6 +427,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
         if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
+        # TODO: which county years work?
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
@@ -473,27 +472,28 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
         context: Context,
         data_df: pd.DataFrame,
     ) -> ProcessResult[DateValueType]:
-        if isinstance(context.scope, StateScope):
-            geoid = data_df["geoid"].apply(STATE.truncate)
-            data_df = (
-                data_df.assign(geoid=geoid)
-                .groupby(["date", "geoid"])
-                .sum()
-                .reset_index()
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
             )
-        data_df = data_df.assign(value=data_df["value"].round())
-
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
-        result = process_txn(
-            sentinels=[],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            data_df=data_df,
-            time_series=time_series,
+            .map_column(
+                "geoid",
+                map_fn=STATE.truncate
+                if isinstance(context.scope, StateScope)
+                else None,
+                dtype=np.str_,
+            )
+            .map_series("value", map_fn=lambda xs: xs.round())
+            .finalize(self._fix_missing)
         )
-        return result.to_date_value(time_series)
+        return pipeline(data_df).to_date_value(time_series)
 
     @override
     def _validate_result(
@@ -503,8 +503,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
         *,
         expected_shape: tuple[int, ...] | None = None,
     ) -> None:
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame)
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
         shp = (len(time_series), context.scope.nodes)
         super()._validate_result(context, result, expected_shape=shp)
 
@@ -623,16 +622,17 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
         context: Context,
         data_df: pd.DataFrame,
     ) -> ProcessResult[DateValueType]:
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
-        result = process_txn(
-            sentinels=[],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            data_df=data_df,
-            time_series=time_series,
-        )
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = DataPipeline(
+            axes=(
+                PivotAxis("date", time_series),
+                PivotAxis("geoid", context.scope.node_ids),
+            ),
+            ndims=2,
+            dtype=self.result_format.value_dtype,
+            rng=context,
+        ).finalize(self._fix_missing)
+        result = pipeline(data_df)
 
         # If we don't allow voluntary reported data and if the time series overlaps
         # the voluntary period, add a data issue with the voluntary dates masked.
@@ -648,7 +648,7 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
             )
             result = dataclasses.replace(
                 result,
-                issues=[*result.issues, ("voluntary", mask)],
+                issues={**result.issues, "voluntary": mask},
             )
 
         return result.to_date_value(time_series)
@@ -661,8 +661,7 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
         *,
         expected_shape: tuple[int, ...] | None = None,
     ) -> None:
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame)
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
         shp = (len(time_series), context.scope.nodes)
         super()._validate_result(context, result, expected_shape=shp)
 
@@ -896,20 +895,27 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
         context: Context,
         data_df: pd.DataFrame,
     ) -> ProcessResult[np.int64]:
-        if isinstance(context.scope, StateScope):
-            geoid = data_df["geoid"].apply(STATE.truncate)
-            data_df = data_df.assign(geoid=geoid)
-
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
-        return process_txn(
-            sentinels=[],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            data_df=data_df,
-            time_series=time_series,
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .map_column(
+                "geoid",
+                map_fn=STATE.truncate
+                if isinstance(context.scope, StateScope)
+                else None,
+                dtype=np.str_,
+            )
+            .finalize(self._fix_missing)
         )
+        return pipeline(data_df)
 
 
 ##########################
@@ -1052,28 +1058,34 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
         context: Context,
         data_df: pd.DataFrame,
     ) -> ProcessResult[DateValueType]:
-        if isinstance(context.scope, StateScope):
-            geoid = data_df["geoid"].apply(STATE.truncate).astype(np.str_)
-            data_df = data_df.assign(geoid=geoid)
-
-        # insert our own sentinel value: nulls in these data mean "redacted"
-        # but we can't have null values for the processing step
-        value = data_df["value"].fillna(-999999).astype(np.int64)
-        data_df = data_df.assign(value=value)
-
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
-        result = process_txn(
-            sentinels=[
-                FixSentinel("redacted", np.int64(-999999), self._fix_redacted),
-            ],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            data_df=data_df,
-            time_series=time_series,
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .map_column(
+                "geoid",
+                map_fn=STATE.truncate
+                if isinstance(context.scope, StateScope)
+                else None,
+                dtype=np.str_,
+            )
+            # insert our own sentinel value: nulls in these data mean "redacted"
+            # but we can't have null values for the finalize step
+            .strip_na_as_sentinel(
+                sentinel_name="redacted",
+                sentinel_value=-999999,
+                fix=self._fix_redacted,
+            )
+            .finalize(self._fix_missing)
         )
-        return result.to_date_value(time_series)
+        return pipeline(data_df).to_date_value(time_series)
 
     @override
     def _validate_result(
@@ -1083,8 +1095,7 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
         *,
         expected_shape: tuple[int, ...] | None = None,
     ) -> None:
-        time_range = self._TIME_RANGE
-        time_series = time_range.overlap_or_raise(context.time_frame)
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
         shp = (len(time_series), context.scope.nodes)
         super()._validate_result(context, result, expected_shape=shp)
 
@@ -1243,24 +1254,27 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
         context: Context,
         data_df: pd.DataFrame,
     ) -> ProcessResult[DateValueType]:
-        # insert our own sentinel value: nulls in these data mean "redacted"
-        # but we can't have null values for the processing step
-        value = data_df["value"].fillna(-999999).astype(np.int64)
-        data_df = data_df.assign(value=value)
-
-        time_range = self._time_range()
-        time_series = time_range.overlap_or_raise(context.time_frame).to_numpy()
-        result = process_txn(
-            sentinels=[
-                FixSentinel("redacted", np.int64(-999999), self._fix_redacted),
-            ],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            data_df=data_df,
-            time_series=time_series,
+        time_series = self._time_range().overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("date", time_series),
+                    PivotAxis("geoid", context.scope.node_ids),
+                ),
+                ndims=2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            # insert our own sentinel value: nulls in these data mean "redacted"
+            # but we can't have null values for the finalize step
+            .strip_na_as_sentinel(
+                sentinel_name="redacted",
+                sentinel_value=-999999,
+                fix=self._fix_redacted,
+            )
+            .finalize(self._fix_missing)
         )
-        return result.to_date_value(time_series)
+        return pipeline(data_df).to_date_value(time_series)
 
     @override
     def _validate_result(
@@ -1270,7 +1284,6 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
         *,
         expected_shape: tuple[int, ...] | None = None,
     ) -> None:
-        time_range = self._time_range()
-        time_series = time_range.overlap_or_raise(context.time_frame)
+        time_series = self._time_range().overlap_or_raise(context.time_frame)
         shp = (len(time_series), context.scope.nodes)
         super()._validate_result(context, result, expected_shape=shp)

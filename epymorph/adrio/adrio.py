@@ -11,6 +11,7 @@ from time import perf_counter
 from typing import (
     Callable,
     Generic,
+    Mapping,
     Sequence,
     TypeVar,
     cast,
@@ -261,10 +262,10 @@ class InspectResult(Generic[ResultT, ValueT]):
     result: NDArray[ResultT]
     dtype: type[ValueT]
     shape: DataShape
-    issues: Sequence[tuple[str, NDArray[np.bool_]]]
+    issues: Mapping[str, NDArray[np.bool_]]
 
     def __post_init__(self):
-        for issue_name, mask in self.issues:
+        for issue_name, mask in self.issues.items():
             if mask.shape != self.result.shape:
                 err = (
                     f"The shape of the mask for '{issue_name}' {mask.shape} did "
@@ -287,7 +288,7 @@ class InspectResult(Generic[ResultT, ValueT]):
         quant = []
         if unmasked_count > 0 and is_numeric(vs):
             quant.append(("zero", (vs == self.dtype(0)).sum() / size))
-        for name, mask in self.issues:
+        for name, mask in self.issues.items():
             quant.append((name, mask.sum() / size))
         quant.append(("unmasked", unmasked_count / size))
         return quant
@@ -514,9 +515,13 @@ class FetchADRIO(ADRIOPrototype[ResultT, ValueT]):
         self, context: Context, data: ProcessResult[ResultT]
     ) -> NDArray[ResultT]:
         if len(data.issues) > 0:
-            mask = reduce(np.logical_or, [m for _, m in data.issues])
-            return np.ma.masked_array(data.raw, mask)
-        return data.raw
+            mask = reduce(
+                np.logical_or,
+                [m for _, m in data.issues.items()],
+                np.ma.nomask,
+            )
+            return np.ma.masked_array(data.value, mask)
+        return data.value
 
     def evaluate(self) -> NDArray[ResultT]:
         return self.inspect().result

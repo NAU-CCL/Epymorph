@@ -13,7 +13,7 @@ from epymorph.adrio.adrio import (
     ResultFormat,
     range_mask_fn,
 )
-from epymorph.adrio.processing import Fill, process_nxn
+from epymorph.adrio.processing import DataPipeline, Fill, PivotAxis
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
@@ -277,10 +277,13 @@ class Commuters(FetchADRIO[np.int64, np.int64]):
 
     @override
     def _process(self, context: Context, data_df: pd.DataFrame) -> ProcessResult:
-        return process_nxn(
-            sentinels=[],
-            fix_missing=self._fix_missing,
-            dtype=np.int64,
-            context=context,
-            data_df=data_df,
-        )
+        pipeline = DataPipeline(
+            axes=(
+                PivotAxis("geoid_src", context.scope.node_ids),
+                PivotAxis("geoid_dst", context.scope.node_ids),
+            ),
+            ndims=2,
+            dtype=self.result_format.value_dtype,
+            rng=context,
+        ).finalize(self._fix_missing)
+        return pipeline(data_df)
