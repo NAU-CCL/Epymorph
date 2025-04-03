@@ -1,13 +1,38 @@
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
 
 from epymorph.adrio import acs5
+from epymorph.adrio.adrio import ADRIOContextError
 from epymorph.adrio.adrio import ADRIOPrototype as ADRIO  # noqa: N814
 from epymorph.data_shape import DataShape, DataShapeMatcher, Dimensions
 from epymorph.data_type import dtype_as_np
 from epymorph.geography.scope import GeoScope
 from epymorph.kit import *
+from epymorph.simulation import Context
 from epymorph.util import NumpyTypeError, check_ndarray, match
+
+# To re-record this test:
+# load your census API key into the environment, then
+# uv run pytest tests/slow/adrio/acs5_test.py --record-mode=rewrite
+pytestmark = [pytest.mark.default_cassette("acs5.yaml")]
+
+
+def drop_resp_headers(response):
+    # we don't need the headers to be saved
+    # and they might contain sensitive info
+    response["headers"] = {}
+    return response
+
+
+@pytest.fixture(scope="module")
+def vcr_config():
+    return {
+        "filter_query_parameters": ["key"],
+        "before_record_response": drop_resp_headers,
+    }
+
 
 # List all of the attributes we want to test, values are tuples containing:
 # - the ADRIO that fetches it
@@ -104,6 +129,7 @@ _test_parameters = [
 
 @pytest.mark.parametrize(("time_frame", "scope", "skip"), _test_parameters)
 def test_attributes(time_frame: TimeFrame, scope: GeoScope, skip: tuple[str, ...]):
+    # TODO: replace this test...
     dim = Dimensions.of(
         T=time_frame.duration_days,
         N=scope.nodes,
@@ -127,21 +153,75 @@ def test_attributes(time_frame: TimeFrame, scope: GeoScope, skip: tuple[str, ...
             pytest.fail(f"attribute '{name}': {e}")
 
 
-def test_population_values():
-    # values retrieved manually from Census table B01001
-    expected = [71714, 126442, 142254, 4412779, 110271]
+##############
+# _FetchACS5 #
+##############
 
+
+def test_fetch_acs5_validate_context(monkeypatch):
+    class MockADRIO(acs5._FetchACS5):
+        @property
+        def _variables(self):
+            raise NotImplementedError()
+
+        @property
+        def result_format(self):
+            raise NotImplementedError()
+
+    adrio = MockADRIO()
+    states = StateScope.in_states(["AZ", "NM"], year=2020)
+    counties = states.lower_granularity()
+    tracts = counties.lower_granularity()
+    cbgs = tracts.lower_granularity()
+
+    # Invalid if we don't have a Census key
+    monkeypatch.delenv("API_KEY__census.gov", raising=False)
+    monkeypatch.delenv("CENSUS_API_KEY", raising=False)
+    with pytest.raises(ADRIOContextError, match="Census API key is required"):
+        adrio.validate_context(Context.of(scope=states))
+
+    monkeypatch.setenv("CENSUS_API_KEY", "abcd1234")
+
+    # Valid contexts:
+    adrio.validate_context(Context.of(scope=states))
+    adrio.validate_context(Context.of(scope=counties))
+    adrio.validate_context(Context.of(scope=tracts))
+    adrio.validate_context(Context.of(scope=cbgs))
+
+    # Invalid contexts:
+    with pytest.raises(ADRIOContextError, match="US Census geo scope required"):
+        adrio.validate_context(Context.of(scope=CustomScope(["A", "B", "C"])))
+
+    states_2008 = MagicMock(spec=StateScope)
+    states_2008.year = 2008  # mock b/c this isn't a valid scope in the first place
+    with pytest.raises(ADRIOContextError, match="not a supported year for ACS5 data"):
+        adrio.validate_context(Context.of(scope=states_2008))
+
+    states_2024 = MagicMock(spec=StateScope)
+    states_2024.year = 2024  # mock b/c this isn't a valid scope in the first place
+    with pytest.raises(ADRIOContextError, match="not a supported year for ACS5 data"):
+        adrio.validate_context(Context.of(scope=states_2024))
+
+
+##############
+# Population #
+##############
+
+
+@pytest.mark.vcr
+def test_population_state():
     actual = (
         acs5.Population()
         .with_context(
-            scope=CountyScope.in_counties(
-                ["04001", "04003", "04005", "04013", "04017"],
-                year=2020,
-            ),
-            time_frame=TimeFrame.year(2020),
+            scope=CountyScope.in_states(["AZ"], year=2021),
         )
         .evaluate()
     )
-
-    assert match.dtype(int)(actual.dtype)
-    assert np.array_equal(expected, actual)
+    # fmt: off
+    expected = np.array([
+        66473, 125092, 144942, 53211, 38145,
+        9542, 16845, 4367186, 211274, 106609,
+        1035063, 420625, 47463, 233789, 202944,
+    ], dtype=np.int64)
+    # fmt: on
+    np.testing.assert_array_equal(actual, expected, strict=True)
