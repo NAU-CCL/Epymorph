@@ -27,6 +27,7 @@ from epymorph.adrio.adrio import (
 from epymorph.adrio.processing import (
     DataPipeline,
     DontFill,
+    DontFix,
     Fill,
     Fix,
     PivotAxis,
@@ -313,6 +314,25 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
     simple cases.
     """
 
+    # sentinel values: https://www.census.gov/data/developers/data-sets/acs-1year/notes-on-acs-estimate-and-annotation-values.html
+
+    _fix_insufficient_data: Fix[ValueT]
+    """
+    The method to use to replace values that could not be computed due to an
+    insufficient number of sample observation (-666666666 in the data).
+    """
+    _fix_missing: Fill[ValueT]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        *,
+        fix_insufficient_data: Fix[ValueT] | None = None,
+        fix_missing: Fill[ValueT] | None = None,
+    ):
+        self._fix_insufficient_data = fix_insufficient_data or DontFix()
+        self._fix_missing = fix_missing or DontFill()
+
     @property
     @abstractmethod
     def _variables(self) -> list[str]:
@@ -365,15 +385,23 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
             group_name = m.group(1)
             vrbs = ACS5Client.get_group_var_names(self.census_scope.year, group_name)
 
-        pipeline = DataPipeline(
-            axes=(
-                PivotAxis("geoid", context.scope.node_ids),
-                PivotAxis("variable", vrbs),
-            ),
-            ndims=1 if len(vrbs) == 1 else 2,
-            dtype=self.result_format.value_dtype,
-            rng=context,
-        ).finalize(fill_missing=DontFill())
+        pipeline = (
+            DataPipeline(
+                axes=(
+                    PivotAxis("geoid", context.scope.node_ids),
+                    PivotAxis("variable", vrbs),
+                ),
+                ndims=1 if len(vrbs) == 1 else 2,
+                dtype=self.result_format.value_dtype,
+                rng=context,
+            )
+            .strip_sentinel(
+                "insufficient_data",
+                np.float64(-666666666),
+                self._fix_insufficient_data,
+            )
+            .finalize(self._fix_missing)
+        )
         return pipeline(data_df)
 
 
@@ -617,6 +645,7 @@ class PopulationByAge(ADRIOPrototype[np.int64, np.int64]):
 
     @override
     def inspect(self) -> InspectResult[np.int64, np.int64]:
+        self.validate_context(self.context)
         scope = _get_scope(self, self.context)
         age_ranges = [
             AgeRange.parse(attrs["label"])
@@ -676,12 +705,17 @@ class PopulationByRace(_FetchACS5[np.int64]):
     ----------
     race : RaceCategory
         The Census-defined race category to load.
+    fix_insufficient_data : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix values for which there were insufficient data to report
+        (sentinel value: -666666666).
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
 
     See Also
     --------
     The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
     from the US Census.
-    """
+    """  # noqa: E501
 
     _RACE_VARIABLES: dict[RaceCategory, str] = {
         "White": "B02001_002E",
@@ -703,8 +737,29 @@ class PopulationByRace(_FetchACS5[np.int64]):
     _race: RaceCategory
     """The race category to load."""
 
-    def __init__(self, race: RaceCategory):
+    def __init__(
+        self,
+        race: RaceCategory,
+        *,
+        fix_insufficient_data: Fix[np.int64]
+        | int
+        | Callable[[], int]
+        | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
         self._race = race
+        try:
+            fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_insufficient_data`")
+        try:
+            fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+        super().__init__(
+            fix_insufficient_data=fix_insufficient_data,
+            fix_missing=fix_missing,
+        )
 
     @property
     @override
@@ -730,11 +785,44 @@ class AverageHouseholdSize(_FetchACS5[np.float64]):
 
     The result is an N-shaped array of floats.
 
+    Parameters
+    ----------
+    fix_insufficient_data : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix values for which there were insufficient data to report
+        (sentinel value: -666666666).
+    fix_missing : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
     See Also
     --------
     The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
     from the US Census.
-    """
+    """  # noqa: E501
+
+    def __init__(
+        self,
+        *,
+        fix_insufficient_data: Fix[np.float64]
+        | float
+        | Callable[[], float]
+        | Literal[False] = False,
+        fix_missing: Fill[np.float64]
+        | float
+        | Callable[[], float]
+        | Literal[False] = False,
+    ):
+        try:
+            fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_insufficient_data`")
+        try:
+            fix_missing = Fill.of_float64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+        super().__init__(
+            fix_insufficient_data=fix_insufficient_data,
+            fix_missing=fix_missing,
+        )
 
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
@@ -766,11 +854,44 @@ class MedianAge(_FetchACS5[np.float64]):
 
     The result is an N-shaped array of floats.
 
+    Parameters
+    ----------
+    fix_insufficient_data : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix values for which there were insufficient data to report
+        (sentinel value: -666666666).
+    fix_missing : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
     See Also
     --------
     The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
     from the US Census.
-    """
+    """  # noqa: E501
+
+    def __init__(
+        self,
+        *,
+        fix_insufficient_data: Fix[np.float64]
+        | float
+        | Callable[[], float]
+        | Literal[False] = False,
+        fix_missing: Fill[np.float64]
+        | float
+        | Callable[[], float]
+        | Literal[False] = False,
+    ):
+        try:
+            fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_insufficient_data`")
+        try:
+            fix_missing = Fill.of_float64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+        super().__init__(
+            fix_insufficient_data=fix_insufficient_data,
+            fix_missing=fix_missing,
+        )
 
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
@@ -803,11 +924,41 @@ class MedianIncome(_FetchACS5[np.int64]):
 
     The result is an N-shaped array of integers.
 
+    Parameters
+    ----------
+    fix_insufficient_data : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix values for which there were insufficient data to report
+        (sentinel value: -666666666).
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
     See Also
     --------
     The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
     from the US Census.
-    """
+    """  # noqa: E501
+
+    def __init__(
+        self,
+        *,
+        fix_insufficient_data: Fix[np.int64]
+        | int
+        | Callable[[], int]
+        | Literal[False] = False,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+    ):
+        try:
+            fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_insufficient_data`")
+        try:
+            fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+        super().__init__(
+            fix_insufficient_data=fix_insufficient_data,
+            fix_missing=fix_missing,
+        )
 
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
@@ -841,24 +992,22 @@ class GiniIndex(_FetchACS5[np.float64]):
 
     The result is an N-shaped array of floats.
 
+    Parameters
+    ----------
+    fix_insufficient_data : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix values for which there were insufficient data to report
+        (sentinel value: -666666666).
+    fix_missing : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values.
+
     See Also
     --------
     The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
     from the US Census, and [general info on the Gini index](https://en.wikipedia.org/wiki/Gini_coefficient).
-    """
+    """  # noqa: E501
 
     # NOTE: the Gini index is named after its inventor, Corrado Gini, so this is the
     # correct capitalization
-
-    # sentinel values: https://www.census.gov/data/developers/data-sets/acs-1year/notes-on-acs-estimate-and-annotation-values.html
-
-    _fix_insufficient_data: Fix[np.float64]
-    """
-    The method to use to replace values that could not be computed due to an
-    insufficient number of sample observation (-666666666 in the data).
-    """
-    _fix_missing: Fill[np.float64]
-    """The method to use to fix missing values."""
 
     def __init__(
         self,
@@ -873,13 +1022,17 @@ class GiniIndex(_FetchACS5[np.float64]):
         | Literal[False] = False,
     ):
         try:
-            self._fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
+            fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
         except ValueError:
             raise ValueError("Invalid value for `fix_insufficient_data`")
         try:
-            self._fix_missing = Fill.of_float64(fix_missing)
+            fix_missing = Fill.of_float64(fix_missing)
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
+        super().__init__(
+            fix_insufficient_data=fix_insufficient_data,
+            fix_missing=fix_missing,
+        )
 
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
@@ -904,32 +1057,6 @@ class GiniIndex(_FetchACS5[np.float64]):
         if isinstance(context.scope, BlockGroupScope):
             err = "Gini index is not available for block group scope."
             raise ADRIOContextError(self, context, err)
-
-    @override
-    def _process(
-        self,
-        context: Context,
-        data_df: pd.DataFrame,
-    ) -> ProcessResult[np.float64]:
-        vrbs = data_df["variable"].unique().tolist()
-        pipeline = (
-            DataPipeline(
-                axes=(
-                    PivotAxis("geoid", context.scope.node_ids),
-                    PivotAxis("variable", vrbs),
-                ),
-                ndims=1,
-                dtype=self.result_format.value_dtype,
-                rng=context,
-            )
-            .strip_sentinel(
-                "insufficient_data",
-                np.float64(-666666666),
-                self._fix_insufficient_data,
-            )
-            .finalize(self._fix_missing)
-        )
-        return pipeline(data_df)
 
 
 class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
@@ -961,6 +1088,16 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
     minority_pop : RaceCategory
         The race category representing the minority population within the
         segregation analysis.
+    fix_insufficient_population : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix values for which there were insufficient data to report
+        (sentinel value: -666666666).
+        The replacement is performed on the underlying population by race data.
+    fix_missing_population : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+        The method to use to fix missing values. The replacement is performed on the
+        underlying population by race data.
+    fix_not_computable : Fill[np.float64] | float | Callable[[], float] | Literal[False], default=False
+        The method to use to fix values for which we cannot compute a value because population
+        numbers cannot be loaded for one or more of the populations involved.
 
 
     See Also
@@ -968,7 +1105,7 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
     The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
     from the US Census, and
     [general information about the dissimilarity index](https://en.wikipedia.org/wiki/Index_of_dissimilarity).
-    """
+    """  # noqa: E501
 
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.N,
@@ -981,10 +1118,53 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
     """The race category of the majority population of interest"""
     _minority_pop: RaceCategory
     """The race category of the minority population of interest"""
+    _fix_insufficient_population: Fix[np.int64]
+    """
+    The method to use to replace population values that could not be computed due to an
+    insufficient number of sample observation (-666666666 in the data).
+    """
+    _fix_missing_population: Fill[np.int64]
+    """The method to use to fix missing population values."""
+    _fix_minority_total_zero: Fix[np.float64]
+    """
+    The method to use to replace dissimilarity index values when the minority population
+    is zero (which would cause a divide-by-zero error).
+    """
 
-    def __init__(self, majority_pop: RaceCategory, minority_pop: RaceCategory):
+    def __init__(
+        self,
+        majority_pop: RaceCategory,
+        minority_pop: RaceCategory,
+        *,
+        fix_insufficient_population: Fix[np.int64]
+        | int
+        | Callable[[], int]
+        | Literal[False] = False,
+        fix_missing_population: Fill[np.int64]
+        | int
+        | Callable[[], int]
+        | Literal[False] = False,
+        fix_not_computable: Fix[np.float64]
+        | float
+        | Callable[[], float]
+        | Literal[False] = False,
+    ):
         self._majority_pop = majority_pop
         self._minority_pop = minority_pop
+        try:
+            self._fix_insufficient_population = Fix.of_int64(
+                fix_insufficient_population
+            )
+        except ValueError:
+            raise ValueError("Invalid value for `fix_insufficient_population`")
+        try:
+            self._fix_missing_population = Fill.of_int64(fix_missing_population)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing_population`")
+        try:
+            self._fix_not_computable = Fix.of_float64(fix_not_computable)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_not_computable`")
 
     @override
     def validate_context(self, context: Context) -> None:
@@ -1005,15 +1185,28 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
 
     @override
     def inspect(self) -> InspectResult[np.float64, np.float64]:
+        self.validate_context(self.context)
+
+        majority_race = PopulationByRace(
+            race=self._majority_pop,
+            fix_insufficient_data=self._fix_insufficient_population,
+            fix_missing=self._fix_missing_population,
+        )
+        minority_race = PopulationByRace(
+            race=self._minority_pop,
+            fix_insufficient_data=self._fix_insufficient_population,
+            fix_missing=self._fix_missing_population,
+        )
+
         # Load populations at the coarse-granularity scope (coarse nodes)
         high_scope = _get_scope(self, self.context)
-        high_majority = self.defer(PopulationByRace(self._majority_pop))
-        high_minority = self.defer(PopulationByRace(self._minority_pop))
+        high_majority = self.defer(majority_race)
+        high_minority = self.defer(minority_race)
 
         # Load populations at the fine-granularity scope (fine nodes)
         low_scope = high_scope.lower_granularity()
-        low_majority = self.defer(PopulationByRace(self._majority_pop), scope=low_scope)
-        low_minority = self.defer(PopulationByRace(self._minority_pop), scope=low_scope)
+        low_majority = self.defer(majority_race, scope=low_scope)
+        low_minority = self.defer(minority_race, scope=low_scope)
 
         # Which fine nodes belong to which coarse nodes?
         as_high = np.vectorize(CensusGranularity.of(high_scope.granularity).truncate)
@@ -1054,6 +1247,26 @@ class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
         if np.any(low_mask):
             issues = [(issue_name, aggregate_mask(m)) for issue_name, m in issues]
             result_np = np.ma.masked_array(result_np, aggregate_mask(low_mask))
+
+        # If there are incomputable values and a fix, apply it;
+        # if successful, consider all underlying issues addressed.
+        has_fix = not isinstance(self._fix_not_computable, DontFix)
+        if np.ma.is_masked(result_np) and has_fix:
+            sentinel = np.float64(-999999)
+            sentinel_result = np.ma.getdata(result_np).copy()
+            sentinel_result[np.ma.getmask(result_np)] = sentinel
+            fixed_result = self._fix_not_computable(
+                rng=self.context,
+                replace=sentinel,
+                data_df=pd.DataFrame({"value": sentinel_result}),
+            )["value"].to_numpy()
+            unfixed = fixed_result == sentinel
+            if unfixed.any():
+                issues = [("not_computable", unfixed)]
+                result_np = np.ma.masked_array(fixed_result, unfixed)
+            else:
+                issues = []
+                result_np = fixed_result
 
         return InspectResult(
             adrio=self,
