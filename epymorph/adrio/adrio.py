@@ -370,6 +370,8 @@ class ResultFormat(Generic[ValueT]):
 
 
 class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
+    # TODO: child classes must call validate context!
+
     @property
     @abstractmethod
     def result_format(self) -> ResultFormat[ValueT]:
