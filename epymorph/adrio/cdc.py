@@ -511,10 +511,6 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
 ##########################
 # DATA.CDC.GOV aemt-mg7g #
 ##########################
-# TODO: is it worth keeping these states ADRIOs, or are the facility ADRIOs sufficient?
-# (given that we can roll it up to state)
-# compare results from each and see how far off they are, and if
-# the time frame and geo availability are comparable.
 
 
 class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
@@ -704,7 +700,7 @@ class COVIDStateHospitalization(_DataCDCAemtMg7g):
     _column = "total_admissions_all_covid_confirmed"
 
 
-class FluStateHospitalization(_DataCDCAemtMg7g):
+class InfluenzaStateHospitalization(_DataCDCAemtMg7g):
     """
     Loads influenza hospitalization data from data.cdc.gov's dataset named
     "Weekly United States Hospitalization Metrics by Jurisdiction, During Mandatory
