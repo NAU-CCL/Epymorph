@@ -6,6 +6,7 @@ from typing import Callable, ParamSpec, TypeVar
 from unittest.mock import MagicMock
 
 import numpy as np
+import pytest
 from numpy.typing import NDArray
 
 from epymorph.attribute import (
@@ -17,11 +18,12 @@ from epymorph.attribute import (
     ModuleNamespace,
     NamePattern,
 )
-from epymorph.data_shape import Shapes
+from epymorph.data_shape import Dimensions, Shapes
 from epymorph.database import (
     Database,
     DatabaseWithFallback,
     DatabaseWithStrataFallback,
+    DataResolver,
     Match,
     ReqTree,
 )
@@ -972,3 +974,56 @@ class ParamEvalTest(unittest.TestCase):
         err = str(ctx.exception).lower()
         self.assertIn("circular dependency", err)
         self.assertIn("gpm:a::ipm::beta", err)
+
+
+################
+# DataResolver #
+################
+
+
+@pytest.fixture
+def data_resolver():
+    return DataResolver(
+        dim=MagicMock(Dimensions),
+        values={
+            AbsoluteName.parse("gpm:all::ipm::beta"): np.array(0.4),
+            AbsoluteName.parse("gpm:all::mm::population"): np.array([100, 200, 300]),
+            AbsoluteName.parse("gpm:one::ipm::xi"): np.array(0.5),
+            AbsoluteName.parse("gpm:two::ipm::xi"): np.array(0.6),
+        },
+    )
+
+
+def test_data_resolver_has(data_resolver):
+    assert data_resolver.has(AbsoluteName.parse("gpm:all::ipm::beta"))
+    assert data_resolver.has(AbsoluteName.parse("gpm:all::mm::population"))
+    assert not data_resolver.has(AbsoluteName.parse("gpm:all::ipm::gamma"))
+    assert not data_resolver.has(AbsoluteName.parse("gpm:all::mm::beta"))
+    assert not data_resolver.has(AbsoluteName.parse("gpm:one::ipm::beta"))
+
+
+def test_data_resolver_get_raw(data_resolver):
+    def test(name, expected):
+        actual = data_resolver.get_raw(name)
+        np.testing.assert_array_equal(actual, expected)
+
+    beta = np.array(0.4)
+    test(AbsoluteName.parse("gpm:all::ipm::beta"), beta)
+    test("gpm:all::ipm::beta", beta)
+    test("ipm::beta", beta)
+    test("beta", beta)
+
+    pop = np.array([100, 200, 300])
+    test(AbsoluteName.parse("gpm:all::mm::population"), pop)
+    test("gpm:all::mm::population", pop)
+    test("mm::population", pop)
+    test("population", pop)
+
+    with pytest.raises(ValueError, match="does not match any values"):
+        data_resolver.get_raw("gpm:all::ipm::gamma")
+    with pytest.raises(ValueError, match="does not match any values"):
+        data_resolver.get_raw("gpm:all::mm::beta")
+    with pytest.raises(ValueError, match="does not match any values"):
+        data_resolver.get_raw("gpm:one::ipm::beta")
+    with pytest.raises(ValueError, match="matches more than one value"):
+        data_resolver.get_raw("xi")

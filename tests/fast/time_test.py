@@ -1,13 +1,22 @@
 # ruff: noqa: PT009,PT027
 import unittest
 from datetime import date
+from itertools import islice
 from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 from numpy.testing import assert_array_equal
 
-from epymorph.time import Dim, EpiWeek, NBins, TimeFrame, epi_week, epi_year_first_day
+from epymorph.time import (
+    DateRange,
+    Dim,
+    EpiWeek,
+    NBins,
+    TimeFrame,
+    epi_week,
+    epi_year_first_day,
+)
 
 
 class TestTimeFrame(unittest.TestCase):
@@ -74,6 +83,29 @@ class TestTimeFrame(unittest.TestCase):
         self.assertFalse(a.is_subset(d))
         self.assertFalse(a.is_subset(e))
         self.assertFalse(a.is_subset(f))
+
+
+class DateRangeTest(unittest.TestCase):
+    def test_date_range_01(self):
+        d = DateRange(date(2020, 1, 1))
+        self.assertEqual(
+            list(islice(d, 0, 4)),
+            [date(2020, 1, 1), date(2020, 1, 2), date(2020, 1, 3), date(2020, 1, 4)],
+        )
+
+    def test_date_range_02(self):
+        d = DateRange(date(2020, 1, 1), date(2020, 1, 5))
+        self.assertEqual(
+            list(d),
+            [date(2020, 1, 1), date(2020, 1, 2), date(2020, 1, 3), date(2020, 1, 4)],
+        )
+
+    def test_date_range_03(self):
+        d = DateRange(date(2020, 1, 1), date(2020, 1, 12), 3)
+        self.assertEqual(
+            list(d),
+            [date(2020, 1, 1), date(2020, 1, 4), date(2020, 1, 7), date(2020, 1, 10)],
+        )
 
 
 class EpiWeeksTest(unittest.TestCase):

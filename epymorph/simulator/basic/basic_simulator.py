@@ -23,7 +23,6 @@ from epymorph.simulator.basic.ipm_exec import IPMExecutor
 from epymorph.simulator.basic.mm_exec import MovementExecutor
 from epymorph.simulator.basic.output import Output
 from epymorph.simulator.world_list import ListWorld
-from epymorph.time import TimeFrame
 from epymorph.util import CovariantMapping
 
 _events = EventBus()
@@ -34,12 +33,15 @@ RUMEType = TypeVar("RUMEType", bound=RUME)
 class BasicSimulator(Generic[RUMEType]):
     """
     A simulator for running singular simulation passes and producing time-series output.
-    The most basic simulator!
+    The most basic simulator.
     """
 
     rume: RUMEType
+    """The RUME we will use for the simulation."""
     ipm_exec: IPMExecutor
+    """The class responsible for executing disease simulation."""
     mm_exec: MovementExecutor
+    """The class responsible for executing movement simulation."""
 
     def __init__(self, rume: RUMEType):
         self.rume = rume
@@ -48,14 +50,32 @@ class BasicSimulator(Generic[RUMEType]):
         self,
         /,
         params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
-        time_frame: TimeFrame | None = None,
         rng_factory: Callable[[], np.random.Generator] | None = None,
     ) -> Output[RUMEType]:
-        """Run a RUME with the given overrides."""
+        """
+        Run a forward simulation on the RUME and produce one realization (output).
+
+        Parameters
+        ----------
+        params : CovariantMapping[str | NamePattern, ParamValue], optional
+            The set of parameters to override for the sake of this
+            run. Specified as a dictionary of name/value pairs, where values
+            can be in any form normally allowed for the construction of a RUME.
+            Any parameter not overridden uses the value from the RUME.
+        rng_factory : Callable[[], np.random.Generator], optional
+            A function used to construct the random number generator for this
+            run. This can be used to provide a seeded random number generator
+            if consistent results are desired. By default BasicSimulator creates
+            a new random number generator for each run, using numpy's default rng
+            logic.
+
+        Returns
+        -------
+        Output[RUMEType]
+            The simulation results.
+        """
 
         rume = self.rume
-        if time_frame is not None:
-            rume = rume.with_time_frame(time_frame)
 
         rng = (rng_factory or np.random.default_rng)()
 
@@ -67,13 +87,14 @@ class BasicSimulator(Generic[RUMEType]):
             try:
                 data = rume.evaluate_params(override_params=params, rng=rng)
             except DataAttributeError as e:
-                msg = f"RUME attribute requirements were not met. See errors:\n- {e}"
-                raise SimValidationError(msg) from None
-            except ExceptionGroup as e:
-                msg = "RUME attribute requirements were not met. See errors:" + "".join(
-                    f"\n- {e}" for e in e.exceptions
+                sub_es = e.exceptions if isinstance(e, ExceptionGroup) else (e,)
+                err = "\n".join(
+                    [
+                        "RUME attribute requirements were not met. See errors:",
+                        *(f"- {e}" for e in sub_es),
+                    ]
                 )
-                raise SimValidationError(msg) from None
+                raise SimValidationError(err) from None
 
         with error_gate("initializing the simulation", InitError):
             initial_values = rume.initialize(data, rng)

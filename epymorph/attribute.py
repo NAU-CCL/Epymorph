@@ -268,15 +268,24 @@ AttributeT = TypeVar("AttributeT", bound=AttributeType)
 @dataclass(frozen=True)
 class AttributeDef(Generic[AttributeT]):
     """
-    Definition of a simulation attribute;
-    the identity plus optional default value and comment.
+    The definition of a data attribute.
+
+    AttributeDef is a frozen dataclass.
+
+    AttributeDef is generic on the [`AttributeType`](`epymorph.data_type.AttributeType`)
+    which describes the type of the data (`AttributeT`).
     """
 
     name: str
+    """The name used to identify the attribute."""
     type: AttributeT
+    """The type of the data."""
     shape: DataShape
+    """The expected array shape of the data."""
     default_value: AttributeValue | None = field(default=None, compare=False)
+    """An optional default value."""
     comment: str | None = field(default=None, compare=False)
+    """An optional description of the attribute."""
 
     def __post_init__(self):
         if acceptable_name.match(self.name) is None:

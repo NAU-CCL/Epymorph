@@ -1,1 +1,1 @@
-This folder is for scripts to automate project conerns.
+This folder is for scripts to automate project concerns.

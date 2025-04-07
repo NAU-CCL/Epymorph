@@ -263,10 +263,15 @@ class MovementModel(ABC, metaclass=MovementModelClass):
     individuals in the model.
     The MM chops the day up into one or more parts (tau steps),
     and then describes movement clauses which trigger for certain parts of the day.
+
+    MovementModel is an abstract class. To create a custom movement model,
+    you will wriet an implementation of this class.
     """
 
     steps: Sequence[float]
+    """The length and order of tau steps."""
     clauses: Sequence[MovementClause]
+    """The movement clauses that make up the model."""
 
     @property
     def requirements(self) -> Sequence[AttributeDef]:
