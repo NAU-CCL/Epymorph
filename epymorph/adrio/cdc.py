@@ -111,6 +111,7 @@ class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
             raise ADRIOContextError(self, context, err)
         if context.scope.year != 2019:
             err = "This data supports 2019 Census geography only."
+            raise ADRIOContextError(self, context, err)
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
@@ -142,12 +143,11 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
     represent values redacted for the sake of protecting patient privacy -- there
     were between 1 and 3 cases reported by the facility on that date.
 
-    NOTE: the data has a number of issues representing Alaska geography.
+    NOTE: this data source has a number of issues representing Alaska geography.
     It uses borough 02280 which isn't in the Census geography until 2020, and
-    it uses non-standard Alaska geography (02080, 02120, 02210, and 02260) which are not
-    county-equivalents. This makes these data inaccessible via this ADRIO.
-    If Alaska data is important for your use-case, we recommend processing the data
-    another way.
+    simultaneously uses pre-1980 Alaska geography (02080, 02120, 02210, and 02260).
+    This makes these data inaccessible via this ADRIO. If Alaska data is important for
+    your use-case, we recommend processing the data another way.
 
     Parameters
     ----------
@@ -294,12 +294,11 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
     represent values redacted for the sake of protecting patient privacy -- there
     were between 1 and 3 cases reported by the facility on that date.
 
-    NOTE: the data has a number of issues representing Alaska geography.
+    NOTE: the data source has a number of issues representing Alaska geography.
     It uses borough 02280 which isn't in the Census geography until 2020, and
-    it uses non-standard Alaska geography (02080, 02120, 02210, and 02260) which are not
-    county-equivalents. This makes these data inaccessible via this ADRIO.
-    If Alaska data is important for your use-case, we recommend processing the data
-    another way.
+    simultaneously uses pre-1980 Alaska geography (02080, 02120, 02210, and 02260).
+    This makes these data inaccessible via this ADRIO. If Alaska data is important for
+    your use-case, we recommend processing the data another way.
 
     Parameters
     ----------
@@ -388,12 +387,12 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
     The data were reported starting 2022-02-24 and ending 2023-05-11, and aggregated
     by CDC to the US County level.
 
-    This ADRIO supports geo scopes at US State and County granularity. The data
-    loaded will be matched to the simulation time frame. The result is a 2D matrix
-    where the first axis represents reporting weeks during the time frame and the
-    second axis is geo scope nodes. Values are tuples of date and the integer number of
-    cases, calculated by multiplying the per-100k rates by the county population and rounding
-    (via banker's rounding).
+    This ADRIO supports geo scopes at US State and County granularity (2015 through 2019
+    allowed). The data loaded will be matched to the simulation time frame. The result
+    is a 2D matrix where the first axis represents reporting weeks during the time frame
+    and the second axis is geo scope nodes. Values are tuples of date and the integer
+    number of cases, calculated by multiplying the per-100k rates by the county
+    population and rounding (via banker's rounding).
 
     Parameters
     ----------
@@ -442,7 +441,9 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
         if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
-        # TODO: which county years work?
+        if context.scope.year < 2015 or context.scope.year > 2019:
+            err = "This data supports Census geography from 2015 through 2019 only."
+            raise ADRIOContextError(self, context, err)
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
@@ -586,6 +587,8 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
         if not isinstance(context.scope, StateScope):
             err = "US State geo scope required."
             raise ADRIOContextError(self, context, err)
+        # No year restriction since state-equivalents are the same
+        # for the entire supported time range.
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
@@ -765,12 +768,13 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
 
     The data were reported on a daily basis, starting 2020-12-13 and ending 2023-05-10.
 
-    This ADRIO supports geo scopes at US State and County granularity. The data appears
-    to have been compiled using 2019 Census delineations, so for best results, use
-    a geo scope for that year. The data loaded will be matched to the simulation time
-    frame. The result is a 2D matrix where the first axis represents reporting dates
-    during the time frame and the second axis is geo scope nodes. Values are integer
-    numbers of people who have had the requested vaccine dosage.
+    This ADRIO supports geo scopes at US State and County granularity (2015 through 2019
+    allowed). The data appears to have been compiled using 2019 Census delineations, so
+    for best results, use a geo scope for that year. The data loaded will be matched
+    to the simulation time frame. The result is a 2D matrix where the first axis
+    represents reporting dates during the time frame and the second axis is geo scope
+    nodes. Values are integer numbers of people who have had the requested vaccine
+    dosage.
 
     Parameters
     ----------
@@ -838,16 +842,12 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
 
     @override
     def validate_context(self, context: Context):
-        scope = context.scope
-        if not isinstance(scope, StateScope | CountyScope):
+        if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
-        # NOTE: Alaska geography is a minor issue.
-        # 2019 has county 02261 which is gone in 2020, and
-        # 2020 has counties 02063 and 02066 which aren't in the data.
-        # I'm not making this an error though.
-        # Using a scope with a mismatched year may result in more missing data,
-        # so users can deal with it that way.
+        if context.scope.year < 2015 or context.scope.year > 2019:
+            err = "This data supports Census geography from 2015 through 2019 only."
+            raise ADRIOContextError(self, context, err)
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
@@ -942,11 +942,18 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
     The data were reported starting 2020-01-04 and ending 2023-04-01, and aggregated
     by CDC to the US County level.
 
-    This ADRIO supports geo scopes at US State and County granularity. The data
-    loaded will be matched to the simulation time frame. The result is a 2D matrix
-    where the first axis represents reporting weeks during the time frame and the
-    second axis is geo scope nodes. Values are tuples of date and the integer number of
-    deaths.
+    This ADRIO supports geo scopes at US State and County granularity (2014 through 2019
+    allowed). The data loaded will be matched to the simulation time frame. The result
+    is a 2D matrix where the first axis represents reporting weeks during the time frame
+    and the second axis is geo scope nodes. Values are tuples of date and the integer
+    number of deaths.
+
+    NOTE: this data source uses non-standard geography for two county-equivalents.
+    In Alaska, 02270 was the Wade Hampton Census Area prior to 2015 and thereafter
+    renamed Kusilvak Census Area with code 02158. And in South Dakota, 46113 was
+    Shannon County prior to 2015 and thereafter renamed Oglala Lakota County
+    with code 46102. These data are inaccessible via this ADRIO unless you use
+    2014 geography.
 
     Parameters
     ----------
@@ -1013,13 +1020,16 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
         if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
+        if context.scope.year < 2014 or context.scope.year > 2019:
+            err = "This data supports Census geography from 2014 through 2019 only."
+            raise ADRIOContextError(self, context, err)
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
         counties = cast(CensusScope, context.scope).as_granularity("county")
         # Data represents county-level FIPS codes as numbers,
-        # so we have to strip leading zeros when querying (???) and
+        # so we strip leading zeros when querying and
         # left-pad with zero to get back to five characters in the result.
 
         match self._cause_of_death:
@@ -1203,6 +1213,8 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
         if not isinstance(context.scope, StateScope):
             err = "US State geo scope required."
             raise ADRIOContextError(self, context, err)
+        # No year restriction since state-equivalents are the same
+        # for the entire supported time range.
         validate_time_frame(self, context, self._time_range())
 
     @override
