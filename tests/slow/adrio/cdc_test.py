@@ -22,7 +22,7 @@ def test_covid_facility_hospitalization():
         return {
             "scope": CountyScope.in_counties(
                 ["Maricopa, AZ", "Bernalillo, NM"],
-                year=2021,
+                year=2019,
             ),
             "time_frame": TimeFrame.rangex("2021-04-01", "2021-06-01"),
             "rng": np.random.default_rng(42),
@@ -104,7 +104,7 @@ def test_covid_facility_hospitalization_age_groups():
         return {
             "scope": CountyScope.in_counties(
                 ["Maricopa, AZ", "Bernalillo, NM"],
-                year=2021,
+                year=2019,
             ),
             "time_frame": TimeFrame.rangex("2021-04-01", "2021-06-01"),
             "rng": np.random.default_rng(42),
@@ -152,7 +152,7 @@ def test_influenza_facility_hospitalization():
         return {
             "scope": CountyScope.in_counties(
                 ["Maricopa, AZ", "Bernalillo, NM"],
-                year=2021,
+                year=2019,
             ),
             "time_frame": TimeFrame.rangex("2021-04-01", "2021-06-01"),
             "rng": np.random.default_rng(42),
