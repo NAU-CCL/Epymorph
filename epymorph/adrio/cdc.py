@@ -109,7 +109,8 @@ class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
         if not isinstance(context.scope, StateScope | CountyScope):
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
-        # TODO: which county years work?
+        if context.scope.year != 2019:
+            err = "This data supports 2019 Census geography only."
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
@@ -133,13 +134,20 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
     starting 2019-12-29 and ending 2024-04-21, although the data is not complete
     over this entire range, nor over the entire United States.
 
-    This ADRIO supports geo scopes at US State and County granularities. The data
-    loaded will be matched to the simulation time frame. The result is a 2D matrix
-    where the first axis represents reporting weeks during the time frame and the
+    This ADRIO supports geo scopes at US State and County granularities in 2019.
+    The data loaded will be matched to the simulation time frame. The result is a 2D
+    matrix where the first axis represents reporting weeks during the time frame and the
     second axis is geo scope nodes. Values are tuples of date and the integer number of
     reported hospitalizations. The data contain sentinel values (-999999) which
     represent values redacted for the sake of protecting patient privacy -- there
     were between 1 and 3 cases reported by the facility on that date.
+
+    NOTE: the data has a number of issues representing Alaska geography.
+    It uses borough 02280 which isn't in the Census geography until 2020, and
+    it uses non-standard Alaska geography (02080, 02120, 02210, and 02260) which are not
+    county-equivalents. This makes these data inaccessible via this ADRIO.
+    If Alaska data is important for your use-case, we recommend processing the data
+    another way.
 
     Parameters
     ----------
@@ -278,13 +286,20 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
     starting 2019-12-29 and ending 2024-04-21, although the data is not complete
     over this entire range, nor over the entire United States.
 
-    This ADRIO supports geo scopes at US State and County granularities. The data
-    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    This ADRIO supports geo scopes at US State and County granularities in 2019.
+    The data loaded will be matched to the simulation time frame. The result is a 2D matrix
     where the first axis represents reporting weeks during the time frame and the
     second axis is geo scope nodes. Values are tuples of date and the integer number of
     reported hospitalizations. The data contain sentinel values (-999999) which
     represent values redacted for the sake of protecting patient privacy -- there
     were between 1 and 3 cases reported by the facility on that date.
+
+    NOTE: the data has a number of issues representing Alaska geography.
+    It uses borough 02280 which isn't in the Census geography until 2020, and
+    it uses non-standard Alaska geography (02080, 02120, 02210, and 02260) which are not
+    county-equivalents. This makes these data inaccessible via this ADRIO.
+    If Alaska data is important for your use-case, we recommend processing the data
+    another way.
 
     Parameters
     ----------
