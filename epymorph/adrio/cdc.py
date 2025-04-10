@@ -449,6 +449,17 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
         counties = cast(CensusScope, context.scope).as_granularity("county")
+
+        # API URL can get too big if we're querying for a large number of counties.
+        # And doing a very large "in" statement is not ideal anyway.
+        # So after 1000 counties, just get all geography and we'll filter locally.
+        if counties.nodes < 1000:
+            geo_clause = [q.In("county_fips", counties.node_ids)]
+            result_filter = None
+        else:
+            geo_clause = []
+            result_filter = lambda df: df[df["geoid"].isin(counties.node_ids)]  # noqa: E731
+
         query = q.Query(
             select=(
                 q.Select("date_updated", "date", as_name="date"),
@@ -465,7 +476,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
                     context.time_frame.start_date,
                     context.time_frame.end_date,
                 ),
-                q.In("county_fips", counties.node_ids),
+                *geo_clause,
             ),
             order_by=(
                 q.Ascending("date_updated"),
@@ -478,6 +489,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
                 resource=self._RESOURCE,
                 query=query,
                 api_token=data_cdc_api_key(),
+                result_filter=result_filter,
             )
         except Exception as e:
             raise ADRIOCommunicationError(self, context) from e
