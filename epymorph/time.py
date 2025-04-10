@@ -34,7 +34,7 @@ class DateRange:
         return cls(start_date, end_date, step)
 
     def __post_init__(self):
-        if self.start_date >= self.end_date:
+        if self.start_date > self.end_date:
             raise ValueError("`start_date` must be before or equal to `end_date`")
         if self.step < 1:
             raise ValueError("`step` must be 1 or greater")
