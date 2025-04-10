@@ -353,8 +353,8 @@ class DataPipeline(Generic[DataT]):
         map_fn: Callable | None = None,
         dtype: type[np.generic] | None = None,
     ) -> Self:
-        map_fn = None if map_fn is None else lambda xs: xs.apply(map_fn)
-        return self.map_series(column=column, map_fn=map_fn, dtype=dtype)
+        map_series_fn = None if map_fn is None else lambda xs: xs.apply(map_fn)
+        return self.map_series(column=column, map_fn=map_series_fn, dtype=dtype)
 
     def strip_sentinel(
         self,
