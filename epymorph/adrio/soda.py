@@ -248,6 +248,7 @@ def query_csv(
     query: Query,
     *,
     limit: int = 10000,
+    result_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     api_token: str | None = None,
 ) -> pd.DataFrame:
     return query_csv_soql(
@@ -255,6 +256,7 @@ def query_csv(
         soql=str(query),
         column_types=[(x.result_name, x.dtype) for x in query.select],
         limit=limit,
+        result_filter=result_filter,
         api_token=api_token,
     )
 
@@ -265,6 +267,7 @@ def query_csv_soql(
     column_types: Sequence[tuple[str, ColumnType]],
     *,
     limit: int = 10000,
+    result_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     api_token: str | None = None,
 ) -> pd.DataFrame:
     # TODO: this handling of types is rudimentary --
@@ -291,9 +294,12 @@ def query_csv_soql(
             storage_options=req_headers,
             date_format="ISO8601",
         )
+        response_rows = len(page_df.index)
+        if result_filter is not None:
+            page_df = result_filter(page_df)
         yield page_df
 
-        if (page_size := len(page_df.index)) >= limit:
+        if (page_size := response_rows) >= limit:
             yield from query_pages(offset + page_size)
 
     return pd.concat(query_pages())

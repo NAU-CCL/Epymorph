@@ -1,0 +1,186 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Connection:
+      - close
+      Host:
+      - data.cdc.gov
+      User-Agent:
+      - Python-urllib/3.11
+    method: GET
+    uri: https://data.cdc.gov/resource/r8kw-7aab.csv?$query=SELECT%20%60week_ending_date%60%20AS%20%60date%60,%60state%60%20AS%20%60geoid%60,(influenza_deaths)%20AS%20%60value%60%20WHERE%20(%60group%60%3D'By%20Week'%20AND%20%60week_ending_date%60%20BETWEEN%20'2025-02-01T00:00:00'%20AND%20'2025-03-29T00:00:00'%20AND%20%60state%60%20IN%20('Arizona','Louisiana','Maine','New%20Mexico'))%20ORDER%20BY%20%60week_ending_date%60%20ASC,%60state%60%20ASC,%60:id%60%20ASC%20LIMIT%2010000%20OFFSET%200
+  response:
+    body:
+      string: '"date","geoid","value"
+
+        "2025-02-01T00:00:00.000","Arizona","24"
+
+        "2025-02-01T00:00:00.000","Louisiana",
+
+        "2025-02-01T00:00:00.000","Maine",
+
+        "2025-02-01T00:00:00.000","New Mexico",
+
+        "2025-02-08T00:00:00.000","Arizona","25"
+
+        "2025-02-08T00:00:00.000","Louisiana",
+
+        "2025-02-08T00:00:00.000","Maine",
+
+        "2025-02-08T00:00:00.000","New Mexico",
+
+        "2025-02-15T00:00:00.000","Arizona","15"
+
+        "2025-02-15T00:00:00.000","Louisiana",
+
+        "2025-02-15T00:00:00.000","Maine","12"
+
+        "2025-02-15T00:00:00.000","New Mexico",
+
+        "2025-02-22T00:00:00.000","Arizona",
+
+        "2025-02-22T00:00:00.000","Louisiana",
+
+        "2025-02-22T00:00:00.000","Maine",
+
+        "2025-02-22T00:00:00.000","New Mexico",
+
+        "2025-03-01T00:00:00.000","Arizona","10"
+
+        "2025-03-01T00:00:00.000","Louisiana","10"
+
+        "2025-03-01T00:00:00.000","Maine","10"
+
+        "2025-03-01T00:00:00.000","New Mexico",
+
+        "2025-03-08T00:00:00.000","Arizona","12"
+
+        "2025-03-08T00:00:00.000","Louisiana",
+
+        "2025-03-08T00:00:00.000","Maine","13"
+
+        "2025-03-08T00:00:00.000","New Mexico",
+
+        "2025-03-15T00:00:00.000","Arizona",
+
+        "2025-03-15T00:00:00.000","Louisiana",
+
+        "2025-03-15T00:00:00.000","Maine",
+
+        "2025-03-15T00:00:00.000","New Mexico",
+
+        "2025-03-22T00:00:00.000","Arizona",
+
+        "2025-03-22T00:00:00.000","Louisiana",
+
+        "2025-03-22T00:00:00.000","Maine","12"
+
+        "2025-03-22T00:00:00.000","New Mexico",
+
+        "2025-03-29T00:00:00.000","Arizona",
+
+        "2025-03-29T00:00:00.000","Louisiana",
+
+        "2025-03-29T00:00:00.000","Maine",
+
+        "2025-03-29T00:00:00.000","New Mexico",
+
+        '
+    headers: {}
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Connection:
+      - close
+      Host:
+      - data.cdc.gov
+      User-Agent:
+      - Python-urllib/3.11
+    method: GET
+    uri: https://data.cdc.gov/resource/r8kw-7aab.csv?$query=SELECT%20%60week_ending_date%60%20AS%20%60date%60,%60state%60%20AS%20%60geoid%60,(covid_19_deaths)%20AS%20%60value%60%20WHERE%20(%60group%60%3D'By%20Week'%20AND%20%60week_ending_date%60%20BETWEEN%20'2025-02-01T00:00:00'%20AND%20'2025-03-29T00:00:00'%20AND%20%60state%60%20IN%20('Arizona','Louisiana','Maine','New%20Mexico'))%20ORDER%20BY%20%60week_ending_date%60%20ASC,%60state%60%20ASC,%60:id%60%20ASC%20LIMIT%2010000%20OFFSET%200
+  response:
+    body:
+      string: '"date","geoid","value"
+
+        "2025-02-01T00:00:00.000","Arizona","13"
+
+        "2025-02-01T00:00:00.000","Louisiana",
+
+        "2025-02-01T00:00:00.000","Maine",
+
+        "2025-02-01T00:00:00.000","New Mexico",
+
+        "2025-02-08T00:00:00.000","Arizona","12"
+
+        "2025-02-08T00:00:00.000","Louisiana",
+
+        "2025-02-08T00:00:00.000","Maine",
+
+        "2025-02-08T00:00:00.000","New Mexico",
+
+        "2025-02-15T00:00:00.000","Arizona","12"
+
+        "2025-02-15T00:00:00.000","Louisiana",
+
+        "2025-02-15T00:00:00.000","Maine",
+
+        "2025-02-15T00:00:00.000","New Mexico",
+
+        "2025-02-22T00:00:00.000","Arizona","21"
+
+        "2025-02-22T00:00:00.000","Louisiana",
+
+        "2025-02-22T00:00:00.000","Maine",
+
+        "2025-02-22T00:00:00.000","New Mexico",
+
+        "2025-03-01T00:00:00.000","Arizona","12"
+
+        "2025-03-01T00:00:00.000","Louisiana",
+
+        "2025-03-01T00:00:00.000","Maine",
+
+        "2025-03-01T00:00:00.000","New Mexico",
+
+        "2025-03-08T00:00:00.000","Arizona","11"
+
+        "2025-03-08T00:00:00.000","Louisiana",
+
+        "2025-03-08T00:00:00.000","Maine",
+
+        "2025-03-08T00:00:00.000","New Mexico",
+
+        "2025-03-15T00:00:00.000","Arizona",
+
+        "2025-03-15T00:00:00.000","Louisiana",
+
+        "2025-03-15T00:00:00.000","Maine",
+
+        "2025-03-15T00:00:00.000","New Mexico",
+
+        "2025-03-22T00:00:00.000","Arizona",
+
+        "2025-03-22T00:00:00.000","Louisiana",
+
+        "2025-03-22T00:00:00.000","Maine",
+
+        "2025-03-22T00:00:00.000","New Mexico",
+
+        "2025-03-29T00:00:00.000","Arizona",
+
+        "2025-03-29T00:00:00.000","Louisiana",
+
+        "2025-03-29T00:00:00.000","Maine","0"
+
+        "2025-03-29T00:00:00.000","New Mexico",
+
+        '
+    headers: {}
+    status:
+      code: 200
+      message: OK
+version: 1

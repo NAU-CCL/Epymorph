@@ -449,6 +449,17 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
         counties = cast(CensusScope, context.scope).as_granularity("county")
+
+        # API URL can get too big if we're querying for a large number of counties.
+        # And doing a very large "in" statement is not ideal anyway.
+        # So after 1000 counties, just get all geography and we'll filter locally.
+        if counties.nodes < 1000:
+            geo_clause = [q.In("county_fips", counties.node_ids)]
+            result_filter = None
+        else:
+            geo_clause = []
+            result_filter = lambda df: df[df["geoid"].isin(counties.node_ids)]  # noqa: E731
+
         query = q.Query(
             select=(
                 q.Select("date_updated", "date", as_name="date"),
@@ -465,7 +476,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
                     context.time_frame.start_date,
                     context.time_frame.end_date,
                 ),
-                q.In("county_fips", counties.node_ids),
+                *geo_clause,
             ),
             order_by=(
                 q.Ascending("date_updated"),
@@ -478,6 +489,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
                 resource=self._RESOURCE,
                 query=query,
                 api_token=data_cdc_api_key(),
+                result_filter=result_filter,
             )
         except Exception as e:
             raise ADRIOCommunicationError(self, context) from e
@@ -761,20 +773,22 @@ class InfluenzaStateHospitalization(_DataCDCAemtMg7g):
 ##########################
 
 
-class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
+class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
     """
     Loads COVID hospitalization data from data.cdc.gov's dataset named
     "COVID-19 Vaccinations in the United States,County".
 
-    The data were reported on a daily basis, starting 2020-12-13 and ending 2023-05-10.
+    The data cover a time period starting 2020-12-13 and ending 2023-05-10.
+    Up through 2022-06-16, data were reported on a daily cadence, and after
+    that switched to a weekly cadence.
 
     This ADRIO supports geo scopes at US State and County granularity (2015 through 2019
     allowed). The data appears to have been compiled using 2019 Census delineations, so
     for best results, use a geo scope for that year. The data loaded will be matched
     to the simulation time frame. The result is a 2D matrix where the first axis
     represents reporting dates during the time frame and the second axis is geo scope
-    nodes. Values are integer numbers of people who have had the requested vaccine
-    dosage.
+    nodes. Values are tuples of date and the integer number of people who have had the
+    requested vaccine dosage.
 
     Parameters
     ----------
@@ -799,12 +813,16 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
 
     _TIME_RANGE = DateRange(iso8601("2020-12-13"), iso8601("2023-05-10"), step=1)
     """The time range over which values are available."""
+    _DAILY_TIME_RANGE = DateRange(iso8601("2020-12-13"), iso8601("2022-06-16"), step=1)
+    """The time range during which data were reported daily."""
+    _WEEKLY_TIME_RANGE = DateRange(iso8601("2022-06-22"), iso8601("2023-05-10"), step=7)
+    """The time range during which data were reported weekly."""
 
     _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.TxN,
+        shape=Shapes.AxN,
         value_dtype=np.int64,
         validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=False,
+        is_date_value=True,
     )
     """The format of results."""
 
@@ -850,14 +868,41 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
             raise ADRIOContextError(self, context, err)
         validate_time_frame(self, context, self._TIME_RANGE)
 
+    def _calculate_time_series(self) -> NDArray[np.datetime64]:
+        time_frame = self.context.time_frame
+        daily = self._DAILY_TIME_RANGE.overlap(time_frame)
+        weekly = self._WEEKLY_TIME_RANGE.overlap(time_frame)
+        match (daily, weekly):
+            case None, None:
+                # this should be caught during validate_context(), but just in case...
+                err = "The supplied time frame does not include any available dates."
+                raise ADRIOContextError(self, self.context, err)
+            case d, None:
+                return d.to_numpy()
+            case None, w:
+                return w.to_numpy()
+            case d, w:
+                return np.concatenate((d.to_numpy(), w.to_numpy()))
+
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
+        # There are three cases to handle:
+        # - StateScope
+        # - CountyScope with # nodes <= 1000
+        # - CountyScope with # nodes > 1000
+        #   In this case API URL can get too big, so just get all geography
+        #   and we'll filter locally.
         if isinstance(context.scope, StateScope):
             to_postal = get_states(context.scope.year).state_fips_to_code
             postal_codes = [to_postal[x] for x in context.scope.node_ids]
-            loc_where = q.In("Recip_State", postal_codes)
+            geo_clause = [q.In("Recip_State", postal_codes)]
+            result_filter = None
+        elif isinstance(context.scope, CountyScope) and context.scope.nodes < 1000:
+            geo_clause = [q.In("fips", context.scope.node_ids)]
+            result_filter = None
         elif isinstance(context.scope, CountyScope):
-            loc_where = q.In("fips", context.scope.node_ids)
+            geo_clause = []
+            result_filter = lambda df: df[df["geoid"].isin(context.scope.node_ids)]  # noqa: E731
         else:
             err = "US State or County geo scope required."
             raise ADRIOContextError(self, context, err)
@@ -882,7 +927,7 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
                     context.time_frame.start_date,
                     context.time_frame.end_date,
                 ),
-                loc_where,
+                *geo_clause,
                 q.NotNull(column),
             ),
             order_by=(
@@ -896,6 +941,7 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
                 resource=self._RESOURCE,
                 query=query,
                 api_token=data_cdc_api_key(),
+                result_filter=result_filter,
             )
         except Exception as e:
             raise ADRIOCommunicationError(self, context) from e
@@ -905,8 +951,8 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
         self,
         context: Context,
         data_df: pd.DataFrame,
-    ) -> ProcessResult[np.int64]:
-        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+    ) -> ProcessResult[DateValueType]:
+        time_series = self._calculate_time_series()
         pipeline = (
             DataPipeline(
                 axes=(
@@ -926,7 +972,19 @@ class COVIDVaccination(FetchADRIO[np.int64, np.int64]):
             )
             .finalize(self._fix_missing)
         )
-        return pipeline(data_df)
+        return pipeline(data_df).to_date_value(time_series)
+
+    @override
+    def _validate_result(
+        self,
+        context: Context,
+        result: NDArray[DateValueType],
+        *,
+        expected_shape: tuple[int, ...] | None = None,
+    ) -> None:
+        time_series = self._calculate_time_series()
+        shp = (len(time_series), context.scope.nodes)
+        super()._validate_result(context, result, expected_shape=shp)
 
 
 ##########################
@@ -1027,10 +1085,23 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
 
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
-        counties = cast(CensusScope, context.scope).as_granularity("county")
         # Data represents county-level FIPS codes as numbers,
         # so we strip leading zeros when querying and
         # left-pad with zero to get back to five characters in the result.
+        counties = cast(CensusScope, context.scope).as_granularity("county")
+
+        if counties.nodes < 1000:
+            geo_clause = [q.In("fips_code", counties.node_ids)]
+
+            def result_filter(df):
+                df["geoid"] = df["geoid"].str.rjust(5, "0")
+                return df
+        else:
+            geo_clause = []
+
+            def result_filter(df):
+                df["geoid"] = df["geoid"].str.rjust(5, "0")
+                return df[df["geoid"].isin(counties.node_ids)]
 
         match self._cause_of_death:
             case "all":
@@ -1054,7 +1125,7 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
                     context.time_frame.start_date,
                     context.time_frame.end_date,
                 ),
-                q.In("fips_code", counties.node_ids),
+                *geo_clause,
             ),
             order_by=(
                 q.Ascending("week_ending_date"),
@@ -1063,13 +1134,12 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
             ),
         )
         try:
-            result_df = q.query_csv(
+            return q.query_csv(
                 resource=self._RESOURCE,
                 query=query,
                 api_token=data_cdc_api_key(),
+                result_filter=result_filter,
             )
-            result_df["geoid"] = result_df["geoid"].str.rjust(5, "0")
-            return result_df
         except Exception as e:
             raise ADRIOCommunicationError(self, context) from e
 
