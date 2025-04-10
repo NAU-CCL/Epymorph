@@ -23,6 +23,13 @@ from epymorph.time import (
 #############
 
 
+def test_date_range():
+    # These are all valid ranges.
+    DateRange(date(2020, 1, 1), date(2020, 1, 1), step=7)
+    DateRange(date(2020, 1, 1), date(2020, 1, 8), step=7)
+    DateRange(date(2020, 1, 1), date(2020, 1, 15), step=7)
+
+
 def test_date_range_invalid():
     with pytest.raises(
         ValueError,
