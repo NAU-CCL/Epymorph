@@ -384,6 +384,8 @@ class DataPipeline(Generic[DataT]):
                 )
                 .to_numpy(dtype=np.bool_)
             )
+
+            # pivot_table produces 2D results; adjust if we expect a 1D result.
             if self.ndims == 1:
                 if mask.shape[1] > 1:
                     raise Exception("?")  # TODO
@@ -408,8 +410,9 @@ class DataPipeline(Generic[DataT]):
             work_df = state.data_df.assign(value=value)
             return state.next(work_df)
 
-        pipe = self._and_then(replace_na)
-        return pipe.strip_sentinel(sentinel_name, sentinel_value, fix)
+        return self._and_then(replace_na).strip_sentinel(
+            sentinel_name, sentinel_value, fix
+        )
 
     def finalize(
         self,
@@ -456,11 +459,23 @@ class DataPipeline(Generic[DataT]):
                     )
                 ).to_numpy(dtype=np.bool_),
             )
+
+            # pivot_table produces 2D results; adjust if we expect a 1D result.
             if self.ndims == 1:
                 if missing_mask.shape[1] > 1 or result_np.shape[1] > 1:
                     raise Exception("?")  # TODO
                 result_np = result_np[:, 0]
                 missing_mask = missing_mask[:, 0]
+
+            # If a value is present in an issue mask it's not missing,
+            # but for calculation purposes we may have removed it
+            # (e.g., stripping sentinels.). Correct that now.
+            all_issues_mask = reduce(
+                np.logical_or,
+                [m for _, m in state.issues.items()],
+                np.ma.nomask,
+            )
+            missing_mask = missing_mask & ~all_issues_mask
 
             # Discover and fill missing data.
             result_np, missing_mask = fill_missing(self.rng, result_np, missing_mask)
