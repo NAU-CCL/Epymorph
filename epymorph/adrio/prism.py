@@ -11,7 +11,7 @@ import rasterio.io as rio
 from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
-from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_cache
 from epymorph.attribute import AttributeDef
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
@@ -139,7 +139,7 @@ def _validate_dates(date_range: TimeFrame) -> TimeFrame:
     return date_range
 
 
-class _PRISMAdrio(ADRIO[np.float64], ABC):
+class _PRISMAdrio(ADRIOLegacy[np.float64], ABC):
     _override_time_frame: TimeFrame | None
     """An override time frame for which to fetch data.
     If None, the simulation time frame will be used."""

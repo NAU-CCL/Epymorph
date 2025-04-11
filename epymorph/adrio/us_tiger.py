@@ -8,7 +8,7 @@ from geopandas import GeoDataFrame
 from pandas import DataFrame, to_numeric
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_cache
 from epymorph.data_type import CentroidDType, StructDType
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceError
@@ -105,7 +105,7 @@ def _get_info(scope: CensusScope, progress: ProgressCallback) -> DataFrame:
 T_co = TypeVar("T_co", bound=np.generic)
 
 
-class _USTigerAdrio(ADRIO[T_co], ABC):
+class _USTigerAdrio(ADRIOLegacy[T_co], ABC):
     """Abstract class for shared functionality in US Tiger ADRIOs."""
 
     def estimate_data(self) -> DataEstimate:

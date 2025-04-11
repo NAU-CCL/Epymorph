@@ -9,7 +9,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIO, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceError
@@ -297,7 +297,7 @@ def _validate_scope(scope: GeoScope) -> CensusScope:
     return scope
 
 
-class _LodesADRIO(ADRIO[np.int64], ABC):
+class _LodesADRIO(ADRIOLegacy[np.int64], ABC):
     _override_year: int | None
     """The year for the commuting data.
     If None, defaults to the year in which the simulation time frame starts."""

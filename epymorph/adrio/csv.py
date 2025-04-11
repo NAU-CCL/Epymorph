@@ -10,7 +10,7 @@ from numpy.typing import DTypeLike, NDArray
 from pandas import DataFrame, Series, read_csv
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIO
+from epymorph.adrio.adrio import ADRIOLegacy
 from epymorph.error import DataResourceError
 from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope, CountyScope, StateScope
@@ -144,7 +144,7 @@ def _validate_result(scope: GeoScope, data: Series) -> None:
         raise DataResourceError(msg)
 
 
-class CSV(ADRIO[Any]):
+class CSV(ADRIOLegacy[Any]):
     """Retrieves an N-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -216,7 +216,7 @@ class CSV(ADRIO[Any]):
             raise DataResourceError(msg)
 
 
-class CSVTimeSeries(ADRIO[Any]):
+class CSVTimeSeries(ADRIOLegacy[Any]):
     """Retrieves a TxN-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
@@ -313,7 +313,7 @@ class CSVTimeSeries(ADRIO[Any]):
             raise DataResourceError(msg)
 
 
-class CSVMatrix(ADRIO[Any]):
+class CSVMatrix(ADRIOLegacy[Any]):
     """Retrieves an NxN-shaped array of any type from a user-provided CSV file."""
 
     file_path: PathLike
