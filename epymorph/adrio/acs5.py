@@ -13,10 +13,10 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.adrio.adrio import (
+    ADRIO,
     ADRIOCommunicationError,
     ADRIOContextError,
     ADRIOProcessingError,
-    ADRIOPrototype,
     FetchADRIO,
     InspectResult,
     ProcessResult,
@@ -291,7 +291,7 @@ class ACS5Client:
             return pd.concat(results).sort_index()
 
 
-def _get_scope(adrio: ADRIOPrototype, context: Context) -> CensusScope:
+def _get_scope(adrio: ADRIO, context: Context) -> CensusScope:
     """
     Validate and retrieve the CensusScope from `context`.
     ACS5 ADRIOs really only work on Census geography, so this is a commonly-useful
@@ -574,7 +574,7 @@ class AgeRange(NamedTuple):
         return AgeRange(start, end)
 
 
-class PopulationByAge(ADRIOPrototype[np.int64, np.int64]):
+class PopulationByAge(ADRIO[np.int64, np.int64]):
     """
     Processes a population-by-age table to extract the population of a specified age
     bracket, as limited by the age brackets defined by the US Census ACS 5-Year Data
@@ -1059,7 +1059,7 @@ class GiniIndex(_FetchACS5[np.float64]):
             raise ADRIOContextError(self, context, err)
 
 
-class DissimilarityIndex(ADRIOPrototype[np.float64, np.float64]):
+class DissimilarityIndex(ADRIO[np.float64, np.float64]):
     """
     Calculates the Dissimilarity Index using US Census ACS 5-Year Data (group B02001).
     The dissimilarity index is a measure of segregation comparing two races.
