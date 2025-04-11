@@ -72,7 +72,7 @@ class TestSimulationFunction(unittest.TestCase):
         with self.assertRaises(MissingContextError) as e:
             f.evaluate()
         self.assertIn(
-            "missing function context during evaluation",
+            "missing function context 'data' during evaluation",
             str(e.exception).lower(),
         )
 

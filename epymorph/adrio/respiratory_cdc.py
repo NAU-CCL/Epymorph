@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_legacy_cache
 from epymorph.adrio.cdc import DataSource, _api_query, _validate_scope
 from epymorph.error import DataResourceError
 from epymorph.geography.us_census import CensusScope
@@ -306,7 +306,7 @@ class DiseaseAdmissions(_RespiratoryADRIO):
         )
 
 
-@adrio_cache
+@adrio_legacy_cache
 class AdmissionsPer100k(_RespiratoryADRIO):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the
@@ -416,7 +416,7 @@ class AdmissionsPer100k(_RespiratoryADRIO):
         )
 
 
-@adrio_cache
+@adrio_legacy_cache
 class HospitalizationsICU(_RespiratoryADRIO):
     """
     Creates a TxN matrix of tuples, containing a date and a float representing the

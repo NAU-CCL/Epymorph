@@ -22,6 +22,7 @@ from epymorph.adrio.adrio import (
     ProcessResult,
     ResultFormat,
     ValueT,
+    adrio_cache,
     range_mask_fn,
 )
 from epymorph.adrio.processing import (
@@ -405,6 +406,7 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
         return pipeline(data_df)
 
 
+@adrio_cache
 class Population(_FetchACS5[np.int64]):
     """
     Loads population data from the US Census ACS 5-Year Data (variable B01001_001E).
@@ -441,6 +443,7 @@ class Population(_FetchACS5[np.int64]):
         return ["B01001_001E"]
 
 
+@adrio_cache
 class PopulationByAgeTable(_FetchACS5[np.int64]):
     """
     Loads a table of population categorized by Census-defined age brackets from the
@@ -574,6 +577,7 @@ class AgeRange(NamedTuple):
         return AgeRange(start, end)
 
 
+@adrio_cache
 class PopulationByAge(ADRIO[np.int64, np.int64]):
     """
     Processes a population-by-age table to extract the population of a specified age
@@ -689,6 +693,7 @@ A racial category defined by ACS5.
 # fmt: on
 
 
+@adrio_cache
 class PopulationByRace(_FetchACS5[np.int64]):
     """
     Loads population by race from the US Census ACS 5-Year Data (group B02001).
@@ -772,6 +777,7 @@ class PopulationByRace(_FetchACS5[np.int64]):
         return [PopulationByRace._RACE_VARIABLES[self._race]]
 
 
+@adrio_cache
 class AverageHouseholdSize(_FetchACS5[np.float64]):
     """
     Loads average household size data, based on the number of people living in a
@@ -842,6 +848,7 @@ class AverageHouseholdSize(_FetchACS5[np.float64]):
         return ["B25010_001E"]
 
 
+@adrio_cache
 class MedianAge(_FetchACS5[np.float64]):
     """
     Loads median age data from the US Census ACS 5-Year Data (variable B01002_001E).
@@ -911,6 +918,7 @@ class MedianAge(_FetchACS5[np.float64]):
         return ["B01002_001E"]
 
 
+@adrio_cache
 class MedianIncome(_FetchACS5[np.int64]):
     """
     Loads median income data in whole dollars from the US Census ACS 5-Year Data
@@ -978,6 +986,7 @@ class MedianIncome(_FetchACS5[np.int64]):
         return ["B19013_001E"]
 
 
+@adrio_cache
 class GiniIndex(_FetchACS5[np.float64]):
     """
     Loads Gini Index data from the US Census ACS 5-Year Data (variable B19083_001E).
@@ -1059,6 +1068,7 @@ class GiniIndex(_FetchACS5[np.float64]):
             raise ADRIOContextError(self, context, err)
 
 
+@adrio_cache
 class DissimilarityIndex(ADRIO[np.float64, np.float64]):
     """
     Calculates the Dissimilarity Index using US Census ACS 5-Year Data (group B02001).

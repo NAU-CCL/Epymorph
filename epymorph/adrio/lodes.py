@@ -9,7 +9,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_legacy_cache
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceError
@@ -397,7 +397,7 @@ def _estimate_lodes(
     )
 
 
-@adrio_cache
+@adrio_legacy_cache
 class Commuters(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving
@@ -440,7 +440,7 @@ class Commuters(_LodesADRIO):
         return _fetch_lodes(scope, "S000", job_var, self.data_year, self.progress)
 
 
-@adrio_cache
+@adrio_legacy_cache
 class CommutersByAge(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
@@ -502,7 +502,7 @@ class CommutersByAge(_LodesADRIO):
         return _fetch_lodes(scope, age_var, job_var, self.data_year, self.progress)
 
 
-@adrio_cache
+@adrio_legacy_cache
 class CommutersByEarnings(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a
@@ -564,7 +564,7 @@ class CommutersByEarnings(_LodesADRIO):
         return _fetch_lodes(scope, earning_var, job_var, self.data_year, self.progress)
 
 
-@adrio_cache
+@adrio_legacy_cache
 class CommutersByIndustry(_LodesADRIO):
     """
     Creates an NxN matrix of integers representing the number of workers moving from a

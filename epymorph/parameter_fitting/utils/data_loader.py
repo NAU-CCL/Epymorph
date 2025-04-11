@@ -8,6 +8,7 @@ from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
 from epymorph.rume import RUME
+from epymorph.simulation import Context
 
 _CDC_ADRIOS = [
     CovidCasesPer100k,  # noqa: F405
@@ -86,7 +87,7 @@ class DataLoader:
                 csv_df = read_csv(source.file_path)
 
                 cases = source.with_context_internal(
-                    data=data, scope=self.rume.scope, rng=rng
+                    Context.of(data=data, scope=self.rume.scope, rng=rng)
                 ).evaluate()
 
                 dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
@@ -94,14 +95,13 @@ class DataLoader:
                 return dates, cases
 
             if any([isinstance(source, cdc_adrio) for cdc_adrio in _CDC_ADRIOS]):
-                result = np.array(
-                    source.with_context_internal(
-                        data=data,
-                        time_frame=self.rume.time_frame,
-                        scope=self.rume.scope,
-                        rng=rng,
-                    ).evaluate()
+                ctx = Context.of(
+                    data=data,
+                    time_frame=self.rume.time_frame,
+                    scope=self.rume.scope,
+                    rng=rng,
                 )
+                result = np.array(source.with_context_internal(ctx).evaluate())
 
                 dates = result["date"][:, 0]
                 cases = result["data"]
