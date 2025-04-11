@@ -4,12 +4,12 @@ import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIOLegacy, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, adrio_legacy_cache
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
 
 
-@adrio_cache
+@adrio_legacy_cache
 class AbsoluteHumidity(ADRIOLegacy[np.float64]):
     """
     Creates a TxN matrix of floats representing absolute humidity in kilograms per cubic
@@ -49,7 +49,7 @@ class AbsoluteHumidity(ADRIOLegacy[np.float64]):
         return np_humidity
 
 
-@adrio_cache
+@adrio_legacy_cache
 class RelativeHumidity(ADRIOLegacy[np.float64]):
     """
     Creates a TxN matrix of floats representing relative humidity as a percentage

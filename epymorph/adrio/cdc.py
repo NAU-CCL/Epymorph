@@ -15,6 +15,7 @@ from epymorph.adrio.adrio import (
     FetchADRIO,
     ProcessResult,
     ResultFormat,
+    adrio_cache,
     range_mask_fn,
     validate_time_frame,
 )
@@ -127,6 +128,7 @@ class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
         super()._validate_result(context, result, expected_shape=shp)
 
 
+@adrio_cache
 class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
     """
     Loads COVID hospitalization data from HealthData.gov's
@@ -278,6 +280,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
         return result.to_date_value(time_series)
 
 
+@adrio_cache
 class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
     """
     Loads influenza hospitalization data from HealthData.gov's
@@ -379,6 +382,7 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
 ##########################
 
 
+@adrio_cache
 class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
     """
     Loads COVID case data from data.cdc.gov's dataset named
@@ -692,6 +696,7 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
         super()._validate_result(context, result, expected_shape=shp)
 
 
+@adrio_cache
 class COVIDStateHospitalization(_DataCDCAemtMg7g):
     """
     Loads COVID hospitalization data from data.cdc.gov's dataset named
@@ -730,6 +735,7 @@ class COVIDStateHospitalization(_DataCDCAemtMg7g):
     _column = "total_admissions_all_covid_confirmed"
 
 
+@adrio_cache
 class InfluenzaStateHospitalization(_DataCDCAemtMg7g):
     """
     Loads influenza hospitalization data from data.cdc.gov's dataset named
@@ -773,6 +779,7 @@ class InfluenzaStateHospitalization(_DataCDCAemtMg7g):
 ##########################
 
 
+@adrio_cache
 class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
     """
     Loads COVID hospitalization data from data.cdc.gov's dataset named
@@ -992,6 +999,7 @@ class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
 ##########################
 
 
+@adrio_cache
 class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
     """
     Loads COVID and total deaths data from data.cdc.gov's dataset named
@@ -1196,6 +1204,7 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
 ##########################
 
 
+@adrio_cache
 class StateDeaths(FetchADRIO[DateValueType, np.int64]):
     """
     Loads deaths data (COVID-19, influenza, pneumonia, and total) from data.cdc.gov's dataset named

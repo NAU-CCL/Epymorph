@@ -9,6 +9,7 @@ from epymorph.event import EventBus, OnMovementClause, OnMovementFinish, OnMovem
 from epymorph.movement_model import MovementClause
 from epymorph.rume import RUME
 from epymorph.simulation import (
+    Context,
     Tick,
     resolve_tick_delta,
 )
@@ -117,7 +118,7 @@ class MovementExecutor:
         for strata, model in self._rume.mms.items():
             namespace = ModuleNamespace(gpm_strata(strata), "mm")
             for clause in model.clauses:
-                c = clause.with_context_internal(
+                ctx = Context.of(
                     namespace.to_absolute(clause.clause_name),
                     data,
                     rume.scope,
@@ -125,6 +126,7 @@ class MovementExecutor:
                     rume.ipm,
                     rng,
                 )
+                c = clause.with_context_internal(ctx)
                 self._clauses.append((strata, c))
 
     def apply(self, tick: Tick) -> None:

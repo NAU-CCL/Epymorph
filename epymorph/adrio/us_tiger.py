@@ -8,7 +8,7 @@ from geopandas import GeoDataFrame
 from pandas import DataFrame, to_numeric
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_legacy_cache
 from epymorph.data_type import CentroidDType, StructDType
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.error import DataResourceError
@@ -137,7 +137,7 @@ class _USTigerAdrio(ADRIOLegacy[T_co], ABC):
         )
 
 
-@adrio_cache
+@adrio_legacy_cache
 class GeometricCentroid(_USTigerAdrio[StructDType]):
     """The centroid of the geographic polygons."""
 
@@ -151,7 +151,7 @@ class GeometricCentroid(_USTigerAdrio[StructDType]):
         )
 
 
-@adrio_cache
+@adrio_legacy_cache
 class InternalPoint(_USTigerAdrio[StructDType]):
     """
     The internal point provided by TIGER data. These points are selected by
@@ -170,7 +170,7 @@ class InternalPoint(_USTigerAdrio[StructDType]):
         return np.array(list(centroids), dtype=CentroidDType)
 
 
-@adrio_cache
+@adrio_legacy_cache
 class Name(_USTigerAdrio[np.str_]):
     """For states and counties, the proper name of the location; otherwise its GEOID."""
 
@@ -185,7 +185,7 @@ class Name(_USTigerAdrio[np.str_]):
             return scope.node_ids
 
 
-@adrio_cache
+@adrio_legacy_cache
 class PostalCode(_USTigerAdrio[np.str_]):
     """
     For states only, the postal code abbreviation for the state
@@ -203,7 +203,7 @@ class PostalCode(_USTigerAdrio[np.str_]):
         return info_df["STUSPS"].to_numpy(dtype=np.str_)
 
 
-@adrio_cache
+@adrio_legacy_cache
 class LandAreaM2(_USTigerAdrio[np.float64]):
     """
     The land area of the geo node in meters-squared. This is the 'ALAND' attribute

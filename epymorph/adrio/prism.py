@@ -11,7 +11,7 @@ import rasterio.io as rio
 from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 
-from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_cache
+from epymorph.adrio.adrio import ADRIOLegacy, ProgressCallback, adrio_legacy_cache
 from epymorph.attribute import AttributeDef
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
@@ -298,7 +298,7 @@ def _estimate_prism(
     )
 
 
-@adrio_cache
+@adrio_legacy_cache
 class Precipitation(_PRISMAdrio):
     """
     Creates an TxN matrix of floats representing the amount of precipitation in an area,
@@ -348,7 +348,7 @@ class Precipitation(_PRISMAdrio):
         return raster_vals
 
 
-@adrio_cache
+@adrio_legacy_cache
 class DewPoint(_PRISMAdrio):
     """
     Creates an TxN matrix of floats representing the dew point temperature in an area,
@@ -403,7 +403,7 @@ class DewPoint(_PRISMAdrio):
         return raster_vals
 
 
-@adrio_cache
+@adrio_legacy_cache
 class Temperature(_PRISMAdrio):
     """
     Creates an TxN matrix of floats representing the temperature in an area, represented
@@ -475,7 +475,7 @@ class Temperature(_PRISMAdrio):
         return raster_vals
 
 
-@adrio_cache
+@adrio_legacy_cache
 class VaporPressureDeficit(_PRISMAdrio):
     """
     Creates an TxN matrix of floats representing the vapor pressure deficit in an area,

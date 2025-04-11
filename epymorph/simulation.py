@@ -9,9 +9,9 @@ from typing import (
     Callable,
     Generic,
     Iterable,
-    Literal,
     Mapping,
     NamedTuple,
+    Never,
     Self,
     Sequence,
     Type,
@@ -26,7 +26,6 @@ from jsonpickle.util import is_picklable
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
 from sympy import Expr
-from typing_extensions import override
 
 from epymorph.attribute import (
     NAME_PLACEHOLDER,
@@ -245,6 +244,8 @@ class Context(ABC):
     # is evaluated in a simulation context object. Partial contexts exist to allow easy
     # one-off evaluation of SimulationFunctions without a full RUME.
 
+    _args: dict[str, Any]
+
     @property
     @abstractmethod
     def name(self) -> AbsoluteName:
@@ -279,6 +280,58 @@ class Context(ABC):
     def dim(self) -> Dimensions:
         """Simulation dimensions."""
 
+    @final
+    def replace(
+        self,
+        name: AbsoluteName | None = None,
+        data: DataResolver | None = None,
+        scope: GeoScope | None = None,
+        time_frame: TimeFrame | None = None,
+        ipm: BaseCompartmentModel | None = None,
+        rng: np.random.Generator | None = None,
+    ) -> "Context":
+        """Create a new Context by overriding some or all of the values."""
+        arg = self._args
+        return Context.of(
+            name=name or arg["name"],
+            data=data or arg["data"],
+            scope=scope or arg["scope"],
+            time_frame=time_frame or arg["time_frame"],
+            ipm=ipm or arg["ipm"],
+            rng=rng or arg["rng"],
+        )
+
+    @final
+    def to_dict(self) -> dict[str, Any]:
+        return {**self._args}
+
+    @final
+    def hash(self, requirements: Sequence[AttributeDef]) -> int:
+        """Compute the hash of a context assuming the given set of requirements."""
+        name = self.name
+
+        if (data := self._args.get("data")) is not None:
+            req_hashes = (
+                data.resolve(name.with_id(req.name), req).tobytes()
+                for req in requirements
+            )
+        else:
+            req_hashes = (None,)
+
+        if (ipm := self._args.get("ipm")) is not None:
+            C = ipm.num_compartments
+            E = ipm.num_events
+            ipm_hash = (ipm.__class__.__name__, C, E)
+        else:
+            ipm_hash = None
+
+        scope = self._args.get("scope")
+        time_frame = self._args.get("time_frame")
+
+        # Note that `None` is a hashable value.
+        hash_values = tuple([str(name), scope, time_frame, ipm_hash, *req_hashes])
+        return hash(hash_values)
+
     @staticmethod
     def of(
         name: AbsoluteName = NAME_PLACEHOLDER,
@@ -287,203 +340,94 @@ class Context(ABC):
         time_frame: TimeFrame | None = None,
         ipm: BaseCompartmentModel | None = None,
         rng: np.random.Generator | None = None,
-    ) -> "_PartialContext | _FullContext":
-        if (
-            data is None
-            or scope is None
-            or time_frame is None
-            or ipm is None
-            or rng is None
-        ):
-            return _PartialContext(name, data, scope, time_frame, ipm, rng)
-        else:
-            return _FullContext(name, data, scope, time_frame, ipm, rng)
+    ) -> "Context":
+        """
+        Create a Context instance, which may represent a partial or complete context.
 
-    @abstractmethod
-    def with_scope(self, scope: GeoScope) -> "Context":
-        pass
+        Parameters
+        ----------
+        name : AbsoluteName, default = NAME_PLACEHOLDER
+            The name in which a SimulationFunction is being evaluated.
+        data : DataResolver, optional
+            Data attributes which may be required by the function.
+        scope : GeoScope, optional
+            The geo scope.
+        time_frame : TimeFrame, optional
+            The simulation time frame.
+        ipm : BaseCompartmentModel, optional
+            The IPM.
+        rng : np.random.Generator, optional
+            A random number generator to use.
+        """
 
+        # NOTE: this function dynamically creates a concrete version of Context
+        # which is an abstract class. This allows us to handle partial context in an
+        # efficient manner. Rather than doing an if-check on every attribute access,
+        # we can just construct properties and methods which already know if they have
+        # a value or must raise a MissingContextError if accessed.
 
-class _PartialContext(Context):
-    _name: AbsoluteName
-    _data: DataResolver | None
-    _scope: GeoScope | None
-    _time_frame: TimeFrame | None
-    _ipm: BaseCompartmentModel | None
-    _rng: np.random.Generator | None
-    _dim: Dimensions
+        def make_missing_context(component: str):
+            def missing_context(self, *args, **kwargs) -> Never:
+                err = (
+                    f"Missing function context '{component}' during evaluation.\n"
+                    f"The simulation function tried to access '{component}' but this "
+                    "has not been provided. Call `with_context()` first, providing all "
+                    "context that is required by this function. Then call `evaluate()` "
+                    "on the returned object to compute the value."
+                )
+                raise MissingContextError(err)
 
-    def __init__(
-        self,
-        name: AbsoluteName,
-        data: DataResolver | None,
-        scope: GeoScope | None,
-        time_frame: TimeFrame | None,
-        ipm: BaseCompartmentModel | None,
-        rng: np.random.Generator | None,
-    ):
-        self._name = name
-        self._data = data
-        self._scope = scope
-        self._time_frame = time_frame
-        self._ipm = ipm
-        self._rng = rng
-        self._dim = Dimensions.of(
+            return missing_context
+
+        def make_getter(component, value):
+            if value is None:
+                return make_missing_context(component)
+            return property(lambda self: value)
+
+        def make_data_getter():
+            if data is None:
+                return make_missing_context("data")
+
+            def data_getter(self, attribute: AttributeDef) -> AttributeArray:
+                n = name.to_namespace().to_absolute(attribute.name)
+                return data.resolve(n, attribute)  # type: ignore
+
+            return data_getter
+
+        dim = Dimensions.of(
             T=time_frame.duration_days if time_frame is not None else None,
             N=scope.nodes if scope is not None else None,
             C=ipm.num_compartments if ipm is not None else None,
             E=ipm.num_events if ipm is not None else None,
         )
 
-    def _invalid_context(
-        self,
-        component: Literal["data", "scope", "time_frame", "ipm", "rng"],
-    ) -> MissingContextError:
-        err = (
-            "Missing function context during evaluation.\n"
-            "Simulation function tried to access "
-            f"'{component}' but this has not been provided. "
-            "Call `with_context()` first, providing all context that is required "
-            "by this function. Then call `evaluate()` on the returned object "
-            "to compute the value."
+        args = {
+            "name": name,
+            "data": data,
+            "scope": scope,
+            "time_frame": time_frame,
+            "ipm": ipm,
+            "rng": rng,
+        }
+
+        instance = type(
+            "ContextInstance",
+            (Context,),
+            {
+                "_args": args,
+                "name": make_getter("name", name),
+                "scope": make_getter("scope", scope),
+                "time_frame": make_getter("time_frame", time_frame),
+                "ipm": make_getter("ipm", ipm),
+                "rng": make_getter("rng", rng),
+                "dim": make_getter("dim", dim),
+                "data": make_data_getter(),
+            },
         )
-        return MissingContextError(err)
-
-    @property
-    def name(self) -> AbsoluteName:
-        return self._name
-
-    @override
-    def data(self, attribute: AttributeDef) -> NDArray:
-        if self._data is None:
-            raise self._invalid_context("data")
-        name = self._name.to_namespace().to_absolute(attribute.name)
-        return self._data.resolve(name, attribute)
-
-    @property
-    @override
-    def time_frame(self) -> TimeFrame:
-        if self._time_frame is None:
-            raise self._invalid_context("time_frame")
-        return self._time_frame
-
-    @property
-    @override
-    def ipm(self) -> BaseCompartmentModel:
-        if self._ipm is None:
-            raise self._invalid_context("ipm")
-        return self._ipm
-
-    @property
-    @override
-    def scope(self) -> GeoScope:
-        if self._scope is None:
-            raise self._invalid_context("scope")
-        return self._scope
-
-    @property
-    @override
-    def rng(self) -> np.random.Generator:
-        if self._rng is None:
-            raise self._invalid_context("rng")
-        return self._rng
-
-    @property
-    @override
-    def dim(self) -> Dimensions:
-        return self._dim
-
-    @override
-    def with_scope(self, scope: GeoScope) -> "Context":
-        return Context.of(
-            name=self._name,
-            data=self._data,
-            scope=scope,
-            time_frame=self._time_frame,
-            ipm=self._ipm,
-            rng=self._rng,
-        )
+        return instance()
 
 
-_EMPTY_CONTEXT = _PartialContext(NAME_PLACEHOLDER, None, None, None, None, None)
-
-
-class _FullContext(Context):
-    _name: AbsoluteName
-    _data: DataResolver
-    _scope: GeoScope
-    _time_frame: TimeFrame
-    _ipm: BaseCompartmentModel
-    _rng: np.random.Generator
-    _dim: Dimensions
-
-    def __init__(
-        self,
-        name: AbsoluteName,
-        data: DataResolver,
-        scope: GeoScope,
-        time_frame: TimeFrame,
-        ipm: BaseCompartmentModel,
-        rng: np.random.Generator,
-    ):
-        self._name = name
-        self._data = data
-        self._scope = scope
-        self._time_frame = time_frame
-        self._ipm = ipm
-        self._rng = rng
-        self._dim = Dimensions.of(
-            T=time_frame.duration_days,
-            N=scope.nodes,
-            C=ipm.num_compartments,
-            E=ipm.num_events,
-        )
-
-    @property
-    def name(self) -> AbsoluteName:
-        return self._name
-
-    @override
-    def data(self, attribute: AttributeDef) -> NDArray:
-        name = self._name.to_namespace().to_absolute(attribute.name)
-        return self._data.resolve(name, attribute)
-
-    @property
-    @override
-    def scope(self) -> GeoScope:
-        return self._scope
-
-    @property
-    @override
-    def time_frame(self) -> TimeFrame:
-        return self._time_frame
-
-    @property
-    @override
-    def ipm(self) -> BaseCompartmentModel:
-        return self._ipm
-
-    @property
-    @override
-    def rng(self) -> np.random.Generator:
-        return self._rng
-
-    @property
-    @override
-    def dim(self) -> Dimensions:
-        return self._dim
-
-    @override
-    def with_scope(self, scope: GeoScope) -> "Context":
-        return Context.of(
-            name=self._name,
-            data=self._data,
-            scope=scope,
-            time_frame=self._time_frame,
-            ipm=self._ipm,
-            rng=self._rng,
-        )
-
+_EMPTY_CONTEXT = Context.of(NAME_PLACEHOLDER)
 
 _TypeT = TypeVar("_TypeT")
 
@@ -603,7 +547,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     the context RNG will only be computed once, resulting in a single random value
     that is shared by all references during evaluation."""
 
-    _ctx: _FullContext | _PartialContext = _EMPTY_CONTEXT
+    _ctx: Context = _EMPTY_CONTEXT
 
     @property
     def class_name(self) -> str:
@@ -684,17 +628,10 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
             Database({NamePattern.parse(k): v for k, v in params.items()}),
         )
         data = reqs.evaluate(scope, time_frame, ipm, rng)
-        return self.with_context_internal(name, data, scope, time_frame, ipm, rng)
+        ctx = Context.of(name, data, scope, time_frame, ipm, rng)
+        return self.with_context_internal(ctx)
 
-    def with_context_internal(
-        self,
-        name: AbsoluteName = NAME_PLACEHOLDER,
-        data: DataResolver | None = None,
-        scope: GeoScope | None = None,
-        time_frame: TimeFrame | None = None,
-        ipm: BaseCompartmentModel | None = None,
-        rng: np.random.Generator | None = None,
-    ) -> Self:
+    def with_context_internal(self, context: Context) -> Self:
         """
         Constructs a clone of this instance which has access to the given context.
 
@@ -705,7 +642,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         # 1. don't have to worry about cleaning up _ctx
         # 2. instances can use @cached_property without surprising results
         clone = deepcopy(self)
-        setattr(clone, "_ctx", Context.of(name, data, scope, time_frame, ipm, rng))
+        setattr(clone, "_ctx", context)
         return clone
 
     @final
@@ -721,14 +658,11 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         This method is intended for usage internal to epymorph's system.
         Typical usage will use `defer` instead.
         """
-        return other.with_context_internal(
-            name=self._ctx._name,
-            data=self._ctx._data,
-            scope=scope or self._ctx._scope,
-            time_frame=time_frame or self._ctx._time_frame,
-            ipm=self._ctx._ipm,
-            rng=self._ctx._rng,
+        new_ctx = self._ctx.replace(
+            scope=scope,
+            time_frame=time_frame,
         )
+        return other.with_context_internal(new_ctx)
 
     @final
     @property

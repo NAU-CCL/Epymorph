@@ -73,7 +73,6 @@ class ADRIOLegacy(SimulationFunction[NDArray[ResultDType]]):
         """
 
     @override
-    @final
     def evaluate(self) -> NDArray[ResultDType]:
         """The ADRIO parent class overrides this to provide ADRIO-specific
         functionality. ADRIO implementations should override `evaluate_adrio`."""
@@ -132,52 +131,78 @@ def _(
     rng: np.random.Generator | None,
 ) -> AttributeArray:
     # depth-first evaluation guarantees `data` has our dependencies.
-    sim_func = value.with_context_internal(name, data, scope, time_frame, ipm, rng)
+    ctx = Context.of(name, data, scope, time_frame, ipm, rng)
+    sim_func = value.with_context_internal(ctx)
     return np.asarray(sim_func.evaluate())
 
 
-AdrioClassT = TypeVar("AdrioClassT", bound=type[ADRIOLegacy])
+_ADRIOLegacyClassT = TypeVar("_ADRIOLegacyClassT", bound=ADRIOLegacy)
 
 
-def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
-    """Adrio class decorator to add result-caching behavior."""
+def adrio_legacy_cache(cls: type[_ADRIOLegacyClassT]) -> type[_ADRIOLegacyClassT]:
+    """ADRIOLegacy class decorator to add result-caching behavior."""
 
     orig_with_context = cls.with_context_internal
-    cached_instance: AdrioClassT | None = None
-    cached_hash: int | None = None
+    orig_evaluate = cls.evaluate
+    ctx_cache_key = "__with_context_cache__"
+    eval_cache_key = "__evaluate_cache__"
 
     @functools.wraps(orig_with_context)
-    def with_context_internal(
-        self,
-        name: AbsoluteName = NAME_PLACEHOLDER,
-        data: DataResolver | None = None,
-        scope: GeoScope | None = None,
-        time_frame: TimeFrame | None = None,
-        ipm: BaseCompartmentModel | None = None,
-        rng: np.random.Generator | None = None,
-    ):
-        if data is None:
-            req_hashes = ()
-        else:
-            req_hashes = (
-                data.resolve(name.with_id(r.name), r).tobytes()
-                for r in self.requirements
-            )
-        ipm_hash = None
-        if ipm is not None:
-            C = ipm.num_compartments
-            E = ipm.num_events
-            ipm_hash = (ipm.__class__.__name__, C, E)
-        curr_hash = hash(tuple([str(name), scope, time_frame, ipm_hash, *req_hashes]))
-        nonlocal cached_instance, cached_hash
+    def with_context_internal(self, context: Context):
+        curr_hash = context.hash(self.requirements)
+        cached_hash, cached_instance = getattr(self, ctx_cache_key, (None, None))
         if cached_instance is None or cached_hash != curr_hash:
-            cached_instance = orig_with_context(
-                self, name, data, scope, time_frame, ipm, rng
-            )
+            cached_instance = orig_with_context(self, context)
             cached_hash = curr_hash
+            setattr(self, ctx_cache_key, (cached_hash, cached_instance))
+            setattr(self, eval_cache_key, None)
         return cached_instance
 
+    @functools.wraps(orig_evaluate)
+    def evaluate(self):
+        cached_value = getattr(self, eval_cache_key, None)
+        if cached_value is None:
+            cached_value = orig_evaluate(self)
+            setattr(self, eval_cache_key, cached_value)
+        return cached_value
+
     cls.with_context_internal = with_context_internal
+    cls.evaluate = evaluate
+    return cls
+
+
+_ADRIOClassT = TypeVar("_ADRIOClassT", bound="ADRIO")
+
+
+def adrio_cache(cls: type[_ADRIOClassT]) -> type[_ADRIOClassT]:
+    """ADRIO class decorator to add result-caching behavior."""
+
+    orig_with_context = cls.with_context_internal
+    orig_evaluate = cls.evaluate
+    ctx_cache_key = "__with_context_cache__"
+    eval_cache_key = "__evaluate_cache__"
+
+    @functools.wraps(orig_with_context)
+    def with_context_internal(self, context: Context):
+        curr_hash = context.hash(self.requirements)
+        cached_hash, cached_instance = getattr(self, ctx_cache_key, (None, None))
+        if cached_instance is None or cached_hash != curr_hash:
+            cached_instance = orig_with_context(self, context)
+            cached_hash = curr_hash
+            setattr(self, ctx_cache_key, (cached_hash, cached_instance))
+            setattr(self, eval_cache_key, None)
+        return cached_instance
+
+    @functools.wraps(orig_evaluate)
+    def evaluate(self):
+        cached_value = getattr(self, eval_cache_key, None)
+        if cached_value is None:
+            cached_value = orig_evaluate(self)
+            setattr(self, eval_cache_key, cached_value)
+        return cached_value
+
+    cls.with_context_internal = with_context_internal
+    cls.evaluate = evaluate
     return cls
 
 
@@ -493,7 +518,8 @@ def _(
     rng: np.random.Generator | None,
 ) -> AttributeArray:
     # depth-first evaluation guarantees `data` has our dependencies.
-    sim_func = value.with_context_internal(name, data, scope, time_frame, ipm, rng)
+    ctx = Context.of(name, data, scope, time_frame, ipm, rng)
+    sim_func = value.with_context_internal(ctx)
     return sim_func.evaluate()
 
 
