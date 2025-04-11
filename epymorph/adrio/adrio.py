@@ -186,7 +186,7 @@ def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
 ######################
 
 
-def _adrio_name(adrio: "ADRIOPrototype", context: Context) -> str:
+def _adrio_name(adrio: "ADRIO", context: Context) -> str:
     if context.name == NAME_PLACEHOLDER:
         return adrio.class_name
     else:
@@ -196,10 +196,10 @@ def _adrio_name(adrio: "ADRIOPrototype", context: Context) -> str:
 class ADRIOError(Exception):
     """Exception while loading or processing data with an ADRIO."""
 
-    adrio: "ADRIOPrototype"
+    adrio: "ADRIO"
     context: Context
 
-    def __init__(self, adrio: "ADRIOPrototype", context: Context, message: str):
+    def __init__(self, adrio: "ADRIO", context: Context, message: str):
         self.adrio = adrio
         self.context = context
         # If message contains "{adrio_name}", fill it in.
@@ -212,7 +212,7 @@ class ADRIOContextError(ADRIOError):
 
     def __init__(
         self,
-        adrio: "ADRIOPrototype",
+        adrio: "ADRIO",
         context: Context,
         message: str | None = None,
     ):
@@ -227,7 +227,7 @@ class ADRIOCommunicationError(ADRIOError):
 
     def __init__(
         self,
-        adrio: "ADRIOPrototype",
+        adrio: "ADRIO",
         context: Context,
         message: str | None = None,
     ):
@@ -242,7 +242,7 @@ class ADRIOProcessingError(ADRIOError):
 
     def __init__(
         self,
-        adrio: "ADRIOPrototype",
+        adrio: "ADRIO",
         context: Context,
         message: str | None = None,
     ):
@@ -258,7 +258,7 @@ ValueT = TypeVar("ValueT", bound=np.generic)
 
 @dataclass(frozen=True)
 class InspectResult(Generic[ResultT, ValueT]):
-    adrio: "ADRIOPrototype"
+    adrio: "ADRIO"
     source: pd.DataFrame | NDArray
     result: NDArray[ResultT]
     dtype: type[ValueT]
@@ -370,7 +370,7 @@ class ResultFormat(Generic[ValueT]):
     is_date_value: bool = field(default=False)
 
 
-class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
+class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
     # TODO: child classes must call validate context!
 
     @property
@@ -484,7 +484,7 @@ class ADRIOPrototype(SimulationFunction[NDArray[ResultT]], Generic[ResultT, Valu
 
 @evaluate_param.register
 def _(
-    value: ADRIOPrototype,
+    value: ADRIO,
     name: AbsoluteName,
     data: DataResolver,
     scope: GeoScope | None,
@@ -497,7 +497,7 @@ def _(
     return sim_func.evaluate()
 
 
-class FetchADRIO(ADRIOPrototype[ResultT, ValueT]):
+class FetchADRIO(ADRIO[ResultT, ValueT]):
     """
     ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
     to load data from external sources for epymorph simulations. This may be from
