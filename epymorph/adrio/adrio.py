@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from sparklines import sparklines
-from typing_extensions import override
+from typing_extensions import deprecated, override
 
 from epymorph.adrio.processing import ProcessResult
 from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
@@ -52,7 +52,8 @@ ProgressCallback = Callable[[float, DownloadActivity | None], None]
 _events = EventBus()
 
 
-class ADRIO(SimulationFunction[NDArray[ResultDType]]):
+@deprecated("Prefer ADRIO.")
+class ADRIOLegacy(SimulationFunction[NDArray[ResultDType]]):
     """
     ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
     to load data from external sources for epymorph simulations. This may be from
@@ -122,7 +123,7 @@ class ADRIO(SimulationFunction[NDArray[ResultDType]]):
 
 @evaluate_param.register
 def _(
-    value: ADRIO,
+    value: ADRIOLegacy,
     name: AbsoluteName,
     data: DataResolver,
     scope: GeoScope | None,
@@ -135,7 +136,7 @@ def _(
     return np.asarray(sim_func.evaluate())
 
 
-AdrioClassT = TypeVar("AdrioClassT", bound=type[ADRIO])
+AdrioClassT = TypeVar("AdrioClassT", bound=type[ADRIOLegacy])
 
 
 def adrio_cache(cls: AdrioClassT) -> AdrioClassT:
@@ -624,7 +625,7 @@ def validate_time_frame(
 ##################
 
 
-class NodeID(ADRIO[np.str_]):
+class NodeID(ADRIOLegacy[np.str_]):
     """An ADRIO that provides the node IDs as they exist in the geo scope."""
 
     @override
@@ -632,13 +633,13 @@ class NodeID(ADRIO[np.str_]):
         return self.scope.node_ids
 
 
-class Scale(ADRIO[np.float64]):
+class Scale(ADRIOLegacy[np.float64]):
     """Scales the result of another ADRIO by multiplying values by the given factor."""
 
-    _parent: ADRIO[np.float64]
+    _parent: ADRIOLegacy[np.float64]
     _factor: float
 
-    def __init__(self, parent: ADRIO[np.float64], factor: float):
+    def __init__(self, parent: ADRIOLegacy[np.float64], factor: float):
         """
         Initializes scaling with the ADRIO to be scaled and with the factor to multiply
         those resulting ADRIO values by.
@@ -658,7 +659,7 @@ class Scale(ADRIO[np.float64]):
         return self.defer(self._parent).astype(dtype=np.float64) * self._factor
 
 
-class PopulationPerKM2(ADRIO[np.float64]):
+class PopulationPerKM2(ADRIOLegacy[np.float64]):
     """
     Calculates population density by combining the values from attributes named
     `population` and `land_area_km2`. You must provide those attributes
