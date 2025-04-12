@@ -278,12 +278,54 @@ class ADRIOProcessingError(ADRIOError):
 
 
 ResultT = TypeVar("ResultT", bound=np.generic)
+"""The dtype of an ADRIO result."""
 ValueT = TypeVar("ValueT", bound=np.generic)
+"""The dtype of an ADRIO result's values, which may differ from the result type."""
 
 
 @dataclass(frozen=True)
 class InspectResult(Generic[ResultT, ValueT]):
-    adrio: "ADRIO"
+    """
+    Inspection is the process by which an ADRIO fetches data and analyzes its quality.
+    The result encapsulates the source data, the processed result data, and any
+    outstanding data issues. ADRIOs will provide methods for correcting these issues
+    as is appropriate for the task, but often these will be optional. A result which
+    contains unresolved data issues will be represented as a masked numpy array. Values
+    which are not impacted by any of the data issues will be unmasked. Individual issues
+    are tracked along with masks specific to the issue.
+
+    For example: if data is not available for every geo node requested, some values will
+    be represented as missing. Missing values will be masked in the result, and an issue
+    will be included (likely called "missing") with a boolean mask indicating the
+    missing values. The ADRIO will likely provide a fill method option which allows
+    users the option of filling missing values, for instance by filling them with zeros.
+    Providing a fill method and inspecting the ADRIO a second time should resolve the
+    "missing" issue and, assuming no other issues remain, produce a non-masked numpy
+    array as a result.
+
+    InspectResult is a dataclass, and is generic on the result and value type
+    (`ResultT` and `ValueT`) of the ADRIO.
+
+    Parameters
+    ----------
+    adrio : ADRIO[ResultT, ValueT]
+        A reference to the ADRIO which produced this result.
+    source : pd.DataFrame | NDArray
+        The data as fetched from the source. This can be useful for debugging data
+        issues.
+    result : NDArray[ResultT]
+        The final result produced by the ADRIO.
+    dtype : type[ValueT]
+        The dtype of the data values.
+    shape : DataShape
+        The shape of the result.
+    issues : Mapping[str, NDArray[np.bool_]]
+        The set of issues in the data along with a mask which indicates which values
+        are impacted by the issue. The keys of this mapping are specific to the ADRIO,
+        as ADRIOs tend to deal with unique data challenges.
+    """
+
+    adrio: "ADRIO[ResultT, ValueT]"
     source: pd.DataFrame | NDArray
     result: NDArray[ResultT]
     dtype: type[ValueT]
@@ -461,11 +503,30 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
 
     @abstractmethod
     def inspect(self) -> InspectResult[ResultT, ValueT]:
-        pass
+        """
+        Produce an inspection of the ADRIO's data for the current context.
+
+        This method is abstract. When implementing an ADRIO, override this method
+        to provide data fetching and processing logic. Use self methods and properties
+        to access the simulation context or defer processing to another function.
+
+        Returns
+        -------
+        InspectResult[ResultT, ValueT]
+            The data inspection results for the ADRIO's current context.
+        """
 
     def estimate_data(self) -> DataEstimate:
-        """Estimate the data usage for this ADRIO in a RUME.
-        If a reasonable estimate cannot be made, return EmptyDataEstimate."""
+        """
+        Estimate the data usage for this ADRIO in a RUME.
+
+        If a reasonable estimate cannot be made, return EmptyDataEstimate.
+
+        Returns
+        -------
+        DataEstimate
+            The estimated data usage for this ADRIO's current context.
+        """
         return EmptyDataEstimate(self.class_name)
 
     @final
@@ -567,7 +628,7 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
             raise ADRIOContextError(self, ctx) from e
 
         self.report_progress(0.0)
-        t0 = perf_counter()
+        start_time = perf_counter()
 
         try:
             source_df = self._fetch(ctx)
@@ -600,8 +661,8 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
         except Exception as e:
             raise ADRIOProcessingError(self, ctx) from e
 
-        t1 = perf_counter()
-        self.report_complete(t1 - t0)
+        finish_time = perf_counter()
+        self.report_complete(finish_time - start_time)
 
         result_format = self.result_format
         return InspectResult[ResultT, ValueT](
@@ -631,7 +692,7 @@ def range_mask_fn(
 
 
 def validate_time_frame(
-    adrio: FetchADRIO,
+    adrio: ADRIO,
     context: Context,
     time_range: DateRange,
 ) -> None:
