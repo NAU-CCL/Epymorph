@@ -1022,6 +1022,14 @@ def evaluate_requirements(
                     ipm,
                     rng,
                 )
+
+                if not isinstance(value, np.ndarray):
+                    err = (
+                        f"Attribute '{node.name}' ({node.resolution}) did "
+                        f"not evaluate to a numpy array."
+                    )
+                    raise DataAttributeError(err)
+
                 if res_tree.is_tree_cacheable:
                     evaluated[res_tree] = value
 

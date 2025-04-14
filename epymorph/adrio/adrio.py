@@ -133,7 +133,7 @@ def _(
     # depth-first evaluation guarantees `data` has our dependencies.
     ctx = Context.of(name, data, scope, time_frame, ipm, rng)
     sim_func = value.with_context_internal(ctx)
-    return np.asarray(sim_func.evaluate())
+    return sim_func.evaluate()
 
 
 _ADRIOLegacyClassT = TypeVar("_ADRIOLegacyClassT", bound=ADRIOLegacy)

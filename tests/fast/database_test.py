@@ -747,7 +747,7 @@ class ParamEvalTest(unittest.TestCase):
 
             @count_calls
             def evaluate(self):
-                return np.asarray(3.0) * self.rng.random()
+                return np.asarray(3.0 * self.rng.random())
 
         reqs = ReqTree.of(
             requirements={
@@ -794,7 +794,7 @@ class ParamEvalTest(unittest.TestCase):
 
             @count_calls
             def evaluate(self):
-                return np.asarray(3.0) * self.rng.random()
+                return np.asarray(3.0 * self.rng.random())
 
         reqs = ReqTree.of(
             requirements={
@@ -858,7 +858,7 @@ class ParamEvalTest(unittest.TestCase):
             def evaluate(self):
                 alpha = self.data("alpha")
                 assert_equal((), alpha.shape)
-                return 3.0 * alpha
+                return np.asarray(3.0 * alpha)
 
         req_a = AN("gpm:a::ipm::beta"), AD("beta", float, Shapes.TxN)
         req_b = AN("gpm:b::ipm::beta"), AD("beta", float, Shapes.TxN)
