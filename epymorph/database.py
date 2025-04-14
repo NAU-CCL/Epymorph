@@ -359,6 +359,15 @@ class DataResolver:
             True if `name` is in this resolver"""
         return name in self._raw_values
 
+    @property
+    def raw_values(self) -> Mapping[AbsoluteName, AttributeArray]:
+        """
+        The mapping of raw values in the resolver, by absolute name.
+
+        **WARNING**: It is not safe to modify this mapping!
+        """
+        return self._raw_values
+
     def get_raw(self, name: str | NamePattern | AbsoluteName) -> AttributeArray:
         """
         Retrieve a raw value that matches the given name.
