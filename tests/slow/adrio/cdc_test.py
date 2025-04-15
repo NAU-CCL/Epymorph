@@ -7,13 +7,13 @@ from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.time import TimeFrame
 
 # NOTE: these tests use VCR to record HTTP requests.
-# To re-record this test load a census API key into the environment, then:
-# uv run pytest tests/slow/adrio/cdc_test.py --record-mode=rewrite
+# To re-record this test, load a census API key into the environment, then:
+# uv run pytest tests/slow/adrio/cdc_test.py --vcr-mode=record
 
 
 @pytest.fixture(scope="module")
-def vcr_config(global_vcr_config):
-    return {**global_vcr_config, "filter_headers": ["x-app-token"]}
+def vcr_config():
+    return {"filter_headers": ["x-app-token"]}
 
 
 ############################
