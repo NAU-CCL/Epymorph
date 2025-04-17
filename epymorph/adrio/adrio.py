@@ -25,7 +25,7 @@ from numpy.typing import NDArray
 from sparklines import sparklines
 from typing_extensions import deprecated, override
 
-from epymorph.adrio.processing import ProcessResult
+from epymorph.adrio.processing import PipelineResult
 from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import DataShape, Shapes
@@ -438,24 +438,86 @@ class ResultFormat(Generic[ValueT]):
 
 
 class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
-    # TODO: child classes must call validate context!
+    """
+    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
+    to load data from external sources for epymorph simulations. This may be from
+    web APIs, local files or database, or anything imaginable.
+
+    ADRIO is an abstract base class. It it generic in the form of the result (`ResultT`)
+    and the type of the values in the result (`ValueT`). Both represent numpy dtypes.
+    When the ADRIO's result is simple, like a numpy array of 64-bit integers, both
+    `ResultT` and `ValueT` will be the same -- `np.int64`. If the result is a structured
+    type, however, like with numpy arrays containing date/value tuples, `ResultT` will
+    reflect the "outer" structured type and `ValueT` will reflect type of the "inner"
+    data values. As a common example, a data/value array with 64-bit integer values
+    will have `ResultT` equal to `[("date", np.datetime64), ("value", np.int64)]`
+    and `ValueT` equal to `np.int64`. (This complexity is necessary to work around
+    weaknesses in Python's type system.)
+    """
 
     @property
     @abstractmethod
     def result_format(self) -> ResultFormat[ValueT]:
-        pass
+        """
+        Information about the format of the ADRIO's resulting data.
+
+        This is an abstract method.
+        """
 
     @abstractmethod
     def validate_context(self, context: Context) -> None:
-        pass
+        """
+        Validates the context before ADRIO evaluation.
 
-    def _validate_result(
+        This is an abstract method.
+
+        NOTE: Implementations (that also implement `inspect`) must call this method
+        at the start of `inspect`.
+
+        Parameters
+        ----------
+        context : Context
+            The context to validate.
+
+        Raises
+        ------
+        ADRIOContextError
+            If this ADRIO cannot be evaluated in the given context.
+        """
+
+    def validate_result(
         self,
         context: Context,
         result: NDArray[ResultT],
         *,
         expected_shape: tuple[int, ...] | None = None,
     ) -> None:
+        """
+        Validates that the result produced by an ADRIO adheres to the
+        declared result format.
+
+        NOTE: Implementations (that also implement `inspect`) must call this method
+        at the end of `inspect`.
+
+        Parameters
+        ----------
+        context : Context
+            The context in which the result has been evaluated.
+        result : NDArray[ResultT]
+            The result produced by the ADRIO.
+        expected_shape : tuple[int, ...], optional
+            Provide the expected absolute shape of the result array, if this cannot
+            be calculated automatically. This is only needed for result DataShapes
+            which have "arbitrary" axis lengths -- that is lengths that can't be
+            determined from the properties of the context itself. In this case, the
+            implementation should override this method, calculate the expected shape,
+            and pass it to a call to `super()._validate_result(...)`.
+
+        Raises
+        ------
+        ADRIOProcessingError
+            If the result is invalid, indicating the processing logic has a bug.
+        """
         if not isinstance(result, np.ndarray):
             err = "result was not a numpy array"
             raise ADRIOProcessingError(self, context, err)
@@ -510,6 +572,9 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
         to provide data fetching and processing logic. Use self methods and properties
         to access the simulation context or defer processing to another function.
 
+        NOTE: if you are implementing this method, make sure to call `validate_context`
+        first and `_validate_result` last.
+
         Returns
         -------
         InspectResult[ResultT, ValueT]
@@ -520,17 +585,16 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
         """
         Estimate the data usage for this ADRIO in a RUME.
 
-        If a reasonable estimate cannot be made, return EmptyDataEstimate.
-
         Returns
         -------
         DataEstimate
             The estimated data usage for this ADRIO's current context.
+            If a reasonable estimate cannot be made, return EmptyDataEstimate.
         """
         return EmptyDataEstimate(self.class_name)
 
     @final
-    def report_progress(
+    def _report_progress(
         self,
         ratio: float,
         *,
@@ -549,7 +613,7 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
         )
 
     @final
-    def report_complete(
+    def _report_complete(
         self,
         duration: float,
         *,
@@ -585,12 +649,6 @@ def _(
 
 
 class FetchADRIO(ADRIO[ResultT, ValueT]):
-    """
-    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
-    to load data from external sources for epymorph simulations. This may be from
-    web APIs, local files or database, or anything imaginable.
-    """
-
     @abstractmethod
     def _fetch(self, context: Context) -> pd.DataFrame:
         pass
@@ -598,11 +656,11 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
     @abstractmethod
     def _process(
         self, context: Context, data_df: pd.DataFrame
-    ) -> ProcessResult[ResultT]:
+    ) -> PipelineResult[ResultT]:
         pass
 
     def _format(
-        self, context: Context, data: ProcessResult[ResultT]
+        self, context: Context, data: PipelineResult[ResultT]
     ) -> NDArray[ResultT]:
         if len(data.issues) > 0:
             mask = reduce(
@@ -627,7 +685,7 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
         except Exception as e:
             raise ADRIOContextError(self, ctx) from e
 
-        self.report_progress(0.0)
+        self._report_progress(0.0)
         start_time = perf_counter()
 
         try:
@@ -653,7 +711,7 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
         try:
             proc_res = self._process(ctx, source_df)
             result_np = self._format(ctx, proc_res)
-            self._validate_result(ctx, result_np)
+            self.validate_result(ctx, result_np)
         except ADRIOError:
             raise
         except MissingContextError as e:
@@ -662,7 +720,7 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
             raise ADRIOProcessingError(self, ctx) from e
 
         finish_time = perf_counter()
-        self.report_complete(finish_time - start_time)
+        self._report_complete(finish_time - start_time)
 
         result_format = self.result_format
         return InspectResult[ResultT, ValueT](

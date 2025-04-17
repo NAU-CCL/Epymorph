@@ -19,7 +19,7 @@ from epymorph.adrio.adrio import (
     ADRIOProcessingError,
     FetchADRIO,
     InspectResult,
-    ProcessResult,
+    PipelineResult,
     ResultFormat,
     ValueT,
     adrio_cache,
@@ -368,7 +368,7 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
                 scope=self.census_scope,
                 variables=self._variables,
                 value_dtype=self.result_format.value_dtype,
-                report_progress=self.report_progress,
+                report_progress=self._report_progress,
             )
         except Exception as e:
             raise ADRIOCommunicationError(self, context) from e
@@ -378,7 +378,7 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
         self,
         context: Context,
         data_df: pd.DataFrame,
-    ) -> ProcessResult[ValueT]:
+    ) -> PipelineResult[ValueT]:
         vrbs = self._variables
 
         # If we're loading a group variable, expand it.
@@ -386,6 +386,7 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
             group_name = m.group(1)
             vrbs = ACS5Client.get_group_var_names(self.census_scope.year, group_name)
 
+        value_dtype = self.result_format.value_dtype
         pipeline = (
             DataPipeline(
                 axes=(
@@ -398,7 +399,7 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
             )
             .strip_sentinel(
                 "insufficient_data",
-                np.float64(-666666666),
+                value_dtype(-666666666),
                 self._fix_insufficient_data,
             )
             .finalize(self._fix_missing)
@@ -486,7 +487,7 @@ class PopulationByAgeTable(_FetchACS5[np.int64]):
         return ["group(B01001)"]
 
     @override
-    def _validate_result(
+    def validate_result(
         self,
         context: Context,
         result: NDArray[np.int64],
@@ -495,7 +496,7 @@ class PopulationByAgeTable(_FetchACS5[np.int64]):
     ) -> None:
         vrbs = ACS5Client.get_group_var_names(self.census_scope.year, "B01001")
         shp = (context.scope.nodes, len(vrbs))
-        super()._validate_result(context, result, expected_shape=shp)
+        super().validate_result(context, result, expected_shape=shp)
 
 
 _exact_pattern = re.compile(r"^(\d+) years$")

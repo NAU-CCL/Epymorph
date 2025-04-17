@@ -509,10 +509,15 @@ def to_date_value_array(
     --------
     >>> import numpy as np
     >>> dates = np.array(['2021-01-01', '2021-01-02'], dtype='datetime64[D]')
-    >>> values = np.array([10, 20])
+    >>> values = np.array([[10, 20], [30, 40]])
     >>> to_date_value_array(dates, values)
-    array([('2021-01-01', 10), ('2021-01-02', 20)],
-          dtype=[('date', 'datetime64[D]'), ('value', '<i8')])
+    array(
+        [
+            [('2021-01-01', 10), ('2021-01-01', 20)],
+            [('2021-01-02', 30), ('2021-01-02', 40)],
+        ],
+        dtype=[('date', 'datetime64[D]'), ('value', '<i8')],
+    )
     """
     if dates.ndim != 1:
         raise ValueError("`dates` must be a 1D array.")

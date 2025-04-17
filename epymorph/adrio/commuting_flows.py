@@ -9,7 +9,7 @@ from epymorph.adrio.adrio import (
     ADRIOCommunicationError,
     ADRIOContextError,
     FetchADRIO,
-    ProcessResult,
+    PipelineResult,
     ResultFormat,
     range_mask_fn,
 )
@@ -276,7 +276,7 @@ class Commuters(FetchADRIO[np.int64, np.int64]):
         return data_df
 
     @override
-    def _process(self, context: Context, data_df: pd.DataFrame) -> ProcessResult:
+    def _process(self, context: Context, data_df: pd.DataFrame) -> PipelineResult:
         pipeline = DataPipeline(
             axes=(
                 PivotAxis("geoid_src", context.scope.node_ids),
