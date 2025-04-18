@@ -1269,6 +1269,7 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
             fixed_result = self._fix_not_computable(
                 rng=self.context,
                 replace=sentinel,
+                columns=("value",),
                 data_df=pd.DataFrame({"value": sentinel_result}),
             )["value"].to_numpy()
             unfixed = fixed_result == sentinel

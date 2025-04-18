@@ -6,7 +6,6 @@ ADRIO implementations.
 import functools
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from functools import reduce
 from time import perf_counter
 from typing import (
     Callable,
@@ -659,18 +658,6 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
     ) -> PipelineResult[ResultT]:
         pass
 
-    def _format(
-        self, context: Context, data: PipelineResult[ResultT]
-    ) -> NDArray[ResultT]:
-        if len(data.issues) > 0:
-            mask = reduce(
-                np.logical_or,
-                [m for _, m in data.issues.items()],
-                np.ma.nomask,
-            )
-            return np.ma.masked_array(data.value, mask)
-        return data.value
-
     def evaluate(self) -> NDArray[ResultT]:
         return self.inspect().result
 
@@ -710,7 +697,7 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
 
         try:
             proc_res = self._process(ctx, source_df)
-            result_np = self._format(ctx, proc_res)
+            result_np = proc_res.value_as_masked
             self.validate_result(ctx, result_np)
         except ADRIOError:
             raise

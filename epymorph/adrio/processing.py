@@ -50,6 +50,7 @@ class Fix(ABC, Generic[DataT]):
         self,
         rng: HasRandomness,
         replace: DataT,
+        columns: tuple[str, ...],
         data_df: pd.DataFrame,
     ) -> pd.DataFrame:
         """
@@ -61,6 +62,8 @@ class Fix(ABC, Generic[DataT]):
             A source of randomness.
         replace : DataT
             The value to replace.
+        columns : tuple[str, ...]
+            The names of the columns to fix.
         data_df : DataFrame
             The data to fix.
 
@@ -149,10 +152,10 @@ class ConstantFix(Fix[DataT]):
     """The value to use to replace bad values."""
 
     @override
-    def __call__(self, rng, replace, data_df):
-        to_replace = {replace: self.with_value}
-        values = data_df["value"].replace(to_replace)
-        return data_df.assign(value=values)
+    def __call__(self, rng, replace, columns, data_df):
+        return data_df.assign(
+            **{col: data_df[col].replace(replace, self.with_value) for col in columns}
+        )
 
 
 @dataclass(frozen=True)
@@ -167,13 +170,14 @@ class FunctionFix(Fix[DataT]):
     """The function that generates replacement values."""
 
     @override
-    def __call__(self, rng, replace, data_df):
-        return FunctionFix.apply(data_df, replace, self.with_function)
+    def __call__(self, rng, replace, columns, data_df):
+        return FunctionFix.apply(data_df, replace, columns, self.with_function)
 
     @staticmethod
     def apply(
         data_df: pd.DataFrame,
         replace: DataT,
+        columns: tuple[str, ...],
         with_function: Callable[[], DataT],
     ) -> pd.DataFrame:
         """
@@ -195,12 +199,16 @@ class FunctionFix(Fix[DataT]):
         DataFrame
             A copy of the data with bad values fixed.
         """
-        is_replace = data_df["value"] == replace
-        num_replace = is_replace.sum()
-        replacements = np.array([with_function() for _ in range(num_replace)])
-        values = data_df["value"].copy()
-        values[is_replace] = replacements
-        return data_df.assign(value=values)
+
+        def replace_col(col: str) -> pd.Series:
+            is_replace = data_df[col] == replace
+            num_replace = is_replace.sum()
+            replacements = np.array([with_function() for _ in range(num_replace)])
+            updated = data_df[col].copy()
+            updated[is_replace] = replacements
+            return updated
+
+        return data_df.assign(**{col: replace_col(col) for col in columns})
 
 
 @dataclass(frozen=True)
@@ -218,9 +226,9 @@ class RandomFix(Fix[DataT]):
     """
 
     @override
-    def __call__(self, rng, replace, data_df):
+    def __call__(self, rng, replace, columns, data_df):
         random_fn = partial(self.with_random, rng.rng)
-        return FunctionFix.apply(data_df, replace, random_fn)
+        return FunctionFix.apply(data_df, replace, columns, random_fn)
 
     @staticmethod
     def from_range(low: int, high: int) -> "RandomFix[np.int64]":
@@ -277,7 +285,7 @@ class DontFix(Fix[Any]):
     """
 
     @override
-    def __call__(self, rng, replace, data_df):
+    def __call__(self, rng, replace, columns, data_df):
         return data_df
 
 
@@ -554,6 +562,17 @@ def _add_issue(
     return issues
 
 
+def _all_issues_mask(issues: Mapping[str, NDArray[np.bool_]]):
+    """
+    Utility function for computing the logical union of the masks of a set of issues.
+    """
+    return reduce(
+        np.logical_or,
+        [m for _, m in issues.items()],
+        np.ma.nomask,
+    )
+
+
 @dataclass(frozen=True)
 class PipelineResult(Generic[DataT]):
     """
@@ -564,11 +583,32 @@ class PipelineResult(Generic[DataT]):
     """
 
     value: NDArray[DataT]
-    """The resulting numpy array. Will be a masked array if `issues` is not empty."""
+    """
+    The resulting numpy array. In this form, the array will never masked, even if there
+    are issues. If you want a masked array, see the `value_as_masked` property.
+    """
     issues: Mapping[str, NDArray[np.bool_]]
     """
     The set of outstanding issues in the underlying data, with issue-specific masks.
     """
+
+    def __post_init__(self):
+        if np.ma.is_masked(self.value):
+            err = "PipelineResult `value` should not be masked directly."
+            raise ValueError(err)
+
+    @property
+    def value_as_masked(self) -> NDArray[DataT]:
+        """
+        The resulting numpy array which will be masked if-and-only-if there are issues.
+        The mask is computed as the logical union of the individual issue masks.
+        """
+        if len(self.issues) == 0:
+            return self.value
+        mask = _all_issues_mask(self.issues)
+        if not np.any(mask):
+            return self.value
+        return np.ma.masked_array(data=self.value, mask=mask)
 
     def with_issue(
         self,
@@ -672,11 +712,7 @@ class PipelineResult(Generic[DataT]):
             **{f"{left_prefix}{iss}": m for iss, m in left.issues.items()},
             **{f"{right_prefix}{iss}": m for iss, m in right.issues.items()},
         }
-        unmasked = ~reduce(
-            np.logical_or,
-            [m for _, m in new_issues.items()],
-            np.ma.nomask,
-        )
+        unmasked = ~_all_issues_mask(new_issues)
         new_value = np.zeros_like(left.value)
         new_value[unmasked] = left.value[unmasked] + right.value[unmasked]
         return PipelineResult(value=new_value, issues=new_issues)
@@ -700,7 +736,7 @@ class PivotAxis(NamedTuple):
     """
 
 
-class PipelineState(NamedTuple):
+class _PipelineState(NamedTuple):
     """
     The state of a data pipeline.
 
@@ -712,7 +748,7 @@ class PipelineState(NamedTuple):
     issues: Mapping[str, NDArray[np.bool_]] = {}
     """A map of outstanding issues that have been discovered in the data."""
 
-    def next(self, updated_df: pd.DataFrame) -> "PipelineState":
+    def next(self, updated_df: pd.DataFrame) -> "_PipelineState":
         """
         Advances the state by updating the working data. Pipeline steps should avoid
         mutating the previous state's data and instead work on a new copy.
@@ -727,14 +763,14 @@ class PipelineState(NamedTuple):
         PipelineState
             The updated state (copy).
         """
-        return PipelineState(updated_df, self.issues)
+        return _PipelineState(updated_df, self.issues)
 
     def next_with_issue(
         self,
         updated_df: pd.DataFrame,
         issue_name: str,
         issue_mask: NDArray[np.bool_] | None,
-    ) -> "PipelineState":
+    ) -> "_PipelineState":
         """
         Advances the state by updating the working data and adding a data issue.
         Pipeline steps should avoid mutating the previous state's data and instead
@@ -756,13 +792,13 @@ class PipelineState(NamedTuple):
         PipelineState
             The updated state (copy).
         """
-        return PipelineState(
+        return _PipelineState(
             data_df=updated_df,
             issues=_add_issue(self.issues, issue_name, issue_mask),
         )
 
 
-_PipelineStep = Callable[[PipelineState], PipelineState]
+_PipelineStep = Callable[[_PipelineState], _PipelineState]
 """
 A step in a data pipeline is just a function from one state to another.
 """
@@ -822,9 +858,9 @@ class DataPipeline(Generic[DataT]):
         """Returns a copy of this pipeline with a pipeline step appended."""
         return dataclasses.replace(self, pipeline_steps=[*self.pipeline_steps, f])
 
-    def _process(self, data_df: pd.DataFrame) -> PipelineState:
+    def _process(self, data_df: pd.DataFrame) -> _PipelineState:
         """Apply all of the pipeline steps to an input."""
-        state = PipelineState(data_df)
+        state = _PipelineState(data_df)
         for f in self.pipeline_steps:
             state = f(state)
         return state
@@ -854,7 +890,7 @@ class DataPipeline(Generic[DataT]):
         if map_fn is None:
             return self
 
-        def map_series(state: PipelineState) -> PipelineState:
+        def map_series(state: _PipelineState) -> _PipelineState:
             series = map_fn(state.data_df[column])
             data_df = state.data_df.assign(**{column: series})
             return state.next(data_df)
@@ -918,9 +954,9 @@ class DataPipeline(Generic[DataT]):
             A copy of this pipeline with the step added.
         """
 
-        def strip_sentinel(state: PipelineState) -> PipelineState:
+        def strip_sentinel(state: _PipelineState) -> _PipelineState:
             # Apply fix.
-            work_df = fix(self.rng, sentinel_value, state.data_df)
+            work_df = fix(self.rng, sentinel_value, ("value",), state.data_df)
 
             # Compute the mask for any remaining sentinels.
             is_sentinel = work_df["value"] == sentinel_value
@@ -998,7 +1034,7 @@ class DataPipeline(Generic[DataT]):
             If the data naturally contains the chosen sentinel value.
         """
 
-        def replace_na(state: PipelineState) -> PipelineState:
+        def replace_na(state: _PipelineState) -> _PipelineState:
             series = state.data_df[column]
             if (series == sentinel_value).any():
                 # the below S608 Ruff warning is a false positive;
