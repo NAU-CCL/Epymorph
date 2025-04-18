@@ -65,6 +65,12 @@ class CensusScope(ABC, GeoScope):
     _node_ids: NDArray[np.str_] = field(init=False, compare=False, hash=False)
 
     def __post_init__(self):
+        # NOTE: functionality depends on `includes` being sorted and unique.
+        # Messing this up would be quite bad and hard to debug so I think it's
+        # worth the overhead to verify it.
+        xs = self.includes
+        if not all(xs[i] < xs[i + 1] for i in range(len(xs) - 1)):
+            raise ValueError("CensusScope.includes is not a sorted and unique list.")
         node_ids = self._compute_node_ids()
         object.__setattr__(self, "_node_ids", node_ids)
 
@@ -105,6 +111,21 @@ class CensusScope(ABC, GeoScope):
         Return a scope with granularity one level lower than this.
         Raises GeographyError if the granularity cannot be lowered.
         """
+
+    def as_granularity(self, granularity: CensusGranularityName) -> "CensusScope":
+        """
+        Return a scope of the named granularity by either raising
+        or lowering the original scope to match. If `granularity`
+        already matches this scope, it is returned unchanged.
+        """
+        target = CensusGranularity.of(granularity)
+        scope = self
+        while scope.granularity != granularity:
+            if target < CensusGranularity.of(scope.granularity):
+                scope = scope.raise_granularity()
+            else:
+                scope = scope.lower_granularity()
+        return scope
 
     @staticmethod
     def of(
@@ -263,6 +284,15 @@ class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
     includes: tuple[str, ...]
     year: int
     granularity: Literal["county"] = field(init=False, default="county")
+
+    @classmethod
+    def all(cls, year: int) -> Self:
+        """Create a scope including all US counties and county-equivalents."""
+        return cls(
+            includes_granularity="county",
+            includes=tuple(get_counties(year).geoid),
+            year=year,
+        )
 
     def raise_granularity(self) -> StateScope:
         """Create and return StateScope object with identical properties."""

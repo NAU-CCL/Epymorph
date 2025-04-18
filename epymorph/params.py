@@ -20,7 +20,7 @@ from epymorph.data_type import (
 from epymorph.database import DataResolver, evaluate_param
 from epymorph.error import DataAttributeError
 from epymorph.geography.scope import GeoScope
-from epymorph.simulation import SimulationFunction
+from epymorph.simulation import Context, SimulationFunction
 from epymorph.sympy_shim import lambdify, to_symbol
 from epymorph.time import TimeFrame
 
@@ -46,8 +46,9 @@ def _(
     rng: np.random.Generator | None,
 ) -> AttributeArray:
     # depth-first evaluation guarantees `data` has our dependencies.
-    sim_func = value.with_context_internal(name, data, scope, time_frame, ipm, rng)
-    return np.asarray(sim_func.evaluate())
+    ctx = Context.of(name, data, scope, time_frame, ipm, rng)
+    sim_func = value.with_context_internal(ctx)
+    return sim_func.evaluate()
 
 
 class ParamFunctionNumpy(ParamFunction[ResultDType]):

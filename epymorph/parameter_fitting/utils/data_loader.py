@@ -4,29 +4,11 @@ import numpy as np
 from pandas import read_csv
 
 from epymorph.adrio.adrio import ADRIO
-from epymorph.adrio.cdc import *  # noqa: F403
 from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
 from epymorph.rume import RUME
-
-_CDC_ADRIOS = [
-    CovidCasesPer100k,  # noqa: F405
-    CovidHospitalizationsPer100k,  # noqa: F405
-    CovidHospitalizationAvgFacility,  # noqa: F405
-    CovidHospitalizationSumFacility,  # noqa: F405
-    InfluenzaHosptializationAvgFacility,  # noqa: F405
-    InfluenzaHospitalizationSumFacility,  # noqa: F405
-    CovidHospitalizationAvgState,  # noqa: F405
-    CovidHospitalizationSumState,  # noqa: F405
-    InfluenzaHospitalizationAvgState,  # noqa: F405
-    InfluenzaHospitalizationSumState,  # noqa: F405
-    FullCovidVaccinations,  # noqa: F405
-    OneDoseCovidVaccinations,  # noqa: F405
-    CovidBoosterDoses,  # noqa: F405
-    CovidDeathsCounty,  # noqa: F405
-    CovidDeathsState,  # noqa: F405
-    InfluenzaDeathsState,  # noqa: F405
-]
+from epymorph.simulation import Context
+from epymorph.util import extract_date_value
 
 
 class DataLoader:
@@ -81,31 +63,33 @@ class DataLoader:
         data = self.rume.evaluate_params(rng)
         source = observations.source
 
-        if isinstance(source, ADRIO):
-            if isinstance(source, CSVTimeSeries):
-                csv_df = read_csv(source.file_path)
+        if isinstance(source, CSVTimeSeries):
+            csv_df = read_csv(source.file_path)
 
-                cases = source.with_context_internal(
-                    data=data, scope=self.rume.scope, rng=rng
-                ).evaluate()
+            cases = source.with_context_internal(
+                Context.of(data=data, scope=self.rume.scope, rng=rng)
+            ).evaluate()
 
-                dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
+            dates = csv_df.pivot_table(index=csv_df.columns[0]).index.to_numpy()
 
-                return dates, cases
+            return dates, cases
 
-            if any([isinstance(source, cdc_adrio) for cdc_adrio in _CDC_ADRIOS]):
-                result = np.array(
-                    source.with_context_internal(
-                        data=data,
-                        time_frame=self.rume.time_frame,
-                        scope=self.rume.scope,
-                        rng=rng,
-                    ).evaluate()
+        if isinstance(source, ADRIO) and source.result_format.is_date_value:
+            ctx = Context.of(
+                data=data,
+                time_frame=self.rume.time_frame,
+                scope=self.rume.scope,
+                rng=rng,
+            )
+            result = source.with_context_internal(ctx).evaluate()
+            if np.ma.is_masked(result):
+                err = (
+                    f"Observation data from {source.class_name} contains unresolved "
+                    "issues. Use ADRIO constructor options to address all data issues "
+                    "as appropriate before execution."
                 )
+                raise ValueError(err)
 
-                dates = result["date"][:, 0]
-                cases = result["data"]
-
-                return dates, cases
+            return extract_date_value(result)
 
         raise ValueError("Unsupported data source provided.")

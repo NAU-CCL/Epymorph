@@ -14,6 +14,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
 from matplotlib.ticker import EngFormatter
 from pyproj import CRS
+from shapely.geometry import Point
 
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.error import GeographyError
@@ -113,7 +114,7 @@ class NodeLabelRenderer:
             self.colors(data_gdf, color_scale),
             self.additional_kwargs(data_gdf),
         ):
-            if label is not None:
+            if label is not None and isinstance(point, Point):
                 ax.annotate(label, xy=(point.x, point.y), color=color, **kwargs)
 
 

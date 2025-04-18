@@ -96,6 +96,17 @@ class BasicSimulator(Generic[RUMEType]):
                 )
                 raise SimValidationError(err) from None
 
+            # Reject any parameter that evaluates to a masked numpy array.
+            # This indicates unresolved data issues from an ADRIO.
+            for key, value in data.raw_values.items():
+                if np.ma.is_masked(value):
+                    err = (
+                        f"Parameter value {key} contains unresolved issues. Use ADRIO "
+                        "constructor options to address all data issues as appropriate "
+                        "before execution."
+                    )
+                    raise SimValidationError(err)
+
         with error_gate("initializing the simulation", InitError):
             initial_values = rume.initialize(data, rng)
             world = ListWorld.from_initials(initial_values)
