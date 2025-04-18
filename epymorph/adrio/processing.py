@@ -713,7 +713,7 @@ class PipelineResult(Generic[DataT]):
             **{f"{right_prefix}{iss}": m for iss, m in right.issues.items()},
         }
         unmasked = ~_all_issues_mask(new_issues)
-        new_value = np.zeros_like(left.value)
+        new_value = np.zeros_like(left.value, dtype=left.value.dtype)
         new_value[unmasked] = left.value[unmasked] + right.value[unmasked]
         return PipelineResult(value=new_value, issues=new_issues)
 
