@@ -51,6 +51,11 @@ ProgressCallback = Callable[[float, DownloadActivity | None], None]
 _events = EventBus()
 
 
+#################################################
+# ADRIOLegacy: old-style ADRIOS (to be removed) #
+#################################################
+
+
 @deprecated("Prefer ADRIO.")
 class ADRIOLegacy(SimulationFunction[NDArray[ResultDType]]):
     """
@@ -205,9 +210,9 @@ def adrio_cache(cls: type[_ADRIOClassT]) -> type[_ADRIOClassT]:
     return cls
 
 
-######################
-# ADRIO V2 PROTOTYPE #
-######################
+#########
+# ADRIO #
+#########
 
 
 def _adrio_name(adrio: "ADRIO", context: Context) -> str:
