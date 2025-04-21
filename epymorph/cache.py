@@ -342,7 +342,7 @@ def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
         if not url.startswith(("http:", "https:")):
             raise ValueError("Data source URLs must use the http or https protocol.")
 
-        response = requests.get(url, timeout=60)
+        response = requests.get(url, timeout=(15.05, 120.05))
         response.raise_for_status()
         return BytesIO(response.content)
 
