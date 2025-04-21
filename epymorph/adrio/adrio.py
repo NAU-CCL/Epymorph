@@ -589,6 +589,14 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
             raise ADRIOProcessingError(self, context, err)
 
     def evaluate(self) -> NDArray[ResultT]:
+        """
+        Evaluates the ADRIO in the current context.
+
+        Returns
+        -------
+        ResultT
+            The result value.
+        """
         return self.inspect().result
 
     @abstractmethod
@@ -677,20 +685,63 @@ def _(
 
 
 class FetchADRIO(ADRIO[ResultT, ValueT]):
+    """
+    A specialization of ADRIO that adds structure for ADRIOs that load data from an
+    external source, such as an API. Instead of overriding `inspect`, implement
+    `_fetch` and `_process` instead.
+
+    FetchADRIO is an abstract class.
+    """
+
     @abstractmethod
     def _fetch(self, context: Context) -> pd.DataFrame:
-        pass
+        """
+        Fetch the source data from the external source (or cache).
+
+        _fetch is an abstract method.
+
+        Parameters
+        ----------
+        context : Context
+            The evaluation context.
+
+        Returns
+        -------
+        DataFrame
+            A DataFrame of the source data, as close to its original form as practical.
+        """
 
     @abstractmethod
     def _process(
         self, context: Context, data_df: pd.DataFrame
     ) -> PipelineResult[ResultT]:
-        pass
+        """
+        Process the source data through a data pipeline.
 
-    def evaluate(self) -> NDArray[ResultT]:
-        return self.inspect().result
+        _process is an abstract method.
+
+        Parameters
+        ----------
+        context : Context
+            The evaluation context.
+        data_df : DataFrame
+            The source data (from _fetch).
+
+        Returns
+        -------
+        PipelineResult[ResultT]
+            The result of processing the data.
+        """
 
     def inspect(self) -> InspectResult[ResultT, ValueT]:
+        """
+        Produce an inspection of the ADRIO's data for the current context.
+
+        Returns
+        -------
+        InspectResult[ResultT, ValueT]
+            The data inspection results for the ADRIO's current context.
+        """
         ctx = self.context
         try:
             self.validate_context(ctx)
@@ -754,6 +805,23 @@ def range_mask_fn(
     minimum: ValueT | None,
     maximum: ValueT | None,
 ) -> Callable[[NDArray[ValueT]], NDArray[np.bool_]]:
+    """
+    Creates a validation function for checking that values are in a given range.
+
+    range_mask_fn is generic in the dtype of arrays it checks (`ValueT`).
+
+    Parameters
+    ----------
+    minimum : ValueT | None
+        The minimum valid value, or None if there is no minimum.
+    maximum : ValueT | None
+        The maximum valid value, or None is there is no maximum.
+
+    Returns
+    -------
+    Callable[[NDArray[ValueT]], NDArray[np.bool_]]
+        The validation function.
+    """
     match (minimum, maximum):
         case (None, None):
             return lambda xs: np.ones_like(xs, dtype=np.bool_)
@@ -770,6 +838,23 @@ def validate_time_frame(
     context: Context,
     time_range: DateRange,
 ) -> None:
+    """
+    Validates that the context time frame is within the specified DateRange.
+
+    Parameters
+    ----------
+    adrio : ADRIO
+        The ADRIO instance doing the validation.
+    context : Context
+        The evaluation context.
+    time_range : DateRange
+        The valid range of dates.
+
+    Raises
+    ------
+    ADRIOContextError
+        If the context time frame is not valid.
+    """
     start = time_range.start_date
     end = time_range.end_date
     tf = context.time_frame
