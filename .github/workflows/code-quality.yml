@@ -28,10 +28,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: ".python-version"
-          
-      - name: Check TIGER
-        run: |
-          uv run --script scripts/tiger-data-status.py
 
       - name: Configure AWS Credentials
         if: vars.SIDELOAD_CACHE == 'true'
