@@ -435,10 +435,34 @@ ArrayValidation = Callable[[NDArray[ValueT]], NDArray[np.bool_]]
 
 @dataclass(frozen=True)
 class ResultFormat(Generic[ValueT]):
+    """
+    Metadata about an ADRIO result.
+
+    ResultFormat is a frozen dataclass.
+    It is generic in the dtype of the result's data (`ValueT`).
+
+    Parameters
+    ----------
+    shape : DataShape
+        The expected shape of the result array.
+    value_dtype : type[ValueT]
+        The dtype of the data contained in the result array.
+    validation : ArrayValidation[ValueT]
+        A validation functino for a result array.
+    is_date_value : bool
+        True if the result is packed in a date/value array,
+        False otherwise. If the result is a date/value array,
+        the type `ValueT` reflects the inner value type.
+    """
+
     shape: DataShape
+    """The expected shape of the result array."""
     value_dtype: type[ValueT]
+    """The dtype of the data contained in the result array."""
     validation: ArrayValidation[ValueT]
+    """A validation functino for a result array."""
     is_date_value: bool = field(default=False)
+    """True if the result is packed in a date/value array."""
 
 
 class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
