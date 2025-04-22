@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 
 from epymorph.attribute import AbsoluteName, AttributeDef
 from epymorph.data_shape import Shapes
+from epymorph.error import MissingContextError
 from epymorph.simulation import (
     SimulationFunction,
     Tick,
@@ -68,10 +69,10 @@ class TestSimulationFunction(unittest.TestCase):
 
         self.assertEqual(42, f.with_context(*self._eval_context(bar=2)).evaluate())
 
-        with self.assertRaises(TypeError) as e:
+        with self.assertRaises(MissingContextError) as e:
             f.evaluate()
         self.assertIn(
-            "missing function context during evaluation",
+            "missing function context 'data' during evaluation",
             str(e.exception).lower(),
         )
 

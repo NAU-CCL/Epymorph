@@ -297,9 +297,12 @@ class EvaluateParamsTest(unittest.TestCase):
             requirements = [ALPHA, GAMMA]
 
             def evaluate(self) -> NDArray[np.float64]:
+                # alpha and gamma are both scalars,
+                # but I'm using ParamFunctionNumpy
+                # so it's on me to make sure my result is an NDArray
                 alpha = self.data(self.ALPHA)
                 gamma = self.data(self.GAMMA)
-                return gamma / alpha
+                return np.asarray(gamma / alpha)
 
         rume = self._create_rume()
 

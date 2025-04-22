@@ -10,9 +10,9 @@ from sys import modules
 from tarfile import TarInfo, is_tarfile
 from tarfile import open as open_tarfile
 from typing import Callable, NamedTuple, Sequence
-from urllib.request import urlopen
 from warnings import warn
 
+import requests
 from platformdirs import user_cache_path
 
 
@@ -341,8 +341,10 @@ def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
         # Do not remove this check.
         if not url.startswith(("http:", "https:")):
             raise ValueError("Data source URLs must use the http or https protocol.")
-        with urlopen(url) as f:  # noqa: S310
-            return BytesIO(f.read())
+
+        response = requests.get(url, timeout=(6.05, 42))
+        response.raise_for_status()
+        return BytesIO(response.content)
 
     return load_or_fetch(cache_path, fetch_url)
 

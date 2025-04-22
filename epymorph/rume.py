@@ -57,6 +57,7 @@ from epymorph.initializer import Initializer
 from epymorph.movement_model import MovementClause, MovementModel
 from epymorph.params import ParamSymbol, simulation_symbols
 from epymorph.simulation import (
+    Context,
     ParamValue,
     SimulationFunction,
     TickDelta,
@@ -471,12 +472,13 @@ class RUME(ABC, Generic[GeoScopeT_co]):
             The assumed maximum network bandwidth in bytes per second.
         """
 
+        ctx = Context.of(
+            scope=self.scope,
+            time_frame=self.time_frame,
+            ipm=self.ipm,
+        )
         estimates = [
-            p.with_context_internal(
-                scope=self.scope,
-                time_frame=self.time_frame,
-                ipm=self.ipm,
-            ).estimate_data()
+            p.with_context_internal(ctx).estimate_data()
             for p in self.params.values()
             if isinstance(p, SimulationFunction) and isinstance(p, CanEstimateData)
         ]
@@ -572,17 +574,21 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         InitException
             If initialization fails for any reason or produces invalid values.
         """
+
+        def gpm_ctx(gpm: GPM) -> Context:
+            return Context.of(
+                name=AbsoluteName(gpm_strata(gpm.name), "init", "init"),
+                data=data,
+                scope=self.scope,
+                time_frame=self.time_frame,
+                ipm=gpm.ipm,
+                rng=rng,
+            )
+
         try:
             return np.column_stack(
                 [
-                    gpm.init.with_context_internal(
-                        name=AbsoluteName(gpm_strata(gpm.name), "init", "init"),
-                        data=data,
-                        scope=self.scope,
-                        time_frame=self.time_frame,
-                        ipm=gpm.ipm,
-                        rng=rng,
-                    ).evaluate()
+                    gpm.init.with_context_internal(gpm_ctx(gpm)).evaluate()
                     for gpm in self.strata
                 ]
             )

@@ -1,6 +1,6 @@
 from typing import Any
 
-from epymorph.adrio.adrio import ADRIO
+from epymorph.adrio.adrio import ADRIO, ADRIOLegacy
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.parameter_fitting.likelihood import Likelihood
@@ -30,7 +30,7 @@ class Observations:
 
     Attributes
     ----------
-    source : Adrio[Any]
+    source : ADRIO[Any, Any] | ADRIOLegacy[Any]
         The data source containing the observational data.
     model_link : ModelLink
         The link that maps the observations to specific
@@ -41,7 +41,7 @@ class Observations:
 
     def __init__(
         self,
-        source: ADRIO[Any],
+        source: ADRIO[Any, Any] | ADRIOLegacy[Any],
         model_link: ModelLink,
         likelihood: Likelihood,
     ):
@@ -50,7 +50,7 @@ class Observations:
 
         Parameters
         ----------
-        source : Adrio[Any]
+        source : ADRIO[Any, Any] | ADRIOLegacy[Any]
             The data source.
         model_link : ModelLink
             Represents the connection between the observational data and the model's

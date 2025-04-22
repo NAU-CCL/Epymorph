@@ -1,237 +1,289 @@
-"""ADRIOs that access the US Census ACS Commuting Flows files."""
-
-from warnings import warn
+from pathlib import Path
+from typing import Callable, Literal, NamedTuple
 
 import numpy as np
-from numpy.typing import NDArray
-from pandas import read_excel
+import pandas as pd
 from typing_extensions import override
 
-from epymorph.adrio.adrio import ADRIO, adrio_cache
-from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
-from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceError
-from epymorph.geography.scope import GeoScope
-from epymorph.geography.us_census import (
-    BlockGroupScope,
-    CensusScope,
-    StateScope,
-    TractScope,
+from epymorph.adrio.adrio import (
+    ADRIOCommunicationError,
+    ADRIOContextError,
+    FetchADRIO,
+    PipelineResult,
+    ResultFormat,
+    range_mask_fn,
 )
-from epymorph.geography.us_tiger import CacheEstimate
+from epymorph.adrio.processing import DataPipeline, Fill, PivotAxis
+from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
+from epymorph.data_shape import Shapes
+from epymorph.data_usage import AvailableDataEstimate, DataEstimate
+from epymorph.geography.us_census import CountyScope, StateScope
+from epymorph.simulation import Context
 
 _COMMFLOWS_CACHE_PATH = module_cache_path(__name__)
 
 
-def _validate_year(scope: CensusScope):
-    year = scope.year
-    if year not in [2010, 2015, 2020]:
-        # if invalid year is close to a valid year, fetch valid data and notify user
-        passed_year = year
-        if year in range(2010, 2015):
-            year = 2010
-        elif year in range(2015, 2020):
-            year = 2015
-        elif year in range(2020, 2024):
-            year = 2020
-        else:
-            msg = "Invalid year. Commuting data is only available for 2010-2023"
-            raise DataResourceError(msg)
+class _Config(NamedTuple):
+    """Configuration for an ACS Comm Flows product."""
 
-        warn(
-            f"Commuting data cannot be retrieved for {passed_year}, "
-            f"fetching {year} data instead."
-        )
+    year: int
+    """The nominal year of the survey results."""
+    geo_year: int
+    """The Census vintage used in the data."""
+    url: str
+    """The URL for the source file."""
+    header: int
+    """How many header rows?"""
+    footer: int
+    """How many footer rows?"""
+    cols: list[str]
+    """Column names."""
+    estimate: int
+    """Estimated file size in bytes."""
 
-    return year
+    @property
+    def cache_path(self) -> Path:
+        """The path to where the source data should be cached."""
+        return _COMMFLOWS_CACHE_PATH / f"{self.year}.xlsx"
+
+    @property
+    def cache_key(self) -> str:
+        """The cache key to use for this result."""
+        return f"commflows:{self.year}"
 
 
-def _validate_scope(scope: GeoScope) -> CensusScope:
-    if not isinstance(scope, CensusScope):
-        msg = "Census scope is required for commuting flows data."
-        raise DataResourceError(msg)
+_CONFIG = [
+    _Config(
+        year=2010,
+        geo_year=2010,
+        url="https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2010/commuting-employment-2010/table1.xlsx",
+        header=4,
+        footer=3,
+        cols=[
+            "res_state_code",
+            "res_county_code",
+            "wrk_state_code",
+            "wrk_county_code",
+            "workers",
+            "moe",
+            "res_state",
+            "res_county",
+            "wrk_state",
+            "wrk_county",
+        ],
+        estimate=7_200_000,
+    ),
+    _Config(
+        year=2015,
+        geo_year=2015,
+        url="https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2015/commuting-flows-2015/table1.xlsx",
+        header=6,
+        footer=2,
+        cols=[
+            "res_state_code",
+            "res_county_code",
+            "res_state",
+            "res_county",
+            "wrk_state_code",
+            "wrk_county_code",
+            "wrk_state",
+            "wrk_county",
+            "workers",
+            "moe",
+        ],
+        estimate=6_700_000,
+    ),
+    _Config(
+        year=2020,
+        geo_year=2022,
+        # yes, the 2020 results use 2022 geography, which is when the Census officially
+        # switched to using planning regions instead of counties for Connecticut.
+        # The footer of this document says as much.
+        url="https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2020/commuting-flows-2020/table1.xlsx",
+        header=7,
+        footer=4,
+        cols=[
+            "res_state_code",
+            "res_county_code",
+            "res_state",
+            "res_county",
+            "wrk_state_code",
+            "wrk_county_code",
+            "wrk_state",
+            "wrk_county",
+            "workers",
+            "moe",
+        ],
+        estimate=5_800_000,
+    ),
+]
+"""All supported ACS Comm Flow products."""
 
-    # check for invalid granularity
-    if isinstance(scope, TractScope | BlockGroupScope):
-        msg = (
-            "Commuting data cannot be retrieved for tract "
-            "or block group granularities"
-        )
-        raise DataResourceError(msg)
 
-    year = scope.year
-    node_ids = scope.node_ids
-    # a discrepancy exists in data for Connecticut counties in 2020 and 2021
-    # raise an exception if this data is requested for these years.
-    if year in [2020, 2021] and any(
-        connecticut_county in node_ids
-        for connecticut_county in [
-            "09001",
-            "09003",
-            "09005",
-            "09007",
-            "09009",
-            "09011",
-            "09013",
-            "09015",
-        ]
+class Commuters(FetchADRIO[np.int64, np.int64]):
+    """
+    Loads data from the US Census Bureau's ACS Commuting Flows product.
+    This product uses answers to the American Community Survey over a five year period
+    to estimate the number of workers aggregated by where they live and where they work.
+    It is a useful estimate of regular commuting activity between locations.
+
+    The product aggregates to the US-County-equivalent granularity, so this ADRIO
+    can work with county or state scopes. Because the data are presented using
+    FIPS codes, we must be certain to use a compatible scope -- therefore the
+    data vintage loaded by this ADRIO is based on the geo scope year and not the
+    simulation time frame. Available data years are nominally 2010, 2015, and 2020,
+    however note that the 2020 data year was compiled using 2022 geography.
+
+    The result is an NxN matrix of integers, with residency location on the first axis
+    and work location on the second axis.
+
+    Parameters
+    ----------
+    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=0
+        The method to use to fix missing values. Missing values are common in this dataset,
+        which simply omits pairs of locations for which there were no recorded workers.
+        Therefore the default is to fill with zero.
+
+    See Also
+    --------
+    The [ACS Commuting Flows documentation](https://www.census.gov/topics/employment/commuting/guidance/flows.html)
+    from the US Census.
+    """  # noqa: E501
+
+    _RESULT_FORMAT = ResultFormat(
+        shape=Shapes.NxN,
+        value_dtype=np.int64,
+        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
+    )
+    """The format of results."""
+
+    _fix_missing: Fill[np.int64]
+    """The method to use to fix missing values."""
+
+    def __init__(
+        self,
+        *,
+        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = 0,
     ):
-        msg = (
-            "Commuting flows data cannot be retrieved for Connecticut counties "
-            "for years 2020 or 2021."
-        )
-        raise DataResourceError(msg)
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
 
-    return scope
+    @property
+    @override
+    def result_format(self) -> ResultFormat[np.int64]:
+        return Commuters._RESULT_FORMAT
 
+    def _get_config(self, context: Context) -> tuple[_Config, StateScope | CountyScope]:
+        scope = context.scope
+        if not isinstance(scope, StateScope | CountyScope):
+            err = "US State or County geo scope required."
+            raise ADRIOContextError(self, context, err)
 
-@adrio_cache
-class Commuters(ADRIO[np.int64]):
-    """
-    Creates an NxN matrix of integers representing commuters from the ACS commuting
-    flow data.
-    """
+        config = next((x for x in _CONFIG if x.geo_year == scope.year), None)
+        if config is None:
+            all_years = [str(x.geo_year) for x in _CONFIG]
+            err = (
+                "Commuters loads data according to your geo scope year "
+                "because it is sensitive to changes in geography. "
+                "Data is only available for these geo years: "
+                f"{','.join(all_years)}"
+            )
+            raise ADRIOContextError(self, context, err)
 
+        return config, scope
+
+    @override
     def estimate_data(self) -> DataEstimate:
-        scope = _validate_scope(self.scope)
-        year = _validate_year(scope)
-
-        est_file_size = 0
-
-        # file size is dependant on the year
-        if year == 2010:
-            est_file_size = 7_200_000  # 2010 table1 is 7.2MB
-        elif year == 2015:
-            est_file_size = 6_700_000  # 2015 table1 is 6.7MB
-        elif year == 2020:
-            est_file_size = 5_800_000  # 2020 table1 is 5.8MB
-
-        # only one url, just check if in cache or not
-        missing_files = (
-            0 if check_file_in_cache(_COMMFLOWS_CACHE_PATH / f"{year}.xlsx") else 1
-        )
-
-        # cache estimate
-        est = CacheEstimate(
-            total_cache_size=est_file_size,
-            missing_cache_size=missing_files * est_file_size,
-        )
-
-        key = f"commflows:{year}"
+        config, _ = self._get_config(self.context)
+        in_cache = check_file_in_cache(config.cache_path)
+        total_bytes = config.estimate
+        new_bytes = total_bytes if not in_cache else 0
         return AvailableDataEstimate(
             name=self.class_name,
-            cache_key=key,
-            new_network_bytes=est.missing_cache_size,
-            new_cache_bytes=est.missing_cache_size,
-            total_cache_bytes=est.total_cache_size,
+            cache_key=config.cache_key,
+            new_network_bytes=new_bytes,
+            new_cache_bytes=new_bytes,
+            total_cache_bytes=total_bytes,
             max_bandwidth=None,
         )
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.int64]:
-        scope = _validate_scope(self.scope)
-        year = _validate_year(scope)
-        progress = self.progress
+    def validate_context(self, context: Context) -> None:
+        self._get_config(context)
 
-        # start progress tracking, +1 for post processing
-        processing_steps = 2
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        config, scope = self._get_config(context)
 
-        if year != 2010:
-            url = f"https://www2.census.gov/programs-surveys/demo/tables/metro-micro/{year}/commuting-flows-{year}/table1.xlsx"
+        # Get and read data file.
+        try:
+            commuter_file = load_or_fetch_url(config.url, config.cache_path)
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
 
-            # organize dataframe column names
-            group_fields = ["state_code", "county_code", "state", "county"]
-
-            all_fields = (
-                ["res_" + field for field in group_fields]
-                + ["wrk_" + field for field in group_fields]
-                + ["workers", "moe"]
-            )
-
-            header_num = 7
-
-        else:
-            url = "https://www2.census.gov/programs-surveys/demo/tables/metro-micro/2010/commuting-employment-2010/table1.xlsx"
-
-            all_fields = [
+        data_df = pd.read_excel(
+            commuter_file,
+            header=config.header,
+            skipfooter=config.footer,
+            names=config.cols,
+            usecols=[
                 "res_state_code",
                 "res_county_code",
                 "wrk_state_code",
                 "wrk_county_code",
                 "workers",
-                "moe",
-                "res_state",
-                "res_county",
-                "wrk_state",
-                "wrk_county",
-            ]
-
-            header_num = 4
-
-        node_ids = scope.node_ids
-
-        try:
-            cache_path = _COMMFLOWS_CACHE_PATH / f"{year}.xlsx"
-            commuter_file = load_or_fetch_url(url, cache_path)
-        except Exception as e:
-            raise DataResourceError("Unable to fetch commuting flows data.") from e
-
-        # increment progress, just one step here
-        if progress is not None:
-            progress(1 / processing_steps, None)
-
-        # download communter data spreadsheet as a pandas dataframe
-        data_df = read_excel(
-            commuter_file,
-            header=header_num,
-            names=all_fields,
+            ],
             dtype={
                 "res_state_code": str,
                 "wrk_state_code": str,
                 "res_county_code": str,
                 "wrk_county_code": str,
+                "workers": np.int64,
             },
         )
 
-        match scope.granularity:
-            case "state":
-                data_df = data_df.rename(
-                    columns={
-                        "res_state_code": "res_geoid",
-                        "wrk_state_code": "wrk_geoid",
-                    }
-                )
+        # Filter out destinations which are not US states and fix two-digit state codes.
+        data_df = data_df.loc[data_df["wrk_state_code"].str.startswith("0", na=False)]
+        data_df = data_df.assign(wrk_state_code=data_df["wrk_state_code"].str.slice(1))
 
-            case "county":
-                data_df["res_geoid"] = (
-                    data_df["res_state_code"] + data_df["res_county_code"]
-                )
-                data_df["wrk_geoid"] = (
-                    data_df["wrk_state_code"] + data_df["wrk_county_code"]
-                )
-
-            case _:
-                raise DataResourceError("Unsupported query.")
-
-        # Filter out GEOIDs that aren't in our scope.
-        res_selection = data_df["res_geoid"].isin(node_ids)
-        wrk_selection = data_df["wrk_geoid"].isin(["0" + x for x in node_ids])
-        data_df = data_df[res_selection & wrk_selection]
-
-        if isinstance(scope, StateScope):
-            # Data is county level; group and aggregate to get state level
-            data_df = (
-                data_df.groupby(["res_geoid", "wrk_geoid"])
-                .agg({"workers": "sum"})
-                .reset_index()
-            )
-
-        return (
-            data_df.pivot_table(
-                index="res_geoid",
-                columns="wrk_geoid",
-                values="workers",
-            )
-            .fillna(0)
-            .to_numpy(dtype=np.int64)
+        # Reformat to combine geoid columns according to result granularity.
+        if scope.granularity == "state":
+            geoid_src = data_df["res_state_code"]
+            geoid_dst = data_df["wrk_state_code"]
+        else:
+            geoid_src = data_df["res_state_code"] + data_df["res_county_code"]
+            geoid_dst = data_df["wrk_state_code"] + data_df["wrk_county_code"]
+        data_df = pd.DataFrame(
+            {
+                "geoid_src": geoid_src,
+                "geoid_dst": geoid_dst,
+                "value": data_df["workers"],
+            }
         )
+
+        # Filter for the geographies in our scope.
+        src_in = data_df["geoid_src"].isin(context.scope.node_ids)
+        dst_in = data_df["geoid_dst"].isin(context.scope.node_ids)
+        data_df = data_df.loc[src_in & dst_in]
+
+        # Aggregate results if our result granularity requires it. Fix indexing.
+        if scope.granularity == "state":
+            data_df = data_df.groupby(["geoid_src", "geoid_dst"]).sum().reset_index()
+        else:
+            data_df = data_df.reset_index(drop=True)
+        return data_df
+
+    @override
+    def _process(self, context: Context, data_df: pd.DataFrame) -> PipelineResult:
+        pipeline = DataPipeline(
+            axes=(
+                PivotAxis("geoid_src", context.scope.node_ids),
+                PivotAxis("geoid_dst", context.scope.node_ids),
+            ),
+            ndims=2,
+            dtype=self.result_format.value_dtype,
+            rng=context,
+        ).finalize(self._fix_missing)
+        return pipeline(data_df)

@@ -359,6 +359,15 @@ class DataResolver:
             True if `name` is in this resolver"""
         return name in self._raw_values
 
+    @property
+    def raw_values(self) -> Mapping[AbsoluteName, AttributeArray]:
+        """
+        The mapping of raw values in the resolver, by absolute name.
+
+        **WARNING**: It is not safe to modify this mapping!
+        """
+        return self._raw_values
+
     def get_raw(self, name: str | NamePattern | AbsoluteName) -> AttributeArray:
         """
         Retrieve a raw value that matches the given name.
@@ -1022,6 +1031,14 @@ def evaluate_requirements(
                     ipm,
                     rng,
                 )
+
+                if not isinstance(value, np.ndarray):
+                    err = (
+                        f"Attribute '{node.name}' ({node.resolution}) did "
+                        f"not evaluate to a numpy array."
+                    )
+                    raise DataAttributeError(err)
+
                 if res_tree.is_tree_cacheable:
                     evaluated[res_tree] = value
 
