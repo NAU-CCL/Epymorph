@@ -78,12 +78,22 @@ def test_date_range_to_pandas():
     pd.testing.assert_index_equal(actual, expected)
 
 
+def test_date_range_between_same_dates():
+    d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
+    actual = d.between(min_date=date(2025, 1, 1), max_date=date(2025, 1, 29))
+    assert actual is not None
+    assert actual.start_date == date(2025, 1, 1)
+    assert actual.end_date == date(2025, 1, 29)
+    assert actual.step == 7
+
+
 def test_date_range_between_within_step():
     d = DateRange(date(2025, 1, 1), date(2025, 1, 29), step=7)
     actual = d.between(min_date=date(2025, 1, 8), max_date=date(2025, 1, 22))
     assert actual is not None
     assert actual.start_date == date(2025, 1, 8)
     assert actual.end_date == date(2025, 1, 22)
+    assert actual.step == 7
 
 
 def test_date_range_between_outside_step():
@@ -92,6 +102,7 @@ def test_date_range_between_outside_step():
     assert actual is not None
     assert actual.start_date == date(2025, 1, 8)
     assert actual.end_date == date(2025, 1, 22)
+    assert actual.step == 7
 
 
 def test_date_range_between_no_change():
@@ -100,6 +111,7 @@ def test_date_range_between_no_change():
     assert actual is not None
     assert actual.start_date == date(2025, 1, 1)
     assert actual.end_date == date(2025, 1, 29)
+    assert actual.step == 7
 
 
 def test_date_range_between_min_date_after_max_date():

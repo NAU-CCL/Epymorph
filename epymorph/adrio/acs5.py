@@ -50,7 +50,7 @@ from epymorph.geography.us_geography import (
     CensusGranularity,
 )
 from epymorph.simulation import Context
-from epymorph.util import filter_with_mask
+from epymorph.util import filter_unique, filter_with_mask
 
 
 def census_api_key() -> str | None:
@@ -304,6 +304,9 @@ def _get_scope(adrio: ADRIO, context: Context) -> CensusScope:
     if context.scope.year not in ACS5_YEARS:
         err = f"{context.scope.year} is not a supported year for ACS5 data."
         raise ADRIOContextError(adrio, context, err)
+    if isinstance(context.scope, BlockGroupScope) and context.scope.year <= 2012:
+        err = "Block group ACS5 data is not available via this API for 2012 or prior."
+        raise ADRIOContextError(adrio, context, err)
     return context.scope
 
 
@@ -419,6 +422,14 @@ class Population(_FetchACS5[np.int64]):
     according to the scope's year, from 2009 to 2023.
 
     The result is an N-shaped array of integers.
+
+    Parameters
+    ----------
+    fix_insufficient_data : Fix[ValueT], optional
+        The method to use to replace values that could not be computed due to an
+        insufficient number of sample observation (-666666666 in the data).
+    fix_missing : Fill[ValueT], optional
+        The method to use to fix missing values.
 
     See Also
     --------
@@ -566,7 +577,7 @@ class AgeRange(NamedTuple):
             end = start
         elif (m := _under_pattern.match(bracket)) is not None:
             start = 0
-            end = int(m.group(1))
+            end = int(m.group(1)) - 1
         elif (m := _range_pattern.match(bracket)) is not None:
             start = int(m.group(1))
             end = int(m.group(2))
@@ -652,6 +663,10 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
     def inspect(self) -> InspectResult[np.int64, np.int64]:
         self.validate_context(self.context)
         scope = _get_scope(self, self.context)
+
+        # NOTE: we don't use the age_ranges() static method here because it's important
+        # for us to keep one value per column, even for columns which don't
+        # correspond to an age group (total, total male, total female).
         age_ranges = [
             AgeRange.parse(attrs["label"])
             for var, attrs in ACS5Client.get_group_vars(scope.year, "B01001")
@@ -681,6 +696,34 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
             dtype=self.result_format.value_dtype,
             shape=self.result_format.shape,
             issues={},
+        )
+
+    @staticmethod
+    def age_ranges(year: int) -> Sequence[AgeRange]:
+        """
+        Lists the AgeRanges used by the ACS5 population by age table in definition order
+        for the given year. Note that this does not correspond one-to-one with the
+        values in the B01001 table -- this list omits "total" columns and duplicates.
+
+        This is a static method.
+
+        Parameters
+        ----------
+        year : int
+            A supported ACS5 year.
+
+        Returns
+        -------
+        Sequence[AgeRange]
+            The age ranges.
+        """
+        return filter_unique(
+            x
+            for x in (
+                AgeRange.parse(attrs["label"])
+                for _, attrs in ACS5Client.get_group_vars(year, "B01001")
+            )
+            if x is not None
         )
 
 
