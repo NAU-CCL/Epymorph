@@ -574,7 +574,7 @@ class AgeRange(NamedTuple):
             end = start
         elif (m := _under_pattern.match(bracket)) is not None:
             start = 0
-            end = int(m.group(1))
+            end = int(m.group(1)) - 1
         elif (m := _range_pattern.match(bracket)) is not None:
             start = int(m.group(1))
             end = int(m.group(2))
