@@ -50,7 +50,7 @@ from epymorph.geography.us_geography import (
     CensusGranularity,
 )
 from epymorph.simulation import Context
-from epymorph.util import filter_with_mask
+from epymorph.util import filter_unique, filter_with_mask
 
 
 def census_api_key() -> str | None:
@@ -420,6 +420,14 @@ class Population(_FetchACS5[np.int64]):
 
     The result is an N-shaped array of integers.
 
+    Parameters
+    ----------
+    fix_insufficient_data : Fix[ValueT], optional
+        The method to use to replace values that could not be computed due to an
+        insufficient number of sample observation (-666666666 in the data).
+    fix_missing : Fill[ValueT], optional
+        The method to use to fix missing values.
+
     See Also
     --------
     The [ACS 5-Year documentation](https://www.census.gov/data/developers/data-sets/acs-5year.html)
@@ -652,6 +660,10 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
     def inspect(self) -> InspectResult[np.int64, np.int64]:
         self.validate_context(self.context)
         scope = _get_scope(self, self.context)
+
+        # NOTE: we don't use the age_ranges() static method here because it's important
+        # for us to keep one value per column, even for columns which don't
+        # correspond to an age group (total, total male, total female).
         age_ranges = [
             AgeRange.parse(attrs["label"])
             for var, attrs in ACS5Client.get_group_vars(scope.year, "B01001")

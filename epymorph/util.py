@@ -160,18 +160,6 @@ def index_of(it: Iterable[T], item: T) -> int:
     return -1
 
 
-def iterator_length(it: Iterable[Any]) -> int:
-    """
-    Count the number of items in the given iterator.
-    Warning: this consumes the iterator!
-    It also never terminates if the iterator is infinite.
-    """
-    length = 0
-    for _ in it:
-        length += 1
-    return length
-
-
 def list_not_none(it: Iterable[T | None]) -> list[T]:
     """Convert an iterable to a list, skipping any entries that are None."""
     return [x for x in it if x is not None]

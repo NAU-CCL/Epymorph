@@ -22,13 +22,39 @@ class DateRange:
     start_date: date
     """The first date in the range."""
     end_date: date
-    """The last date in the range."""
+    """The last date in the range. Must be an exact multiple of steps after
+    start_date."""
     step: int = field(default=1)
     """The step between dates in the range, as a number of days.
     Must be 1 or greater."""
 
     @classmethod
     def until_date(cls, start_date: date, max_end_date: date, step: int) -> Self:
+        """
+        Alternative constructor for DateRange when you aren't sure of the precise end
+        date: that is, you know roughly when the range ends but aren't sure if that
+        date is an exact number of steps after start date.
+
+        until_date is a class method.
+
+        Parameters
+        ----------
+        start_date : date
+            The first date in the range.
+        max_end_date : date
+            The latest possible date in the range. If max_end_date is already an exact
+            multiple of steps away from `start_date`, it will be the DateRange's end
+            date. Otherwise, we will calculate the latest date that is before
+            `max_end_date` and also an exact multiple of steps after start date.
+        step : int
+            The step between dates in the range, as a number of days.
+            Must be 1 or greater.
+
+        Returns
+        -------
+        DateRange
+            A new DateRange.
+        """
         diff = (max_end_date - start_date).days % step
         end_date = max_end_date - timedelta(days=diff)
         return cls(start_date, end_date, step)
@@ -64,6 +90,23 @@ class DateRange:
         return result if result >= self.start_date else None
 
     def between(self, min_date: date, max_date: date) -> "DateRange | None":
+        """
+        Compute a new DateRange that represents the subset of dates in this range
+        that are also between `min_date` and `max_date` (inclusive).
+
+        Parameters
+        ----------
+        min_date : date
+            The earliest date to include in the subset.
+        max_date : date
+            The latest date to include in the subset.
+
+        Returns
+        -------
+        DateRange | None
+            The subset DateRange, or None if that subset would be empty -- when there's
+            no overlap between this DateRange and the min/max dates.
+        """
         if min_date > max_date:
             raise ValueError("`min_date` must be before or equal to `max_date`")
         new_start_date = self._next_date(min_date)
@@ -77,9 +120,43 @@ class DateRange:
         return DateRange(new_start_date, new_end_date, self.step)
 
     def overlap(self, time_frame: "TimeFrame") -> "DateRange | None":
+        """
+        Compute a new DateRange that represents the subset of dates in this range
+        that are also in the given TimeFrame.
+
+        Parameters
+        ----------
+        time_frame : TimeFrame
+            The time frame to overlap.
+
+        Returns
+        -------
+        DateRange | None
+            The subset DateRange, or None if that subset would be empty -- when there's
+            no overlap between this DateRange and the time frame.
+        """
         return self.between(time_frame.start_date, time_frame.end_date)
 
     def overlap_or_raise(self, time_frame: "TimeFrame") -> "DateRange":
+        """
+        Compute a new DateRange that represents the subset of dates in this range
+        that are also in the given TimeFrame. If there is no overlap, raise an error.
+
+        Parameters
+        ----------
+        time_frame : TimeFrame
+            The time frame to overlap.
+
+        Returns
+        -------
+        DateRange
+            The subset DateRange.
+
+        Raises
+        ------
+        ValueError
+            When there's no overlap between this DateRange and the time frame.
+        """
         if (date_range := self.overlap(time_frame)) is None:
             err = "There is no overlap between the date range and time frame."
             raise ValueError(err)
@@ -90,6 +167,14 @@ class DateRange:
         return (delta_days // self.step) + 1
 
     def to_pandas(self) -> pd.DatetimeIndex:
+        """
+        Convert the DateRange to a Pandas datetime index.
+
+        Returns
+        -------
+        DatetimeIndex
+            The index containing all dates in the range in order.
+        """
         return pd.date_range(
             start=self.start_date,
             end=self.end_date,
@@ -98,6 +183,14 @@ class DateRange:
         )
 
     def to_numpy(self) -> NDArray[np.datetime64]:
+        """
+        Convert the DateRange to a numpy datetime64 array.
+
+        Returns
+        -------
+        NDArray[datetime64]
+            The one-dimensional array containing all dates in the range in order.
+        """
         step = timedelta(days=self.step)
         return np.arange(
             start=self.start_date,
@@ -108,7 +201,19 @@ class DateRange:
 
 
 def iso8601(value: date | str) -> date:
-    """Adapt ISO 8601 strings to dates; leave dates as they are."""
+    """
+    Adapt ISO 8601 strings to dates; leave dates as they are.
+
+    Parameters
+    ----------
+    value : date | str
+        The value to parse (if string) or pass through unchanged (if date).
+
+    Returns
+    -------
+    date
+        The equivalent date.
+    """
     if isinstance(value, date):
         return value
     return date.fromisoformat(value)

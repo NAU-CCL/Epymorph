@@ -179,7 +179,18 @@ _ADRIOClassT = TypeVar("_ADRIOClassT", bound="ADRIO")
 
 
 def adrio_cache(cls: type[_ADRIOClassT]) -> type[_ADRIOClassT]:
-    """ADRIO class decorator to add result-caching behavior."""
+    """
+    ADRIO class decorator to add result-caching behavior.
+
+    Examples
+    --------
+    ```python
+    @adrio_cache
+    class Population(_FetchACS5[np.int64]):
+        # Now this ADRIO will cache its results.
+        # ...
+    ```
+    """
 
     orig_with_context = cls.with_context_internal
     orig_evaluate = cls.evaluate
@@ -223,10 +234,23 @@ def _adrio_name(adrio: "ADRIO", context: Context) -> str:
 
 
 class ADRIOError(Exception):
-    """Exception while loading or processing data with an ADRIO."""
+    """
+    Exception while loading or processing data with an ADRIO.
+
+    Parameters
+    ----------
+    adrio : ADRIO
+        The ADRIO being evaluated.
+    context : Context
+        The evaluation context.
+    message : str
+        An error description.
+    """
 
     adrio: "ADRIO"
+    """The ADRIO being evaluated."""
     context: Context
+    """The evaluation context."""
 
     def __init__(self, adrio: "ADRIO", context: Context, message: str):
         self.adrio = adrio
@@ -237,7 +261,18 @@ class ADRIOError(Exception):
 
 
 class ADRIOContextError(ADRIOError):
-    """The simulation context is invalid for using the ADRIO."""
+    """
+    The simulation context is invalid for using the ADRIO.
+
+    Parameters
+    ----------
+    adrio : ADRIO
+        The ADRIO being evaluated.
+    context : Context
+        The evaluation context.
+    message : str, optional
+        An error description, or else a default message will be used.
+    """
 
     def __init__(
         self,
@@ -252,7 +287,18 @@ class ADRIOContextError(ADRIOError):
 
 
 class ADRIOCommunicationError(ADRIOError):
-    """The ADRIO could not communicate with the external resource."""
+    """
+    The ADRIO could not communicate with the external resource.
+
+    Parameters
+    ----------
+    adrio : ADRIO
+        The ADRIO being evaluated.
+    context : Context
+        The evaluation context.
+    message : str, optional
+        An error description, or else a default message will be used.
+    """
 
     def __init__(
         self,
@@ -267,7 +313,18 @@ class ADRIOCommunicationError(ADRIOError):
 
 
 class ADRIOProcessingError(ADRIOError):
-    """An unexpected error occurred while processing ADRIO data."""
+    """
+    An unexpected error occurred while processing ADRIO data.
+
+    Parameters
+    ----------
+    adrio : ADRIO
+        The ADRIO being evaluated.
+    context : Context
+        The evaluation context.
+    message : str, optional
+        An error description, or else a default message will be used.
+    """
 
     def __init__(
         self,
@@ -291,6 +348,8 @@ ValueT = TypeVar("ValueT", bound=np.generic)
 class InspectResult(Generic[ResultT, ValueT]):
     """
     Inspection is the process by which an ADRIO fetches data and analyzes its quality.
+    The simplest way to use an InspectionResult is to print it!
+
     The result encapsulates the source data, the processed result data, and any
     outstanding data issues. ADRIOs will provide methods for correcting these issues
     as is appropriate for the task, but often these will be optional. A result which
@@ -307,7 +366,7 @@ class InspectResult(Generic[ResultT, ValueT]):
     "missing" issue and, assuming no other issues remain, produce a non-masked numpy
     array as a result.
 
-    InspectResult is a dataclass, and is generic on the result and value type
+    InspectResult is a frozen dataclass, and is generic on the result and value type
     (`ResultT` and `ValueT`) of the ADRIO.
 
     Parameters
@@ -330,11 +389,23 @@ class InspectResult(Generic[ResultT, ValueT]):
     """
 
     adrio: "ADRIO[ResultT, ValueT]"
+    """A reference to the ADRIO which produced this result."""
     source: pd.DataFrame | NDArray
+    """
+    The data as fetched from the source. This can be useful for debugging data issues.
+    """
     result: NDArray[ResultT]
+    """The final result produced by the ADRIO."""
     dtype: type[ValueT]
+    """The dtype of the data values."""
     shape: DataShape
+    """The shape of the result."""
     issues: Mapping[str, NDArray[np.bool_]]
+    """
+    The set of issues in the data along with a mask which indicates which values
+    are impacted by the issue. The keys of this mapping are specific to the ADRIO,
+    as ADRIOs tend to deal with unique data challenges.
+    """
 
     def __post_init__(self):
         for issue_name, mask in self.issues.items():
@@ -347,6 +418,10 @@ class InspectResult(Generic[ResultT, ValueT]):
 
     @property
     def values(self) -> NDArray[ValueT]:
+        """
+        The values in the result. If the result is date/value tuples, the values are
+        first extracted.
+        """
         values = self.result
         if is_date_value_array(values, self.dtype):
             _, values = extract_date_value(values, self.dtype)
@@ -354,6 +429,12 @@ class InspectResult(Generic[ResultT, ValueT]):
 
     @property
     def quantify(self) -> Sequence[tuple[str, float]]:
+        """
+        Quantifies properties of the data: what percentage of the values are impacted by
+        each data issue (if any), how many are zero, and how many are "unmasked" (that
+        is, not affected by any issues). Returns a sequence of tuples which are the name
+        of the quality and the percentage of values.
+        """
         vs = self.values
         size = vs.size
         unmasked_count = np.ma.count(vs)
@@ -440,19 +521,6 @@ class ResultFormat(Generic[ValueT]):
 
     ResultFormat is a frozen dataclass.
     It is generic in the dtype of the result's data (`ValueT`).
-
-    Parameters
-    ----------
-    shape : DataShape
-        The expected shape of the result array.
-    value_dtype : type[ValueT]
-        The dtype of the data contained in the result array.
-    validation : ArrayValidation[ValueT]
-        A validation functino for a result array.
-    is_date_value : bool
-        True if the result is packed in a date/value array,
-        False otherwise. If the result is a date/value array,
-        the type `ValueT` reflects the inner value type.
     """
 
     shape: DataShape
@@ -460,27 +528,36 @@ class ResultFormat(Generic[ValueT]):
     value_dtype: type[ValueT]
     """The dtype of the data contained in the result array."""
     validation: ArrayValidation[ValueT]
-    """A validation functino for a result array."""
+    """A validation function for a result array."""
     is_date_value: bool = field(default=False)
-    """True if the result is packed in a date/value array."""
+    """
+    True if the result is packed in a date/value array. If the result is a
+    date/value array, the type `ValueT` reflects the inner value type.
+    """
 
 
 class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
     """
-    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
-    to load data from external sources for epymorph simulations. This may be from
-    web APIs, local files or database, or anything imaginable.
+    ADRIOs (or Abstract Data Resource Interface Objects) are functions which are
+    intended to load data from external sources for epymorph simulations. This may be
+    from web APIs, local files or databases, or anything imaginable.
 
-    ADRIO is an abstract base class. It it generic in the form of the result (`ResultT`)
-    and the type of the values in the result (`ValueT`). Both represent numpy dtypes.
-    When the ADRIO's result is simple, like a numpy array of 64-bit integers, both
-    `ResultT` and `ValueT` will be the same -- `np.int64`. If the result is a structured
-    type, however, like with numpy arrays containing date/value tuples, `ResultT` will
-    reflect the "outer" structured type and `ValueT` will reflect type of the "inner"
-    data values. As a common example, a data/value array with 64-bit integer values
-    will have `ResultT` equal to `[("date", np.datetime64), ("value", np.int64)]`
+    ADRIO is an abstract base class. It is generic in both the form of the result
+    (`ResultT`) and the type of the values in the result (`ValueT`). Both represent
+    numpy dtypes. When the ADRIO's result is simple, like a numpy array of 64-bit
+    integers, both `ResultT` and `ValueT` will be the same -- `np.int64`. If the result
+    is a structured type, however, like with numpy arrays containing date/value tuples,
+    `ResultT` will reflect the "outer" structured type and `ValueT` will reflect type
+    of the "inner" data values. As a common example, a date/value array with 64-bit
+    integer values will have `ResultT` equal to
+    `[("date", np.datetime64), ("value", np.int64)]`
     and `ValueT` equal to `np.int64`. (This complexity is necessary to work around
     weaknesses in Python's type system.)
+
+    See Also
+    --------
+    ADRIO extends [`SimulationFunction`](`epymorph.simulation.SimulationFunction`),
+    enforcing that the return type must be a numpy array.
     """
 
     @property
@@ -686,9 +763,10 @@ def _(
 
 class FetchADRIO(ADRIO[ResultT, ValueT]):
     """
-    A specialization of ADRIO that adds structure for ADRIOs that load data from an
-    external source, such as an API. Instead of overriding `inspect`, implement
-    `_fetch` and `_process` instead.
+    A specialization of [`ADRIO`](`epymorph.adrio.adrio.ADRIO`) that adds structure for
+    ADRIOs that load data from an external source, such as an API. FetchADRIO provides
+    an implementation of `inspect`, and requires that you implement methods `_fetch` and
+    `_process` instead.
 
     FetchADRIO is an abstract class.
     """
