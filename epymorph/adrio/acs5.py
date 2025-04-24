@@ -695,6 +695,34 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
             issues={},
         )
 
+    @staticmethod
+    def age_ranges(year: int) -> Sequence[AgeRange]:
+        """
+        Lists the AgeRanges used by the ACS5 population by age table in definition order
+        for the given year. Note that this does not correspond one-to-one with the
+        values in the B01001 table -- this list omits "total" columns and duplicates.
+
+        This is a static method.
+
+        Parameters
+        ----------
+        year : int
+            A supported ACS5 year.
+
+        Returns
+        -------
+        Sequence[AgeRange]
+            The age ranges.
+        """
+        return filter_unique(
+            x
+            for x in (
+                AgeRange.parse(attrs["label"])
+                for _, attrs in ACS5Client.get_group_vars(year, "B01001")
+            )
+            if x is not None
+        )
+
 
 # fmt: off
 RaceCategory = Literal["White", "Black", "Native", "Asian", "Pacific Islander", "Other", "Multiple"]  # noqa: E501
