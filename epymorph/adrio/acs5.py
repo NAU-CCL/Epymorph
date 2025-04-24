@@ -304,6 +304,9 @@ def _get_scope(adrio: ADRIO, context: Context) -> CensusScope:
     if context.scope.year not in ACS5_YEARS:
         err = f"{context.scope.year} is not a supported year for ACS5 data."
         raise ADRIOContextError(adrio, context, err)
+    if isinstance(context.scope, BlockGroupScope) and context.scope.year <= 2012:
+        err = "Block group ACS5 data is not available via this API for 2012 or prior."
+        raise ADRIOContextError(adrio, context, err)
     return context.scope
 
 
