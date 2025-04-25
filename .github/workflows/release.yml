@@ -45,6 +45,21 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 
+      - name: Setup cache folder (bash)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p .cache
+          echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
+
+      - name: Setup cache folder (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .cache | Out-Null
+          $cachePath = Resolve-Path .cache
+          echo "EPYMORPH_CACHE_PATH=$cachePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Configure AWS Credentials
         if: vars.SIDELOAD_CACHE == 'true'
         uses: aws-actions/configure-aws-credentials@v4
@@ -55,10 +70,7 @@ jobs:
 
       - name: Download cache files from S3
         if: vars.SIDELOAD_CACHE == 'true'
-        run: |
-          mkdir -p .cache
-          echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
-          aws s3 sync s3://epymorph-gha-cache .cache
+        run: aws s3 sync s3://epymorph-gha-cache .cache
 
       - name: Run unit tests
         run: uv run pytest tests/fast
