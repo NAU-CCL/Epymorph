@@ -22,7 +22,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          version: "0.6.x"
+          version: ${{ vars.UV_VERSION }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
