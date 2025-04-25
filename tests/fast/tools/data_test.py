@@ -48,15 +48,15 @@ def output(rume: RUME[StateScope]) -> Output:
         rume,
         pd.DataFrame(
             {
-                "tick": np.repeat(np.arange(0, 4), 2),
+                "tick": np.repeat(np.arange(0, 4, dtype=np.int64), 2),
                 "date": np.repeat(np.arange(date(2021, 1, 1), date(2021, 1, 5)), 2),
                 "node": np.tile(["04", "35"], 4),
-                "S": np.arange(3000, 3800, 100),
-                "I": np.arange(2000, 2800, 100),
-                "R": np.arange(1000, 1800, 100),
-                "S → I": np.arange(300, 380, 10),
-                "I → R": np.arange(200, 280, 10),
-                "R → S": np.arange(100, 180, 10),
+                "S": np.arange(3000, 3800, 100, dtype=np.int64),
+                "I": np.arange(2000, 2800, 100, dtype=np.int64),
+                "R": np.arange(1000, 1800, 100, dtype=np.int64),
+                "S → I": np.arange(300, 380, 10, dtype=np.int64),
+                "I → R": np.arange(200, 280, 10, dtype=np.int64),
+                "R → S": np.arange(100, 180, 10, dtype=np.int64),
             }
         ),
     )
@@ -73,11 +73,11 @@ def test_basic_munge(rume, output):
 
     expected = pd.DataFrame(
         {
-            "time": [1, 2],
+            "time": np.array([1, 2], dtype=np.int64),
             "geo": ["04", "04"],
-            "S": [3200, 3400],
-            "I": [2200, 2400],
-            "R": [1200, 1400],
+            "S": np.array([3200, 3400], dtype=np.int64),
+            "I": np.array([2200, 2400], dtype=np.int64),
+            "R": np.array([1200, 1400], dtype=np.int64),
         }
     )
 
