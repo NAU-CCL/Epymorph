@@ -739,9 +739,9 @@ class ReqTree(Generic[V]):
 
         Raises
         ------
-        AttributeException
-            if the tree cannot be evaluated, for instance, due to containing
-            circular dependencies
+        DataAttributeError
+            If the tree cannot be evaluated, for instance, due to containing
+            circular dependencies.
         """
 
         def recurse(

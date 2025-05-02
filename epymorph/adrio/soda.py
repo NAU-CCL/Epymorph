@@ -1,10 +1,14 @@
 """
 Methods for querying SODA APIs.
-See: https://dev.socrata.com/
+See: [https://dev.socrata.com/](https://dev.socrata.com/)
 
-There is a package called sodapy that was created for this purpose;
-however at time of writing, it is no longer maintained.
+Examples
+--------
+--8<-- "docs/_examples/adrio_soda.md"
 """
+
+# NOTE: There is a package called sodapy that was created for this purpose;
+# however at time of writing, it is no longer maintained.
 
 from abc import abstractmethod
 from collections.abc import Iterator
@@ -74,7 +78,12 @@ class SocrataResource:
     """
     Defines a Socrata API resource.
 
-    SocrataResource is a frozen dataclass.
+    Parameters
+    ----------
+    domain :
+        The domain where the API is hosted.
+    id :
+        The ID of the resource.
     """
 
     domain: str
@@ -96,11 +105,7 @@ class SocrataResource:
 
 
 class SelectClause(Protocol):
-    """
-    A SOQL select clause.
-
-    SelectClause is a protocol.
-    """
+    """The common interface for SOQL select clauses."""
 
     @property
     @abstractmethod
@@ -119,7 +124,14 @@ class Select(SelectClause):
     """
     A SOQL select clause for selecting a column as-is.
 
-    Select is a frozen dataclass.
+    Parameters
+    ----------
+    name :
+        Column name.
+    dtype :
+        The data type of the column.
+    as_name :
+        Define a new name for the column; the 'AS' statement.
     """
 
     name: str
@@ -150,12 +162,22 @@ class SelectExpression(SelectClause):
     """
     A SOQL select clause for selecting the result of an expression.
 
-    SelectExpression is a frozen dataclass.
+    Parameters
+    ----------
+    expression :
+        Expression; as best practice you should escape column names in the expression
+        by surrounding them in back-ticks.
+    dtype :
+        The data type of the column.
+    as_name :
+        Define a name for the result; the 'AS' statement.
     """
 
     expression: str
-    """Expression; as best practice you should escape column names in the expression
-    by surrounding them in back-ticks."""
+    """
+    Expression; as best practice you should escape column names in the expression
+    by surrounding them in back-ticks.
+    """
     dtype: ColumnType
     """The data type of the column."""
     as_name: str
@@ -176,11 +198,7 @@ class SelectExpression(SelectClause):
 
 
 class WhereClause(Protocol):
-    """
-    A SOQL where clause.
-
-    WhereClause is a protocol.
-    """
+    """The common interface for SOQL where clauses."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,7 +206,10 @@ class NotNull(WhereClause):
     """
     A where-clause for rows that are not null.
 
-    NotNull is a frozen dataclass.
+    Parameters
+    ----------
+    column :
+        Column name.
     """
 
     column: str
@@ -203,7 +224,12 @@ class Equals(WhereClause):
     """
     A where-clause for rows whose values are equal to the given value.
 
-    Equals is a frozen dataclass.
+    Parameters
+    ----------
+    column :
+        Column name.
+    value :
+        The value to test.
     """
 
     column: str
@@ -220,7 +246,12 @@ class In(WhereClause):
     """
     A where-clause for rows whose values are in the given set of values.
 
-    In is a frozen dataclass.
+    Parameters
+    ----------
+    column :
+        Column name.
+    values :
+        The sequence of values to test.
     """
 
     column: str
@@ -243,7 +274,14 @@ class DateBetween(WhereClause):
     A where-clause for rows whose date values are between two dates.
     Endpoints are inclusive.
 
-    DateBetween is a frozen dataclass.
+    Parameters
+    ----------
+    column :
+        Column name.
+    start :
+        Start date.
+    end :
+        End date (inclusive).
     """
 
     column: str
@@ -262,7 +300,10 @@ class And(WhereClause):
     """
     A where-clause that joins other where clauses with "and".
 
-    And is a frozen dataclass.
+    Parameters
+    ----------
+    clauses :
+        The clauses to join with an 'AND'.
     """
 
     clauses: Sequence[WhereClause]
@@ -286,7 +327,10 @@ class Or(WhereClause):
     """
     A where-clause that joins other where clauses with "or".
 
-    Or is a frozen dataclass.
+    Parameters
+    ----------
+    clauses :
+        The clauses to join with an 'OR'.
     """
 
     clauses: Sequence[WhereClause]
@@ -310,7 +354,10 @@ class Not(WhereClause):
     """
     A where-clause that negates another where clause.
 
-    Not is a frozen dataclass.
+    Parameters
+    ----------
+    clause :
+        The clause to negate.
     """
 
     clause: WhereClause
@@ -321,11 +368,7 @@ class Not(WhereClause):
 
 
 class OrderClause(Protocol):
-    """
-    A SOQL order-by clause.
-
-    OrderClause is a protocol.
-    """
+    """The common interface for SOQL order-by clauses."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,7 +376,10 @@ class Ascending(OrderClause):
     """
     An order-by-clause that sorts the named column in ascending order.
 
-    Ascending is a frozen dataclass.
+    Parameters
+    ----------
+    column :
+        The column name.
     """
 
     column: str
@@ -348,7 +394,10 @@ class Descending(OrderClause):
     """
     An order-by-clause that sorts the named column in descending order.
 
-    Descending is a frozen dataclass.
+    Parameters
+    ----------
+    column :
+        The column name.
     """
 
     column: str
@@ -364,7 +413,14 @@ class Query:
     A complete SOQL query, which includes oen or more select clauses,
     exactly one where clause, and any number of order-by clauses.
 
-    Query is a frozen dataclass.
+    Parameters
+    ----------
+    select :
+        One or more select clauses.
+    where :
+        A where clause.
+    order_by :
+        Zero or more order-by clause.
     """
 
     select: Sequence[SelectClause]
@@ -395,34 +451,34 @@ def query_csv(
     api_token: str | None = None,
 ) -> pd.DataFrame:
     """
-    Issue `query` against the data in `resource` and return the result as a DataFrame.
+    Issue `query` against the data in `resource` and return the result as a dataframe.
     For particularly large result sets, we may need to break up the total query into
     more than one request. This is handled automatically, as is concatenating the
     results.
 
     Parameters
     ----------
-    resource : SocrataResource
+    resource :
         The data resource.
-    query : Query
+    query :
         The query object.
-    limit : int, default=10000
+    limit :
         The maximum number of rows fetched per request. Changing this should not change
         the results, but may change the number of requests (and the clock time) it takes
         to produce the results.
-    result_filter : Callable[[DataFrame], DataFrame], optional
+    result_filter :
         An optional transform to apply to the results, intended to be used to filter out
         rows from the result in situations where doing this filtering as a where-clause
         would be impossible or impractical. This function will be run on the results of
         each request, not the end result, since it is likely to be more efficient to
         filter as we go when the data requires many requests to complete.
-    api_token : str, optional
+    api_token :
         An optional API token to include in requests.
 
     Returns
     -------
-    DataFrame
-        The results as a DataFrame.
+    :
+        The query results.
     """
     return query_csv_soql(
         resource=resource,
@@ -445,33 +501,33 @@ def query_csv_soql(
 ) -> pd.DataFrame:
     """
     Issue the query (given in string form, `soql`) against the data in `resource` and
-    return the result as a DataFrame. For particularly large result sets, we may need to
+    return the result as a dataframe. For particularly large result sets, we may need to
     break up the total query into more than one request. This is handled automatically,
     as is concatenating the results.
 
     Parameters
     ----------
-    resource : SocrataResource
+    resource :
         The data resource.
-    query : Query
-        The query object.
-    limit : int, default=10000
+    soql :
+        The query string.
+    limit :
         The maximum number of rows fetched per request. Changing this should not change
         the results, but may change the number of requests (and the clock time) it takes
         to produce the results.
-    result_filter : Callable[[DataFrame], DataFrame], optional
+    result_filter :
         An optional transform to apply to the results, intended to be used to filter out
         rows from the result in situations where doing this filtering as a where-clause
         would be impossible or impractical. This function will be run on the results of
         each request, not the end result, since it is likely to be more efficient to
         filter as we go when the data requires many requests to complete.
-    api_token : str, optional
+    api_token :
         An optional API token to include in requests.
 
     Returns
     -------
-    DataFrame
-        The results as a DataFrame.
+    :
+        The query results.
     """
 
     # NOTE: type conversion is essentially non-existent,

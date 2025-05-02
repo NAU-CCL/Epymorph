@@ -13,47 +13,49 @@ from typing_extensions import override
 @dataclass(frozen=True)
 class DateRange:
     """
-    Like [`range`](:py:class:`range`) but for dates, with an optional fixed interval
-    between dates.
+    A sequence of calendar dates, with a fixed interval between dates (default 1 day).
 
-    DateRange is a frozen dataclass.
+    Parameters
+    ----------
+    start_date :
+        The first date in the range.
+    end_date :
+        The last date in the range. Must be an exact multiple of steps after start_date.
+    step :
+        The step between dates in the range, as a number of days. Must be 1 or greater.
     """
 
     start_date: date
     """The first date in the range."""
     end_date: date
-    """The last date in the range. Must be an exact multiple of steps after
-    start_date."""
+    """The last date in the range."""
     step: int = field(default=1)
-    """The step between dates in the range, as a number of days.
-    Must be 1 or greater."""
+    """The step between dates in the range, as a number of days."""
 
     @classmethod
     def until_date(cls, start_date: date, max_end_date: date, step: int) -> Self:
         """
-        Alternative constructor for DateRange when you aren't sure of the precise end
+        Alternative constructor for cases where you aren't sure of the precise end
         date: that is, you know roughly when the range ends but aren't sure if that
         date is an exact number of steps after start date.
 
-        until_date is a class method.
-
         Parameters
         ----------
-        start_date : date
+        start_date :
             The first date in the range.
-        max_end_date : date
-            The latest possible date in the range. If max_end_date is already an exact
-            multiple of steps away from `start_date`, it will be the DateRange's end
+        max_end_date :
+            The latest possible date in the range. If `max_end_date` is already an exact
+            multiple of steps away from `start_date`, it will be the `DateRange`'s end
             date. Otherwise, we will calculate the latest date that is before
             `max_end_date` and also an exact multiple of steps after start date.
-        step : int
-            The step between dates in the range, as a number of days.
+        step :
+            The interval between dates in the range, as a number of days.
             Must be 1 or greater.
 
         Returns
         -------
-        DateRange
-            A new DateRange.
+        :
+            A new `DateRange`.
         """
         diff = (max_end_date - start_date).days % step
         end_date = max_end_date - timedelta(days=diff)
@@ -70,9 +72,9 @@ class DateRange:
 
     def _next_date(self, from_date: date) -> date | None:
         """
-        If from_date is in the range, return it.
+        If `from_date` is in the range, return it.
         Otherwise return the next date that is in the range.
-        Returns None if no date satisfies these conditions.
+        Returns `None` if no date satisfies these conditions.
         """
         s = self.step
         diff = (s - (from_date - self.start_date).days % s) % s
@@ -81,9 +83,9 @@ class DateRange:
 
     def _prev_date(self, from_date: date) -> date | None:
         """
-        If from_date is in the range, return it.
+        If `from_date` is in the range, return it.
         Otherwise return the most recent date that is in the range.
-        Returns None if no date satisfies these conditions.
+        Returns `None` if no date satisfies these conditions.
         """
         diff = (from_date - self.start_date).days % self.step
         result = min(self.end_date, from_date - timedelta(days=diff))
@@ -91,21 +93,21 @@ class DateRange:
 
     def between(self, min_date: date, max_date: date) -> "DateRange | None":
         """
-        Compute a new DateRange that represents the subset of dates in this range
+        Compute a new `DateRange` that represents the subset of dates in this range
         that are also between `min_date` and `max_date` (inclusive).
 
         Parameters
         ----------
-        min_date : date
+        min_date :
             The earliest date to include in the subset.
-        max_date : date
+        max_date :
             The latest date to include in the subset.
 
         Returns
         -------
-        DateRange | None
-            The subset DateRange, or None if that subset would be empty -- when there's
-            no overlap between this DateRange and the min/max dates.
+        :
+            The subset `DateRange`, or `None` if that subset would be empty -- when
+            there's no overlap between this range and the min/max dates.
         """
         if min_date > max_date:
             raise ValueError("`min_date` must be before or equal to `max_date`")
@@ -121,17 +123,17 @@ class DateRange:
 
     def overlap(self, time_frame: "TimeFrame") -> "DateRange | None":
         """
-        Compute a new DateRange that represents the subset of dates in this range
+        Compute a new `DateRange` that represents the subset of dates in this range
         that are also in the given TimeFrame.
 
         Parameters
         ----------
-        time_frame : TimeFrame
+        time_frame :
             The time frame to overlap.
 
         Returns
         -------
-        DateRange | None
+        :
             The subset DateRange, or None if that subset would be empty -- when there's
             no overlap between this DateRange and the time frame.
         """
@@ -139,23 +141,23 @@ class DateRange:
 
     def overlap_or_raise(self, time_frame: "TimeFrame") -> "DateRange":
         """
-        Compute a new DateRange that represents the subset of dates in this range
-        that are also in the given TimeFrame. If there is no overlap, raise an error.
+        Compute a new `DateRange` that represents the subset of dates in this range
+        that are also in the given `TimeFrame`. If there is no overlap, raise an error.
 
         Parameters
         ----------
-        time_frame : TimeFrame
+        time_frame :
             The time frame to overlap.
 
         Returns
         -------
-        DateRange
-            The subset DateRange.
+        :
+            The subset `DateRange`.
 
         Raises
         ------
         ValueError
-            When there's no overlap between this DateRange and the time frame.
+            When there's no overlap between this `DateRange` and the time frame.
         """
         if (date_range := self.overlap(time_frame)) is None:
             err = "There is no overlap between the date range and time frame."
@@ -168,11 +170,11 @@ class DateRange:
 
     def to_pandas(self) -> pd.DatetimeIndex:
         """
-        Convert the DateRange to a Pandas datetime index.
+        Convert the `DateRange` to a Pandas datetime index.
 
         Returns
         -------
-        DatetimeIndex
+        :
             The index containing all dates in the range in order.
         """
         return pd.date_range(
@@ -184,11 +186,11 @@ class DateRange:
 
     def to_numpy(self) -> NDArray[np.datetime64]:
         """
-        Convert the DateRange to a numpy datetime64 array.
+        Convert the `DateRange` to a numpy datetime64 array.
 
         Returns
         -------
-        NDArray[datetime64]
+        :
             The one-dimensional array containing all dates in the range in order.
         """
         step = timedelta(days=self.step)
@@ -206,12 +208,12 @@ def iso8601(value: date | str) -> date:
 
     Parameters
     ----------
-    value : date | str
+    value :
         The value to parse (if string) or pass through unchanged (if date).
 
     Returns
     -------
-    date
+    :
         The equivalent date.
     """
     if isinstance(value, date):
@@ -225,22 +227,36 @@ class TimeFrame:
     Describes a time frame as a contiguous set of calendar dates,
     primarily used to define the time frame of a simulation.
 
-    TimeFrame is a frozen dataclass. TimeFrame is iterable, and produces
-    the sequence of dates in the time frame.
+    Parameters
+    ----------
+    start_date :
+        The first date included in the time frame.
+    duration_days :
+        The number of days included in the time frame.
+
+    Examples
+    --------
+    --8<-- "docs/_examples/time_TimeFrame.md"
     """
 
     @classmethod
     def of(cls, start_date: date | str, duration_days: int) -> Self:
         """
-        Alternate constructor: start date and a given duration in days.
+        Alternate constructor: start date (accepts ISO-8601 strings)
+        and a given duration in days.
 
         Parameters
         ----------
-        start_date : date | str
+        start_date :
             The starting date.
             If a date is passed as a string, it will be parsed using ISO-8601 format.
-        duration_days : int
+        duration_days :
             The number of days in the time frame, including the first day.
+
+        Returns
+        -------
+        :
+            The new `TimeFrame`.
         """
         start_date = iso8601(start_date)
         return cls(start_date, duration_days)
@@ -252,12 +268,17 @@ class TimeFrame:
 
         Parameters
         ----------
-        start_date : date | str
+        start_date :
             The starting date.
             If a date is passed as a string, it will be parsed using ISO-8601 format.
-        end_date : date | str
+        end_date :
             The final date included in the time frame.
             If a date is passed as a string, it will be parsed using ISO-8601 format.
+
+        Returns
+        -------
+        :
+            The new `TimeFrame`.
         """
         start_date = iso8601(start_date)
         end_date = iso8601(end_date)
@@ -271,12 +292,17 @@ class TimeFrame:
 
         Parameters
         ----------
-        start_date : date | str
+        start_date :
             The starting date.
             If a date is passed as a string, it will be parsed using ISO-8601 format.
-        end_date_exclusive : date | str
+        end_date_exclusive :
             The stop date, which is to say the first date not in the time frame.
             If a date is passed as a string, it will be parsed using ISO-8601 format.
+
+        Returns
+        -------
+        :
+            The new `TimeFrame`.
         """
         start_date = iso8601(start_date)
         end_date_exclusive = iso8601(end_date_exclusive)
@@ -290,16 +316,21 @@ class TimeFrame:
 
         Parameters
         ----------
-        year : int
+        year :
             The year of the time frame, from January 1st through December 31st.
             Includes 365 days, or 366 days on a leap year.
+
+        Returns
+        -------
+        :
+            The new `TimeFrame`.
         """
         return cls.rangex(date(year, 1, 1), date(year + 1, 1, 1))
 
     start_date: date
     """The first date in the time frame."""
     duration_days: int
-    """The number of days for included in the time frame."""
+    """The number of days included in the time frame."""
     end_date: date = field(init=False)
     """The last date included in the time frame."""
 
@@ -315,16 +346,16 @@ class TimeFrame:
 
     def is_subset(self, other: "TimeFrame") -> bool:
         """
-        Is the given TimeFrame a subset of this one?
+        Is the given `TimeFrame` a subset of this one?
 
         Parameters
         ----------
-        other : TimeFrame
+        other :
             The other time frame to consider.
 
         Returns
         -------
-        bool
+        :
             True if the other time frame is a subset of this time frame.
         """
         return self.start_date <= other.start_date and self.end_date >= other.end_date
@@ -335,7 +366,7 @@ class TimeFrame:
         return self.duration_days
 
     def __iter__(self) -> Iterator[date]:
-        """Iterates over the sequence of dates which are part of this time frame."""
+        """Iterate over the sequence of dates in the time frame."""
         step = timedelta(days=1)
         curr = self.start_date
         for _ in range(self.duration_days):
@@ -353,8 +384,8 @@ class TimeFrame:
 
         Returns
         -------
-        NDArray[np.datetime64]
-            The array in `np.datetime64` format.
+        :
+            The equivalent numpy array.
         """
         return np.array(list(self), dtype=np.datetime64)
 
@@ -375,9 +406,8 @@ class TimeFrame:
 
 class EpiWeek(NamedTuple):
     """
-    A CDC-defined system for labeling weeks of the year.
-
-    EpiWeek is a NamedTuple.
+    Identifies a specific epi week, a CDC-defined system for labeling weeks of the year
+    in a consistent way.
 
     See Also
     --------
@@ -405,12 +435,12 @@ def epi_year_first_day(year: int) -> pd.Timestamp:
 
     Parameters
     ----------
-    year : int
+    year :
         The year to consider.
 
     Returns
     -------
-    pd.Timestamp
+    :
         The first day of the first epi week in the given year.
     """
     first_saturday = pd.Timestamp(year, 1, 1) + pd.offsets.Week(weekday=5)
@@ -426,13 +456,13 @@ def epi_week(check_date: date) -> EpiWeek:
 
     Parameters
     ----------
-    check_date : date
+    check_date :
         The date to consider.
 
     Returns
     -------
-    EpiWeek
-        The EpiWeek that contains the given date.
+    :
+        The `EpiWeek` that contains the given date.
     """
     d = pd.Timestamp(check_date.year, check_date.month, check_date.day)
     last_year_day1 = epi_year_first_day(d.year - 1)
@@ -459,14 +489,13 @@ def epi_week(check_date: date) -> EpiWeek:
 
 
 GroupKeyType = TypeVar("GroupKeyType", bound=np.generic)
+"""The numpy type used to represent the group keys of a `TimeGrouping`."""
 
 
 class Dim(NamedTuple):
     """
     Describes data dimensions for a time-grouping operation;
     i.e., after subselections and geo-grouping.
-
-    Dim is a NamedTuple.
     """
 
     nodes: int
@@ -479,11 +508,9 @@ class Dim(NamedTuple):
 
 class TimeGrouping(ABC, Generic[GroupKeyType]):
     """
-    Defines a time-axis grouping scheme. This is essentially a function that maps
+    Base class for time-axis grouping schemes. This is essentially a function that maps
     the simulation time axis info (ticks and dates) into a new series which describes
     the group membership of each time axis row.
-
-    TimeGrouping is an abstract class.
 
     TimeGrouping is generic in the type of the key it uses for its
     time groups (`GroupKeyType`) -- e.g., a grouping that groups weeks
@@ -492,9 +519,11 @@ class TimeGrouping(ABC, Generic[GroupKeyType]):
     """
 
     group_format: Literal["date", "tick", "day", "other"]
-    """What scale describes the result of the grouping?
+    """
+    What scale describes the result of the grouping?
     Are the group keys dates? Simulation ticks? Simulation days?
-    Or some arbitrary other type?"""
+    Or some arbitrary other type?
+    """
 
     @abstractmethod
     def map(
@@ -521,16 +550,16 @@ class TimeGrouping(ABC, Generic[GroupKeyType]):
 
         Parameters
         ----------
-        dim : Dim
+        dim :
             The simulation dimensions for time grouping.
-        ticks : NDArray[np.int64]
+        ticks :
             The series of simulation ticks.
-        dates : NDArray[np.datetime64]
+        dates :
             The series of calendar dates corresponding to simulation ticks.
 
         Returns
         -------
-        NDArray[GroupKeyType]
+        :
             The group membership of each tick. For example, if the first three
             ticks were in group 0 and the next three ticks were in group 1, etc.,
             the returned array would contain `[0,0,0,1,1,1,...]`.
@@ -539,8 +568,8 @@ class TimeGrouping(ABC, Generic[GroupKeyType]):
 
 class ByTick(TimeGrouping[np.int64]):
     """
-    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
-    Group by simulation tick. (Effectively the same as no grouping.)
+    A kind of `TimeGrouping` to group by simulation tick.
+    (Effectively the same as no grouping.)
     """
 
     group_format = "tick"
@@ -551,10 +580,7 @@ class ByTick(TimeGrouping[np.int64]):
 
 
 class ByDate(TimeGrouping[np.datetime64]):
-    """
-    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
-    Group by date.
-    """
+    """A kind of `TimeGrouping` to group by date."""
 
     group_format = "date"
 
@@ -565,12 +591,11 @@ class ByDate(TimeGrouping[np.datetime64]):
 
 class ByWeek(TimeGrouping[np.datetime64]):
     """
-    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
-    Group by week, using the given start of the week.
+    A kind of `TimeGrouping` to group by week, using a configurable start of the week.
 
     Parameters
     ----------
-    start_of_week : int, default=0
+    start_of_week :
         Which day of the week is the begins each weekly group?
         This uses the Python standard numbering for week days,
         so 0=Monday and 6=Sunday.
@@ -599,8 +624,7 @@ class ByWeek(TimeGrouping[np.datetime64]):
 
 class ByMonth(TimeGrouping[np.datetime64]):
     """
-    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
-    Group by month, using the first day of the month.
+    A kind `TimeGrouping` to group by month, using the first day of the month.
     """
 
     group_format = "date"
@@ -612,12 +636,11 @@ class ByMonth(TimeGrouping[np.datetime64]):
 
 class EveryNDays(TimeGrouping[np.datetime64]):
     """
-    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
-    Group every 'n' days from the start of the time range.
+    A kind of `TimeGrouping` to group every 'n' days from the start of the time range.
 
     Parameters
     ----------
-    days : int
+    days :
         How many days should be in each group?
     """
 
@@ -638,9 +661,8 @@ class EveryNDays(TimeGrouping[np.datetime64]):
 
 class NBins(TimeGrouping[np.int64]):
     """
-    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
-    Group the time series into a number of bins where bin boundaries
-    must align with simulation days.
+    A kind of `TimeGrouping` to group the time series into a number of bins
+    where bin boundaries must align with simulation days.
 
     If the time series is not evenly divisible into the given number of bins,
     you may get more bins than requested (data will not be truncated).
@@ -648,7 +670,7 @@ class NBins(TimeGrouping[np.int64]):
 
     Parameters
     ----------
-    bins : int
+    bins :
         Approximately how many bins should be in the result?
     """
 
@@ -667,10 +689,7 @@ class NBins(TimeGrouping[np.int64]):
 
 
 class ByEpiWeek(TimeGrouping[np.str_]):
-    """
-    An instance of [`TimeGrouping`](`epymorph.time.TimeGrouping`).
-    Group the time series by epi week.
-    """
+    """A kind of `TimeGrouping` to group the time series by epi week."""
 
     group_format = "other"
 
@@ -679,25 +698,19 @@ class ByEpiWeek(TimeGrouping[np.str_]):
         return np.array([str(epi_week(d.astype(date))) for d in dates], dtype=np.str_)
 
 
-_AggMethod = Literal["sum", "max", "min", "mean", "median", "last", "first"]
-"""
-A method for aggregating time series data.
-
-`Literal["sum", "max", "min", "mean", "median", "last", "first"]`
-"""
+AggMethod = Literal["sum", "max", "min", "mean", "median", "last", "first"]
+"""A method for aggregating time series data."""
 
 
 class TimeAggMethod(NamedTuple):
     """
     A time-axis aggregation scheme. There may be one aggregation method for
     compartments and another for events.
-
-    TimeAggMethod is a NamedTuple.
     """
 
-    compartments: _AggMethod
+    compartments: AggMethod
     """The method for aggregating compartment values."""
-    events: _AggMethod
+    events: AggMethod
     """The method for aggregating event values."""
 
 
@@ -713,20 +726,18 @@ class TimeStrategy:
     Strategies can include selection of a subset, grouping, and aggregation.
 
     Typically you will create one of these by calling methods on a
-    [`TimeSelector`](`epymorph.time.TimeSelector`) instance.
-
-    TimeStrategy is a frozen dataclass.
+    `TimeSelector` instance.
 
     Parameters
     ----------
-    time_frame: TimeFrame
+    time_frame :
         The original simulation time frame.
-    selection: tuple[slice, int | None]
+    selection :
         The selected subset of the time frame: described as a date slice
         and an optional tau step index.
-    grouping: TimeGrouping | None
+    grouping :
         A method for grouping the time series data.
-    aggregation: TimeAggMethod | None
+    aggregation :
         A method for aggregating the time series data
         (if no grouping is specified, the time series is reduced to a scalar).
     """
@@ -739,8 +750,10 @@ class TimeStrategy:
     grouping: TimeGrouping | None
     """A method for grouping the time series data."""
     aggregation: TimeAggMethod | None
-    """A method for aggregating the time series data
-    (if no grouping is specified, the time series is reduced to a scalar)."""
+    """
+    A method for aggregating the time series data
+    (if no grouping is specified, the time series is reduced to a scalar).
+    """
 
     @property
     @abstractmethod
@@ -760,15 +773,35 @@ class TimeStrategy:
         return (first_date, last_date)
 
     def to_time_frame(self) -> TimeFrame:
-        """Creates a TimeFrame that has the same bounds as this TimeStrategy.
-        NOTE: this does not mean the TimeFrame contains the same number of entries
+        """
+        Creates a `TimeFrame` that has the same bounds as this `TimeStrategy`.
+
+        NOTE: this does not mean the `TimeFrame` contains the same number of entries
         (group keys) as the result of applying this strategy -- groups can skip days
-        whereas TimeFrames are contiguous."""
+        whereas `TimeFrames` are contiguous.
+
+        Returns
+        -------
+        :
+            The corresponding time frame.
+        """
         first, last = self.date_bounds
         return TimeFrame.range(first, last)
 
     def selection_ticks(self, taus: int) -> slice:
-        """Converts this into a slice for which ticks are selected (by index)."""
+        """
+        Converts this into a slice for which ticks are selected (by index).
+
+        Parameters
+        ----------
+        taus :
+            The total number of tau steps per day.
+
+        Returns
+        -------
+        :
+            The selection as an index slice.
+        """
         day, tau_step = self.selection
         if tau_step is not None and tau_step >= taus:
             err = (
@@ -800,24 +833,24 @@ class TimeStrategy:
 class _CanAggregate(TimeStrategy):
     def agg(
         self,
-        compartments: _AggMethod = "last",
-        events: _AggMethod = "sum",
+        compartments: AggMethod = "last",
+        events: AggMethod = "sum",
     ) -> "TimeAggregation":
         """
         Aggregates the time series using the specified methods.
 
-        Paramters
-        ---------
-        compartments : Literal["sum", "max", "min", "mean", "median", "last", "first"], default="last"
+        Parameters
+        ----------
+        compartments :
             The method to use to aggregate compartment values.
-        events : Literal["sum", "max", "min", "mean", "median", "last", "first"], default="sum"
+        events :
             The method to use to aggregate event values.
 
         Returns
         -------
-        TimeAggregation
+        :
             The aggregation strategy object.
-        """  # noqa: E501
+        """
         return TimeAggregation(
             self.time_frame,
             self.selection,
@@ -829,20 +862,17 @@ class _CanAggregate(TimeStrategy):
 @dataclass(frozen=True)
 class TimeSelection(_CanAggregate, TimeStrategy):
     """
-    A kind of [`TimeStrategy`](`epymorph.time.TimeStrategy`)
-    describing a sub-selection of a time frame.
+    A kind of `TimeStrategy` describing a sub-selection of a time frame.
     A selection performs no grouping or aggregation.
 
     Typically you will create one of these by calling methods on a
-    [`TimeSelector`](`epymorph.time.TimeSelector`) instance.
-
-    TimeSelection is a frozen dataclass.
+    `TimeSelector` instance.
 
     Parameters
     ----------
-    time_frame: TimeFrame
+    time_frame :
         The original simulation time frame.
-    selection: tuple[slice, int | None]
+    selection :
         The selected subset of the time frame: described as a date slice
         and an optional tau step index.
     """
@@ -850,13 +880,17 @@ class TimeSelection(_CanAggregate, TimeStrategy):
     time_frame: TimeFrame
     """The original time frame."""
     selection: tuple[slice, int | None]
-    """The selected subset of the time frame: described as a date slice
-    and an optional tau step index."""
+    """
+    The selected subset of the time frame: described as a date slice
+    and an optional tau step index.
+    """
     grouping: None = field(init=False, default=None)
     """A method for grouping the time series data."""
     aggregation: None = field(init=False, default=None)
-    """A method for aggregating the time series data
-    (if no grouping is specified, the time series is reduced to a scalar)."""
+    """
+    A method for aggregating the time series data
+    (if no grouping is specified, the time series is reduced to a scalar).
+    """
 
     @property
     @override
@@ -872,22 +906,22 @@ class TimeSelection(_CanAggregate, TimeStrategy):
 
         Parameters
         ----------
-        grouping : Literal["day", "week", "epiweek", "month"] | TimeGrouping
+        grouping :
             The grouping to use. You can specify a supported string value --
-            all of which act as shortcuts for common TimeGrouping instances --
-            or you can provide a TimeGrouping instance to perform custom grouping.
+            all of which act as shortcuts for common `TimeGrouping` instances --
+            or you can provide a `TimeGrouping` instance to perform custom grouping.
 
             The shortcut values are:
 
-            - "day": equivalent to [`ByDate`](`epymorph.time.ByDate`)
-            - "week": equivalent to [`ByWeek`](`epymorph.time.ByWeek`)
-            - "epiweek": equivalent to [`ByEpiWeek`](`epymorph.time.ByEpiWeek`)
-            - "month": equivalent to [`ByMonth`](`epymorph.time.ByMonth`)
+            - "day": equivalent to `ByDate`
+            - "week": equivalent to `ByWeek`
+            - "epiweek": equivalent to `ByEpiWeek`
+            - "month": equivalent to `ByMonth`
 
         Returns
         -------
-        TimeGroup
-            The grouping strategy object.
+        :
+            The grouping strategy.
         """
         match grouping:
             # String-based short-cuts:
@@ -908,35 +942,37 @@ class TimeSelection(_CanAggregate, TimeStrategy):
 @dataclass(frozen=True)
 class TimeGroup(_CanAggregate, TimeStrategy):
     """
-    A kind of [`TimeStrategy`](`epymorph.time.TimeStrategy`)
-    describing a group operation on a time frame, with an optional sub-selection.
+    A kind of `TimeStrategy` describing a group operation on a time frame,
+    with an optional sub-selection.
 
     Typically you will create one of these by calling methods on a
-    [`TimeSelection`](`epymorph.time.TimeSelection`) instance.
-
-    TimeGroup is a frozen dataclass.
+    `TimeSelection` instance.
 
     Parameters
     ----------
-    time_frame: TimeFrame
+    time_frame :
         The original simulation time frame.
-    selection: tuple[slice, int | None]
+    selection :
         The selected subset of the time frame: described as a date slice
         and an optional tau step index.
-    grouping: TimeGrouping
+    grouping :
         A method for grouping the time series data.
     """
 
     time_frame: TimeFrame
     """The original time frame."""
     selection: tuple[slice, int | None]
-    """The selected subset of the time frame: described as a date slice
-    and an optional tau step index."""
+    """
+    The selected subset of the time frame: described as a date slice
+    and an optional tau step index.
+    """
     grouping: TimeGrouping
     """A method for grouping the time series data."""
     aggregation: None = field(init=False, default=None)
-    """A method for aggregating the time series data
-    (if no grouping is specified, the time series is reduced to a scalar)."""
+    """
+    A method for aggregating the time series data
+    (if no grouping is specified, the time series is reduced to a scalar).
+    """
 
     @property
     @override
@@ -947,15 +983,11 @@ class TimeGroup(_CanAggregate, TimeStrategy):
 @dataclass(frozen=True)
 class TimeAggregation(TimeStrategy):
     """
-    A kind of [`TimeStrategy`](`epymorph.time.TimeStrategy`)
-    describing a group-and-aggregate operation on a time frame,
+    A kind of `TimeStrategy` describing a group-and-aggregate operation on a time frame,
     with an optional sub-selection.
 
     Typically you will create one of these by calling methods on a
-    [`TimeSelection`](`epymorph.time.TimeSelection`) or
-    [`TimeGroup`](`epymorph.time.TimeGroup`) instance.
-
-    TimeAggregation is a frozen dataclass.
+    `TimeSelection` or `TimeGroup` instance.
 
     Parameters
     ----------
@@ -974,13 +1006,17 @@ class TimeAggregation(TimeStrategy):
     time_frame: TimeFrame
     """The original time frame."""
     selection: tuple[slice, int | None]
-    """The selected subset of the time frame: described as a date slice
-    and an optional tau step index."""
+    """
+    The selected subset of the time frame: described as a date slice
+    and an optional tau step index.
+    """
     grouping: TimeGrouping | None
     """A method for grouping the time series data."""
     aggregation: TimeAggMethod
-    """A method for aggregating the time series data
-    (if no grouping is specified, the time series is reduced to a scalar)."""
+    """
+    A method for aggregating the time series data
+    (if no grouping is specified, the time series is reduced to a scalar).
+    """
 
     @property
     @override
@@ -992,8 +1028,7 @@ class TimeAggregation(TimeStrategy):
 class TimeSelector:
     """
     A utility class for selecting a subset of a time frame.
-    Most of the time you obtain one of these using
-    [`TimeFrame`](`epymorph.time.TimeFrame`)'s `select` property.
+    Most of the time you obtain one of these using `TimeFrame`'s `select` property.
     """
 
     time_frame: TimeFrame
@@ -1004,9 +1039,14 @@ class TimeSelector:
 
         Parameters
         ----------
-        step : int, optional
-            if given, narrow the selection to a specific tau step (by index) within
-            the date range; by default include all steps
+        step :
+            If given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps.
+
+        Returns
+        -------
+        :
+            The selection strategy object.
         """
         return TimeSelection(self.time_frame, (slice(None), step))
 
@@ -1016,8 +1056,8 @@ class TimeSelector:
         step: int | None = None,
     ) -> TimeSelection:
         """
-        Use a TimeFrame object (which must be a subset of the base TimeFrame)
-        to create a TimeSelection.
+        Use a `TimeFrame` object (which must be a subset of the base `TimeFrame`)
+        to create a `TimeSelection`.
         """
         if not self.time_frame.is_subset(other):
             err = "When selecting part of a time frame you must specify a subset."
@@ -1032,22 +1072,22 @@ class TimeSelector:
         to_day: int,
         step: int | None = None,
     ) -> TimeSelection:
-        """Subset the time frame by providing a start and end simulation day
-        (inclusive).
+        """
+        Subset the time frame by providing a start and end simulation day (inclusive).
 
         Parameters
         ----------
-        from_day : int
-            the starting simulation day of the range, as an index
-        to_day : int
-            the last included simulation day of the range, as an index
-        step : int, optional
-            if given, narrow the selection to a specific tau step (by index) within
-            the date range; by default include all steps
+        from_day :
+            The starting simulation day of the range, as an index.
+        to_day :
+            The last included simulation day of the range, as an index.
+        step :
+            If given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps.
 
         Returns
         -------
-        TimeSelection
+        :
             The selection strategy object.
         """
         return TimeSelection(self.time_frame, (slice(from_day, to_day + 1), step))
@@ -1058,21 +1098,22 @@ class TimeSelector:
         to_date: date | str,
         step: int | None = None,
     ) -> TimeSelection:
-        """Subset the time frame by providing the start and end date (inclusive).
+        """
+        Subset the time frame by providing the start and end date (inclusive).
 
         Parameters
         ----------
-        from_date : date | str
-            the starting date of the range, as a date object or an ISO-8601 string
-        to_date : date | str
-            the last included date of the range, as a date object or an ISO-8601 string
-        step : int, optional
-            if given, narrow the selection to a specific tau step (by index) within
-            the date range; by default include all steps
+        from_date :
+            The starting date of the range, as a date object or an ISO-8601 string.
+        to_date :
+            The last included date of the range, as a date object or an ISO-8601 string.
+        step :
+            If given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps.
 
         Returns
         -------
-        TimeSelection
+        :
             The selection strategy object.
         """
         other = TimeFrame.range(from_date, to_date)
@@ -1084,22 +1125,23 @@ class TimeSelector:
         until_date: date | str,
         step: int | None = None,
     ) -> TimeSelection:
-        """Subset the time frame by providing the start and end date (exclusive).
+        """
+        Subset the time frame by providing the start and end date (exclusive).
 
         Parameters
         ----------
-        from_date : date | str
-            the starting date of the range, as a date object or an ISO-8601 string
-        until_date : date | str
-            the stop date date of the range (the first date excluded)
-            as a date object or an ISO-8601 string
-        step : int, optional
-            if given, narrow the selection to a specific tau step (by index) within
-            the date range; by default include all steps
+        from_date :
+            The starting date of the range, as a date object or an ISO-8601 string.
+        until_date :
+            The stop date date of the range (the first date excluded)
+            as a date object or an ISO-8601 string.
+        step :
+            If given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps.
 
         Returns
         -------
-        TimeSelection
+        :
             The selection strategy object.
         """
         other = TimeFrame.rangex(from_date, until_date)
@@ -1110,19 +1152,20 @@ class TimeSelector:
         year: int,
         step: int | None = None,
     ) -> TimeSelection:
-        """Subset the time frame to a specific year.
+        """
+        Subset the time frame to a specific year.
 
         Parameters
         ----------
-        year : int
-            the year to include, from January 1st through December 31st
-        step : int, optional
-            if given, narrow the selection to a specific tau step (by index) within
-            the date range; by default include all steps
+        year :
+            The year to include, from January 1st through December 31st.
+        step :
+            If given, narrow the selection to a specific tau step (by index) within
+            the date range; by default include all steps.
 
         Returns
         -------
-        TimeSelection
+        :
             The selection strategy object.
         """
         other = TimeFrame.year(year)

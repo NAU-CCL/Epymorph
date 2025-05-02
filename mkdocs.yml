@@ -1,0 +1,96 @@
+# The mkdocs configuration for epymorph's API documentation.
+# This config file (which is the mkdocs default file) uses dev-environment values.
+# When building the production site, use mkdocs-prod.yml which inherits from this.
+
+site_name: epymorph
+site_url: https://docs.dev.epimorph.org/api
+repo_url: https://github.com/NAU-CCL/Epymorph
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/NAU-CCL/Epymorph/
+      name: epymorph on Github
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+
+extra_css:
+  - styles.css
+extra_javascript:
+  - scripts.js
+
+watch:
+  - docs
+  - epymorph
+  - mkdocs.yml
+  - mkdocs-prod.yml
+
+exclude_docs: |
+  _examples/
+
+validation:
+  links:
+    absolute_links: ignore
+
+plugins:
+  search:
+  gen-files:
+    scripts:
+      - scripts/mkdocs_generate_api_pages.py
+  mkdocstrings:
+    enable_inventory: true
+    handlers:
+      python:
+        paths: [.]
+        inventories:
+          - https://docs.python.org/3.11/objects.inv
+          - https://numpy.org/doc/1.26/objects.inv
+          - https://docs.sympy.org/latest/objects.inv
+          - https://pandas.pydata.org/pandas-docs/version/2.2/objects.inv
+          - https://geopandas.org/en/v0.14.4/objects.inv
+          - https://matplotlib.org/3.9.3/objects.inv
+          - https://shapely.readthedocs.io/en/2.0.6/objects.inv
+
+        options:
+          docstring_style: numpy
+          docstring_section_style: list
+          docstring_options:
+            ignore_init_summary: true
+          merge_init_into_class: true
+          show_source: false
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
+          show_if_no_docstring: true
+          show_overloads: false
+          show_signature_annotations: true
+          separate_signature: true
+          signature_crossrefs: true
+          inherited_members: false
+          members_order: [__all__, source]
+          filters:
+            - "!^_"
+            - "^__init__$"
+            - "^__iter__$"
+            - "^__call__$"
+          extensions:
+            - griffe_inherited_docstrings
+
+markdown_extensions:
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.highlight:
+      linenums: true
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true

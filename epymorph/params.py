@@ -10,6 +10,7 @@ from typing import Literal, TypeVar, final
 import numpy as np
 from numpy.typing import NDArray
 from sympy import Expr, Symbol
+from typing_extensions import override
 
 from epymorph.attribute import AbsoluteName
 from epymorph.compartment_model import BaseCompartmentModel
@@ -25,13 +26,15 @@ from epymorph.sympy_shim import lambdify, to_symbol
 from epymorph.time import TimeFrame
 
 ResultDType = TypeVar("ResultDType", bound=np.generic)
-"""The result type of a ParamFunction."""
+"""The result type of a `ParamFunction`."""
 
 
 class ParamFunction(SimulationFunction[NDArray[ResultDType]], ABC):
     """
-    Parameter functions can be specified in a variety of forms;
-    this class describe the common elements.
+    Base class for parameter functions.
+
+    `ParamFunction`s are generic on the dtype of the numpy array
+    that they produce (`ResultDType`).
     """
 
 
@@ -52,17 +55,26 @@ def _(
 
 
 class ParamFunctionNumpy(ParamFunction[ResultDType]):
-    """A param function which produces a numpy array for the full data series."""
+    """
+    Base class for param functions whose evaluate method produces
+    the whole data series as a numpy array.
+    """
 
+    @override
     @abstractmethod
     def evaluate(self) -> NDArray[ResultDType]:
         """
         Produce a numpy array containing all of this parameter's values.
         This method must assure the values are the appropriate shape and data type.
+
+        Returns
+        -------
+        :
+            The data array.
         """
 
 
-class _ParamFunction1(ParamFunction[ResultDType], ABC):
+class ParamFunction1(ParamFunction[ResultDType], ABC):
     """Base class for parameter functions which calculate results one at a time."""
 
     dtype: type[ResultDType] | None = None
@@ -71,60 +83,141 @@ class _ParamFunction1(ParamFunction[ResultDType], ABC):
     """
 
 
-class ParamFunctionScalar(_ParamFunction1[ResultDType]):
+class ParamFunctionScalar(ParamFunction1[ResultDType]):
     """
-    A param function which produces a scalar value (which is the full data series).
+    Base class for param functions whose evaluate method produces
+    a scalar value (which is the full data series).
+
+    Implement by overriding `evaluate1`.
     """
 
     @final
+    @override
     def evaluate(self) -> NDArray[ResultDType]:
+        """
+        Fully evaluate the parameter function in the current simulation context.
+
+        Returns
+        -------
+        :
+            The data array.
+        """
         return np.array(self.evaluate1(), dtype=self.dtype)
 
     @abstractmethod
     def evaluate1(self) -> AttributeValue:
-        """Produce a scalar value for this parameter in the given simulation context."""
+        """
+        Produce a scalar value for this parameter in the given simulation context.
+
+        Returns
+        -------
+        :
+            The data value.
+        """
 
 
-class ParamFunctionTime(_ParamFunction1[ResultDType]):
-    """A param function which produces a time-series of data, one value at a time."""
+class ParamFunctionTime(ParamFunction1[ResultDType]):
+    """
+    Base class for param functions whose evaluate method produces
+    a time-series of data, one value at a time.
+
+    Implement by overriding `evaluate1`.
+    """
 
     @final
+    @override
     def evaluate(self) -> NDArray[ResultDType]:
+        """
+        Fully evaluate the parameter function in the current simulation context.
+
+        Returns
+        -------
+        :
+            The data array.
+        """
         result = [self.evaluate1(day) for day in range(self.time_frame.days)]
         return np.array(result, dtype=self.dtype)
 
     @abstractmethod
     def evaluate1(self, day: int) -> AttributeValue:
         """
-        Produce a scalar value for this parameter by day
-        in the given simulation context.
+        Produce the daily value for this parameter.
+
+        Parameters
+        ----------
+        day :
+            The simulation day (0-indexed from the start of the simulation).
+
+        Returns
+        -------
+        :
+            The data value.
         """
 
 
-class ParamFunctionNode(_ParamFunction1[ResultDType]):
-    """A param function which produces a node-series of data, one value at a time."""
+class ParamFunctionNode(ParamFunction1[ResultDType]):
+    """
+    Base class for param functions whose evaluate method produces
+    a node-series of data, one value at a time.
+
+    Implement by overriding `evaluate1`.
+    """
 
     @final
+    @override
     def evaluate(self) -> NDArray[ResultDType]:
+        """
+        Fully evaluate the parameter function in the current simulation context.
+
+        Returns
+        -------
+        :
+            The data array.
+        """
         result = [self.evaluate1(n) for n in range(self.scope.nodes)]
         return np.array(result, dtype=self.dtype)
 
     @abstractmethod
     def evaluate1(self, node_index: int) -> AttributeValue:
         """
-        Produce a scalar value for this parameter by node
-        in the given simulation context.
+        Produce the per-node value for this parameter.
+
+        Parameters
+        ----------
+        node_index :
+            The node index for which to compute the value.
+
+        Returns
+        -------
+        :
+            The data value.
         """
 
 
-class ParamFunctionNodeAndNode(_ParamFunction1[ResultDType]):
+class ParamFunctionNodeAndNode(ParamFunction1[ResultDType]):
     """
-    A param function which produces a node-by-node matrix of data,
-    one value at a time.
+    Base class for param functions whose evaluate method produces
+    a node-by-node matrix of data, one value at a time.
+
+    Often, this kind of data is posed as having an originating node
+    and a destination node, for example: data describing the normal
+    number of commuters between locations. For some data this relationship
+    may be more figurative than literal.
+
+    Implement by overriding `evaluate1`.
     """
 
     @final
+    @override
     def evaluate(self) -> NDArray[ResultDType]:
+        """
+        Fully evaluate the parameter function in the current simulation context.
+
+        Returns
+        -------
+        :
+            The data array.
+        """
         result = [
             [self.evaluate1(n1, n2) for n2 in range(self.scope.nodes)]
             for n1 in range(self.scope.nodes)
@@ -134,19 +227,41 @@ class ParamFunctionNodeAndNode(_ParamFunction1[ResultDType]):
     @abstractmethod
     def evaluate1(self, node_from: int, node_to: int) -> AttributeValue:
         """
-        Produce a scalar value for this parameter by node-pair
-        in the given simulation context.
+        Produce the per-node-pair value for this parameter.
+
+        Parameters
+        ----------
+        node_from :
+            The origin node.
+        node_to :
+            The destination node.
+
+        Returns
+        -------
+        :
+            The data value.
         """
 
 
-class ParamFunctionNodeAndCompartment(_ParamFunction1[ResultDType]):
+class ParamFunctionNodeAndCompartment(ParamFunction1[ResultDType]):
     """
-    A param function which produces a node-by-disease-compartment matrix of data,
-    one value at a time.
+    Base class for param functions whose evaluate method produces
+    a node-by-disease-compartment matrix of data, one value at a time.
+
+    Implement by overriding 'evaluate1`.
     """
 
     @final
+    @override
     def evaluate(self) -> NDArray[ResultDType]:
+        """
+        Fully evaluate the parameter function in the current simulation context.
+
+        Returns
+        -------
+        :
+            The data array.
+        """
         result = [
             [self.evaluate1(n, c) for c in range(self.ipm.num_compartments)]
             for n in range(self.scope.nodes)
@@ -156,18 +271,42 @@ class ParamFunctionNodeAndCompartment(_ParamFunction1[ResultDType]):
     @abstractmethod
     def evaluate1(self, node_index: int, compartment_index: int) -> AttributeValue:
         """
-        Produce a scalar value for this parameter by node and disease compartment
-        in the given simulation context.
+        Produce the per-node and per-disease-compartment value for this parameter.
+
+        Parameters
+        ----------
+        node_index :
+            The node index for which to compute the value.
+        compartment_index :
+            The disease compartment index for which to compute the value.
+            This is taken from the IPM compartment definition order, indexed from 0.
+
+        Returns
+        -------
+        :
+            The data value.
         """
 
 
-class ParamFunctionTimeAndNode(_ParamFunction1[ResultDType]):
+class ParamFunctionTimeAndNode(ParamFunction1[ResultDType]):
     """
-    A param function which produces a time-by-node matrix of data, one value at a time.
+    Base class for param functions whose evaluate method produces
+    a time-by-node matrix of data, one value at a time.
+
+    Implement by overriding `evaluate1`.
     """
 
     @final
+    @override
     def evaluate(self) -> NDArray[ResultDType]:
+        """
+        Fully evaluate the parameter function in the current simulation context.
+
+        Returns
+        -------
+        :
+            The data array.
+        """
         result = [
             [self.evaluate1(day, n) for n in range(self.scope.nodes)]
             for day in range(self.time_frame.days)
@@ -177,8 +316,19 @@ class ParamFunctionTimeAndNode(_ParamFunction1[ResultDType]):
     @abstractmethod
     def evaluate1(self, day: int, node_index: int) -> AttributeValue:
         """
-        Produce a scalar value for this parameter by day and node
-        in the given simulation context.
+        Produce the per-day and per-node value for this parameter.
+
+        Parameters
+        ----------
+        day :
+            The simulation day (0-indexed from the start of the simulation).
+        node_index :
+            The node index for which to compute the value.
+
+        Returns
+        -------
+        :
+            The data value.
         """
 
 
@@ -189,17 +339,12 @@ _PARAMS_MAP = dict(zip(_ALL_PARAMS, _ALL_PARAM_SYMBOLS))
 ParamSymbol = Literal["day", "node_index", "duration_days", "nodes"]
 """
 The names of common symbols used in epymorph simulation expressions.
-For example, building a
-[`ParamExpressionTimeAndNode`](`epymorph.params.ParamExpressionTimeAndNode`)
-may make use of these symbols.
+For example, building a `ParamExpressionTimeAndNode` may make use of these symbols.
 
 See Also
 --------
-[`RUME.symbols`](`epymorph.rume.RUME.symbols`) and
-[`simulation_symbols`](`epymorph.params.simulation_symbols`)
+[epymorph.rume.RUME.symbols][] and [epymorph.params.simulation_symbols][]
 which are methods for using these names to obtain symbol references.
-
-`Literal["day", "node_index", "duration_days", "nodes"]`
 """
 
 
@@ -209,14 +354,13 @@ def simulation_symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
 
     Parameters
     ----------
-    *symbols : ParamSymbol
-        The symbols to retrieve, as var-args.
+    *symbols :
+        The names of symbols to retrieve, as var-args.
 
     Returns
     -------
-    tuple[sympy.Symbol, ...]
-        A tuple containing the symbols requested, in the order
-        requested.
+    :
+        A tuple containing the symbols named, in the order requested.
     """
     return tuple(_PARAMS_MAP[x] for x in symbols if x in _PARAMS_MAP)
 
@@ -224,9 +368,24 @@ def simulation_symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
 class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
     """
     A param function based on a sympy expression for a time-by-node matrix of data.
+
+    Parameters
+    ----------
+    expression :
+        The sympy expression to use.
+
+    See Also
+    --------
+    [`epymorph.params.simulation_symbols`][] which enables you to obtain
+    symbols standing for simulation properties like "day" and "node_index";
+    you will likely make use of the symbols in writing the expression.
     """
 
     requirements = ()
+    """
+    Param expressions do not support data requirements, so this list must be empty.
+    """
+    # TODO (ISSUE #250): support data requirements
 
     _expr: Expr
 
@@ -239,12 +398,17 @@ class ParamExpressionTimeAndNode(ParamFunction[np.float64]):
             raise ValueError(f"expression uses unsupported symbols: {bs}")
         self._expr = expression
 
-    # TODO: support data attributes
-    # 1. user needs a way to acquire valid symbols, maybe: self.symbol(attribute)
-    # 2. evaluate() would need to include attr symbols in lambdify(), values in fn()
-
     @final
+    @override
     def evaluate(self) -> NDArray[np.float64]:
+        """
+        Fully evaluate the parameter function in the current simulation context.
+
+        Returns
+        -------
+        :
+            The data array.
+        """
         T = self.time_frame.days
         N = self.scope.nodes
         ds = np.broadcast_to(np.arange(T).reshape((T, 1)), (T, N))

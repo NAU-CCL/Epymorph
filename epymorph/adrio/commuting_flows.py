@@ -139,7 +139,7 @@ class Commuters(FetchADRIO[np.int64, np.int64]):
 
     Parameters
     ----------
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=0
+    fix_missing :
         The method to use to fix missing values. Missing values are common in this dataset,
         which simply omits pairs of locations for which there were no recorded workers.
         Therefore the default is to fill with zero.

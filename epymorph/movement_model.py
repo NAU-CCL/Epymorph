@@ -1,11 +1,14 @@
 """
-The basis of the movement model system in epymorph.
-Movement models are responsible for dividing up the day
-into one or more parts, in accordance with their desired
-tempo of movement. (For example, commuting patterns of work day
-versus night.) Movement mechanics are expressed using a set of
-clauses which calculate a requested number of individuals move
-between geospatial nodes at a particular time step of the simulation.
+The basis of the movement system in epymorph.
+
+Movement models are responsible for dividing up the day into one or more parts, in
+accordance with their desired tempo of movement. For example, commuting patterns of
+work day versus night.
+
+Movement mechanics are expressed as a set of clauses which calculate the "requested"
+number of individuals that should move between geospatial nodes at a particular time
+step of the simulation. This is "requested" movement because fewer individuals may wind
+up moving if there are not enough to satisfy the request.
 """
 
 import re
@@ -38,11 +41,26 @@ _day_of_week_pattern = r"\b(M|T|W|Th|F|Sa|Su)\b"
 
 def parse_days_of_week(dow: str) -> tuple[DayOfWeek, ...]:
     """
-    Parses the string as a list of days of the week using our standard abbreviations:
-    M,T,W,Th,F,Sa,Su.
-    This parser is pretty permissive, simply ignoring invalid parts of the input while
-    keeping the valid parts. Any separator is allowed between the day of the week
-    themselves. Returns an empty tuple if there are no matches.
+    Parses a list of days of the week using our standard abbreviations:
+    M, T, W, Th, F, Sa, Su.
+
+    Parameters
+    ----------
+    dow :
+        A string containing a list of days of the week.
+        The parser is pretty permissive; it ignores invalid parts of the input while
+        keeping the valid parts. Any separator is allowed between the day of the week
+        themselves.
+
+    Returns
+    -------
+    :
+        The days of the week parsed from the string. Empty if there are none.
+
+    Examples
+    --------
+    >>> parse_days_of_week("M,W,F")
+    ('M', 'W', 'F')
     """
     ds = re.findall(_day_of_week_pattern, dow)
     # return the matched days in standard order
@@ -50,22 +68,47 @@ def parse_days_of_week(dow: str) -> tuple[DayOfWeek, ...]:
 
 
 class MovementPredicate(ABC):
-    """Checks the current tick and responds with True or False."""
+    """
+    Checks the current tick and responds with true or false.
+    Movement predicates are used to determine whether a movement clause
+    should be applied for this simulation tick or not.
+    """
 
     @abstractmethod
     def evaluate(self, tick: Tick) -> bool:
-        """Check the given tick."""
+        """
+        Check the given tick.
+
+        Parameters
+        ----------
+        tick :
+            The current simulation tick.
+
+        Returns
+        -------
+        :
+            The result of the predicate.
+        """
 
 
 class EveryDay(MovementPredicate):
-    """Return True for every day."""
+    """Return true for every day."""
 
     def evaluate(self, tick: Tick) -> bool:
         return True
 
 
 class DayIs(MovementPredicate):
-    """Checks that the day is in the given set of days of the week."""
+    """
+    Checks that the day is in the given set of days of the week.
+
+    Parameters
+    ----------
+    week_days :
+        The week days for which this predicate should evaluate true.
+        Either a list of `DayOfWeek` or a string which will be parsed
+        as in `parse_days_of_week`.
+    """
 
     week_days: tuple[DayOfWeek, ...]
 
@@ -88,10 +131,7 @@ _TypeT = TypeVar("_TypeT")
 
 
 class MovementClauseClass(SimulationFunctionClass):
-    """
-    The metaclass for user-defined MovementClause classes.
-    Used to verify proper class implementation.
-    """
+    """The metaclass for `MovementClause` classes; enforces proper implementation."""
 
     def __new__(
         cls: Type[_TypeT],
@@ -144,10 +184,12 @@ class MovementClause(
 ):
     """
     A movement clause is basically a function which calculates _how many_ individuals
-    should move between all of the geo nodes, and then epymorph decides by random draw
-    _which_ individuals move
-    (as identified by their disease status, or IPM compartment).
-    It also has various settings which determine when the clause is active
+    should move between all of the geo nodes.
+
+    It's up to epymorph's internal mechanisms to decide by random draw _which_
+    individuals move (as identified by their disease status, or IPM compartment).
+
+    The clause also has various settings which determine when the clause is active
     (for example, only move people Monday-Friday at the start of the day)
     and when the individuals that were moved by the clause should return home
     (for example, stay for two days and then return at the end of the day).
@@ -167,19 +209,43 @@ class MovementClause(
     """When do the movers from this clause return home?"""
 
     def is_active(self, tick: Tick) -> bool:
-        """Should this movement clause be applied this tick?"""
+        """
+        Should this movement clause be applied this tick?
+
+        Parameters
+        ----------
+        tick :
+            The current simulation tick.
+
+        Returns
+        -------
+        :
+            True if the clause should be applied this tick.
+        """
         return self.leaves.step == tick.step and self.predicate.evaluate(tick)
 
     @property
     def clause_name(self) -> str:
+        """A display name to use for the clause."""
         return self.__class__.__name__
 
     @abstractmethod
     def evaluate(self, tick: Tick) -> NDArray[SimDType]:
         """
         Implement this method to provide logic for the clause.
-        Your implementation is free to use `data`, `dim`, and `rng`.
-        You can also use `defer` to utilize another MovementClause instance.
+        Use self methods and properties to access the simulation context or defer
+        processing to another function.
+
+        Parameters
+        ----------
+        tick :
+            The simulation tick being evaluated.
+
+        Returns
+        -------
+        :
+            An array describing the requested number of individuals to move from origin
+            location (row; axis 0) to destination location (column; axis 1).
         """
 
 
@@ -189,10 +255,7 @@ class MovementClause(
 
 
 class MovementModelClass(ABCMeta):
-    """
-    The metaclass for user-defined MovementModel classes.
-    Used to verify proper class implementation.
-    """
+    """The metaclass for `MovementModel` classes; enforces proper implementation."""
 
     def __new__(
         cls: Type[_TypeT],
@@ -260,13 +323,14 @@ class MovementModelClass(ABCMeta):
 
 class MovementModel(ABC, metaclass=MovementModelClass):
     """
-    A MovementModel (MM) describes a pattern of geospatial movement for
+    A `MovementModel` (MM) describes a pattern of geospatial movement for
     individuals in the model.
-    The MM chops the day up into one or more parts (tau steps),
-    and then describes movement clauses which trigger for certain parts of the day.
 
-    MovementModel is an abstract class. To create a custom movement model,
-    you will wriet an implementation of this class.
+    The MM defines the tau steps which chop the day up into one or more parts,
+    as well as the set of movement clauses which may apply throughout each day.
+
+    To create a custom MM, you will write an implementation of this class
+    and of any required clause classes.
     """
 
     steps: Sequence[float]
