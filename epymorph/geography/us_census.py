@@ -44,15 +44,17 @@ from epymorph.util import filter_unique, mask
 
 @dataclass(frozen=True)
 class CensusScope(ABC, GeoScope):
-    """A GeoScope using US Census delineations."""
+    """
+    A GeoScope using US Census delineations.
+
+    CensusScope is an abstract class.
+    """
 
     year: int
     """
-    The Census delineation year.
-    With every decennial census, the Census Department can (and does) define
+    The Census delineation year. Census Bureau can (and does) define
     new delineations, especially at the smaller granularities. Hence, you must
-    know the delineation year in order to absolutely identify any
-    particular granularity.
+    know the year in order to absolutely identify a set of delineations.
     """
 
     granularity: CensusGranularityName

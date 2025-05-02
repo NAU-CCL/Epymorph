@@ -7,22 +7,21 @@ and a structured ID system for labeling all delineations
 
 import re
 from abc import ABC, abstractmethod
-from typing import (
-    Iterable,
-    Literal,
-    Self,
-)
+from typing import Iterable, Literal, Self
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.error import GeographyError
-from epymorph.util import (
-    prefix,
-)
+from epymorph.util import prefix
 
 CensusGranularityName = Literal["state", "county", "tract", "block group", "block"]
-"""The name of a supported Census granularity."""
+"""
+The name of a supported Census granularity.
+
+`Literal["state", "county", "tract", "block group", "block"]`
+"""
 
 CENSUS_HIERARCHY = ("state", "county", "tract", "block group", "block")
 """The granularities in hierarchy order (largest to smallest)."""
@@ -33,6 +32,18 @@ class CensusGranularity(ABC):
     Each CensusGranularity instance defines a set of utility functions for working with
     GEOIDs of that granularity, as well as inspecting and manipulating the granularity
     hierarchy itself.
+
+    Most of the time you will use
+    [`CensusGranularity.of`](`epymorph.geography.us_geography.CensusGranularity.of)
+    to obtain an instance for a particular granularity, or import one of the
+    singleton instances:
+    [`STATE`](`epymorph.geography.us_geography.STATE`),
+    [`COUNTY`](`epymorph.geography.us_geography.COUNTY`),
+    [`TRACT`](`epymorph.geography.us_geography.TRACT`),
+    [`BLOCK_GROUP`](`epymorph.geography.us_geography.BLOCK_GROUP`), or
+    [`BLOCK`](`epymorph.geography.us_geography.BLOCK`).
+
+    CensusGranularity is an abstract class.
     """
 
     _name: CensusGranularityName
@@ -93,18 +104,55 @@ class CensusGranularity(ABC):
         """
         Test whether this granularity is nested inside (or equal to)
         the given granularity.
+
+        Parameters
+        ----------
+        outer : CensusGranularityName
+            The other granularity to consider.
+
+        Returns
+        -------
+        bool
+            True if this granularity is inside or the same as `other`.
         """
         return CENSUS_HIERARCHY.index(outer) <= CENSUS_HIERARCHY.index(self.name)
 
     def matches(self, geoid: str) -> bool:
-        """Test whether the given GEOID matches this granularity."""
+        """
+        Test whether the given GEOID matches this granularity exactly.
+        For example: "04" matches state granularity but not county granularity.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to test.
+
+        Returns
+        -------
+        bool
+            True if the GEOID given matches this granularity.
+        """
         return self._match_pattern.match(geoid) is not None
 
     def extract(self, geoid: str) -> str:
         """
         Extracts this level of granularity's GEOID segment, if the given GEOID is of
-        this granularity or smaller. Raises a GeographyError if the GEOID is unsuitable
-        or poorly formatted.
+        this granularity or smaller.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        str
+            The segment of the GEOID that matches this granularity.
+
+        Raises
+        ------
+        GeographyError
+            If the GEOID is unsuitable or poorly formatted.
         """
         if (m := self._extract_pattern.match(geoid)) is not None:
             return m[1]
@@ -117,6 +165,16 @@ class CensusGranularity(ABC):
         Truncates the given GEOID to this level of granularity.
         If the given GEOID is for a granularity larger than this level,
         the GEOID will be returned unchanged.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        str
+            The truncated GEOID.
         """
         return geoid[: self.length]
 
@@ -124,6 +182,17 @@ class CensusGranularity(ABC):
         """
         Truncates an Iterable of GEOIDs to this level of granularity, returning only
         unique entries without changing the ordering of entries.
+
+        Parameters
+        ----------
+        geoids : Iterable[str]
+            The list of GEOIDs to operate on.
+
+        Returns
+        -------
+        Iterable[str]
+            The unique values contained in `geoids` after truncation
+            to this level of granularity.
         """
         n = self.length
         seen = set[str]()
@@ -150,14 +219,40 @@ class CensusGranularity(ABC):
     def decompose(self, geoid: str) -> tuple[str, ...]:
         """
         Decompose a GEOID into a tuple containing all of its granularity component IDs.
-        The GEOID must match this granularity exactly,
-        or else GeographyError will be raised.
+        The GEOID must match this granularity exactly.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        tuple[str, ...]
+            A tuple as long as the number of granularity segments used for this
+            level of granularity.
+
+        Raises
+        ------
+        GeographyError
+            If the GEOID does not match this granularity exactly.
         """
 
     def grouped(self, sorted_geoids: NDArray[np.str_]) -> dict[str, NDArray[np.str_]]:
         """
         Group a list of GEOIDs by this level of granularity.
         WARNING: Requires that the GEOID array has been sorted!
+
+        Parameters
+        ----------
+        sorted_geoids: NDArray[np.str_]
+            The GEOIDs to group, as a sorted array.
+
+        Returns
+        -------
+        dict[str, NDArray[np.str_]]
+            A dictionary where the keys represent the unique groups
+            present and the values are all GEOIDs contained in each group.
         """
         group_prefix = prefix(self.length)(sorted_geoids)
         uniques, splits = np.unique(group_prefix, return_index=True)
@@ -166,7 +261,21 @@ class CensusGranularity(ABC):
 
     @staticmethod
     def of(name: CensusGranularityName) -> "CensusGranularity":
-        """Get a CensusGranularity instance by name."""
+        """
+        Get a CensusGranularity instance by name.
+
+        This is a static method.
+
+        Parameters
+        ----------
+        name : CensusGranularityName
+            The name of the granularity.
+
+        Returns
+        -------
+        CensusGranularity
+            The CensusGranularity instance, whose type matches the named granularity.
+        """
         match name:
             case "state":
                 return STATE
@@ -192,7 +301,27 @@ class State(CensusGranularity):
             decompose_pattern=r"^(\d{2})$",
         )
 
+    @override
     def decompose(self, geoid: str) -> tuple[str]:
+        """
+        Decompose a GEOID into a tuple containing the state ID.
+        The GEOID must be a state GEOID.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        tuple[str]
+            A tuple of state ID.
+
+        Raises
+        ------
+        GeographyError
+            If the GEOID does not match this granularity exactly.
+        """
         m = self._decompose(geoid)
         return (m[1],)
 
@@ -209,7 +338,27 @@ class County(CensusGranularity):
             decompose_pattern=r"^(\d{2})(\d{3})$",
         )
 
+    @override
     def decompose(self, geoid: str) -> tuple[str, str]:
+        """
+        Decompose a GEOID into a tuple containing the state and county ID.
+        The GEOID must be a county GEOID.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        tuple[str, str]
+            A tuple of state and county ID.
+
+        Raises
+        ------
+        GeographyError
+            If the GEOID does not match this granularity exactly.
+        """
         m = self._decompose(geoid)
         return (m[1], m[2])
 
@@ -226,7 +375,27 @@ class Tract(CensusGranularity):
             decompose_pattern=r"^(\d{2})(\d{3})(\d{6})$",
         )
 
+    @override
     def decompose(self, geoid: str) -> tuple[str, str, str]:
+        """
+        Decompose a GEOID into a tuple containing the state, county, and tract ID.
+        The GEOID must be a tract GEOID.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        tuple[str, str, str]
+            A tuple of state, county, and tract ID.
+
+        Raises
+        ------
+        GeographyError
+            If the GEOID does not match this granularity exactly.
+        """
         m = self._decompose(geoid)
         return (m[1], m[2], m[3])
 
@@ -243,7 +412,27 @@ class BlockGroup(CensusGranularity):
             decompose_pattern=r"^(\d{2})(\d{3})(\d{6})(\d)$",
         )
 
+    @override
     def decompose(self, geoid: str) -> tuple[str, str, str, str]:
+        """
+        Decompose a GEOID into a tuple containing the state, county, tract, and
+        block group ID. The GEOID must be a block group GEOID.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        tuple[str, str, str, str]
+            A tuple of state, county, tract, and block group ID.
+
+        Raises
+        ------
+        GeographyError
+            If the GEOID does not match this granularity exactly.
+        """
         m = self._decompose(geoid)
         return (m[1], m[2], m[3], m[4])
 
@@ -260,7 +449,30 @@ class Block(CensusGranularity):
             decompose_pattern=r"^(\d{2})(\d{3})(\d{6})(\d{4})$",
         )
 
+    @override
     def decompose(self, geoid: str) -> tuple[str, str, str, str, str]:
+        """
+        Decompose a GEOID into a tuple containing the state, county, tract,
+        block group, and block ID. The GEOID must be a block GEOID.
+        Note that block IDs are kind of strange -- the block group ID
+        is a single digit, but the block ID also includes this digit.
+        Thus, the returned tuple will include this digit in both of the last two parts.
+
+        Parameters
+        ----------
+        geoid : str
+            The GEOID to operate on.
+
+        Returns
+        -------
+        tuple[str, str, str, str, str]
+            A tuple of state, county, tract, block group, and block ID.
+
+        Raises
+        ------
+        GeographyError
+            If the GEOID does not match this granularity exactly.
+        """
         # The block group ID is the first digit of the block ID,
         # but the block ID also includes this digit.
         m = self._decompose(geoid)
@@ -269,10 +481,17 @@ class Block(CensusGranularity):
 
 # Singletons for the CensusGranularity classes.
 STATE = State()
+"""A singleton [`State`](`epymorph.geography.us_geography.State`) instance."""
 COUNTY = County()
+"""A singleton [`County`](`epymorph.geography.us_geography.County`) instance."""
 TRACT = Tract()
+"""A singleton [`Tract`](`epymorph.geography.us_geography.Tract`) instance."""
 BLOCK_GROUP = BlockGroup()
+"""
+A singleton [`BlockGroup`](`epymorph.geography.us_geography.BlockGroup`) instance.
+"""
 BLOCK = Block()
+"""A singleton [`Block`](`epymorph.geography.us_geography.Block`) instance."""
 
 CENSUS_GRANULARITY = (STATE, COUNTY, TRACT, BLOCK_GROUP, BLOCK)
 """CensusGranularity singletons in hierarchy order."""

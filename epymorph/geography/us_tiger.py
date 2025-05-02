@@ -1,7 +1,7 @@
 """
-Functions for fetching TIGER files for common US Census geographic delineations.
-This is designed to return information for the entire United States,
-including territories, and handles quirks and differences between the supported
+Functions for fetching information from TIGER files for common US Census geographic
+delineations. This is designed to return information for a common selection of the
+United States and territories, and handles quirks and differences between the supported
 census years.
 """
 
@@ -61,15 +61,11 @@ from epymorph.util import cache_transparent, normalize_list, normalize_str, zip_
 # NOTE: TIGER files express areas in meters-squared.
 
 # fmt: off
-TigerYear = Literal[
-    2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, # noqa
-]
-"""A supported TIGER file year."""
+TigerYear = Literal[2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023] # noqa
+"""A supported TIGER file year. (2000 and 2009-2023)"""
 
-TIGER_YEARS: Sequence[TigerYear] = (
-    2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, #noqa
-)
-"""All supported TIGER file years."""
+TIGER_YEARS: Sequence[TigerYear] = (2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023) #noqa
+"""All supported TIGER file years. (2000 and 2009-2023)"""
 
 _SUPPORTED_STATES = [
     "01", "02", "04", "05", "06", "08", "09", "10", "11", "12",
@@ -183,11 +179,34 @@ class CacheEstimate(NamedTuple):
 
 @dataclass(frozen=True)
 class GranularitySummary(ABC):
+    """
+    A GranularitySummary contains information about the geography at the given level of
+    granularity for a specific Census year. The information available may differ
+    between the implementations for different granularities, but at a minimum
+    each provides the full list of GEOIDs in that granularity.
+
+    GranularitySummary is an abstract class.
+    """
+
     geoid: list[str]
+    """The GEOIDs (sometimes called FIPS codes) of all nodes in this granularity."""
 
     def interpret(self, identifiers: Sequence[str]) -> list[str]:
-        """Permissively interprets the given set of identifiers as describing nodes,
-        and converts them to a sorted list of GEOIDs."""
+        """
+        Permissively interprets the given set of identifiers as describing nodes,
+        and converts them to a sorted list of GEOIDs.
+
+        Parameters
+        ----------
+        identifiers : Sequence[str]
+            A list of identifiers. Which kind of identifiers are allowed depends
+            on the granularity.
+
+        Returns
+        -------
+        list[str]
+            The list of GEOIDs in canonical sort order.
+        """
         # The base case is that the identifiers are literal GEOIDs.
         return self._to_geoid(identifiers, self.geoid, "FIPS code")
 
@@ -296,7 +315,22 @@ def get_states_geo(
     year: TigerYear,
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
-    """Get all US states and territories for the given census year, with geography."""
+    """
+    Get all supported US states and territories for the given census year, with
+    geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    GeoDataFrame
+        The TIGER file info with geography.
+    """
     return _get_geo(_get_states_config(year), progress)
 
 
@@ -306,6 +340,18 @@ def get_states_info(
 ) -> DataFrame:
     """
     Get all US states and territories for the given census year, without geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    DataFrame
+        The TIGER file info without geography.
     """
     return _get_info(_get_states_config(year), progress)
 
@@ -326,14 +372,18 @@ def check_cache_states(year: TigerYear) -> CacheEstimate:
 
 @dataclass(frozen=True)
 class StatesSummary(GranularitySummary):
-    """Information about US states (and state equivalents)."""
+    """
+    Information about US states (and state equivalents).
+
+    StatesSummary is a frozen dataclass.
+    """
 
     geoid: list[str]
-    """The GEOID (aka FIPS code) of the state."""
+    """The GEOIDs (aka FIPS codes) of all states."""
     name: list[str]
-    """The typical name for the state."""
+    """The typical names for the states."""
     code: list[str]
-    """The US postal code for the state."""
+    """The US postal codes for the states."""
 
     @cached_property
     def state_code_to_fips(self) -> Mapping[str, str]:
@@ -352,12 +402,27 @@ class StatesSummary(GranularitySummary):
 
     @override
     def interpret(self, identifiers: Sequence[str]) -> list[str]:
-        """Permissively interprets the given set of identifiers as describing nodes,
+        """
+        Permissively interprets the given set of identifiers as describing nodes,
         and converts them to a sorted list of GEOIDs.
 
-        Identifiers can be given in any of the acceptable forms, but all of the
-        identifiers must use the same form. Forms are: GEOID/FIPS code, full name, or
-        postal code. Raises GeographyError if invalid or identifiers are given."""
+        Parameters
+        ----------
+        identifiers : Sequence[str]
+            A list of identifiers. Identifiers can be given in any of the acceptable
+            forms, but all of the identifiers must use the same form. Forms are:
+            GEOID/FIPS code, full name, or postal code.
+
+        Returns
+        -------
+        list[str]
+            The list of GEOIDs in canonical sort order.
+
+        Raises
+        ------
+        GeographyError
+            If invalid identifiers are given.
+        """
         first_val = identifiers[0]
         if re.fullmatch(r"\d{2}", first_val) is not None:
             return super().interpret(identifiers)
@@ -369,7 +434,19 @@ class StatesSummary(GranularitySummary):
 
 @cache_transparent
 def get_states(year: int) -> StatesSummary:
-    """Loads US States information (assumed to be invariant for all supported years)."""
+    """
+    Loads US States information (assumed to be invariant for all supported years).
+
+    Parameters
+    ----------
+    year : int
+        The geography year.
+
+    Returns
+    -------
+    StatesSummary
+        The summary.
+    """
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
 
@@ -427,8 +504,20 @@ def get_counties_geo(
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
     """
-    Get all US counties and county-equivalents for the given census year,
+    Get all supported US counties and county-equivalents for the given census year,
     with geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    GeoDataFrame
+        The TIGER file info with geography.
     """
     return _get_geo(_get_counties_config(year), progress)
 
@@ -440,6 +529,18 @@ def get_counties_info(
     """
     Get all US counties and county-equivalents for the given census year,
     without geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    DataFrame
+        The TIGER file info without geography.
     """
     return _get_info(_get_counties_config(year), progress)
 
@@ -460,14 +561,21 @@ def check_cache_counties(year: TigerYear) -> CacheEstimate:
 
 @dataclass(frozen=True)
 class CountiesSummary(GranularitySummary):
-    """Information about US counties (and county equivalents.)"""
+    """
+    Information about US counties (and county equivalents.)
+
+    CountiesSummary is a frozen dataclass.
+    """
 
     geoid: list[str]
-    """The GEOID (aka FIPS code) of the county."""
+    """The GEOIDs (aka FIPS codes) of all counties."""
     name: list[str]
-    """The typical name of the county (does not include state)."""
+    """
+    The typical names of the counties (does not include state).
+    Note: county names are not unique across the whole US.
+    """
     name_with_state: list[str]
-    """The name of the county and state, e.g., `Coconino, AZ`"""
+    """The typical names including county and state, e.g., `Coconino, AZ`"""
 
     @cached_property
     def county_fips_to_name(self) -> Mapping[str, str]:
@@ -476,14 +584,28 @@ class CountiesSummary(GranularitySummary):
 
     @override
     def interpret(self, identifiers: Sequence[str]) -> list[str]:
-        """Permissively interprets the given set of identifiers as describing nodes,
+        """
+        Permissively interprets the given set of identifiers as describing nodes,
         and converts them to a sorted list of GEOIDs.
 
-        Identifiers can be given in any of the acceptable forms, but all of the
-        identifiers must use the same form. Forms are: GEOID/FIPS code, or
-        the name of the county and its state postal code separated by a comma,
-        e.g., `Coconino, AZ`. Raises GeographyError if invalid or identifiers are
-        given."""
+        Parameters
+        ----------
+        identifiers : Sequence[str]
+            A list of identifiers. Identifiers can be given in any of the acceptable
+            forms, but all of the identifiers must use the same form. Forms are:
+            GEOID/FIPS code, or the name of the county and its state postal code
+            separated by a comma, e.g., `Coconino, AZ`.
+
+        Returns
+        -------
+        list[str]
+            The list of GEOIDs in canonical sort order.
+
+        Raises
+        ------
+        GeographyError
+            If invalid identifiers are given.
+        """
         first_val = identifiers[0]
         if re.fullmatch(r"\d{5}", first_val) is not None:
             return super().interpret(identifiers)
@@ -497,7 +619,19 @@ class CountiesSummary(GranularitySummary):
 
 @cache_transparent
 def get_counties(year: int) -> CountiesSummary:
-    """Loads US Counties information for the given year."""
+    """
+    Loads US Counties information for the given year.
+
+    Parameters
+    ----------
+    year : int
+        The geography year.
+
+    Returns
+    -------
+    CountiesSummary
+        The summary.
+    """
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
 
@@ -575,7 +709,23 @@ def get_tracts_geo(
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
-    """Get all US census tracts for the given census year, with geography."""
+    """
+    Get all supported US census tracts for the given census year, with geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    state_id : Sequence[str], optional
+        If provided, return only the tracts in the given list of states (by GEOID).
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    GeoDataFrame
+        The TIGER file info with geography.
+    """
     return _get_geo(_get_tracts_config(year, state_id), progress=progress)
 
 
@@ -584,7 +734,23 @@ def get_tracts_info(
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> DataFrame:
-    """Get all US census tracts for the given census year, without geography."""
+    """
+    Get all US census tracts for the given census year, without geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    state_id : Sequence[str], optional
+        If provided, return only the tracts in the given list of states (by GEOID).
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    DataFrame
+        The TIGER file info without geography.
+    """
     return _get_info(_get_tracts_config(year, state_id), progress=progress)
 
 
@@ -607,15 +773,31 @@ def check_cache_tracts(
 
 @dataclass(frozen=True)
 class TractsSummary(GranularitySummary):
-    """Information about US census tracts."""
+    """
+    Information about US Census tracts.
+
+    TractsSummary is a frozen dataclass.
+    """
 
     geoid: list[str]
-    """The GEOID (aka FIPS code) of the tract."""
+    """The GEOIDs (aka FIPS codes) of all tracts."""
 
 
 @cache_transparent
 def get_tracts(year: int) -> TractsSummary:
-    """Loads US Census Tracts information for the given year."""
+    """
+    Loads US Census Tracts information for the given year.
+
+    Parameters
+    ----------
+    year : int
+        The geography year.
+
+    Returns
+    -------
+    TractsSummary
+        The summary.
+    """
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
 
@@ -684,7 +866,24 @@ def get_block_groups_geo(
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
-    """Get all US census block groups for the given census year, with geography."""
+    """
+    Get all supported US census block groups for the given census year, with geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    state_id : Sequence[str], optional
+        If provided, return only the block groups in the given list of states
+        (by GEOID).
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    GeoDataFrame
+        The TIGER file info with geography.
+    """
     return _get_geo(_get_block_groups_config(year, state_id), progress=progress)
 
 
@@ -693,7 +892,24 @@ def get_block_groups_info(
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> DataFrame:
-    """Get all US census block groups for the given census year, without geography."""
+    """
+    Get all US census block groups for the given census year, without geography.
+
+    Parameters
+    ----------
+    year : TigerYear
+        The geography year.
+    state_id : Sequence[str], optional
+        If provided, return only the block groups in the given list of states
+        (by GEOID).
+    progress : ProgressCallback, optional
+        A optional callback for reporting the progress of downloading TIGER files.
+
+    Returns
+    -------
+    DataFrame
+        The TIGER file info without geography.
+    """
     return _get_info(_get_block_groups_config(year, state_id), progress=progress)
 
 
@@ -716,15 +932,31 @@ def check_cache_block_groups(
 
 @dataclass(frozen=True)
 class BlockGroupsSummary(GranularitySummary):
-    """Information about US census block groups."""
+    """
+    Information about US Census block groups.
+
+    BlockGroupsSummary is a frozen dataclass.
+    """
 
     geoid: list[str]
-    """The GEOID (aka FIPS code) of the block group."""
+    """The GEOIDs (aka FIPS codes) of all block groups."""
 
 
 @cache_transparent
 def get_block_groups(year: int) -> BlockGroupsSummary:
-    """Loads US Census Block Group information for the given year."""
+    """
+    Loads US Census Block Group information for the given year.
+
+    Parameters
+    ----------
+    year : int
+        The geography year.
+
+    Returns
+    -------
+    BlockGroupsSummary
+        The summary.
+    """
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
 
@@ -747,6 +979,21 @@ def get_block_groups(year: int) -> BlockGroupsSummary:
 
 
 def get_summary_of(granularity: CensusGranularityName, year: int) -> GranularitySummary:
+    """
+    Retrieve a GranularitySummary for the given granularity and year.
+
+    Parameters
+    ----------
+    granularity : CensusGranularityName
+        The granularity.
+    year : int
+        The geography year.
+
+    Returns
+    -------
+    GranularitySummary
+        The summary.
+    """
     match granularity:
         case "state":
             return get_states(year)

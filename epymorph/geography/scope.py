@@ -9,12 +9,16 @@ from numpy.typing import NDArray
 
 @runtime_checkable
 class GeoScope(Protocol):
-    """The common interface expected of all geo scopes."""
+    """
+    The common interface expected of all geo scopes.
+
+    GeoScope is a protocol.
+    """
 
     @property
     @abstractmethod
     def node_ids(self) -> NDArray[np.str_]:
-        """Retrieve the complete list of node IDs included in this scope."""
+        """The list of node IDs included in this scope."""
 
     @property
     def nodes(self) -> int:
@@ -22,8 +26,25 @@ class GeoScope(Protocol):
         return len(self.node_ids)
 
     def index_of(self, node_id: str) -> int:
-        """Returns the index of a given node by its ID string.
-        Raises ValueError if the given ID isn't in the scope."""
+        """
+        Returns the index of a given node by its ID string.
+        Raises ValueError if the given ID isn't in the scope.
+
+        Parameters
+        ----------
+        node_id : str
+            The ID to check for.
+
+        Returns
+        -------
+        int
+            The index if `node_id` exists in this scope.
+
+        Raises
+        ------
+        ValueError
+            If `node_id` is not found.
+        """
         idxs, *_ = np.where(self.node_ids == node_id)
         if len(idxs) == 0:
             raise ValueError(f"'{node_id}' not present in geo scope.")
@@ -59,9 +80,13 @@ GeoAggMethod = Literal["sum", "min", "max"]
 
 @dataclass(frozen=True)
 class GeoStrategy(ABC, Generic[GeoScopeT_co]):
-    """A strategy for dealing with the spatial axis, e.g., in processing results.
+    """
+    A strategy for dealing with the spatial axis, e.g., in processing results.
+    Strategies can include selection of a subset, grouping, and aggregation.
 
-    Strategies can include selection of a subset, grouping, and aggregation."""
+    GeoStrategy is an abstract class. It is generic in the type of GeoScope
+    it works with (`GeoScopeT_co`).
+    """
 
     scope: GeoScopeT_co
     """The original scope."""
@@ -75,12 +100,29 @@ class GeoStrategy(ABC, Generic[GeoScopeT_co]):
 
     @property
     def indices(self) -> tuple[int, ...]:
-        """Get a tuple of indices for each selected node."""
+        """
+        A tuple containing the indices from the original scope that are selected by this
+        strategy.
+        """
         return tuple(i for i, selected in enumerate(self.selection) if selected)
 
     @final
     def to_scope(self) -> GeoScope:
-        """Returns the scope that results from applying this strategy."""
+        """
+        Convert this strategy to the scope that results from applying this strategy.
+
+        Returns
+        -------
+        GeoScope
+            A new scope instance.
+
+        Raises
+        ------
+        NotImplementedError
+            If this type of scope does not support this operation.
+        """
+        # NOTE: in order to support this, you must provide a singledispatch
+        # implementation of `strategy_to_scope` that covers the GeoScope subtype.
         return strategy_to_scope(self.scope, self)
 
 
@@ -90,18 +132,34 @@ def strategy_to_scope(scope: GeoScopeT, strategy: GeoStrategy[GeoScopeT]) -> Geo
 
 
 class GeoGrouping(ABC):
-    """Defines a geo-axis grouping scheme. This is essentially a function that maps
+    """
+    Defines a geo-axis grouping scheme. This is essentially a function that maps
     the simulation geo axis info (node IDs) into a new series which describes
     the group membership of each geo axis row.
-    Certain groupings may only be valid for specific types of GeoScope."""
+
+    Certain groupings may only be valid for specific types of GeoScope.
+
+    GeoGrouping is an abstract class.
+    """
 
     @abstractmethod
     def map(self, node_ids: NDArray[np.str_]) -> NDArray[np.str_]:
-        """Produce a column that describes the group membership of each "row",
-        where rows of the geo axis are described by their geoid,
-        producing a unique value per group. This column will be used as the basis
-        of a `groupby` operation. The result must correspond element-wise to the given
-        `node_ids` array."""
+        """
+        Produce a column that describes the group membership of each node.
+
+        The returned column will be used as the basis of a `groupby` operation.
+
+        Parameters
+        ----------
+        node_ids : NDArray[np.str_]
+            The node IDs to group.
+
+        Returns
+        -------
+        NDArray[np.str_]
+            An array of the same length as `node_ids` where each value defines which
+            group the original node ID belongs to.
+        """
 
 
 class _CanGeoAggregate(GeoStrategy[GeoScopeT_co]):
