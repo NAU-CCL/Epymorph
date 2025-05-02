@@ -1,0 +1,5 @@
+---
+title: ".strata"
+---
+
+::: epymorph.strata

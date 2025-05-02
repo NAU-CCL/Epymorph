@@ -1,0 +1,5 @@
+---
+title: ".initializer"
+---
+
+::: epymorph.initializer

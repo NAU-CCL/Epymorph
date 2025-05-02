@@ -1,0 +1,5 @@
+---
+title: ".simulation"
+---
+
+::: epymorph.simulation

@@ -1,0 +1,5 @@
+---
+title: ".event"
+---
+
+::: epymorph.event

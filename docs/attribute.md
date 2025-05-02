@@ -1,0 +1,5 @@
+---
+title: ".attribute"
+---
+
+::: epymorph.attribute

@@ -17,11 +17,7 @@ from epymorph.error import GeographyError
 from epymorph.util import prefix
 
 CensusGranularityName = Literal["state", "county", "tract", "block group", "block"]
-"""
-The name of a supported Census granularity.
-
-`Literal["state", "county", "tract", "block group", "block"]`
-"""
+"""Type alias: the name of a supported Census granularity."""
 
 CENSUS_HIERARCHY = ("state", "county", "tract", "block group", "block")
 """The granularities in hierarchy order (largest to smallest)."""
@@ -33,17 +29,10 @@ class CensusGranularity(ABC):
     GEOIDs of that granularity, as well as inspecting and manipulating the granularity
     hierarchy itself.
 
-    Most of the time you will use
-    [`CensusGranularity.of`](`epymorph.geography.us_geography.CensusGranularity.of)
-    to obtain an instance for a particular granularity, or import one of the
-    singleton instances:
-    [`STATE`](`epymorph.geography.us_geography.STATE`),
-    [`COUNTY`](`epymorph.geography.us_geography.COUNTY`),
-    [`TRACT`](`epymorph.geography.us_geography.TRACT`),
-    [`BLOCK_GROUP`](`epymorph.geography.us_geography.BLOCK_GROUP`), or
-    [`BLOCK`](`epymorph.geography.us_geography.BLOCK`).
-
-    CensusGranularity is an abstract class.
+    In typical usage, you will not construct this class directly, but use the
+    `CensusGranularity.of(granularity)` static method to obtain an instance, or import
+    one of the singleton instances: `STATE`, `COUNTY`, `TRACT`, `BLOCK_GROUP`, or
+    `BLOCK`.
     """
 
     _name: CensusGranularityName
@@ -64,6 +53,24 @@ class CensusGranularity(ABC):
         extract_pattern: str,
         decompose_pattern: str,
     ):
+        """
+        Initialize CensusGranularity.
+
+        Parameters
+        ----------
+        name :
+            The granularity.
+        length :
+            The number of digits in the GEOIDs for this granularity.
+        match_pattern :
+            A regex pattern matching GEOIDs for this granularity.
+        extract_pattern :
+            A regex pattern with match groups for extracting this granularity
+            segment from a GEOID of an equal or finer granularity.
+        decompose_pattern :
+            A regex pattern with match groups for decomposing a GEOID of this
+            granularity into segments.
+        """
         self._name = name
         self._index = CENSUS_HIERARCHY.index(name)
         self._length = length
@@ -263,8 +270,6 @@ class CensusGranularity(ABC):
     def of(name: CensusGranularityName) -> "CensusGranularity":
         """
         Get a CensusGranularity instance by name.
-
-        This is a static method.
 
         Parameters
         ----------
@@ -481,17 +486,15 @@ class Block(CensusGranularity):
 
 # Singletons for the CensusGranularity classes.
 STATE = State()
-"""A singleton [`State`](`epymorph.geography.us_geography.State`) instance."""
+"""A singleton `State` instance."""
 COUNTY = County()
-"""A singleton [`County`](`epymorph.geography.us_geography.County`) instance."""
+"""A singleton `County` instance."""
 TRACT = Tract()
-"""A singleton [`Tract`](`epymorph.geography.us_geography.Tract`) instance."""
+"""A singleton `Tract` instance."""
 BLOCK_GROUP = BlockGroup()
-"""
-A singleton [`BlockGroup`](`epymorph.geography.us_geography.BlockGroup`) instance.
-"""
+"""A singleton `BlockGroup` instance."""
 BLOCK = Block()
-"""A singleton [`Block`](`epymorph.geography.us_geography.Block`) instance."""
+"""A singleton `Block` instance."""
 
 CENSUS_GRANULARITY = (STATE, COUNTY, TRACT, BLOCK_GROUP, BLOCK)
-"""CensusGranularity singletons in hierarchy order."""
+"""`CensusGranularity` singletons in hierarchy order."""

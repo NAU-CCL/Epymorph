@@ -1,0 +1,46 @@
+site_name: epymorph
+
+theme:
+  name: material
+
+extra_css:
+  - styles.css
+
+watch:
+  - docs
+  - epymorph
+
+plugins:
+  search:
+  mkdocstrings:
+    default_handler: python
+    handlers:
+      python:
+        paths: [.]
+        inventories:
+          - https://docs.python.org/3.11/objects.inv
+          - https://numpy.org/doc/1.26/objects.inv
+          - https://docs.sympy.org/latest/objects.inv
+          - https://pandas.pydata.org/pandas-docs/version/2.2/objects.inv
+          - https://geopandas.org/en/v0.14.4/objects.inv
+          - https://matplotlib.org/3.9.3/objects.inv
+
+        options:
+          docstring_style: numpy
+          docstring_section_style: list  # torn between list and table style...
+          docstring_options:
+            ignore_init_summary: true
+          merge_init_into_class: true
+          show_source: false
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
+          show_if_no_docstring: true
+          show_overloads: true
+          show_signature_annotations: true
+          separate_signature: true
+          signature_crossrefs: true
+          # inherited_members: true  # inherited members might be noise, since bases are displayed...
+          members_order: [__all__, source]
+          # filters:
+          #   - "!^_"
+          #   - "^__init__$"
