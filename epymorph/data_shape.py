@@ -401,6 +401,37 @@ class ArbitraryAndNode(DataShape):
 
 
 @dataclass(frozen=True)
+class TimeAndNodeAndArbitrary(DataShape):
+    """
+    An array of size at-least-T by exactly-N by any number of additional dimensions.
+    """
+
+    @override
+    def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
+        return (dim.T, dim.N, -1)
+
+    @override
+    def matches(self, dim: Dimensions, value: NDArray) -> bool:
+        if value.ndim < 2:
+            return False
+        T, N = dim.T, dim.N
+        if value.shape[0] >= T and value.shape[1] == N:
+            return True
+        return False
+
+    @override
+    def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
+        if not self.matches(dim, value):
+            raise ValueError("Not able to adapt shape.")
+        T, N = dim.T, dim.N
+        slices = [slice(0, T), slice(0, N)] + [slice(None)] * (value.ndim - 2)
+        return value[tuple(slices)]
+
+    def __str__(self):
+        return "TxNxA"
+
+
+@dataclass(frozen=True)
 class Shapes:
     """Static instances for all available shapes."""
 
@@ -419,6 +450,7 @@ class Shapes:
     TxN = TimeAndNode()
     NxA = NodeAndArbitrary()
     AxN = ArbitraryAndNode()
+    TxNxA = TimeAndNodeAndArbitrary()
 
 
 def parse_shape(shape: str) -> DataShape:
@@ -440,6 +472,8 @@ def parse_shape(shape: str) -> DataShape:
             return Shapes.NxA
         case "AxN":
             return Shapes.AxN
+        case "TxNxA":
+            return Shapes.TxNxA
         case _:
             raise ValueError(f"'{shape}' is not a valid shape specification.")
 

@@ -2,6 +2,7 @@
 movement patterns."""
 
 from abc import ABC
+from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 from zipfile import ZipFile
@@ -173,8 +174,6 @@ def _fetch_distribution_data(date_range: TimeFrame, progress: ProgressCallback) 
                 url_list.append(resource["alt_url"])
                 break
 
-    # processing_steps = len(url_list) + 1
-
     # download the file/s
     try:
         # rename the file for cache since they are all loaded as "download"
@@ -187,9 +186,6 @@ def _fetch_distribution_data(date_range: TimeFrame, progress: ProgressCallback) 
             "Unable to fetch Movement Distribution Maps data."
         ) from e
 
-    # if progress is not None:
-    #     progress((i + 1) / processing_steps, None)
-
     return files
 
 
@@ -198,6 +194,7 @@ def _make_distribution_adrio(
 ) -> NDArray[np.float64]:
     # get the appropriate files
     files = _fetch_distribution_data(date_range, progress)
+
     daily_rows = []
     # set up the categories to search for
     dist_categories = ["0", "(0, 10)", "[10, 100)", "100+"]
@@ -210,25 +207,42 @@ def _make_distribution_adrio(
     category_index = {cat: i for i, cat in enumerate(dist_categories)}
 
     # move through each zip file
-    for file in files:
+    formatted_dates = set()
+    dates_by_month = defaultdict(list)
+
+    # move through all of the dates
+    current = date_range.start_date
+    while current <= date_range.end_date:
+        # add the formatted month to the dictionary and regular set
+        key = current.strftime("%B %Y")
+        dates_by_month[key].append(current)
+        formatted_dates.add(key)
+        current += timedelta(days=1)
+
+    # sort formatted dates chronologically
+    formatted_dates = sorted(
+        formatted_dates,
+        key=lambda d: (
+            int(d.split()[1]),
+            list(_INT_TO_MONTH.values()).index(d.split()[0]) + 1,
+        ),
+    )
+
+    # iterate over files and their corresponding dates
+    for file, formatted_date in zip(files, formatted_dates):
         # open the zip file
         with ZipFile(file) as zf:
-            # iterate through each day
-            for day in range(date_range.days):
-                # set up for the current day and month
-                current_day = date_range.start_date + timedelta(days=day)
+            for current_day in dates_by_month.get(formatted_date, []):
                 month_key = current_day.strftime("%B %Y")
 
-                # if the current month and year are considered an outlier
-                # months from October 2024 - present have inconsistent file formatting
+                # get any outlier months here
                 if month_key in _MONTH_TO_FILE:
                     folder = _MONTH_TO_FILE[month_key]
                     csv_name = f"{folder}/1922039342088483_{current_day}.csv"
-                # otherwise, follow the typical format
                 else:
                     csv_name = f"1922039342088483_{current_day}.csv"
 
-                # open the csv file and read into a pandas dataframe
+                # open the current csv as a pandas dataframe
                 with zf.open(csv_name) as file:
                     dist_df = pd.read_csv(file)
 
