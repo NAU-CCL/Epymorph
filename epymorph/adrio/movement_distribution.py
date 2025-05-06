@@ -121,7 +121,7 @@ DATASET = Dataset.read_from_hdx("movement-distribution")
 """Gets the Movement Distribution datasets from the HDX Python API
 
 API Data Source: Humanitarian Data Exchange (HDX)
-API Ownership: HDX / UNOCHA (United Nations Office for the Coordination of Humanitarian 
+API Ownership: HDX / UNOCHA (United Nations Office for the Coordination of Humanitarian
 Affairs)
 GitHub Repository: https://github.com/OCHA-DAP/hdx-python-api
 """
