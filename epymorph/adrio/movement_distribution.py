@@ -6,6 +6,7 @@ from abc import ABC
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
+from typing import cast
 from zipfile import ZipFile
 
 import numpy as np
@@ -16,18 +17,18 @@ from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.adrio.adrio import (
+    ADRIOCommunicationError,
     ADRIOContextError,
     ADRIOError,
     FetchADRIO,
     ResultFormat,
     range_mask_fn,
+    validate_time_frame,
 )
 from epymorph.adrio.processing import PipelineResult
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
-from epymorph.error import DataResourceError
-from epymorph.geography.scope import GeoScope
 from epymorph.geography.us_census import CensusScope, CountyScope
 from epymorph.geography.us_geography import STATE
 from epymorph.geography.us_tiger import CacheEstimate, get_counties, get_states
@@ -36,199 +37,121 @@ from epymorph.time import DateRange, TimeFrame
 
 _MOVEMENT_DIST_CACHE_PATH = module_cache_path(__name__)
 
-STATE_ABBRS = [
-    "AL",
-    "AK",
-    "AZ",
-    "AR",
-    "CA",
-    "CO",
-    "CT",
-    "DE",
-    "DC",
-    "FL",
-    "GA",
-    "HI",
-    "ID",
-    "IL",
-    "IN",
-    "IA",
-    "KS",
-    "KY",
-    "LA",
-    "ME",
-    "MD",
-    "MA",
-    "MI",
-    "MN",
-    "MS",
-    "MO",
-    "MT",
-    "NE",
-    "NV",
-    "NH",
-    "NJ",
-    "NM",
-    "NY",
-    "NC",
-    "ND",
-    "OH",
-    "OK",
-    "OR",
-    "PA",
-    "RI",
-    "SC",
-    "SD",
-    "TN",
-    "TX",
-    "UT",
-    "VT",
-    "VA",
-    "WA",
-    "WV",
-    "WI",
-    "WY",
-]
-
-_STATE_TO_NUM = {abbr: i + 1 for i, abbr in enumerate(STATE_ABBRS)}
+_STATE_TO_NUM = {
+    "AL": 1,
+    "AK": 2,
+    "AZ": 3,
+    "AR": 4,
+    "CA": 5,
+    "CO": 6,
+    "CT": 7,
+    "DE": 8,
+    "DC": 9,
+    "FL": 10,
+    "GA": 11,
+    "HI": 12,
+    "ID": 13,
+    "IL": 14,
+    "IN": 15,
+    "IA": 16,
+    "KS": 17,
+    "KY": 18,
+    "LA": 19,
+    "ME": 20,
+    "MD": 21,
+    "MA": 22,
+    "MI": 23,
+    "MN": 24,
+    "MS": 25,
+    "MO": 26,
+    "MT": 27,
+    "NE": 28,
+    "NV": 29,
+    "NH": 30,
+    "NJ": 31,
+    "NM": 32,
+    "NY": 33,
+    "NC": 34,
+    "ND": 35,
+    "OH": 36,
+    "OK": 37,
+    "OR": 38,
+    "PA": 39,
+    "RI": 40,
+    "SC": 41,
+    "SD": 42,
+    "TN": 43,
+    "TX": 44,
+    "UT": 45,
+    "VT": 46,
+    "VA": 47,
+    "WA": 48,
+    "WV": 49,
+    "WI": 50,
+    "WY": 51,
+}
+"""State to numeric code for GADM polygon codes."""
 
 _INT_TO_MONTH = {i: month for i, month in enumerate(calendar.month_name) if month}
 
 _MONTH_TO_FILE = {
-    "October 2024": "movement-distribution-data-for-good-at-meta_2024-10-01_2024-11-01_csv",
+    "October 2024": (
+        "movement-distribution-data-for-good-at-meta_2024-10-01_2024-11-01_csv"
+    ),
     "November 2024": "1922039342088483_2024-11-01_2024-11-16_csv",
     "December 2024": "1922039342088483_2024-12-01_2024-12-16_csv",
-    "January 2025": "movement-distribution-data-for-good-at-meta_2025-01-01_2025-02-01_csv",
+    "January 2025": (
+        "movement-distribution-data-for-good-at-meta_2025-01-01_2025-02-01_csv"
+    ),
     "February 2025": "1922039342088483_2025-02-01_2025-02-16_csv",
 }
+"""Folder paths for months that do not follow the typical pattern of the ZIP files"""
 
-# create a configuration for the HDX Python API
-# reading from the live site and not staging changes and only using GET requests
+
 Configuration.create(
     hdx_site="prod",
     user_agent="EpiMoRPH_MovementDistributionADRIO",
     hdx_read_only=True,
 )
+"""
+Creates a configuration for the HDX Python API, reading from the live site,
+not staging changes. Only uses GET requests and reads from the datasets."""
+
 DATASET = Dataset.read_from_hdx("movement-distribution")
+"""Gets the Movement Distribution datasets from the HDX Python API
+
+API Data Source: Humanitarian Data Exchange (HDX)
+API Ownership: HDX / UNOCHA (United Nations Office for the Coordination of Humanitarian 
+Affairs)
+GitHub Repository: https://github.com/OCHA-DAP/hdx-python-api
+"""
 
 
-def _validate_scope(scope: GeoScope) -> CensusScope:
-    if not isinstance(scope, CensusScope):
-        msg = "Census scope is required for Movement Distribution attributes."
-        raise DataResourceError(msg)
-    return scope
-
-
-def _validate_dates(date_range: TimeFrame) -> TimeFrame:
-    # from the hdx api, get the valid dataset starting date and ending date
-    time_period = DATASET.get_time_period()  # type: ignore
-
-    start_limit = time_period["startdate"].date()
-    end_limit = time_period["enddate"].date()
-
-    # if the current date range exceeds the start or end limits of the dataset
-    if date_range.start_date < start_limit or date_range.end_date > end_limit:
-        msg = (
-            "Given date range is out of Movement Distribution scope, please enter dates"
-            f" between {start_limit} and {end_limit}"
-        )
-        raise DataResourceError(msg)
-    return date_range
-
-
-class _MovementADRIO(FetchADRIO[np.float64, np.float64], ABC):
-    _override_time_frame: TimeFrame | None
-    """An override time frame for which to fetch data.
-    If None, the simulation time frame will be used."""
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        self._override_time_frame = time_frame
-
-    @property
-    def data_time_frame(self) -> TimeFrame:
-        """The time frame for which to fetch data."""
-        return self._override_time_frame or self.time_frame
-
-
-def _estimate_distribution(
-    adrio_instance: _MovementADRIO, file_size: int, date_range: TimeFrame
-) -> DataEstimate:
+class Distribution(FetchADRIO[np.float64, np.float64], ABC):
     """
-    Calculate estimates for downloading Movement Distribution files.
-    """
-    # set cache size variables
-    missing_cache_size = 0
-    total_cache_size = 0
-
-    # get the months that will be loaded and check in cache
-    formatted_dates = []
-
-    # set the current starting date
-    current = date_range.start_date.replace(day=1)
-
-    # iterate through each day
-    while current <= date_range.end_date:
-        # format the current month variable
-        file = f"{_INT_TO_MONTH[current.month]} {current.year}"
-
-        # add the formatted date to the list of months
-        formatted_dates.append(file)
-
-        # check for cache size, files before October 2024 are much larger
-        if current < date(2024, 10, 1):
-            # add to the total cache
-            total_cache_size += 358_764_000
-            # if the file is not in the cache, add to the missing cache size
-            if not check_file_in_cache(_MOVEMENT_DIST_CACHE_PATH / Path(file).name):
-                missing_cache_size += 358_764_000
-        else:
-            # add to the total cache
-            total_cache_size += 91_820_000
-            # if the file is not in the cache, add to the missing cache size
-            if not check_file_in_cache(_MOVEMENT_DIST_CACHE_PATH / Path(file).name):
-                missing_cache_size += 91_820_000
-
-        # move to the first of next month
-
-        # if currently checking for december, move to the next year
-        if current.month == 12:
-            current = current.replace(year=current.year + 1, month=1)
-        # otherwise, just move to the next month
-        else:
-            current = current.replace(month=current.month + 1)
-
-    # calculate the cache estimate
-    est = CacheEstimate(
-        total_cache_size=total_cache_size,
-        missing_cache_size=missing_cache_size,
-    )
-
-    key = f"distribution:{date_range}"
-    return AvailableDataEstimate(
-        name=adrio_instance.class_name,
-        cache_key=key,
-        new_network_bytes=est.missing_cache_size,
-        new_cache_bytes=est.missing_cache_size,
-        total_cache_bytes=est.total_cache_size,
-        max_bandwidth=None,
-    )
-
-
-class Distribution(_MovementADRIO):
-    """
-    Creates an TxN matrix of movers and the amount that move within a range of distance
-    away from their typical home location.
+    Creates an TxNxA matrix of movers and the fraction that move within a range of
+    distance away from their typical home location. The four ranges go in order from
+    moving 0 and 1km, between 0 and 10 km, between 10 and 100 km, and moving anywhere
+    above 100km from the home location.
     """
 
     time_period = DATASET.get_time_period()  # type: ignore
+    """
+    The available dates of the dataset changes irregularly as new files are not added
+    on a consistent basis. This function gets the time frame directly from the dataset.
+    """
 
     start_limit = time_period["startdate"].date()
+    """Starting date for Movement Distribution."""
+
     end_limit = time_period["enddate"].date()
+    """Ending date for Movement Distribution."""
 
     _TIME_RANGE = DateRange(start_limit, end_limit)
     """The time range over which values are available."""
 
     _NUM_ATTRIBUTES = 4
+    """The number of distance range categories: (0, (0, 10), [10, 100), 100+)"""
 
     _RESULT_FORMAT = ResultFormat(
         shape=Shapes.TxNxA,
@@ -236,19 +159,6 @@ class Distribution(_MovementADRIO):
         validation=range_mask_fn(minimum=np.float64(0.0), maximum=np.float64(1.0)),
         is_date_value=False,
     )
-
-    def __init__(self, time_frame: TimeFrame | None = None):
-        """
-        Initializes the time frame for the movement distribution data.
-
-        Parameters
-        ----------
-        time_frame : int, optional
-            The year for the movement distribution data.
-            Defaults to the year in which the simulation time frame starts.
-
-        """
-        super().__init__(time_frame)
 
     def _fetch(self, context: Context) -> pd.DataFrame:
         start_date = context.time_frame.start_date
@@ -300,9 +210,7 @@ class Distribution(_MovementADRIO):
                 for u, formatted_date in zip(url_list, formatted_dates)
             ]
         except Exception as e:
-            raise DataResourceError(
-                "Unable to fetch Movement Distribution Maps data."
-            ) from e
+            raise ADRIOCommunicationError(self, context) from e
 
         # return files as a pandas dataframe
         return pd.DataFrame({"files": files, "formatted_dates": formatted_dates})
@@ -312,6 +220,7 @@ class Distribution(_MovementADRIO):
         context: Context,
         data_df: pd.DataFrame,
     ) -> PipelineResult[np.float64]:
+        scope = cast(CensusScope, context.scope)
         # set up the categories to search for
         dist_categories = ["0", "(0, 10)", "[10, 100)", "100+"]
 
@@ -320,7 +229,6 @@ class Distribution(_MovementADRIO):
         daily_rows = []
         missing_files = []
 
-        scope = _validate_scope(context.scope)
         start_date = context.time_frame.start_date
         end_date = context.time_frame.end_date
 
@@ -413,7 +321,10 @@ class Distribution(_MovementADRIO):
             raise ADRIOError(
                 adrio=self,
                 context=context,
-                message=f"The following files were not found in the ZIP archives for {{adrio_name}}:\n{missing_str}",
+                message=(
+                    "The following files were not found in the ZIP archives for "
+                    f"{{adrio_name}}:\n{missing_str}"
+                ),
             )
 
         # organize and shape by nodes and days
@@ -426,15 +337,8 @@ class Distribution(_MovementADRIO):
             issues={},
         )
 
-    # estimate the amount of data that will be downloaded
     def estimate_data(self) -> DataEstimate:
-        # files from before October 2024 average to 358.8 MB
-        if self.data_time_frame.end_date < date(2024, 10, 1):
-            file_size = 358_764_000
-        # files from October 2024 and after average to 91.82MB
-        else:
-            file_size = 91_820_000
-        est = _estimate_distribution(self, file_size, self.data_time_frame)
+        est = _estimate_distribution(self, self.context.time_frame)
         return est
 
     @override
@@ -455,18 +359,74 @@ class Distribution(_MovementADRIO):
         return self._RESULT_FORMAT
 
     def validate_context(self, context: Context) -> None:
-        scope = context.scope
-        time_frame = context.time_frame
-
-        if not isinstance(scope, CountyScope):
+        if not isinstance(context.scope, CountyScope):
             raise ADRIOContextError(self, context, "Scope must be a CountyScope.")
-
-        if len(scope.node_ids) == 0:
+        if len(context.scope.node_ids) == 0:
             raise ADRIOContextError(
                 self, context, "Scope must include at least one county."
             )
+        validate_time_frame(self, context, self._TIME_RANGE)
 
-        if time_frame.start_date > time_frame.end_date:
-            raise ADRIOContextError(
-                self, context, "Time frame must have a valid start and end date."
-            )
+
+def _estimate_distribution(
+    adrio_instance: Distribution, date_range: TimeFrame
+) -> DataEstimate:
+    """
+    Calculate estimates for downloading Movement Distribution files.
+    """
+    # set cache size variables
+    missing_cache_size = 0
+    total_cache_size = 0
+
+    # get the months that will be loaded and check in cache
+    formatted_dates = []
+
+    # set the current starting date
+    current = date_range.start_date.replace(day=1)
+
+    # iterate through each day
+    while current <= date_range.end_date:
+        # format the current month variable
+        file = f"{_INT_TO_MONTH[current.month]} {current.year}"
+
+        # add the formatted date to the list of months
+        formatted_dates.append(file)
+
+        # check for cache size, files before October 2024 are much larger
+        if current < date(2024, 10, 1):
+            # add to the total cache
+            total_cache_size += 358_764_000
+            # if the file is not in the cache, add to the missing cache size
+            if not check_file_in_cache(_MOVEMENT_DIST_CACHE_PATH / Path(file).name):
+                missing_cache_size += 358_764_000
+        else:
+            # add to the total cache
+            total_cache_size += 91_820_000
+            # if the file is not in the cache, add to the missing cache size
+            if not check_file_in_cache(_MOVEMENT_DIST_CACHE_PATH / Path(file).name):
+                missing_cache_size += 91_820_000
+
+        # move to the first of next month
+
+        # if currently checking for december, move to the next year
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1)
+        # otherwise, just move to the next month
+        else:
+            current = current.replace(month=current.month + 1)
+
+    # calculate the cache estimate
+    est = CacheEstimate(
+        total_cache_size=total_cache_size,
+        missing_cache_size=missing_cache_size,
+    )
+
+    key = f"distribution:{date_range}"
+    return AvailableDataEstimate(
+        name=adrio_instance.class_name,
+        cache_key=key,
+        new_network_bytes=est.missing_cache_size,
+        new_cache_bytes=est.missing_cache_size,
+        total_cache_bytes=est.total_cache_size,
+        max_bandwidth=None,
+    )
