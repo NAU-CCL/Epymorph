@@ -13,4 +13,4 @@ If you're looking for other documentation, these links may be useful:
 - [epymorph documentation home](../)
 - [User Guide](../guide/)
 - [Demo Vignettes](../demo/)
-- [About](../about/)
+- [About](../about.html)
