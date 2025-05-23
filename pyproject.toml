@@ -57,20 +57,18 @@ dependencies = [
 dev = [
   # Jupyter
   "ipykernel>=6.29.5",
-
   # Linting/formatting
   "ruff>=0.9.0",
-  
   # Testing
   "pytest>=8.3.4",
   "pytest-cov>=6.0.0",
   "vcrpy>=7.0.0",
-
   # Documentation
   "mkdocs>=1.6.1",
   "mkdocs-material>=9.6.12",
   "mkdocs-gen-files>=0.5.0",
   "mkdocstrings[python]>=0.29.1",
+  "griffe-inherited-docstrings>=1.1.1",
 ]
 
 [project.urls]

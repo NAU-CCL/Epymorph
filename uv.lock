@@ -401,6 +401,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "griffe-inherited-docstrings" },
     { name = "ipykernel" },
     { name = "mkdocs" },
     { name = "mkdocs-gen-files" },
@@ -434,6 +435,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "griffe-inherited-docstrings", specifier = ">=1.1.1" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "mkdocs-gen-files", specifier = ">=0.5.0" },
@@ -563,6 +565,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a9/3e/5aa9a61f7c3c47b0b52a1d930302992229d191bf4bc76447b324b731510a/griffe-1.7.3.tar.gz", hash = "sha256:52ee893c6a3a968b639ace8015bec9d36594961e156e23315c8e8e51401fa50b", size = 395137, upload-time = "2025-04-23T11:29:09.147Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/c6/5c20af38c2a57c15d87f7f38bee77d63c1d2a3689f74fefaf35915dd12b2/griffe-1.7.3-py3-none-any.whl", hash = "sha256:c6b3ee30c2f0f17f30bcdef5068d6ab7a2a4f1b8bf1a3e74b56fffd21e1c5f75", size = 129303, upload-time = "2025-04-23T11:29:07.145Z" },
+]
+
+[[package]]
+name = "griffe-inherited-docstrings"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "griffe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/9f/098599019b2715e1edad3618305b8acf253e2ee375cbd389507cb23a2a00/griffe_inherited_docstrings-1.1.1.tar.gz", hash = "sha256:d179b6a6b7dc260fb892ad5b857837afd6f9de6193fc26d14463c4e9975a0cd3", size = 24146, upload-time = "2024-11-05T13:46:05.394Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/f9/51a3fd7460b95583ff470c7b4fd706bd21f3fda97d521f3770126dc6d1fc/griffe_inherited_docstrings-1.1.1-py3-none-any.whl", hash = "sha256:0cb613ade70793b3589c706269a2cc4ceb91cbc4cfdc651037839cb9506eabe6", size = 6008, upload-time = "2024-11-05T13:46:03.504Z" },
 ]
 
 [[package]]

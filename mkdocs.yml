@@ -29,6 +29,8 @@ extra_javascript:
 watch:
   - docs
   - epymorph
+  - mkdocs.yml
+  - mkdocs-prod.yml
 
 plugins:
   search:
@@ -36,7 +38,6 @@ plugins:
     scripts:
       - scripts/mkdocs_generate_api_pages.py
   mkdocstrings:
-    default_handler: python
     enable_inventory: true
     handlers:
       python:
@@ -63,8 +64,11 @@ plugins:
           show_signature_annotations: true
           separate_signature: true
           signature_crossrefs: true
-          # inherited_members: true  # inherited members might be noise, since bases are displayed...
+          inherited_members: false
           members_order: [__all__, source]
-          # filters:
-          #   - "!^_"
-          #   - "^__init__$"
+          filters:
+            - "!^_"
+            - "^__init__$"
+            - "^__iter__$"
+          extensions:
+            - griffe_inherited_docstrings
