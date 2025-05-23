@@ -25,6 +25,7 @@ from typing import (
 import numpy as np
 from numpy.typing import NDArray
 from sympy import Symbol
+from typing_extensions import override
 
 from epymorph.attribute import (
     AbsoluteName,
@@ -84,11 +85,23 @@ class GPM:
     initialization scheme. Most often, a GPM is used to define one strata
     in a multi-strata RUME.
 
-    GPM is a frozen dataclass.
+    Parameters
+    ----------
+    name :
+        The name to use to identify the GPM.
+    ipm :
+        The IPM for the GPM.
+    mm :
+        The MM for the GPM.
+    init :
+        The initializer for the GPM.
+    params :
+        Parameter values specific to this GPM. When a GPM is used in a RUME,
+        RUME parameters will override GPM parameters if there's overlap.
 
     See Also
     --------
-    [`MultiStrataRUME.build`](`epymorph.rume.MultiStrataRUME.build`) which uses GPMs.
+    [epymorph.rume.MultiStrataRUME.build][] which uses GPMs.
     """
 
     name: str
@@ -129,29 +142,50 @@ GEO_LABELS = KeyValue(
     ),
 )
 """
-A special attribute which, if provided to a RUME ("meta::geo::label"),
-will be used as labels for the geo node.
-Otherwise labels will be taken from the geo scope.
+A special attribute which, if provided to a RUME ("meta::geo::label"), will be used as
+labels for the geo node. Otherwise labels will be taken from the geo scope.
 """
 
 
-class _CombineTauStepsResult(NamedTuple):
+class CombineTauStepsResult(NamedTuple):
+    """The result of the `combine_tau_steps` function."""
+
     new_tau_steps: tuple[float, ...]
+    """The lengths of the output tau steps."""
     start_mapping: dict[str, dict[int, int]]
+    """
+    A per-strata mapping for the start of tau step bounds;
+    from original tau step index to new tau step index.
+    """
     stop_mapping: dict[str, dict[int, int]]
+    """
+    A per-strata mapping for the end of tau step bounds;
+    from original tau step index to new tau step index.
+    """
 
 
 def combine_tau_steps(
     strata_tau_lengths: dict[str, Sequence[float]],
-) -> _CombineTauStepsResult:
+) -> CombineTauStepsResult:
     """
-    When combining movement models with different tau steps, it is necessary to create a
-    new tau step scheme which can accomodate them all. This function performs that
-    calculation, returning both the new tau steps (a list of tau lengths) and the
-    mapping by strata from old tau step indices to new tau step indices, so that
-    movement models can be adjusted as necessary. For example, if MM A has
-    tau steps [1/3, 2/3] and MM B has tau steps [1/2, 1/2] -- the resulting
-    combined tau steps are [1/3, 1/6, 1/2].
+    Combines multiple tau step schemes to calculate a unified scheme which is compatible
+    with all of them while using the fewest possible number of tau steps.
+
+    Parameters
+    ----------
+    strata_tau_lengths :
+        A mapping containing each strata name (key) and the list of tau lengths (value).
+
+    Returns
+    -------
+    :
+        A tuple containing the information required to adjust movement models to the
+        combined tau step scheme.
+
+    Examples
+    --------
+    For tau steps `[1/3, 2/3]` and tau steps `[1/2, 1/2]` --
+    the combined tau steps are `[1/3, 1/6, 1/2]`.
     """
 
     # Convert the tau lengths into the starting point and stopping point for each
@@ -190,7 +224,7 @@ def combine_tau_steps(
         for name, curr in strata_tau_stops.items()
     }
 
-    return _CombineTauStepsResult(
+    return CombineTauStepsResult(
         combined_tau_lengths, tau_start_mapping, tau_stop_mapping
     )
 
@@ -199,8 +233,20 @@ def remap_taus(
     strata_mms: list[tuple[str, MovementModel]],
 ) -> OrderedDict[str, MovementModel]:
     """
-    When combining movement models with different tau steps, it is necessary to create a
-    new tau step scheme which can accomodate them all.
+    Adjusts a set of movement models which may use different tau step schemes such that
+    they all use a unified tau step scheme which is compatible with all of them.
+
+    This step is performed automatically when constructing a multi-strata RUME.
+
+    Parameters
+    ----------
+    strata_mms :
+        The list of tuples of strata name and the movement model for that strata.
+
+    Returns
+    -------
+    :
+        The adjusted movement model for each strata.
     """
     new_tau_steps, start_mapping, stop_mapping = combine_tau_steps(
         {strata: mm.steps for strata, mm in strata_mms}
@@ -234,44 +280,43 @@ def remap_taus(
 
 
 GeoScopeT = TypeVar("GeoScopeT", bound=GeoScope)
+"""A type of `GeoScope`."""
 GeoScopeT_co = TypeVar("GeoScopeT_co", covariant=True, bound=GeoScope)
+"""A type of `GeoScope`, covariant."""
 
 
 @dataclass(frozen=True)
 class RUME(ABC, Generic[GeoScopeT_co]):
     """
     A RUME (or Runnable Modeling Experiment) contains the configuration of an
-    epymorph-style simulation.
-
-    It brings together one or more IPMs, MMs, initialization
+    epymorph-style simulation. It brings together one or more IPMs, MMs, initialization
     routines, and a geo-temporal scope. Model parameters can also be specified.
-    The RUME will eventually be used to construct a Simulation, which is an
-    algorithm that uses a RUME to produce some results -- in the most basic case,
-    running a disease simulation and providing time-series results of the disease model.
 
-    RUME is an abstract parent class; users will typically use
-    [`SingleStrataRUME.build`](`epymorph.rume.SingleStrataRUME.build`) and
-    [`MultiStrataRUMEBuilder`](`epymorph.rume.MultiStrataRUMEBuilder`) to construct
-    concrete RUMEs.
+    RUMEs are often used to construct a simulation -- in the most basic case, running a
+    forward simulation and producing time-series results of disease progression.
 
-    RUME is generic on the type of [`GeoScope`](`epymorph.geography.scope.GeoScope`)
-    used to construct the RUME (`GeoScopeT_co`).
+    `RUME` is generic on the type of `GeoScope` used to construct it (`GeoScopeT_co`).
+
+    See Also
+    --------
+    `RUME` is an abstract parent class; users will typically use
+    [epymorph.rume.SingleStrataRUME.build][] and
+    [epymorph.rume.MultiStrataRUMEBuilder][] to construct concrete RUMEs.
     """
 
     strata: Sequence[GPM]
-    """The list of strata expressed as GPMs."""
+    """The strata for the RUME expressed as GPMs."""
     ipm: BaseCompartmentModel
     """The effective IPM for the RUME, made by combining all strata IPMs."""
     mms: OrderedDict[str, MovementModel]
-    """The effective MMs for the RUME by strata. The MMs in this list represent
-    any modifications which must be made to the movement models so that they are
-    mutually compatible. (For example, adjusting to a common tau-step scheme.)"""
+    """ The effective MMs for the RUME by strata, made by combining all strata MMs."""
     scope: GeoScopeT_co
     """The geo scope. This is shared by all strata."""
     time_frame: TimeFrame
     """The simulation time frame."""
     params: Mapping[NamePattern, ParamValue]
-    """Parameter values set on the RUME."""
+    """Parameter values for the RUME."""
+
     tau_step_lengths: list[float] = field(init=False)
     """The lengths of each tau step in the simulation as fractions of a day."""
     num_tau_steps: int = field(init=False)
@@ -381,6 +426,9 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         """
         Masks that describe which compartments should be considered
         subject to movement in a particular strata.
+
+        Currently a compartment is exempted from movement calculations if it is tagged
+        "immobile".
         """
         # The mobility mask for all strata.
         all_mobility = np.array(
@@ -437,19 +485,17 @@ class RUME(ABC, Generic[GeoScopeT_co]):
     @staticmethod
     def symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
         """
-        Convenient function to retrieve the symbols used to represent
+        Convenient function to retrieve the sympy symbols used to represent
         simulation quantities.
-
-        This is a static method.
 
         Parameters
         ----------
-        *symbols : ParamSymbol
+        *symbols :
             The symbols to retrieve, as var-args.
 
         Returns
         -------
-        tuple[sympy.Symbol, ...]
+        :
             A tuple containing the symbols requested, in the order
             requested.
         """
@@ -460,16 +506,18 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         *,
         max_bandwidth: int = 1000**2,  # default: 1 MB/s
     ) -> None:
-        """Prints a report estimating the data requirements of this RUME.
+        """
+        Prints a report estimating the data requirements of this RUME.
 
         Includes data which must be downloaded and how much will be added to the file
         cache. Provides a projected download time based on the given assumed maximum
-        network bandwidth (defaults to 1 MB/s).
+        network bandwidth.
 
         Parameters
         ----------
-        max_bandwidth: int, default=1 MB/s
-            The assumed maximum network bandwidth in bytes per second.
+        max_bandwidth :
+            The assumed maximum network download speed in bytes per second.
+            Default is 1 MB/s.
         """
 
         ctx = Context.of(
@@ -497,19 +545,26 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         self,
         override_params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
     ) -> ReqTree:
-        """Compute the requirements tree for the given RUME.
+        """
+        Compute the requirements tree for the given RUME.
 
         Parameters
         ----------
-        override_params : Mapping[NamePattern, ParamValue], optional
-            when computing requirements, use these values to override
-            any that are provided by the RUME itself.  If keys are provided as strings,
+        override_params :
+            When computing requirements, use these values to override
+            any that are provided by the RUME itself. If keys are provided as strings,
             they must be able to be parsed as `NamePattern`s.
 
         Returns
         -------
-        ReqTree
-            the requirements tree
+        :
+            The requirements tree.
+
+        Raises
+        ------
+        DataAttributeError
+            If the tree cannot be evaluated, for instance, due to containing circular
+            dependencies.
         """
         label_name, label_def = GEO_LABELS
         return ReqTree.of(
@@ -532,18 +587,24 @@ class RUME(ABC, Generic[GeoScopeT_co]):
 
         Parameters
         ----------
-        rng : np.random.Generator, optional
+        rng :
             The random number generator to use during evaluation
-        override_params : Mapping[NamePattern, ParamValue] | Mapping[str, ParamValue], optional
+        override_params :
             Use these values to override any that are provided by the RUME itself.
             If keys are provided as strings, they must be able to be parsed as
             `NamePattern`s.
 
         Returns
         -------
-        DataResolver
-            the resolver containing the evaluated values
-        """  # noqa: E501
+        :
+            The resolver containing the evaluated values.
+
+        Raises
+        ------
+        DataAttributeError
+            If the parameters cannot be evaluated for any reason, such as missing or
+            invalid parameter values.
+        """
         ps = None
         if override_params is not None and len(override_params) > 0:
             ps = {NamePattern.of(k): v for k, v in override_params.items()}
@@ -557,21 +618,21 @@ class RUME(ABC, Generic[GeoScopeT_co]):
 
         Parameters
         ----------
-        data : DataResolver
+        data :
             The resolved parameters for this RUME.
-        rng : np.random.Generator
+        rng :
             The random number generator to use. Generally this should be the same
             RNG used to evaluate parameters.
 
         Returns
         -------
-        SimArray
+        :
             the initial values ((N,C)-shaped array) for all geo scope nodes and
             IPM compartments
 
         Raises
         ------
-        InitException
+        InitError
             If initialization fails for any reason or produces invalid values.
         """
 
@@ -601,22 +662,11 @@ class RUME(ABC, Generic[GeoScopeT_co]):
 @dataclass(frozen=True)
 class SingleStrataRUME(RUME[GeoScopeT_co]):
     """
-    A RUME with a single strata.
+    A RUME with a single strata. We recommend using the more-convenient static method
+    `SingleStrataRUME.build` instead of the normal class constructor.
 
-    We recommend using the static method
-    [`SingleStrataRUME.build`](`epymorph.rume.SingleStrataRUME.build`)
-    instead of the normal class constructor, as it is more convenient.
-
-    SingleStrataRUME is a frozen dataclass.
-
-    SingleStrataRUME is generic on the type of
-    [`GeoScope`](`epymorph.geography.scope.GeoScope`)
-    used to construct the RUME (`GeoScopeT_co`).
-
-    See Also
-    --------
-    [`RUME`](`epymorph.rume.RUME`), the parent class, for more attributes and methods
-    of this class
+    `SingleStrataRUME` is generic on the type of `GeoScope` used to construct it
+    (`GeoScopeT_co`).
     """
 
     ipm: CompartmentModel
@@ -633,31 +683,28 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
         """
         Create a RUME with a single strata.
 
-        This is a static method.
-
-        This method is generic on the type of
-        [`GeoScope`](`epymorph.geography.scope.GeoScope`) passed in (`GeoScopeT`).
+        This method is generic on the type of `GeoScope` used (`GeoScopeT`).
 
         Parameters
         ----------
-        ipm : CompartmentModel
+        ipm :
             The compartmental model.
-        mm : MovementModel
+        mm :
             The movement model.
-        init : Initializer
+        init :
             The logic for setting the initial conditions of the simulation.
-        scope : GeoScopeT
+        scope :
             The geo scope.
-        time_frame : TimeFrame
+        time_frame :
             The time frame to simulate.
-        params : CovariantMapping[str | NamePattern, ParamValue]
+        params :
             Parameter values that will be used to fulfill the data requirements
             of the various modules of the RUME.
 
         Returns
         -------
-        SingleStrataRUME[GeoScopeT]
-            A RUME instance.
+        :
+            The RUME instance.
         """
         return SingleStrataRUME(
             strata=[GPM(DEFAULT_STRATA, ipm, mm, init)],
@@ -668,6 +715,7 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
             params={NamePattern.of(k): v for k, v in params.items()},
         )
 
+    @override
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
         """Returns a function for formatting attribute/parameter names."""
         return lambda n: f"{n.module}::{n.id}"
@@ -678,16 +726,13 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
     """
     A RUME with multiple strata.
 
-    MultiStrataRUME is a frozen dataclass.
-
-    MultiStrataRUME is generic on the type of
-    [`GeoScope`](`epymorph.geography.scope.GeoScope`)
-    used to construct the RUME (`GeoScopeT_co`).
+    `MultiStrataRUME` is generic on the type of `GeoScope` used to construct it
+    (`GeoScopeT_co`).
 
     See Also
     --------
-    [`RUME`](`epymorph.rume.RUME`), the parent class, for more attributes and methods
-    of this class
+    [epymorph.rume.MultiStrataRUMEBuilder][] for a more user-friendly way to construct
+    multistrata RUMEs.
     """
 
     ipm: CombinedCompartmentModel
@@ -703,36 +748,32 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
     ) -> "MultiStrataRUME[GeoScopeT]":
         """
         Create a multistrata RUME by combining one GPM per strata.
-        Using this function directly is not the recommended workflow
-        for creating a multistrata RUME; see
-        [`MultiStrataRUMEBuilder`](`epymorph.rume.MultiStrataRUMEBuilder`).
 
-        This is a static method.
+        This function is not the recommended way to create multistrata RUMEs;
+        see `MultiStrataRUMEBuilder` instead.
 
-        This method is generic on the type of
-        [`GeoScope`](`epymorph.geography.scope.GeoScope`)
-        passed in (`GeoScopeT`).
+        This method is generic on the type of `GeoScope` used (`GeoScopeT`).
 
         Parameters
         ----------
-        strata : Sequence[GPM]
+        strata :
             Define the strata for this RUME by providing a GPM for each.
-        meta_requirements : Sequence[AttributeDef]
+        meta_requirements :
             Define any data requirements used for the meta-edges of the combined IPM.
-        meta_edges : MetaEdgeBuilder
+        meta_edges :
             A function which constructs the meta-edges of the combined IPM.
-        scope : GeoScopeT
+        scope :
             The geo scope.
-        time_frame : TimeFrame
+        time_frame :
             The time frame to simulate.
-        params : CovariantMapping[str | NamePattern, ParamValue]
+        params :
             Parameter values that will be used to fulfill the data requirements
             of the various modules of the RUME.
 
         Returns
         -------
-        MultiStrataRUME[GeoScopeT]
-            A RUME instance.
+        :
+            The RUME instance.
         """
         return MultiStrataRUME(
             strata=strata,
@@ -749,13 +790,17 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
             params={NamePattern.of(k): v for k, v in params.items()},
         )
 
+    @override
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
         """Returns a function for formatting attribute/parameter names."""
         return str
 
 
 class MultiStrataRUMEBuilder(ABC):
-    """Declare a multi-strata RUME by combining GPMs, one for each strata."""
+    """
+    The recommended way to define and create multistrata RUMEs. Implement this class
+    and then call `build` to obtain an instance.
+    """
 
     strata: Sequence[GPM]
     """The strata that are part of this RUME."""
@@ -770,9 +815,19 @@ class MultiStrataRUMEBuilder(ABC):
     def meta_edges(self, symbols: MultiStrataModelSymbols) -> Sequence[TransitionDef]:
         """
         When implementing a MultiStrataRumeBuilder, override this method
-        to build the meta-transition-edges -- the edges which represent
-        cross-strata interactions. You are given a reference to this model's symbols
-        library so you can build expressions for the transition rates.
+        to define the meta-transition-edges -- the edges which represent
+        cross-strata interactions.
+
+        Parameters
+        ----------
+        symbols :
+            The model's symbols library, to obtain compartment and parameter symbols
+            needed to build transition rate expressions.
+
+        Returns
+        -------
+        :
+            The set of transitions to add to the resulting combined IPM.
         """
 
     @final
@@ -785,24 +840,22 @@ class MultiStrataRUMEBuilder(ABC):
         """
         Complete the RUME definition and construct an instance.
 
-        This method is generic on the type of
-        [`GeoScope`](`epymorph.geography.scope.GeoScope`)
-        passed in (`GeoScopeT`).
+        This method is generic on the type of `GeoScope` used (`GeoScopeT`).
 
         Parameters
         ----------
-        scope : GeoScope
+        scope :
             The geo scope.
-        time_frame : TimeFrame
+        time_frame :
             The time frame to simulate.
-        params : CovariantMapping[str | NamePattern, ParamValue]
+        params :
             Parameter values that will be used to fulfill the data requirements
             of the various modules of the RUME.
 
         Returns
         -------
-        MultiStrataRUME[GeoScopeT]
-            A RUME instance.
+        :
+            The RUME instance.
         """
         return MultiStrataRUME[GeoScopeT].build(
             self.strata,

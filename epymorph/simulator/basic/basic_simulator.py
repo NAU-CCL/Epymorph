@@ -1,4 +1,7 @@
-"""Implements one epymorph simulation algorithm: the basic simulator."""
+"""
+Implements `BasicSimulator`: an epymorph simulation algorithm for performing single run,
+forward simulations.
+"""
 
 from typing import Callable, Generic, TypeVar
 
@@ -28,16 +31,24 @@ from epymorph.util import CovariantMapping
 _events = EventBus()
 
 RUMEType = TypeVar("RUMEType", bound=RUME)
+"""A type of `RUME`."""
 
 
 class BasicSimulator(Generic[RUMEType]):
     """
     A simulator for running singular simulation passes and producing time-series output.
     The most basic simulator.
+
+    This class is generic in the type of RUME used to create it (`RUMEType`).
+
+    Parameters
+    ----------
+    rume :
+        The rume to use for the simulation.
     """
 
     rume: RUMEType
-    """The RUME we will use for the simulation."""
+    """The RUME to use for the simulation."""
     ipm_exec: IPMExecutor
     """The class responsible for executing disease simulation."""
     mm_exec: MovementExecutor
@@ -57,21 +68,21 @@ class BasicSimulator(Generic[RUMEType]):
 
         Parameters
         ----------
-        params : CovariantMapping[str | NamePattern, ParamValue], optional
+        params :
             The set of parameters to override for the sake of this
             run. Specified as a dictionary of name/value pairs, where values
             can be in any form normally allowed for the construction of a RUME.
             Any parameter not overridden uses the value from the RUME.
-        rng_factory : Callable[[], np.random.Generator], optional
+        rng_factory :
             A function used to construct the random number generator for this
             run. This can be used to provide a seeded random number generator
-            if consistent results are desired. By default BasicSimulator creates
+            if consistent results are desired. By default `BasicSimulator` creates
             a new random number generator for each run, using numpy's default rng
             logic.
 
         Returns
         -------
-        Output[RUMEType]
+        :
             The simulation results.
         """
 
