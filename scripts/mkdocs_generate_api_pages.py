@@ -1,3 +1,4 @@
+#!/usr/bin/env -S uv run --script
 """
 Auto-generate mkdocs files for all of epymorph's modules (with some exclusions).
 This script is configured to run during mkdocs generation via the mkdocs-gen-files
@@ -8,6 +9,7 @@ import fnmatch
 import importlib
 import importlib.util
 import pkgutil
+import sys
 import textwrap
 from contextlib import contextmanager
 from pathlib import Path
@@ -46,38 +48,40 @@ def discover_modules(package_name: str, excludes: list[str]) -> list[str]:
     ]
 
 
-def format_docs_stub(module: str) -> tuple[str, str]:
-    """
-    Format a stub file that mkdocstrings will use to generate API documentation
-    for the given module. Return the file name and content as a tuple.
-    """
-    filename = f"{module.removeprefix(PACKAGE).removeprefix('.').replace('.', '_')}.md"
-    content = f"""\
-    ---
-    title: "{module.removeprefix(PACKAGE)}"
-    ---
+def write_module_stubs(open_file):
+    """Generate docs stub files for all modules."""
 
-    # {module}
+    def format_docs_stub(module: str) -> tuple[str, str]:
+        """
+        Format a stub file that mkdocstrings will use to generate API documentation
+        for the given module. Return the file name and content as a tuple.
+        """
+        filename = (
+            f"{module.removeprefix(PACKAGE).removeprefix('.').replace('.', '_')}.md"
+        )
+        content = f"""\
+        ---
+        title: "{module.removeprefix(PACKAGE)}"
+        ---
 
-    ::: {module}
-    """
-    return filename, textwrap.dedent(content)
+        # {module}
 
+        ::: {module}
+        """
+        return filename, textwrap.dedent(content)
 
-def main(open_file):
     docs_dir = Path("docs")
-    # Generate docs stub files for all modules.
     for m in discover_modules(PACKAGE, EXCLUDES):
-        name, content = format_docs_stub(m)
+        filename, content = format_docs_stub(m)
 
         # Skip if a matching file already exists in the docs dir.
         # This allows you to override document page generation per module.
-        if (docs_dir / name).exists():
-            print(f"Found override doc file for '{name}'; skipping generation.")  # noqa: T201
+        if (docs_dir / filename).exists():
+            print(f"Found override doc file for '{filename}'; skipping generation.")  # noqa: T201
             continue
 
         # Write the document.
-        with open_file(name, "w") as file:
+        with open_file(filename, "w") as file:
             file.write(content)
 
 
@@ -86,12 +90,21 @@ if __name__ == "<run_path>":
     # > uv run mkdocs serve
     # --or--
     # > uv run mkdocs build
-    main(mkdocs_gen_files.open)
+    write_module_stubs(mkdocs_gen_files.open)
 
 
 if __name__ == "__main__":
     # Running directly (useful for debugging)
-    # > uv run scripts/mkdocs_generate_api_pages.py
+
+    # list mode: just list discovered modules
+    # > scripts/mkdocs_generate_api_pages.py list
+    if len(sys.argv) > 1 and sys.argv[1] == "list":
+        for module in discover_modules(PACKAGE, EXCLUDES):
+            print(module)  # noqa: T201
+        sys.exit(0)
+
+    # write mode: write stub files to `mkdocs_debug` directory
+    # > scripts/mkdocs_generate_api_pages.py
     out_dir = Path("mkdocs_debug")
     out_dir.mkdir(exist_ok=True)
 
@@ -101,4 +114,4 @@ if __name__ == "__main__":
             print(f"Writing {name}")  # noqa: T201
             yield file
 
-    main(open_file)
+    write_module_stubs(open_file)
