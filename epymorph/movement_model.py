@@ -45,7 +45,8 @@ def parse_days_of_week(dow: str) -> tuple[DayOfWeek, ...]:
     themselves. Returns an empty tuple if there are no matches.
     """
     ds = re.findall(_day_of_week_pattern, dow)
-    return tuple(set(ds))
+    # return the matched days in standard order
+    return tuple(x for x in ALL_DAYS if x in ds)
 
 
 class MovementPredicate(ABC):

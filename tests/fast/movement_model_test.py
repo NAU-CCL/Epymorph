@@ -2,11 +2,39 @@
 import unittest
 
 import numpy as np
+import pytest
 from numpy.typing import NDArray
 
 from epymorph.data_type import SimDType
-from epymorph.movement_model import EveryDay, MovementClause, MovementModel
+from epymorph.movement_model import (
+    EveryDay,
+    MovementClause,
+    MovementModel,
+    parse_days_of_week,
+)
 from epymorph.simulation import NEVER, Tick, TickDelta, TickIndex
+
+
+@pytest.mark.parametrize(
+    ("input_str", "expected"),
+    [
+        ("M", ("M",)),
+        ("T", ("T",)),
+        ("W", ("W",)),
+        ("Th", ("Th",)),
+        ("F", ("F",)),
+        ("Sa", ("Sa",)),
+        ("Su", ("Su",)),
+        ("M T W Th F Sa Su", ("M", "T", "W", "Th", "F", "Sa", "Su")),
+        ("Su Sa F Th W T M", ("M", "T", "W", "Th", "F", "Sa", "Su")),  # order is fixed
+        ("M, T;W|Th/F-Sa.Su", ("M", "T", "W", "Th", "F", "Sa", "Su")),
+        ("M;F;W", ("M", "W", "F")),
+        ("I would like T and Th please", ("T", "Th")),
+        ("a house divided against itself cannot stand", ()),
+    ],
+)
+def test_parse_day_of_week(input_str, expected):
+    assert parse_days_of_week(input_str) == expected
 
 
 class MovementClauseTest(unittest.TestCase):
