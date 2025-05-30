@@ -65,13 +65,13 @@ def default_rng(
 
     Parameters
     ----------
-    seed : int | SeedSequence, optional
+    seed :
         Construct a generate with this random seed. By default, the generator will be
         "unseeded", that is seeded in an unpredictable way.
 
     Returns
     -------
-    Callable[[], np.random.Generator]
+    :
         A function that creates a random number generator.
     """
     return lambda: np.random.default_rng(seed)
@@ -84,13 +84,10 @@ def default_rng(
 
 class Tick(NamedTuple):
     """
-    A Tick represents a single time-step in a simulation.
-    This object bundles the related information for a single tick.
-    For instance, each time step corresponds to a calendar day,
-    a numeric day (i.e., relative to the start of the simulation),
-    which tau step this corresponds to, and so on.
-
-    Tick is a NamedTuple.
+    Represents a single time-step in a simulation, by analogy to the ticking of a clock.
+    This tuple bundles the related information for a single tick. For instance, each
+    time step corresponds to a calendar day, a numeric day (i.e., relative to the start
+    of the simulation), which tau step this corresponds to, and so on.
     """
 
     sim_index: int
@@ -100,7 +97,7 @@ class Tick(NamedTuple):
     date: date
     """The calendar date corresponding to `day`"""
     step: int
-    """Which tau step are we on? (0,1,0,1,0,1,...)"""
+    """Which tau step are we on, by index? (0,1,0,1,0,1,...)"""
     tau: float
     """What's the tau length of the current step? (0.666,0.333,0.666,0.333,...)"""
 
@@ -111,8 +108,6 @@ class TickIndex(NamedTuple):
     For example, if a RUME's movement model declares three tau steps,
     the first six tick indices will be 0, 1, 2, 0, 1, 2.
     Indices 3 or more would be invalid for this RUME.
-
-    TickIndex is a NamedTuple.
     """
 
     step: int
@@ -121,26 +116,26 @@ class TickIndex(NamedTuple):
 
 class TickDelta(NamedTuple):
     """
-    An offset relative to a Tick expressed as a number of days which should elapse,
-    and the step on which to end up. In applying this delta, it does not matter which
-    step we start on.
+    An offset relative to a tick, expressed as a number of whole days which should
+    elapse and the step on which to end up. In applying this delta, it does not matter
+    which step we start on.
 
     See Also
     --------
-    [`resolve_tick_delta`](`epymorph.simulation.resolve_tick_delta`) combines an
+    [epymorph.simulation.resolve_tick_delta][], the function which combines an
     absolute tick with a relative delta to get another absolute tick.
     """
 
     days: int
     """The number of whole days."""
     step: int
-    """Which tau step within that day (zero-indexed)."""
+    """Which tau step within that day, by index."""
 
 
 NEVER = TickDelta(-1, -1)
 """
-A special TickDelta which expresses an event that should never happen.
-Any Tick plus Never returns Never.
+A special `TickDelta` which expresses an event that should never happen.
+Any `Tick` plus `NEVER` equals `NEVER`.
 """
 
 
@@ -150,16 +145,16 @@ def resolve_tick_delta(tau_steps_per_day: int, tick: Tick, delta: TickDelta) -> 
 
     Parameters
     ----------
-    tau_steps_per_day : int
+    tau_steps_per_day :
         The number of simulation tau steps per day.
-    tick : Tick
+    tick :
         The tick to start from.
-    delta : TickDelta
+    delta :
         A delta to add to `tick`.
 
     Returns
     -------
-    int
+    :
         The result of adding `delta` to `tick`, as a tick index.
     """
     return (
@@ -178,14 +173,14 @@ def simulation_clock(
 
     Parameters
     ----------
-    time_frame : TimeFrame
+    time_frame :
         A simulation's time frame.
-    tau_step_lengths : list[float]
+    tau_step_lengths :
         The simulation tau steps as fractions of one day.
 
     Returns
     -------
-    Iterable[Tick]
+    :
         The sequence of ticks as determined by the simulation's start date,
         duration, and tau steps configuration.
     """
@@ -206,6 +201,11 @@ def simulation_clock(
 
 
 ListValue = Sequence[Union[ScalarValue, StructValue, "ListValue"]]
+"""
+A type alias which describes acceptable input forms for parameter values which are
+lists. (Necessary because this type is recursive: lists can be nested inside lists.)
+"""
+
 ParamValue = Union[
     ScalarValue,
     StructValue,
@@ -217,13 +217,13 @@ ParamValue = Union[
 """
 A type alias which describes all acceptable input forms for parameter values:
 
-- scalars (according to [`ScalarValue`](`epymorph.data_type.ScalarValue`))
+- scalars (according to [epymorph.data_type.ScalarValue][])
 - tuples (single structured values, according to
-    [`StructValue`](`epymorph.data_type.StructValue`))
+    [epymorph.data_type.StructValue][])
 - Python lists of scalars or tuples, which may be nested
+- [epymorph.simulation.SimulationFunction][] instances
 - Numpy arrays
-- [`SimulationFunctions`](`epymorph.simulation.SimulationFunction`)
-- [`sympy expressions`](`sympy.core.expr.Expr`)
+- sympy expressions
 """
 
 
@@ -234,7 +234,12 @@ A type alias which describes all acceptable input forms for parameter values:
 
 class Context(ABC):
     """
-    The evaluation context of a SimulationFunction.
+    The evaluation context of a `SimulationFunction`.
+
+    See Also
+    --------
+    This class is abstract so you won't instantiate it as a normal class;
+    instead you may use static method [epymorph.simulation.Context.of][].
     """
 
     # NOTE: We want SimulationFunction instances to be able to access properties of the
@@ -245,6 +250,7 @@ class Context(ABC):
     # one-off evaluation of SimulationFunctions without a full RUME.
 
     _args: dict[str, Any]
+    """Remember the arguments that were used to construct this context instance."""
 
     @property
     @abstractmethod
@@ -253,12 +259,24 @@ class Context(ABC):
 
     @abstractmethod
     def data(self, attribute: AttributeDef) -> AttributeArray:
-        """Retrieve the value of an attribute."""
+        """
+        Retrieve the value of an attribute.
+
+        Parameters
+        ----------
+        attribute :
+            The attribute to retrieve.
+
+        Returns
+        -------
+        :
+            The attribute's value.
+        """
 
     @property
     @abstractmethod
     def scope(self) -> GeoScope:
-        """The simulation GeoScope."""
+        """The simulation `GeoScope`."""
 
     @property
     @abstractmethod
@@ -290,7 +308,29 @@ class Context(ABC):
         ipm: BaseCompartmentModel | None = None,
         rng: np.random.Generator | None = None,
     ) -> "Context":
-        """Create a new Context by overriding some or all of the values."""
+        """
+        Create a new context by overriding some or all of this context's values.
+
+        Parameters
+        ----------
+        name :
+            The name in which a `SimulationFunction` is being evaluated.
+        data :
+            Data attributes which may be required by the function.
+        scope :
+            The geo scope.
+        time_frame :
+            The simulation time frame.
+        ipm :
+            The IPM.
+        rng :
+            A random number generator to use.
+
+        Returns
+        -------
+        :
+            The new context.
+        """
         arg = self._args
         return Context.of(
             name=name or arg["name"],
@@ -302,12 +342,23 @@ class Context(ABC):
         )
 
     @final
-    def to_dict(self) -> dict[str, Any]:
-        return {**self._args}
-
-    @final
     def hash(self, requirements: Sequence[AttributeDef]) -> int:
-        """Compute the hash of a context assuming the given set of requirements."""
+        """
+        Compute a hash for the context, assuming the given set of requirements.
+        This is used to quickly identify if the context has changed between evaluations.
+
+        Parameters
+        ----------
+        requirements :
+            The subset of requirements that are important to include when computing the
+            hash. This allows the hash to ignore changes to attributes which aren't
+            critical to a particular use-case.
+
+        Returns
+        -------
+        :
+            The hash value.
+        """
         name = self.name
 
         if (data := self._args.get("data")) is not None:
@@ -342,22 +393,27 @@ class Context(ABC):
         rng: np.random.Generator | None = None,
     ) -> "Context":
         """
-        Create a Context instance, which may represent a partial or complete context.
+        Create a new context instance, which may be a partial or complete context.
 
         Parameters
         ----------
-        name : AbsoluteName, default = NAME_PLACEHOLDER
-            The name in which a SimulationFunction is being evaluated.
-        data : DataResolver, optional
+        name :
+            The name in which a `SimulationFunction` is being evaluated.
+        data :
             Data attributes which may be required by the function.
-        scope : GeoScope, optional
+        scope :
             The geo scope.
-        time_frame : TimeFrame, optional
+        time_frame :
             The simulation time frame.
-        ipm : BaseCompartmentModel, optional
+        ipm :
             The IPM.
-        rng : np.random.Generator, optional
+        rng :
             A random number generator to use.
+
+        Returns
+        -------
+        :
+            The new context.
         """
 
         # NOTE: this function dynamically creates a concrete version of Context
@@ -434,8 +490,7 @@ _TypeT = TypeVar("_TypeT")
 
 class SimulationFunctionClass(ABCMeta):
     """
-    The metaclass for SimulationFunctions.
-    Used to verify proper class implementation.
+    The metaclass for `SimulationFunction` classes; enforces proper implementation.
     """
 
     def __new__(
@@ -504,19 +559,18 @@ class SimulationFunctionClass(ABCMeta):
 
 
 ResultT = TypeVar("ResultT")
-"""The result type of a SimulationFunction."""
+"""The result type of a `SimulationFunction`."""
 
-_DeferResultT = TypeVar("_DeferResultT")
-"""The result type of a SimulationFunction during deference."""
-_DeferFunctionT = TypeVar("_DeferFunctionT", bound="BaseSimulationFunction")
-"""The type of a SimulationFunction during deference."""
+DeferResultT = TypeVar("DeferResultT")
+"""The result type of a `SimulationFunction` during deference."""
+DeferFunctionT = TypeVar("DeferFunctionT", bound="BaseSimulationFunction")
+"""The type of a `SimulationFunction` during deference."""
 
 
 class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunctionClass):
     """
     A function which runs in the context of a simulation to produce a value
-    (as a numpy array). This base class exists to share functionality without
-    limiting the function signature of evaluate().
+    (as a numpy array).
 
     Instances may access the context in which they are being evaluated using
     attributes and methods present on "self":
@@ -524,18 +578,23 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     methods like `defer` to pass their context on to another function for
     direct evaluation.
 
-    BaseSimulationFunction is an abstract class.
+    This class is generic on the type of result it produces (`ResultT`).
+
 
     See Also
     --------
     Refer to
-    [`SimulationFunction`](`epymorph.simulation.SimulationFunction`) and
-    [`SimulationTickFunction`](`epymorph.simulation.SimulationTickFunction`)
-    for more concrete subclasses.
+    [epymorph.simulation.SimulationFunction][] and
+    [epymorph.simulation.SimulationTickFunction][] for more concrete subclasses.
     """
 
+    # NOTE: this base class exists so that we don't limit the signature of `evaluate`.
+    # `SimulationTickFunction` evaluates using the current tick, while
+    # `SimulationFunction` does not require any parameters.
+
     requirements: Sequence[AttributeDef] | property = ()
-    """The attribute definitions describing the data requirements for this function.
+    """
+    The attribute definitions describing the data requirements for this function.
 
     For advanced use-cases, you may specify requirements as a property if you need it
     to be dynamically computed.
@@ -551,18 +610,19 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
 
     @property
     def class_name(self) -> str:
-        """The class name of the SimulationFunction."""
+        """The class name of the `SimulationFunction`."""
         return f"{self.__class__.__module__}.{self.__class__.__qualname__}"
 
     def validate(self, result: ResultT) -> None:
         """
         Override this method to validate the function evaluation result.
+        If not overridden, the default is to do no validation.
         Implementations should raise an appropriate error if results
         are not valid.
 
         Parameters
         ----------
-        result : ResultT
+        result :
             The result produced from function evaluation.
         """
 
@@ -584,28 +644,36 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         partial context that is strictly necessary. (It's very tedious to create
         fake context when it isn't strictly needed.) For example, a function
         might be able to calculate a result knowing only the geo scope and time frame.
-        If the function tries to use a part of the context that hasn't been provided,
-        an exception will be raised.
-
         During normal function evaluation, such as when running a simulation,
         the full context is always provided and available.
 
         Parameters
         ----------
-        name : AbsoluteName, default=NAME_PLACEHOLDER
+        name :
             The name used for the value this function produces, according
             to the evaluation context. Defaults to a generic placeholder
             name.
-        params : Mapping[str, ParamValue], optional
+        params :
             Additional parameter values we may need to evaluate this function.
-        scope : GeoScope, optional
+        scope :
             The geo scope.
-        time_frame : TimeFrame, optional
+        time_frame :
             The time frame.
-        ipm : BaseCompartmentModel, optional
+        ipm :
             The IPM.
-        rng : np.random.Generator, optional
+        rng :
             A random number generator instance.
+
+        Returns
+        -------
+        :
+            A clone with new context information.
+
+        Raises
+        ------
+        MissingContextError
+            If the function tries to use a part of the context that hasn't been
+            provided.
         """
         # This version allows users to specify data using strings for names.
         # epymorph should use `with_context_internal()` whenever possible.
@@ -648,12 +716,12 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     @final
     def defer_context(
         self,
-        other: _DeferFunctionT,
+        other: DeferFunctionT,
         scope: GeoScope | None = None,
         time_frame: TimeFrame | None = None,
-    ) -> _DeferFunctionT:
+    ) -> DeferFunctionT:
         """
-        Defer processing to another instance of a SimulationFunction.
+        Defer processing to another instance of a `SimulationFunction`.
 
         This method is intended for usage internal to epymorph's system.
         Typical usage will use `defer` instead.
@@ -673,25 +741,24 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     @final
     def data(self, attribute: AttributeDef | str) -> NDArray:
         """
-        Retrieve the value of a requirement. You must declare
-        the attribute in this function's `requirements` list.
+        Retrieve the value of a requirement. You must declare the attribute in this
+        function's `requirements` list.
 
         Parameters
         ----------
-        attribute : AttributeDef | str
-            The attribute to get, identified either by its name (string) or
-            its definition object.
+        attribute :
+            The attribute to get, identified either by its name (string) or its
+            definition object.
 
         Returns
         -------
-        NDArray
+        :
             The attribute value.
 
         Raises
         ------
         ValueError
-            If the attribute is not in the function's requirements
-            declaration.
+            If the attribute is not in the function's requirements declaration.
         """
         if isinstance(attribute, str):
             name = attribute
@@ -716,13 +783,13 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     @final
     @property
     def scope(self) -> GeoScope:
-        """The simulation GeoScope."""
+        """The simulation geo scope."""
         return self._ctx.scope
 
     @final
     @property
     def time_frame(self) -> TimeFrame:
-        """The simulation TimeFrame."""
+        """The simulation time frame."""
         return self._ctx.time_frame
 
     @final
@@ -759,18 +826,18 @@ class SimulationFunction(BaseSimulationFunction[ResultT]):
     (as a numpy array). The value must be independent of the simulation state,
     and they will often be evaluated before the simulation starts.
 
-    SimulationFunction is an abstract class. In typical usage you will not
-    implement a SimulationFunction directly, but rather one of its
+    `SimulationFunction` is an abstract class. In typical usage you will not
+    implement a `SimulationFunction` directly, but rather one of its
     more-specific child classes.
 
-    SimulationFunction is generic in the type of result it produces (`ResultT`).
+    `SimulationFunction` is generic in the type of result it produces (`ResultT`).
 
     See Also
     --------
     Notable child classes of SimulationFunction include
-    [`Initializers`](`epymorph.initializer.Initializer`),
-    [`ADRIOs`](`epymorph.adrio.adrio.ADRIO`), and
-    [`ParamFunctions`](`epymorph.params.ParamFunction`).
+    [epymorph.initializer.Initializer][],
+    [epymorph.adrio.adrio.ADRIO][], and
+    [epymorph.params.ParamFunction][].
     """
 
     @abstractmethod
@@ -780,35 +847,39 @@ class SimulationFunction(BaseSimulationFunction[ResultT]):
         Use self methods and properties to access the simulation context or defer
         processing to another function.
 
-        evaluate is an abstract method.
-
         Returns
         -------
-        ResultT
+        :
             The result value.
         """
 
     @final
     def defer(
         self,
-        other: "SimulationFunction[_DeferResultT]",
+        other: "SimulationFunction[DeferResultT]",
         scope: GeoScope | None = None,
         time_frame: TimeFrame | None = None,
-    ) -> _DeferResultT:
-        """Defer processing to another instance of a SimulationFunction, returning
+    ) -> DeferResultT:
+        """
+        Defer processing to another instance of a `SimulationFunction`, returning
         the result of evaluation.
 
         This function is generic in the type of result returned by the function
-        to which we are deferring.
+        to which we are deferring (`DeferResultT`).
 
         Parameters
         ----------
-        other : SimulationFunction
-            the other function to defer to
-        scope : GeoScope, optional
-            override the geo scope for evaluation; if None, use the same scope
-        time_frame : TimeFrame, optional
-            override the time frame for evaluation; if None, use the same time frame
+        other :
+            The other function to defer to.
+        scope :
+            Override the geo scope for evaluation; if None, use the same scope.
+        time_frame :
+            Override the time frame for evaluation; if None, use the same time frame.
+
+        Returns
+        -------
+        :
+            The result value.
         """
         return self.defer_context(other, scope, time_frame).evaluate()
 
@@ -818,16 +889,14 @@ class SimulationTickFunction(BaseSimulationFunction[ResultT]):
     A function which runs in the context of a RUME to produce a value
     (as a numpy array) which is expected to vary over the run of a simulation.
 
-    SimulationTickFunction is an abstract class. In typical usage you will not
-    implement a SimulationTickFunction directly, but rather one of its
-    more-specific child classes.
+    In typical usage you will not implement a `SimulationTickFunction` directly,
+    but rather one of its more-specific child classes.
 
-    SimulationTickFunction is generic in the type of result it produces (`ResultT`).
+    `SimulationTickFunction` is generic in the type of result it produces (`ResultT`).
 
     See Also
     --------
-    The only notable child class of SimulationTickFunction is
-    the movement model [`MovementClause`](`epymorph.movement_model.MovementClause`).
+    The only notable child class is [epymorph.movement_model.MovementClause][].
     """
 
     @abstractmethod
@@ -837,37 +906,44 @@ class SimulationTickFunction(BaseSimulationFunction[ResultT]):
         Use self methods and properties to access the simulation context or defer
         processing to another function.
 
-        evaluate is an abstract method.
-
         Parameters
         ----------
-        tick : Tick
+        tick :
             The simulation tick being evaluated.
 
         Returns
         -------
-        ResultT
+        :
             The result value.
         """
 
     @final
     def defer(
         self,
-        other: "SimulationTickFunction[_DeferResultT]",
+        other: "SimulationTickFunction[DeferResultT]",
         tick: Tick,
         scope: GeoScope | None = None,
         time_frame: TimeFrame | None = None,
-    ) -> _DeferResultT:
-        """Defer processing to another instance of a SimulationTickFunction, returning
+    ) -> DeferResultT:
+        """
+        Defer processing to another instance of a `SimulationTickFunction`, returning
         the result of evaluation.
+
+        This function is generic in the type of result returned by the function
+        to which we are deferring (`DeferResultT`).
 
         Parameters
         ----------
-        other : SimulationFunction
+        other :
             the other function to defer to
-        scope : GeoScope, optional
+        scope :
             override the geo scope for evaluation; if None, use the same scope
-        time_frame : TimeFrame, optional
+        time_frame :
             override the time frame for evaluation; if None, use the same time frame
+
+        Returns
+        -------
+        :
+            The result value.
         """
         return self.defer_context(other, scope, time_frame).evaluate(tick)

@@ -58,9 +58,19 @@ def _get_geo(scope: GeoScope) -> gpd.GeoDataFrame:
 
 
 class NodeLabelRenderer:
-    """A class for rendering text labels on choropleth maps.
-    The default implementation is very simple, but you may
-    override this class to customize."""
+    """
+    Customizes rendering of text labels on choropleth maps.
+
+    The default implementation is very simple, but you may override this class to
+    customize. Default implementations of `coords`, `labels`, `colors`, and
+    `additional_kwargs` are given so you can override only the aspects you are
+    interested in customizing.
+
+    Parameters
+    ----------
+    color :
+        The default color of the labels. Accepts color formats supported by matplotlib.
+    """
 
     _color: str
 
@@ -68,7 +78,20 @@ class NodeLabelRenderer:
         self._color = color
 
     def coords(self, data_gdf: pd.DataFrame) -> gpd.GeoSeries:
-        """Determine where to draw the labels."""
+        """
+        Determine where to draw the labels.
+
+        Parameters
+        ----------
+        data_gdf :
+            The geography/data being rendered.
+
+        Returns
+        -------
+        :
+            The series of centroids for each row in the data.
+            Data must be [`shapely.Point`][] instances.
+        """
         # If we already have centroids in the gdf, use those.
         # Otherwise calculate from the polygon.
         # Note that this will throw a warning if a geographic CRS is used.
@@ -82,7 +105,20 @@ class NodeLabelRenderer:
         )
 
     def labels(self, data_gdf: pd.DataFrame) -> Iterable[str | None]:
-        """Determine the text of each label."""
+        """
+        Determine the text of each label.
+
+        Parameters
+        ----------
+        data_gdf :
+            The geography/data being rendered.
+
+        Returns
+        -------
+        :
+            The series of labels for each row in the data.
+            Values can be `None` to skip labeling a row.
+        """
         return data_gdf["data"].apply(lambda x: f"{x:.1f}")
 
     def colors(
@@ -90,12 +126,40 @@ class NodeLabelRenderer:
         data_gdf: pd.DataFrame,
         color_scale: ScalarMappable,
     ) -> Iterable[str]:
-        """Determine the color of each label."""
+        """
+        Determine the color of each label.
+
+        Parameters
+        ----------
+        data_gdf :
+            The geography/data being rendered.
+        color_scale :
+            A color scale to use.
+
+        Returns
+        -------
+        :
+            The series of colors for each row in the data.
+            Values can be any color format supported by matplotlib.
+        """
         return repeat(self._color, data_gdf["data"].size)
 
     def additional_kwargs(self, data_gdf: pd.DataFrame) -> Iterable[dict]:
-        """Determine extra keyword arguments to pass to the `annotate()` method
-        for each label."""
+        """
+        Determine extra keyword arguments to pass to the method drawing labels;
+        supports any argument used by [`matplotlib.axes.Axes.annotate`][].
+
+        Parameters
+        ----------
+        data_gdf :
+            The geography/data being rendered.
+
+        Returns
+        -------
+        :
+            The series of dicts containing additional kwargs options for each row in the
+            data.
+        """
         return repeat(
             {"ha": "center", "va": "center", "fontsize": 8},
             data_gdf["data"].size,
@@ -107,7 +171,18 @@ class NodeLabelRenderer:
         data_gdf: pd.DataFrame,
         color_scale: ScalarMappable,
     ) -> None:
-        """Render labels onto the given `matplotlib.axes.Axes`."""
+        """
+        Render labels onto the given matplotlib axes.
+
+        Parameters
+        ----------
+        ax :
+            The axes on which to render.
+        data_gdf :
+            The geography/data being rendered.
+        color_scale :
+            The color scale to use.
+        """
         for point, label, color, kwargs in zip(
             self.coords(data_gdf),
             self.labels(data_gdf),
@@ -119,20 +194,25 @@ class NodeLabelRenderer:
 
 
 class MapRenderer:
-    """Provides methods for rendering an output in choropleth map form.
+    """
+    Provides methods for rendering an output in choropleth map form.
 
-    Examples
-    --------
-    Most commonly, you will use MapRenderer starting from a simulation output object
+    Most commonly, you will use `MapRenderer` starting from a simulation output object
     that supports it:
 
     ```python
     out = BasicSimulation(rume).run()
     out.map.choropleth(...)
     ```
+
+    Parameters
+    ----------
+    output :
+        The output the renderer will use.
     """
 
     output: Output
+    """The output the renderer will use."""
 
     def __init__(self, output: Output):
         self.output = output
@@ -146,8 +226,42 @@ class MapRenderer:
         proj: CRS | str | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> gpd.GeoDataFrame:
-        """Calculate the GeoDataFrame used for drawing maps
-        merged with the output data from the given axis strategies."""
+        """
+        Calculate the geo dataframe used for drawing maps merged with the output data
+        from the given axis strategies.
+
+        This is an advanced method that allows you to leverage the data-handling logic
+        of `MapRenderer` without necessarily drawing a map.
+
+        Parameters
+        ----------
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        proj :
+            The projection to use for mapping; if `None` (default) we will
+            map using the default projection for the source geography.
+            (For US Census, this is NAD83 [https://epsg.org/crs_4269/index.html](https://epsg.org/crs_4269/index.html))
+        transform :
+            Allows you to specify an arbitrary transform function on the source
+            dataframe before we plot it, e.g., to rescale the values.
+            The dataframe given as the argument is the result of applying
+            all selections and the projection if specified.
+            You should return a dataframe with the same format, where the
+            data column has been modified for your purposes.
+
+            Dataframe columns:
+            - "geo": the node ID of each polygon
+            - "data": the data value from the quantity selection
+
+        Returns
+        -------
+        :
+            The geo dataframe as a result of applying the axis strategies to the data.
+        """
 
         # Our result should have three columns: time, node, and a data value
         data_df = munge(self.output, geo, time, quantity)
@@ -185,8 +299,28 @@ class MapRenderer:
         *,
         proj: CRS | str | None = None,
     ) -> gpd.GeoDataFrame:
-        """Calculate the GeoDataFrame for the given geo axis strategy, without merging
-        any simulation data."""
+        """
+        Calculate the geo dataframe by applying the given geo axis strategy,
+        but without merging any simulation data.
+
+        This is an advanced method that allows you to leverage the geo-handling logic
+        of `MapRenderer` without necessarily drawing a map.
+
+        Parameters
+        ----------
+        geo :
+            The geographic selection to make on the source geography.
+        proj :
+            The projection to use for mapping; if `None` (default) we will
+            map using the default projection for the source geography.
+            (For US Census, this is NAD83 [https://epsg.org/crs_4269/index.html](https://epsg.org/crs_4269/index.html))
+
+        Returns
+        -------
+        :
+            The geo dataframe as a result of applying the geo axis strategies to the
+            source geography.
+        """
         gdf = _get_geo(geo.to_scope())
 
         # If we have internal point info in the gdf, make it a centroid column.
@@ -218,7 +352,8 @@ class MapRenderer:
         vmax: float | None = None,
         vmin: float | None = None,
     ) -> None:
-        """Renders a choropleth map using GeoPandas and matplotlib showing the given
+        """
+        Renders a choropleth map using GeoPandas and matplotlib showing the given
         selections.
 
         Selections must be made carefully to produce a valid map: the geo
@@ -236,31 +371,31 @@ class MapRenderer:
 
         Parameters
         ----------
-        geo : GeoSelection | GeoAggregation
-            the geographic selection to make on the output data
-        time : TimeSelection | TimeAggregation
-            the time selection to make on the output data
-        quantity : QuantitySelection | QuantityAggregation
-            the quantity selection to make on the output data
-        borders : GeoSelection | GeoGroup, optional
-            if given, use this geography to draw dark borders,
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        borders :
+            If given, use this geography to draw dark borders,
             this could be the same or different geography from `geo`;
-            if None (default), no borders are drawn
+            if `None` (default), no borders are drawn.
         cmap
-            the color map to use for the plot; you can pass any value
-            you would normally pass to `geopandas.GeoDataFrame.plot()`
-        proj : CRS | str, optional
-            the projection to use for mapping; if None (default) we will
-            map using the default projection for the source geography
-            (for US Census, this is NAD83 https://epsg.org/crs_4269/index.html)
-        text_label : bool | str | NodeLabelRenderer, default=False
+            The color map to use for the plot; you can pass any value
+            you would normally pass to [`geopandas.GeoDataFrame.plot`][].
+        proj :
+            The projection to use for mapping; if `None` (default) we will
+            map using the default projection for the source geography.
+            (For US Census, this is NAD83 [https://epsg.org/crs_4269/index.html](https://epsg.org/crs_4269/index.html))
+        text_label :
             True to render a text label of the data value for each polygon in white;
-            a string to specify a different color, or a NodeLabelRenderer instance
+            a string to specify a different color, or a `NodeLabelRenderer` instance
             to use that.
-        title : str, optional
-            a title to draw on the plot
-        transform : Callable[[pd.DataFrame], pd.DataFrame], optional
-            allows you to specify an arbitrary transform function on the source
+        title :
+            A title to draw on the plot.
+        transform :
+            Allows you to specify an arbitrary transform function on the source
             dataframe before we plot it, e.g., to rescale the values.
             The dataframe given as the argument is the result of applying
             all selections and the projection if specified.
@@ -270,10 +405,10 @@ class MapRenderer:
             Dataframe columns:
             - "geo": the node ID of each polygon
             - "data": the data value from the quantity selection
-        vmax : float, optional
-            the max value for the color map, by default the max value of the data
-        vmin : float, optional
-            the min value for the color map, by default the min value of the data
+        vmax :
+            The max value for the color map, by default the max value of the data.
+        vmin :
+            The min value for the color map, by default the min value of the data.
         """
         try:
             fig, ax = plt.subplots(layout="constrained")
@@ -328,7 +463,7 @@ class MapRenderer:
         vmin: float | None = None,
     ) -> tuple[gpd.GeoDataFrame, ScalarMappable]:
         """
-        Draws a choropleth map onto the given matplotlib Axes showing the given
+        Draws a choropleth map onto the given matplotlib axes showing the given
         selections. This is a variant of the method `choropleth()` that gives you
         more control over the rendering of a plot by letting you do most of the work
         with matplotlib's API. See that method for conditions that must be met to use
@@ -336,27 +471,27 @@ class MapRenderer:
 
         Parameters
         ----------
-        ax : matplotlib.axes.Axes
-            the plot axes on which to draw the map
-        geo : GeoSelection | GeoAggregation
-            the geographic selection to make on the output data
-        time : TimeSelection | TimeAggregation
-            the time selection to make on the output data
-        quantity : QuantitySelection | QuantityAggregation
-            the quantity selection to make on the output data
-        borders : GeoSelection | GeoGroup, optional
-            if given, use this geography to draw dark borders,
+        ax :
+            The plot axes on which to draw the map.
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        borders :
+            If given, use this geography to draw dark borders,
             this could be the same or different geography from `geo`;
-            if None (default), no borders are drawn
-        cmap
-            the color map to use for the plot; you can pass any value
-            you would normally pass to `geopandas.GeoDataFrame.plot()`
-        proj : CRS | str, optional
-            the projection to use for mapping; if None (default) we will
-            map using the default projection for the source geography
-            (for US Census, this is NAD83 https://epsg.org/crs_4269/index.html)
-        transform : Callable[[pd.DataFrame], pd.DataFrame], optional
-            allows you to specify an arbitrary transform function on the source
+            if `None` (default), no borders are drawn.
+        cmap :
+            The color map to use for the plot; you can pass any value
+            you would normally pass to [`geopandas.GeoDataFrame.plot`][].
+        proj :
+            The projection to use for mapping; if `None` (default) we will
+            map using the default projection for the source geography.
+            (For US Census, this is NAD83 [https://epsg.org/crs_4269/index.html](https://epsg.org/crs_4269/index.html))
+        transform :
+            Allows you to specify an arbitrary transform function on the source
             dataframe before we plot it, e.g., to rescale the values.
             The dataframe given as the argument is the result of applying
             all selections and the projection if specified.
@@ -366,16 +501,16 @@ class MapRenderer:
             Dataframe columns:
             - "geo": the node ID of each polygon
             - "data": the data value from the quantity selection
-        vmax : float, optional
-            the max value for the color map, by default the max value of the data
-        vmin : float, optional
-            the min value for the color map, by default the min value of the data
+        vmax :
+            The max value for the color map, by default the max value of the data.
+        vmin :
+            The min value for the color map, by default the min value of the data.
 
         Returns
         -------
-        tuple[GeoDataFrame, ScalarMappable]
-            a tuple with 1. the GeoDataFrame containing the data used to render the map
-            and 2. the ScalarMappable used as the map's color scale
+        :
+            a tuple with 1. the geo dataframe containing the data used to render the map
+            and 2. the map's color scale.
         """
         data_gdf = self.geography_data(
             geo,
@@ -418,8 +553,10 @@ class MapRenderer:
 
 
 class MapRendererMixin(Output):
-    """Mixin class that adds a convenient method for rendering choropleth maps
-    from an output."""
+    """
+    Mixin class that adds a convenient method for rendering choropleth maps from an
+    output.
+    """
 
     @property
     def map(self) -> MapRenderer:

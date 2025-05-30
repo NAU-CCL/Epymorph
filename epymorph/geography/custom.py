@@ -1,3 +1,7 @@
+"""
+Implements a generic geo scope capable of representing arbitrary geographies.
+"""
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -18,8 +22,12 @@ from epymorph.geography.scope import (
 class CustomScope(GeoScope):
     """
     A scope with no logical connection to existing geographic systems.
-    You simply specify a list of IDs, one for each node in the scope.
-    The order in which you specify them will be the canonical node order.
+
+    Parameters
+    ----------
+    nodes :
+        The identifiers for all nodes in the scope. The order in which you specify
+        these IDs will be the canonical node order.
     """
 
     _nodes: NDArray[np.str_]
@@ -36,20 +44,39 @@ class CustomScope(GeoScope):
 
     @property
     def select(self) -> "CustomSelector":
+        """Create a selection from this scope."""
         return CustomSelector(self, CustomSelection)
 
 
 @dataclass(frozen=True)
 class CustomSelection(GeoSelection[CustomScope]):
-    """A GeoSelection on a CustomScope."""
+    """
+    A `GeoSelection` on a `CustomScope`.
+
+    Typically you will create one of these by calling methods on a `GeoSelector`
+    instance.
+    """
 
     def group(self, grouping: GeoGrouping) -> GeoGroup[CustomScope]:
+        """
+        Groups the geo axis using the specified grouping.
+
+        Parameters
+        ----------
+        grouping :
+            The grouping to use.
+
+        Returns
+        -------
+        :
+            The grouping strategy.
+        """
         return GeoGroup(self.scope, self.selection, grouping)
 
 
 @dataclass(frozen=True)
 class CustomSelector(GeoSelector[CustomScope, CustomSelection]):
-    """A GeoSelector for CustomScopes."""
+    """A `GeoSelector` for `CustomScopes`."""
 
 
 @strategy_to_scope.register

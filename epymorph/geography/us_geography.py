@@ -17,11 +17,7 @@ from epymorph.error import GeographyError
 from epymorph.util import prefix
 
 CensusGranularityName = Literal["state", "county", "tract", "block group", "block"]
-"""
-The name of a supported Census granularity.
-
-`Literal["state", "county", "tract", "block group", "block"]`
-"""
+"""Type alias: the name of a supported Census granularity."""
 
 CENSUS_HIERARCHY = ("state", "county", "tract", "block group", "block")
 """The granularities in hierarchy order (largest to smallest)."""
@@ -29,21 +25,29 @@ CENSUS_HIERARCHY = ("state", "county", "tract", "block group", "block")
 
 class CensusGranularity(ABC):
     """
-    Each CensusGranularity instance defines a set of utility functions for working with
-    GEOIDs of that granularity, as well as inspecting and manipulating the granularity
-    hierarchy itself.
+    Each `CensusGranularity` instance defines a set of utility functions for working
+    with GEOIDs of that granularity, as well as inspecting and manipulating the
+    granularity hierarchy itself.
 
-    Most of the time you will use
-    [`CensusGranularity.of`](`epymorph.geography.us_geography.CensusGranularity.of)
-    to obtain an instance for a particular granularity, or import one of the
-    singleton instances:
-    [`STATE`](`epymorph.geography.us_geography.STATE`),
-    [`COUNTY`](`epymorph.geography.us_geography.COUNTY`),
-    [`TRACT`](`epymorph.geography.us_geography.TRACT`),
-    [`BLOCK_GROUP`](`epymorph.geography.us_geography.BLOCK_GROUP`), or
-    [`BLOCK`](`epymorph.geography.us_geography.BLOCK`).
+    In typical usage, you will not construct this class directly, but use the
+    `CensusGranularity.of(granularity)` static method to obtain an instance, or import
+    one of the singleton instances: `STATE`, `COUNTY`, `TRACT`, `BLOCK_GROUP`, or
+    `BLOCK`.
 
-    CensusGranularity is an abstract class.
+    Parameters
+    ----------
+    name :
+        The granularity.
+    length :
+        The number of digits in the GEOIDs for this granularity.
+    match_pattern :
+        A regex pattern matching GEOIDs for this granularity.
+    extract_pattern :
+        A regex pattern with match groups for extracting this granularity
+        segment from a GEOID of an equal or finer granularity.
+    decompose_pattern :
+        A regex pattern with match groups for decomposing a GEOID of this
+        granularity into segments.
     """
 
     _name: CensusGranularityName
@@ -107,12 +111,12 @@ class CensusGranularity(ABC):
 
         Parameters
         ----------
-        outer : CensusGranularityName
+        outer :
             The other granularity to consider.
 
         Returns
         -------
-        bool
+        :
             True if this granularity is inside or the same as `other`.
         """
         return CENSUS_HIERARCHY.index(outer) <= CENSUS_HIERARCHY.index(self.name)
@@ -124,12 +128,12 @@ class CensusGranularity(ABC):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to test.
 
         Returns
         -------
-        bool
+        :
             True if the GEOID given matches this granularity.
         """
         return self._match_pattern.match(geoid) is not None
@@ -141,12 +145,12 @@ class CensusGranularity(ABC):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        str
+        :
             The segment of the GEOID that matches this granularity.
 
         Raises
@@ -168,12 +172,12 @@ class CensusGranularity(ABC):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        str
+        :
             The truncated GEOID.
         """
         return geoid[: self.length]
@@ -185,12 +189,12 @@ class CensusGranularity(ABC):
 
         Parameters
         ----------
-        geoids : Iterable[str]
+        geoids :
             The list of GEOIDs to operate on.
 
         Returns
         -------
-        Iterable[str]
+        :
             The unique values contained in `geoids` after truncation
             to this level of granularity.
         """
@@ -223,12 +227,12 @@ class CensusGranularity(ABC):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        tuple[str, ...]
+        :
             A tuple as long as the number of granularity segments used for this
             level of granularity.
 
@@ -245,12 +249,12 @@ class CensusGranularity(ABC):
 
         Parameters
         ----------
-        sorted_geoids: NDArray[np.str_]
+        sorted_geoids :
             The GEOIDs to group, as a sorted array.
 
         Returns
         -------
-        dict[str, NDArray[np.str_]]
+        :
             A dictionary where the keys represent the unique groups
             present and the values are all GEOIDs contained in each group.
         """
@@ -264,16 +268,14 @@ class CensusGranularity(ABC):
         """
         Get a CensusGranularity instance by name.
 
-        This is a static method.
-
         Parameters
         ----------
-        name : CensusGranularityName
+        name :
             The name of the granularity.
 
         Returns
         -------
-        CensusGranularity
+        :
             The CensusGranularity instance, whose type matches the named granularity.
         """
         match name:
@@ -309,12 +311,12 @@ class State(CensusGranularity):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        tuple[str]
+        :
             A tuple of state ID.
 
         Raises
@@ -346,12 +348,12 @@ class County(CensusGranularity):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        tuple[str, str]
+        :
             A tuple of state and county ID.
 
         Raises
@@ -383,12 +385,12 @@ class Tract(CensusGranularity):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        tuple[str, str, str]
+        :
             A tuple of state, county, and tract ID.
 
         Raises
@@ -420,12 +422,12 @@ class BlockGroup(CensusGranularity):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        tuple[str, str, str, str]
+        :
             A tuple of state, county, tract, and block group ID.
 
         Raises
@@ -460,12 +462,12 @@ class Block(CensusGranularity):
 
         Parameters
         ----------
-        geoid : str
+        geoid :
             The GEOID to operate on.
 
         Returns
         -------
-        tuple[str, str, str, str, str]
+        :
             A tuple of state, county, tract, block group, and block ID.
 
         Raises
@@ -481,17 +483,15 @@ class Block(CensusGranularity):
 
 # Singletons for the CensusGranularity classes.
 STATE = State()
-"""A singleton [`State`](`epymorph.geography.us_geography.State`) instance."""
+"""A singleton `State` instance."""
 COUNTY = County()
-"""A singleton [`County`](`epymorph.geography.us_geography.County`) instance."""
+"""A singleton `County` instance."""
 TRACT = Tract()
-"""A singleton [`Tract`](`epymorph.geography.us_geography.Tract`) instance."""
+"""A singleton `Tract` instance."""
 BLOCK_GROUP = BlockGroup()
-"""
-A singleton [`BlockGroup`](`epymorph.geography.us_geography.BlockGroup`) instance.
-"""
+"""A singleton `BlockGroup` instance."""
 BLOCK = Block()
-"""A singleton [`Block`](`epymorph.geography.us_geography.Block`) instance."""
+"""A singleton `Block` instance."""
 
 CENSUS_GRANULARITY = (STATE, COUNTY, TRACT, BLOCK_GROUP, BLOCK)
-"""CensusGranularity singletons in hierarchy order."""
+"""`CensusGranularity` singletons in hierarchy order."""

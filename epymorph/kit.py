@@ -1,4 +1,20 @@
-"""A convenient star-import for the most-commonly-used features in epymorph."""
+"""
+A convenient star-import for the most-commonly-used features in epymorph.
+
+Most of the included symbols are classes or functions which you can find by searching
+their names. The three exceptions are `init`, `ipm`, and `mm` which are whole Python
+modules or packages representing our built-in component libraries.
+
+- `init` is the `epymorph.initializer` module
+- `ipm` is the `epymorph.data.ipm` package
+- `mm` is the `epymorph.data.mm` package
+
+Included this way, for instance, you can instantiate the built-in SIRS IPM like:
+
+```
+my_ipm = ipm.SIRS()
+```
+"""
 
 import epymorph.data.ipm as ipm
 import epymorph.data.mm as mm
@@ -88,3 +104,4 @@ __all__ = [
     "CentroidType",
     "CentroidDType",
 ]
+"""When you do `from epymorph.kit import *` you get all of these symbols."""

@@ -27,7 +27,7 @@ class Output(Protocol):
     """A generic output interface."""
 
     rume: RUME
-    """The Rume used in the simulation that generated this output."""
+    """The RUME used in the simulation that generated this output."""
 
     @property
     @abstractmethod

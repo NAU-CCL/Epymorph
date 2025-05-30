@@ -16,6 +16,7 @@ __pycache__/
 # Build
 dist/
 build/
+site/
 *.egg-info
 
 # Testing & dev
@@ -24,4 +25,3 @@ build/
 htmlcov
 debug.log
 scratch
-doc/devlog/data/temp_synthetic_data.csv

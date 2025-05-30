@@ -59,6 +59,11 @@ def census_api_key() -> str | None:
     as environment variable 'API_KEY__census.gov'.
     If that's not found we fall back to 'CENSUS_API_KEY',
     as a legacy form.
+
+    Returns
+    -------
+    :
+        The key, or `None` if it's not set.
     """
     key = os.environ.get("API_KEY__census.gov", default=None)
     if key is None:
@@ -81,17 +86,48 @@ For caching ACS5. At the moment, the only thing that is cached is variables meta
 
 
 class ACS5Client:
-    """Methods for interacting with the Census API for ACS5 data."""
+    """
+    Methods for interacting with the Census API for ACS5 data. Typical usage will not
+    need to use this class, but it's provided for advanced cases.
+    """
 
     @staticmethod
     def url(year: int) -> str:
-        """The base request URL for a given ACS5 year."""
+        """
+        The base request URL for a given ACS5 year.
+
+        Parameters
+        ----------
+        year :
+            The ACS5 data vintage year.
+
+        Returns
+        -------
+        :
+            The formatted base url.
+        """
         return f"https://api.census.gov/data/{year}/acs/acs5"
 
     @cache
     @staticmethod
     def get_vars(year: int) -> dict[str, dict]:
-        """Loads (and caches) ACS5 variable metadata."""
+        """
+        Loads (and caches) ACS5 variable metadata. This metadata is published by the
+        Census alongside the data for each year.
+
+        Parameters
+        ----------
+        year :
+            The ACS5 data vintage year.
+
+        Returns
+        -------
+        :
+            A dictionary of metadata about available variables,
+            where the key is a variable name and values are
+            also dictionaries containing the metadata pertaining
+            to the variable.
+        """
         try:
             vars_url = f"{ACS5Client.url(year)}/variables.json"
             cache_path = _ACS5_CACHE_PATH / f"variables-{year}.json"
@@ -104,7 +140,23 @@ class ACS5Client:
     @cache
     @staticmethod
     def get_group_vars(year: int, group: str) -> list[tuple[str, dict]]:
-        """Retrieves the variables metadata for a specific group of variables."""
+        """
+        Retrieves the variables metadata for a specific group of variables.
+        This is equivalent to calling `get_vars` and then filtering to the
+        variables in the group.
+
+        Parameters
+        ----------
+        year :
+            The ACS5 data vintage year.
+        group :
+            The name of the group to fetch.
+
+        Returns
+        -------
+        :
+            Variable metadata for all variables in the group.
+        """
         variables = sorted(
             (
                 (name, attrs)
@@ -120,7 +172,21 @@ class ACS5Client:
     @cache
     @staticmethod
     def get_group_var_names(year: int, group: str) -> list[str]:
-        """Like `get_group_vars` but just returns the variable names in the group."""
+        """
+        Like `get_group_vars` but just returns the variable names in the group.
+
+        Parameters
+        ----------
+        year :
+            The ACS5 data vintage year.
+        group :
+            The name of the group to fetch.
+
+        Returns
+        -------
+        :
+            The names of all variables in the group.
+        """
         return [var for var, _ in ACS5Client.get_group_vars(year, group)]
 
     @staticmethod
@@ -132,6 +198,17 @@ class ACS5Client:
         may be required, especially when your scope represents a disjoint spatial
         selection or one that otherwise can't be neatly expressed in a form like
         "all counties within state X".
+
+        Parameters
+        ----------
+        scope :
+            The geo scope for which to make a query.
+
+        Returns
+        -------
+        :
+            The list of queries necessary to cover the scope. As defined by the Census
+            API, individual queries are in the form of key/value pairs of strings.
         """
 
         def to_list(group: Iterable[tuple[str, ...]]) -> str:
@@ -247,8 +324,25 @@ class ACS5Client:
     ) -> pd.DataFrame:
         """
         Requests `variables` from the Census API for the given `scope`.
-        Returns a DataFrame in "long" format, with columns: geoid, variable, and value.
-        Geoid and variable are strings and value will be converted to the given dtype.
+
+        Parameters
+        ----------
+        scope :
+            The geo scope to query.
+        variables :
+            The list of variables to query.
+        value_dtype :
+            The dtype of the result array.
+        report_progress :
+            A callback for reporting query progress; especially useful when the scope
+            necessitates multiple queries.
+
+        Returns
+        -------
+        :
+            A dataframe in "long" format, with columns: geoid, variable, and value.
+            Geoid and variable are strings and value will be converted to the given
+            dtype.
         """
         url = ACS5Client.url(scope.year)
         params = {
@@ -294,7 +388,7 @@ class ACS5Client:
 
 def _get_scope(adrio: ADRIO, context: Context) -> CensusScope:
     """
-    Validate and retrieve the CensusScope from `context`.
+    Validate and retrieve the `CensusScope` from the context.
     ACS5 ADRIOs really only work on Census geography, so this is a commonly-useful
     validation function.
     """
@@ -417,18 +511,18 @@ class Population(_FetchACS5[np.int64]):
     ACS5 data is compiled from surveys taken during a rolling five year period, and
     as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `BlockGroupScope` (aggregates are computed by the Census Bureau). Data is loaded
     according to the scope's year, from 2009 to 2023.
 
     The result is an N-shaped array of integers.
 
     Parameters
     ----------
-    fix_insufficient_data : Fix[ValueT], optional
+    fix_insufficient_data :
         The method to use to replace values that could not be computed due to an
         insufficient number of sample observation (-666666666 in the data).
-    fix_missing : Fill[ValueT], optional
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -460,19 +554,26 @@ class PopulationByAgeTable(_FetchACS5[np.int64]):
     """
     Loads a table of population categorized by Census-defined age brackets from the
     US Census ACS 5-Year Data (group B01001). This table is most useful as the source
-    data for one or more [`PopulationByAge`](`epymorph.adrio.acs5.PopulationByAge`)
-    ADRIOs, which knows how to select, group, and aggregate the data for simulations.
-    ACS5 data is compiled from surveys taken during a rolling five year period, and
-    as such are estimates.
+    data for one or more `PopulationByAge` ADRIOs, which knows how to select, group,
+    and aggregate the data for simulations. ACS5 data is compiled from surveys taken
+    during a rolling five year period, and as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `BlockGroupScope` (aggregates are computed by the Census Bureau). Data is loaded
     according to the scope's year, from 2009 to 2023.
 
     The result is an NxA-shaped array of integers where A is the number of variables
     included in the table. For example, in 2023 there are 49 variables: 23 age brackets
     for male, 23 age brackets for female, the male all-ages total, the female all-ages
     total, and a grand total.
+
+    Parameters
+    ----------
+    fix_insufficient_data :
+        The method to use to replace values that could not be computed due to an
+        insufficient number of sample observation (-666666666 in the data).
+    fix_missing :
+        The method to use to fix missing values.
 
     See Also
     --------
@@ -522,8 +623,6 @@ class AgeRange(NamedTuple):
     Unlike Python integer ranges, the `end` of the this range is inclusive.
     `end` can also be None which models the "and over" part of ranges
     like "85 years and over".
-
-    AgeRange is a NamedTuple.
     """
 
     start: int
@@ -537,12 +636,13 @@ class AgeRange(NamedTuple):
 
         Parameters
         ----------
-        other : AgeRange
+        other :
             The other age range to consider.
 
         Returns
         -------
-        bool
+        :
+            True if the range is contained in this range.
         """
         if self.start > other.start:
             return False
@@ -560,13 +660,13 @@ class AgeRange(NamedTuple):
 
         Parameters
         ----------
-        label : str
+        label :
             A census variable label.
 
         Returns
         -------
-        AgeRange | None
-            The AgeRange object if parsing is successful, None if not.
+        :
+            The `AgeRange` object if parsing is successful, `None` if not.
         """
         parts = label.split("!!")
         if len(parts) != 4:
@@ -596,8 +696,7 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
     bracket, as limited by the age brackets defined by the US Census ACS 5-Year Data
     (group B01001). This ADRIO does not fetch data on its own, but requires you to
     provide another attribute named "population_by_age_table" for it to parse.
-    Most often, this will be provided by a
-    [`PopulationByAgeTable`](`epymorph.adrio.acs5.PopulationByAgeTable`) instance.
+    Most often, this will be provided by a `PopulationByAgeTable` instance.
     This allows the table to be reused in case you need to calculate more than one
     population bracket (as is common in a multi-strata model).
 
@@ -605,9 +704,9 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
 
     Parameters
     ----------
-    age_range_start : int
+    age_range_start :
         The youngest age to include in the age bracket.
-    age_range_end : int | None
+    age_range_end :
         The oldest age to include in the age bracket, or None to indicate an unbounded
         range (include all ages greater than or equal to `age_range_start`).
 
@@ -701,20 +800,18 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
     @staticmethod
     def age_ranges(year: int) -> Sequence[AgeRange]:
         """
-        Lists the AgeRanges used by the ACS5 population by age table in definition order
-        for the given year. Note that this does not correspond one-to-one with the
+        Lists the age ranges used by the ACS5 population by age table in definition
+        order for the given year. Note that this does not correspond one-to-one with the
         values in the B01001 table -- this list omits "total" columns and duplicates.
-
-        This is a static method.
 
         Parameters
         ----------
-        year : int
+        year :
             A supported ACS5 year.
 
         Returns
         -------
-        Sequence[AgeRange]
+        :
             The age ranges.
         """
         return filter_unique(
@@ -729,11 +826,7 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
 
 # fmt: off
 RaceCategory = Literal["White", "Black", "Native", "Asian", "Pacific Islander", "Other", "Multiple"]  # noqa: E501
-"""
-A racial category defined by ACS5.
-
-`Literal["White", "Black", "Native", "Asian", "Pacific Islander", "Other", "Multiple"]`
-"""
+"""A racial category defined by ACS5."""
 # fmt: on
 
 
@@ -744,20 +837,20 @@ class PopulationByRace(_FetchACS5[np.int64]):
     ACS5 data is compiled from surveys taken during a rolling five year period, and
     as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `BlockGroupScope` (aggregates are computed by the Census Bureau). Data is loaded
     according to the scope's year, from 2009 to 2023.
 
     The result is an N-shaped array of integers.
 
     Parameters
     ----------
-    race : RaceCategory
+    race :
         The Census-defined race category to load.
-    fix_insufficient_data : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_insufficient_data :
         The method to use to fix values for which there were insufficient data to report
         (sentinel value: -666666666).
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -829,18 +922,18 @@ class AverageHouseholdSize(_FetchACS5[np.float64]):
     ACS5 data is compiled from surveys taken during a rolling five year period, and
     as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `BlockGroupScope` (aggregates are computed by the Census Bureau). Data is loaded
     according to the scope's year, from 2009 to 2023.
 
     The result is an N-shaped array of floats.
 
     Parameters
     ----------
-    fix_insufficient_data : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+    fix_insufficient_data :
         The method to use to fix values for which there were insufficient data to report
         (sentinel value: -666666666).
-    fix_missing : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -899,18 +992,18 @@ class MedianAge(_FetchACS5[np.float64]):
     ACS5 data is compiled from surveys taken during a rolling five year period, and
     as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `BlockGroupScope` (aggregates are computed by the Census Bureau). Data is loaded
     according to the scope's year, from 2009 to 2023.
 
     The result is an N-shaped array of floats.
 
     Parameters
     ----------
-    fix_insufficient_data : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+    fix_insufficient_data :
         The method to use to fix values for which there were insufficient data to report
         (sentinel value: -666666666).
-    fix_missing : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -970,18 +1063,18 @@ class MedianIncome(_FetchACS5[np.int64]):
     ACS5 data is compiled from surveys taken during a rolling five year period, and
     as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `BlockGroupScope` (aggregates are computed by the Census Bureau). Data is loaded
     according to the scope's year, from 2009 to 2023.
 
     The result is an N-shaped array of integers.
 
     Parameters
     ----------
-    fix_insufficient_data : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_insufficient_data :
         The method to use to fix values for which there were insufficient data to report
         (sentinel value: -666666666).
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -1039,18 +1132,18 @@ class GiniIndex(_FetchACS5[np.float64]):
     ACS5 data is compiled from surveys taken during a rolling five year period, and
     as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    BlockGroupScope (aggregates are computed by the Census Bureau). Data is loaded
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `BlockGroupScope` (aggregates are computed by the Census Bureau). Data is loaded
     according to the scope's year, from 2009 to 2023.
 
     The result is an N-shaped array of floats.
 
     Parameters
     ----------
-    fix_insufficient_data : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+    fix_insufficient_data :
         The method to use to fix values for which there were insufficient data to report
         (sentinel value: -666666666).
-    fix_missing : Fill[np.float64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -1126,9 +1219,9 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
     ACS5 data is compiled from surveys taken during a rolling five year period, and
     as such are estimates.
 
-    Data is available using CensusScope geographies, from StateScope down to
-    TractScope. Data is loaded according to the scope's year, from 2009 to 2023.
-    This ADRIO does not support BlockGroupScope because we the calculation of the index
+    Data is available using `CensusScope` geographies, from `StateScope` down to
+    `TractScope`. Data is loaded according to the scope's year, from 2009 to 2023.
+    This ADRIO does not support `BlockGroupScope` because we the calculation of the index
     requires loading data at a finer granularity than the target granularity, and
     there is no ACS5 data below block groups.
 
@@ -1136,23 +1229,22 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
 
     Parameters
     ----------
-    majority_pop : RaceCategory
+    majority_pop :
         The race category representing the majority population for the amount of
         segregation.
-    minority_pop : RaceCategory
+    minority_pop :
         The race category representing the minority population within the
         segregation analysis.
-    fix_insufficient_population : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_insufficient_population :
         The method to use to fix values for which there were insufficient data to report
         (sentinel value: -666666666).
         The replacement is performed on the underlying population by race data.
-    fix_missing_population : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing_population :
         The method to use to fix missing values. The replacement is performed on the
         underlying population by race data.
-    fix_not_computable : Fill[np.float64] | float | Callable[[], float] | Literal[False], default=False
+    fix_not_computable :
         The method to use to fix values for which we cannot compute a value because population
         numbers cannot be loaded for one or more of the populations involved.
-
 
     See Also
     --------

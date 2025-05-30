@@ -1,0 +1,20 @@
+/* fix excess padding at the top of the page */
+.md-main__inner {
+  margin-top: 0;
+}
+
+/* style Bases list */
+p.doc-class-bases {
+    font-style: italic;
+}
+
+/* give object names a little more breathing room */
+span.doc-object-name {
+    margin: 0 0.5rem;
+}
+
+/* display an "indent" line to help with visual grouping */
+div.doc-object:not(.doc-module) {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--md-typeset-table-color);
+}

@@ -40,6 +40,11 @@ def healthdata_api_key() -> str | None:
     """
     Loads the Socrata API key to use for healthdata.gov,
     as environment variable 'API_KEY__healthdata.gov'.
+
+    Returns
+    -------
+    :
+        The key or `None` if it is not set.
     """
     return os.environ.get("API_KEY__healthdata.gov", default=None)
 
@@ -48,6 +53,11 @@ def data_cdc_api_key() -> str | None:
     """
     Loads the Socrata API key to use for data.cdc.gov,
     as environment variable 'API_KEY__data.cdc.gov'.
+
+    Returns
+    -------
+    :
+        The key or `None` if it is not set.
     """
     return os.environ.get("API_KEY__data.cdc.gov", default=None)
 
@@ -164,9 +174,11 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
 
     Parameters
     ----------
-    fix_redacted : Fix[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    age_group :
+        Which age group to fetch data for.
+    fix_redacted :
         The method to use to replace redacted values (-999999 in the data).
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -316,9 +328,9 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
 
     Parameters
     ----------
-    fix_redacted : Fix[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_redacted :
         The method to use to replace redacted values (-999999 in the data).
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -411,7 +423,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
 
     Parameters
     ----------
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -727,9 +739,9 @@ class COVIDStateHospitalization(_DataCDCAemtMg7g):
 
     Parameters
     ----------
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
-    allow_voluntary : bool, default=True
+    allow_voluntary :
         Whether or not to accept voluntary data. If False and if the simulation time
         frame overlaps the voluntary period, such data will be masked.
         Set this to False if you want to be sure you are only using data during the
@@ -766,9 +778,9 @@ class InfluenzaStateHospitalization(_DataCDCAemtMg7g):
 
     Parameters
     ----------
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
-    allow_voluntary : bool, default=True
+    allow_voluntary :
         Whether or not to accept voluntary data. If False and if the simulation time
         frame overlaps the voluntary period, such data will be masked.
         Set this to False if you want to be sure you are only using data during the
@@ -807,7 +819,7 @@ class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
 
     Parameters
     ----------
-    vaccine_status : Literal["at least one dose", "full series", "full series and booster"]
+    vaccine_status :
         The dataset breaks down vaccination status by how many doses individuals have
         received. Use this to specify which status you're interested in.
         "at least one dose" includes people who have received at least one COVID vaccine
@@ -815,7 +827,7 @@ class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
         two doses of a two-dose vaccine or one dose of a one-dose vaccine;
         "full series and booster" includes people who have received the full series
         and at least one booster dose.
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -1028,11 +1040,11 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
 
     Parameters
     ----------
-    cause_of_death : Literal["all", "COVID-19"]
+    cause_of_death :
         The cause of death.
-    fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_redacted :
         The method to use to fix redacted values.
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also
@@ -1224,11 +1236,11 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
 
     Parameters
     ----------
-    cause_of_death : Literal["all", "COVID-19", "influenza", "pneumonia"]
+    cause_of_death :
         The cause of death.
-    fix_redacted : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_redacted :
         The method to use to fix redacted values.
-    fix_missing : Fill[np.int64] | int | Callable[[], int] | Literal[False], default=False
+    fix_missing :
         The method to use to fix missing values.
 
     See Also

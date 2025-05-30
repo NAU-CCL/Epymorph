@@ -23,11 +23,14 @@ from epymorph.time import NBins, TimeAggregation, TimeSelection
 from epymorph.tools.data import Output, munge
 from epymorph.util import filter_unique
 
-OrderingOptions = Literal["location", "quantity"]
-FormatOptions = Literal["dataframe", "string", "print"]
+OrderingOption = Literal["location", "quantity"]
+"""Options for table row ordering."""
+
+FormatOption = Literal["dataframe", "string", "print"]
+"""Options for table render output format."""
 
 
-def to_sparklines(values):
+def _to_sparklines(values):
     """A Pandas aggregation function that produces a sparkline result."""
     # NOTE: I tried using the same max value for each quantity;
     # in a way this improves comparison between locations, but means that
@@ -49,7 +52,7 @@ def _process_output(
     geo: GeoSelection | GeoAggregation,
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,
-    ordering: OrderingOptions,
+    ordering: OrderingOption,
     column_names: Sequence[str],
     process_groups: Callable[[DataFrameGroupBy], pd.DataFrame],
 ) -> pd.DataFrame:
@@ -144,10 +147,9 @@ def _process_output(
 
 
 class TableRenderer:
-    """Provides a number of methods for rendering an output in tabular form.
+    """
+    Provides a number of methods for rendering an output in tabular form.
 
-    Examples
-    --------
     Most commonly, you will use TableRenderer starting from a simulation output object
     that supports it:
 
@@ -155,14 +157,21 @@ class TableRenderer:
     out = BasicSimulation(rume).run()
     out.table.quantiles(...)
     ```
+
+    Parameters
+    ----------
+    output :
+        The output the renderer will use.
     """
 
     output: Output
+    """The output the renderer will use."""
 
     def __init__(self, output: Output):
         self.output = output
 
-    def _format_output(self, result_df: pd.DataFrame, result_format: FormatOptions):
+    def _format_output(self, result_df: pd.DataFrame, result_format: FormatOption):
+        """Produce output according to the given format setting."""
         match result_format:
             case "dataframe":
                 return result_df
@@ -183,7 +192,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["dataframe"] = "dataframe",
         column_names: Sequence[str] | None = None,
     ) -> pd.DataFrame: ...
@@ -196,7 +205,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["string"],
         column_names: Sequence[str] | None = None,
     ) -> str: ...
@@ -209,7 +218,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["print"],
         column_names: Sequence[str] | None = None,
     ) -> None: ...
@@ -221,8 +230,8 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
-        result_format: Literal["dataframe", "string", "print"] = "dataframe",
+        ordering: OrderingOption = "location",
+        result_format: FormatOption = "dataframe",
         column_names: Sequence[str] | None = None,
     ) -> pd.DataFrame | str | None:
         """
@@ -230,31 +239,31 @@ class TableRenderer:
 
         Parameters
         ----------
-        quantiles : Sequence[float]
-            the list of quantiles to calculate and display, in the range [0,1]
-        geo : GeoSelection | GeoAggregation
-            the geographic selection to make on the output data
-        time : TimeSelection | TimeAggregation
-            the time selection to make on the output data
-        quantity : QuantitySelection | QuantityAggregation
-            the quantity selection to make on the output data
-        ordering : {"location", "quantity"}
-            controls the ordering of rows in the result;
+        quantiles :
+            The list of quantiles to calculate and display, in the range [0,1].
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        ordering :
+            Controls the ordering of rows in the result;
             both location and quantity are used to sort the resulting rows,
-            this just decides which gets priority
-        result_format : {"dataframe", "string", "print"}
-            controls the type of the result of this method;
-            "dataframe" returns a Pandas DataFrame,
+            this just decides which gets priority.
+        result_format :
+            Controls the type of the result of this method;
+            "dataframe" returns a Pandas dataframe,
             "string" returns the stringified table, and
-            "print" just prints the stringified table directly and returns None
-        column_names : Sequence[str], optional
-            overrides the default names of the quantiles columns;
-            by default, this is just the quantile value itself
+            "print" just prints the stringified table directly and returns `None`.
+        column_names :
+            Overrides the default names of the quantiles columns;
+            by default, this is just the quantile value itself.
 
         Returns
         -------
-        DataFrame | str | None
-            according to the value of the `result_format` parameter
+        :
+            Output according to the value of the `result_format` parameter.
         """
         _quantiles = np.array(quantiles)
         if len(quantiles) == 0:
@@ -291,7 +300,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["dataframe"] = "dataframe",
     ) -> pd.DataFrame: ...
 
@@ -302,7 +311,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["string"],
     ) -> str: ...
 
@@ -313,7 +322,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["print"],
     ) -> None: ...
 
@@ -323,8 +332,8 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
-        result_format: Literal["dataframe", "string", "print"] = "dataframe",
+        ordering: OrderingOption = "location",
+        result_format: FormatOption = "dataframe",
     ) -> pd.DataFrame | str | None:
         """
         Renders a table showing minimum and maximum values over time for the given
@@ -332,26 +341,26 @@ class TableRenderer:
 
         Parameters
         ----------
-        geo : GeoSelection | GeoAggregation
-            the geographic selection to make on the output data
-        time : TimeSelection | TimeAggregation
-            the time selection to make on the output data
-        quantity : QuantitySelection | QuantityAggregation
-            the quantity selection to make on the output data
-        ordering : {"location", "quantity"}
-            controls the ordering of rows in the result;
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        ordering :
+            Controls the ordering of rows in the result;
             both location and quantity are used to sort the resulting rows,
-            this just decides which gets priority
-        result_format : {"dataframe", "string", "print"}
-            controls the type of the result of this method;
-            "dataframe" returns a Pandas DataFrame,
+            this just decides which gets priority.
+        result_format :
+            Controls the type of the result of this method;
+            "dataframe" returns a Pandas dataframe,
             "string" returns the stringified table, and
-            "print" just prints the stringified table directly and returns None
+            "print" just prints the stringified table directly and returns `None`.
 
         Returns
         -------
-        DataFrame | str | None
-            according to the value of the `result_format` parameter
+        :
+            Output according to the value of the `result_format` parameter.
         """
         return self.quantiles(
             quantiles=(0.0, 1.0),
@@ -370,7 +379,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["dataframe"] = "dataframe",
     ) -> pd.DataFrame: ...
 
@@ -381,7 +390,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["string"],
     ) -> str: ...
 
@@ -392,7 +401,7 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["print"],
     ) -> None: ...
 
@@ -402,8 +411,8 @@ class TableRenderer:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
-        ordering: Literal["location", "quantity"] = "location",
-        result_format: Literal["dataframe", "string", "print"] = "dataframe",
+        ordering: OrderingOption = "location",
+        result_format: FormatOption = "dataframe",
     ) -> pd.DataFrame | str | None:
         """
         Renders a table showing summed values over time for the given selections.
@@ -415,26 +424,26 @@ class TableRenderer:
 
         Parameters
         ----------
-        geo : GeoSelection | GeoAggregation
-            the geographic selection to make on the output data
-        time : TimeSelection | TimeAggregation
-            the time selection to make on the output data
-        quantity : QuantitySelection | QuantityAggregation
-            the quantity selection to make on the output data
-        ordering : {"location", "quantity"}
-            controls the ordering of rows in the result;
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        ordering :
+            Controls the ordering of rows in the result;
             both location and quantity are used to sort the resulting rows,
-            this just decides which gets priority
-        result_format : {"dataframe", "string", "print"}
-            controls the type of the result of this method;
-            "dataframe" returns a Pandas DataFrame,
+            this just decides which gets priority.
+        result_format :
+            Controls the type of the result of this method;
+            "dataframe" returns a Pandas dataframe,
             "string" returns the stringified table, and
-            "print" just prints the stringified table directly and returns None
+            "print" just prints the stringified table directly and returns `None`.
 
         Returns
         -------
-        DataFrame | str | None
-            according to the value of the `result_format` parameter
+        :
+            Output according to the value of the `result_format` parameter.
         """
         if any(isinstance(q, CompartmentDef) for q in quantity.selected):
             warn(
@@ -471,7 +480,7 @@ class TableRenderer:
         quantity: QuantitySelection | QuantityAggregation,
         *,
         chart_length: int = 20,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["dataframe"] = "dataframe",
     ) -> pd.DataFrame: ...
 
@@ -483,7 +492,7 @@ class TableRenderer:
         quantity: QuantitySelection | QuantityAggregation,
         *,
         chart_length: int = 20,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["string"],
     ) -> str: ...
 
@@ -495,7 +504,7 @@ class TableRenderer:
         quantity: QuantitySelection | QuantityAggregation,
         *,
         chart_length: int = 20,
-        ordering: Literal["location", "quantity"] = "location",
+        ordering: OrderingOption = "location",
         result_format: Literal["print"],
     ) -> None: ...
 
@@ -506,8 +515,8 @@ class TableRenderer:
         quantity: QuantitySelection | QuantityAggregation,
         *,
         chart_length: int = 20,
-        ordering: Literal["location", "quantity"] = "location",
-        result_format: Literal["dataframe", "string", "print"] = "dataframe",
+        ordering: OrderingOption = "location",
+        result_format: FormatOption = "dataframe",
     ) -> pd.DataFrame | str | None:
         """
         Renders a table showing a rough time series bar chart for the given selections
@@ -521,33 +530,33 @@ class TableRenderer:
 
         Parameters
         ----------
-        geo : GeoSelection | GeoAggregation
-            the geographic selection to make on the output data
-        time : TimeSelection | TimeAggregation
-            the time selection to make on the output data
-        quantity : QuantitySelection | QuantityAggregation
-            the quantity selection to make on the output data
-        chart_length : int, default=20
-            approximately how many characters should we use to render the charts?
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        chart_length :
+            Approximately how many characters should we use to render the charts?
             This is simply a ballpark, similar to automatically selecting the number
             of bins in a histogram, so you may get more or less than you ask for.
             Multiple days may be compressed into one bin, but one day will never be
             split between bins. The last bin may contain less days of data than the
             rest of the bins.
-        ordering : {"location", "quantity"}
-            controls the ordering of rows in the result;
+        ordering :
+            Controls the ordering of rows in the result;
             both location and quantity are used to sort the resulting rows,
-            this just decides which gets priority
-        result_format : {"dataframe", "string", "print"}
-            controls the type of the result of this method;
-            "dataframe" returns a Pandas DataFrame,
+            this just decides which gets priority.
+        result_format :
+            Controls the type of the result of this method;
+            "dataframe" returns a Pandas dataframe,
             "string" returns the stringified table, and
-            "print" just prints the stringified table directly and returns None
+            "print" just prints the stringified table directly and returns `None`.
 
         Returns
         -------
-        DataFrame | str | None
-            according to the value of the `result_format` parameter
+        :
+            Output according to the value of the `result_format` parameter.
         """
         if isinstance(time, TimeSelection):
             # Unless the user supplies their own TimeAggregation,
@@ -561,13 +570,13 @@ class TableRenderer:
             quantity,
             ordering,
             ["chart"],
-            lambda df: df.agg(to_sparklines).reset_index(),
+            lambda df: df.agg(_to_sparklines).reset_index(),
         )
         return self._format_output(result_df, result_format)
 
 
 class TableRendererMixin(Output):
-    "Mixin class that adds a convenient method for rendering tables from an output."
+    """Mixin class that adds a convenient method for rendering tables from an output."""
 
     @property
     def table(self) -> TableRenderer:
