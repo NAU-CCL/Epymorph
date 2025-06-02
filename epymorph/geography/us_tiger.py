@@ -289,8 +289,10 @@ def _load_summary_from_cache(
 ##########
 
 
-def _get_states_config(year: TigerYear) -> _DataConfig:
+def _get_states_config(year: int) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (states)."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
     match year:
         case year if year in range(2011, 2024):
             cols = ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
@@ -340,7 +342,7 @@ def _get_states_config(year: TigerYear) -> _DataConfig:
 
 
 def get_states_geo(
-    year: TigerYear,
+    year: int,
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
     """
@@ -363,7 +365,7 @@ def get_states_geo(
 
 
 def get_states_info(
-    year: TigerYear,
+    year: int,
     progress: ProgressCallback | None = None,
 ) -> DataFrame:
     """
@@ -384,7 +386,7 @@ def get_states_info(
     return _get_info(_get_states_config(year), progress)
 
 
-def check_cache_states(year: TigerYear) -> CacheEstimate:
+def check_cache_states(year: int) -> CacheEstimate:
     """
     Check the cache status for a US states and territories query.
 
@@ -514,8 +516,10 @@ def get_states(year: int) -> StatesSummary:
 ############
 
 
-def _get_counties_config(year: TigerYear) -> _DataConfig:
+def _get_counties_config(year: int) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (counties)."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
     match year:
         case year if year in range(2011, 2024):
             cols = ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"]
@@ -548,7 +552,7 @@ def _get_counties_config(year: TigerYear) -> _DataConfig:
 
 
 def get_counties_geo(
-    year: TigerYear,
+    year: int,
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
     """
@@ -571,7 +575,7 @@ def get_counties_geo(
 
 
 def get_counties_info(
-    year: TigerYear,
+    year: int,
     progress: ProgressCallback | None = None,
 ) -> DataFrame:
     """
@@ -593,7 +597,7 @@ def get_counties_info(
     return _get_info(_get_counties_config(year), progress)
 
 
-def check_cache_counties(year: TigerYear) -> CacheEstimate:
+def check_cache_counties(year: int) -> CacheEstimate:
     """
     Check the cache status for a US counties query.
 
@@ -727,10 +731,12 @@ def get_counties(year: int) -> CountiesSummary:
 
 
 def _get_tracts_config(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
 ) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (tracts)."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
     states = get_states_info(year)
     if state_id is not None:
         states = states[states["GEOID"].isin(state_id)]
@@ -771,7 +777,7 @@ def _get_tracts_config(
 
 
 def get_tracts_geo(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
@@ -796,7 +802,7 @@ def get_tracts_geo(
 
 
 def get_tracts_info(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> DataFrame:
@@ -821,7 +827,7 @@ def get_tracts_info(
 
 
 def check_cache_tracts(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
 ) -> CacheEstimate:
     """
@@ -903,10 +909,12 @@ def get_tracts(year: int) -> TractsSummary:
 
 
 def _get_block_groups_config(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
 ) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (block groups)."""
+    if not is_tiger_year(year):
+        raise GeographyError(f"Unsupported year: {year}")
     states = get_states_info(year)
     if state_id is not None:
         states = states[states["GEOID"].isin(state_id)]
@@ -947,7 +955,7 @@ def _get_block_groups_config(
 
 
 def get_block_groups_geo(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> GeoDataFrame:
@@ -973,7 +981,7 @@ def get_block_groups_geo(
 
 
 def get_block_groups_info(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
 ) -> DataFrame:
@@ -999,7 +1007,7 @@ def get_block_groups_info(
 
 
 def check_cache_block_groups(
-    year: TigerYear,
+    year: int,
     state_id: Sequence[str] | None = None,
 ) -> CacheEstimate:
     """
