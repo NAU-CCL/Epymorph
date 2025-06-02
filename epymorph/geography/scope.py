@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import singledispatch
-from typing import Generic, Literal, Protocol, TypeVar, final, runtime_checkable
+from typing import Generic, Literal, Never, Protocol, TypeVar, final, runtime_checkable
 
 import numpy as np
+from geopandas import GeoDataFrame
 from numpy.typing import NDArray
 
 
@@ -63,6 +64,31 @@ class GeoScope(Protocol):
         if (labels := self.labels_option) is not None:
             return labels
         return self.node_ids
+
+    @property
+    @abstractmethod
+    def geography(self) -> GeoDataFrame | Never:
+        """
+        Retrieves the shapes corresponding to the nodes of this scope as a
+        `GeoDataFrame`. Note that this is not possible for all types of `GeoScope`.
+
+        Returns
+        -------
+        :
+            The geography.
+
+        Raises
+        ------
+        GeographyError
+            If we cannot fetch geography for this type of scope.
+        """
+        # NOTE: implementations should:
+        # - if geography is NOT supported:
+        #   - override the return type to `Never`
+        # - if geography IS supported:
+        #   - override the return type to `GeoDataFrame`
+        #   - use @cached_property as repeated access of the geography is expected;
+        #     however Pylance errors this so you can mark it `typed: ignore[override]`
 
 
 #############################################

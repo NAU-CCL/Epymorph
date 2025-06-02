@@ -2,7 +2,6 @@
 Tools for rendering geographic maps from epymorph simulation output data.
 """
 
-from functools import lru_cache
 from itertools import repeat
 from typing import Any, Callable, Iterable, cast
 
@@ -18,43 +17,9 @@ from shapely.geometry import Point
 
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.error import GeographyError
-from epymorph.geography.scope import GeoAggregation, GeoGroup, GeoScope, GeoSelection
-from epymorph.geography.us_census import CensusScope
-from epymorph.geography.us_geography import STATE
-from epymorph.geography.us_tiger import (
-    get_block_groups_geo,
-    get_counties_geo,
-    get_states_geo,
-    get_tracts_geo,
-    is_tiger_year,
-)
+from epymorph.geography.scope import GeoAggregation, GeoGroup, GeoSelection
 from epymorph.time import TimeAggregation, TimeSelection
 from epymorph.tools.data import Output, munge
-
-
-@lru_cache(16)
-def _get_geo(scope: GeoScope) -> gpd.GeoDataFrame:
-    if not isinstance(scope, CensusScope):
-        err = "Cannot draw choropleth maps for the given scope."
-        raise GeographyError(err)
-    if not is_tiger_year(scope.year):
-        err = "Cannot draw choropleth map: that year is not supported by TIGER."
-        raise GeographyError(err)
-
-    match scope.granularity:
-        case "state":
-            gdf = get_states_geo(scope.year)
-        case "county":
-            gdf = get_counties_geo(scope.year)
-        case "tract":
-            states = list({STATE.extract(x) for x in scope.node_ids})
-            gdf = get_tracts_geo(scope.year, states)
-        case "block group":
-            states = list({STATE.extract(x) for x in scope.node_ids})
-            gdf = get_block_groups_geo(scope.year, states)
-        case _:
-            raise GeographyError("Unsupported Census granularity.")
-    return gpd.GeoDataFrame(gdf[gdf["GEOID"].isin(scope.node_ids)])  # type: ignore
 
 
 class NodeLabelRenderer:
@@ -261,6 +226,11 @@ class MapRenderer:
         -------
         :
             The geo dataframe as a result of applying the axis strategies to the data.
+
+        Raises
+        ------
+        GeographyError
+            If we cannot fetch geography for the type of scope used.
         """
 
         # Our result should have three columns: time, node, and a data value
@@ -320,8 +290,17 @@ class MapRenderer:
         :
             The geo dataframe as a result of applying the geo axis strategies to the
             source geography.
+
+        Raises
+        ------
+        GeographyError
+            If we cannot fetch geography for the type of scope used.
         """
-        gdf = _get_geo(geo.to_scope())
+        try:
+            gdf = geo.to_scope().geography
+        except GeographyError as e:
+            err = f"Cannot draw choropleth map: {e}"
+            raise GeographyError(err) from e
 
         # If we have internal point info in the gdf, make it a centroid column.
         cols = gdf.columns
@@ -409,6 +388,11 @@ class MapRenderer:
             The max value for the color map, by default the max value of the data.
         vmin :
             The min value for the color map, by default the min value of the data.
+
+        Raises
+        ------
+        GeographyError
+            If we cannot fetch geography for the type of scope used.
         """
         try:
             fig, ax = plt.subplots(layout="constrained")
@@ -511,6 +495,11 @@ class MapRenderer:
         :
             a tuple with 1. the geo dataframe containing the data used to render the map
             and 2. the map's color scale.
+
+        Raises
+        ------
+        GeographyError
+            If we cannot fetch geography for the type of scope used.
         """
         data_gdf = self.geography_data(
             geo,

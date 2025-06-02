@@ -8,9 +8,11 @@ For instance, "give me all of the counties in Nebraska and South Dakota".
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Literal, Mapping, Never, Self, Sequence, TypeVar, cast
 
 import numpy as np
+from geopandas import GeoDataFrame
 from numpy.typing import NDArray
 from typing_extensions import override
 
@@ -34,10 +36,14 @@ from epymorph.geography.us_geography import (
 )
 from epymorph.geography.us_tiger import (
     get_block_groups,
+    get_block_groups_geo,
     get_counties,
+    get_counties_geo,
     get_states,
+    get_states_geo,
     get_summary_of,
     get_tracts,
+    get_tracts_geo,
 )
 from epymorph.util import filter_unique, mask
 
@@ -406,6 +412,13 @@ class StateScope(_InStatesMixin, CensusScope):
         mapping = get_states(self.year).state_fips_to_code
         return np.array([mapping[x] for x in self.node_ids], dtype=np.str_)
 
+    @cached_property
+    @override
+    def geography(self) -> GeoDataFrame:  # type: ignore[override]
+        gdf = get_states_geo(self.year)
+        in_scope = gdf["GEOID"].isin(self.node_ids)
+        return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
+
 
 @dataclass(frozen=True)
 class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
@@ -482,6 +495,13 @@ class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
         mapping = get_counties(self.year).county_fips_to_name
         return np.array([mapping[x] for x in self.node_ids], dtype=np.str_)
 
+    @cached_property
+    @override
+    def geography(self) -> GeoDataFrame:  # type: ignore[override]
+        gdf = get_counties_geo(self.year)
+        in_scope = gdf["GEOID"].isin(self.node_ids)
+        return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
+
 
 @dataclass(frozen=True)
 class TractScope(_InStatesMixin, _InCountiesMixin, _InTractsMixin, CensusScope):
@@ -534,6 +554,14 @@ class TractScope(_InStatesMixin, _InCountiesMixin, _InTractsMixin, CensusScope):
         """Create a selection from this scope."""
         return TractSelector(self, TractSelection)
 
+    @cached_property
+    @override
+    def geography(self) -> GeoDataFrame:  # type: ignore[override]
+        states = list({STATE.extract(x) for x in self.node_ids})
+        gdf = get_tracts_geo(self.year, states)
+        in_scope = gdf["GEOID"].isin(self.node_ids)
+        return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
+
 
 @dataclass(frozen=True)
 class BlockGroupScope(
@@ -583,6 +611,14 @@ class BlockGroupScope(
     def select(self) -> "BlockGroupSelector[BlockGroupScope, BlockGroupSelection]":
         """Create a selection from this scope."""
         return BlockGroupSelector(self, BlockGroupSelection)
+
+    @cached_property
+    @override
+    def geography(self) -> GeoDataFrame:  # type: ignore[override]
+        states = list({STATE.extract(x) for x in self.node_ids})
+        gdf = get_block_groups_geo(self.year, states)
+        in_scope = gdf["GEOID"].isin(self.node_ids)
+        return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
 
 
 #####################

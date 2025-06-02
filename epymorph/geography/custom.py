@@ -3,11 +3,13 @@ Implements a generic geo scope capable of representing arbitrary geographies.
 """
 
 from dataclasses import dataclass
+from typing import Never
 
 import numpy as np
 from numpy.typing import NDArray
 from typing_extensions import override
 
+from epymorph.error import GeographyError
 from epymorph.geography.scope import (
     GeoGroup,
     GeoGrouping,
@@ -46,6 +48,12 @@ class CustomScope(GeoScope):
     def select(self) -> "CustomSelector":
         """Create a selection from this scope."""
         return CustomSelector(self, CustomSelection)
+
+    @property
+    @override
+    def geography(self) -> Never:
+        """Automatic geography is not supported for custom scopes."""
+        raise GeographyError("Geography is not possible for CustomScopes.")
 
 
 @dataclass(frozen=True)
