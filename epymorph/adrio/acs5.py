@@ -4,7 +4,7 @@ from abc import abstractmethod
 from functools import cache, reduce
 from itertools import groupby
 from json import load as load_json
-from typing import Callable, Iterable, Literal, NamedTuple, Sequence, TypeGuard
+from typing import Callable, Iterable, Literal, NamedTuple, Sequence, TypeGuard, cast
 
 import numpy as np
 import pandas as pd
@@ -21,17 +21,27 @@ from epymorph.adrio.adrio import (
     InspectResult,
     PipelineResult,
     ResultFormat,
+    ResultT,
     ValueT,
     adrio_cache,
-    range_mask_fn,
+    adrio_validate_pipe,
 )
 from epymorph.adrio.processing import (
     DataPipeline,
-    DontFill,
     DontFix,
     Fill,
+    FillLikeFloat,
+    FillLikeInt,
     Fix,
+    FixLikeFloat,
+    FixLikeInt,
     PivotAxis,
+)
+from epymorph.adrio.validation import (
+    validate_dtype,
+    validate_numpy,
+    validate_shape,
+    validate_values_in_range,
 )
 from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
@@ -386,30 +396,36 @@ class ACS5Client:
             return pd.concat(results).sort_index()
 
 
-def _get_scope(adrio: ADRIO, context: Context) -> CensusScope:
-    """
-    Validate and retrieve the `CensusScope` from the context.
-    ACS5 ADRIOs really only work on Census geography, so this is a commonly-useful
-    validation function.
-    """
-    if not isinstance(context.scope, CensusScope):
-        err = "US Census geo scope required."
-        raise ADRIOContextError(adrio, context, err)
-    if context.scope.year not in ACS5_YEARS:
-        err = f"{context.scope.year} is not a supported year for ACS5 data."
-        raise ADRIOContextError(adrio, context, err)
-    if isinstance(context.scope, BlockGroupScope) and context.scope.year <= 2012:
-        err = "Block group ACS5 data is not available via this API for 2012 or prior."
-        raise ADRIOContextError(adrio, context, err)
-    return context.scope
+class _ACS5Mixin(ADRIO):
+    """Common ADRIO logic for ACS5 ADRIOs."""
+
+    @override
+    def validate_context(self, context: Context) -> None:
+        if census_api_key() is None:
+            err = (
+                "Census API key is required for accessing ACS5 data. "
+                "Please set the environment variable 'CENSUS_API_KEY'"
+            )
+            raise ADRIOContextError(self, context, err)
+        if not isinstance(context.scope, CensusScope):
+            err = "US Census geo scope required."
+            raise ADRIOContextError(self, context, err)
+        if context.scope.year not in ACS5_YEARS:
+            err = f"{context.scope.year} is not a supported year for ACS5 data."
+            raise ADRIOContextError(self, context, err)
+        if isinstance(context.scope, BlockGroupScope) and context.scope.year <= 2012:
+            err = (
+                "Block group ACS5 data is not available via this API for 2012 or prior."
+            )
+            raise ADRIOContextError(self, context, err)
 
 
-class _FetchACS5(FetchADRIO[ValueT, ValueT]):
+class _ACS5FetchMixin(_ACS5Mixin, FetchADRIO[ResultT, ValueT]):
     """
-    An abstract specialization of `FetchADRIO` for ADRIOs which fetch
+    Mixin implementing some of `FetchADRIO`'s API for ADRIOs which fetch
     data from the ACS5 API. At a minimum, implementors will need to
-    override `result_format` and `_variables`, and that is sufficient for
-    simple cases.
+    provide an initializer to set Fix/Fill values, and override `result_format`,
+    `validate_result`, and `_variables` -- that is sufficient for simple cases.
     """
 
     # sentinel values: https://www.census.gov/data/developers/data-sets/acs-1year/notes-on-acs-estimate-and-annotation-values.html
@@ -422,49 +438,19 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
     _fix_missing: Fill[ValueT]
     """The method to use to fix missing values."""
 
-    def __init__(
-        self,
-        *,
-        fix_insufficient_data: Fix[ValueT] | None = None,
-        fix_missing: Fill[ValueT] | None = None,
-    ):
-        self._fix_insufficient_data = fix_insufficient_data or DontFix()
-        self._fix_missing = fix_missing or DontFill()
-
     @property
     @abstractmethod
     def _variables(self) -> list[str]:
         """The ACS variables to fetch for this ADRIO."""
 
-    _census_scope: CensusScope | None = None
-
-    @override
-    def validate_context(self, context: Context):
-        self._census_scope = _get_scope(self, context)
-        if census_api_key() is None:
-            err = (
-                "Census API key is required for accessing ACS5 data. "
-                "Please set the environment variable 'CENSUS_API_KEY'"
-            )
-            raise ADRIOContextError(self, context, err)
-
-    @property
-    def census_scope(self) -> CensusScope:
-        """
-        Gets the context scope type-narrowed to CensusScope.
-        If for any reason this has not yet been verified, it first validates this fact.
-        """
-        if self._census_scope is None:
-            self._census_scope = _get_scope(self, self.context)
-        return self._census_scope
-
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
+        scope = cast(CensusScope, self.context.scope)
         try:
             return ACS5Client.fetch(
-                scope=self.census_scope,
+                scope=scope,
                 variables=self._variables,
-                value_dtype=self.result_format.value_dtype,
+                value_dtype=self.result_format.dtype.type,
                 report_progress=self._report_progress,
             )
         except Exception as e:
@@ -475,15 +461,16 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
         self,
         context: Context,
         data_df: pd.DataFrame,
-    ) -> PipelineResult[ValueT]:
+    ) -> PipelineResult[ResultT]:
+        scope = cast(CensusScope, self.context.scope)
         vrbs = self._variables
 
         # If we're loading a group variable, expand it.
         if len(vrbs) == 1 and (m := re.match(r"^group\((.*?)\)$", vrbs[0])):
             group_name = m.group(1)
-            vrbs = ACS5Client.get_group_var_names(self.census_scope.year, group_name)
+            vrbs = ACS5Client.get_group_var_names(scope.year, group_name)
 
-        value_dtype = self.result_format.value_dtype
+        value_dtype = self.result_format.dtype.type
         pipeline = (
             DataPipeline(
                 axes=(
@@ -491,7 +478,7 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
                     PivotAxis("variable", vrbs),
                 ),
                 ndims=1 if len(vrbs) == 1 else 2,
-                dtype=self.result_format.value_dtype,
+                dtype=value_dtype,
                 rng=context,
             )
             .strip_sentinel(
@@ -505,7 +492,7 @@ class _FetchACS5(FetchADRIO[ValueT, ValueT]):
 
 
 @adrio_cache
-class Population(_FetchACS5[np.int64]):
+class Population(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
     """
     Loads population data from the US Census ACS 5-Year Data (variable B01001_001E).
     ACS5 data is compiled from surveys taken during a rolling five year period, and
@@ -531,17 +518,31 @@ class Population(_FetchACS5[np.int64]):
     from the US Census.
     """
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=False,
-    )
+    def __init__(
+        self,
+        *,
+        fix_insufficient_data: FixLikeInt = False,
+        fix_missing: FillLikeInt = False,
+    ):
+        self._fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
+        self._fix_missing = Fill.of_int64(fix_missing)
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return Population._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.int64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     @property
     @override
@@ -550,7 +551,7 @@ class Population(_FetchACS5[np.int64]):
 
 
 @adrio_cache
-class PopulationByAgeTable(_FetchACS5[np.int64]):
+class PopulationByAgeTable(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
     """
     Loads a table of population categorized by Census-defined age brackets from the
     US Census ACS 5-Year Data (group B01001). This table is most useful as the source
@@ -581,34 +582,39 @@ class PopulationByAgeTable(_FetchACS5[np.int64]):
     from the US Census, and [an example of this table for 2023](https://data.census.gov/table/ACSDT5Y2023.B01001).
     """
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.NxA,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=False,
-    )
+    def __init__(
+        self,
+        *,
+        fix_insufficient_data: FixLikeInt = False,
+        fix_missing: FillLikeInt = False,
+    ):
+        self._fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
+        self._fix_missing = Fill.of_int64(fix_missing)
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return PopulationByAgeTable._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.NxA, dtype=np.int64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        scope = cast(CensusScope, self.scope)
+        variables = ACS5Client.get_group_var_names(scope.year, "B01001")
+        result_shape = (context.scope.nodes, len(variables))
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     @property
     @override
     def _variables(self) -> list[str]:
         return ["group(B01001)"]
-
-    @override
-    def validate_result(
-        self,
-        context: Context,
-        result: NDArray[np.int64],
-        *,
-        expected_shape: tuple[int, ...] | None = None,
-    ) -> None:
-        vrbs = ACS5Client.get_group_var_names(self.census_scope.year, "B01001")
-        shp = (context.scope.nodes, len(vrbs))
-        super().validate_result(context, result, expected_shape=shp)
 
 
 _exact_pattern = re.compile(r"^(\d+) years$")
@@ -690,7 +696,7 @@ class AgeRange(NamedTuple):
 
 
 @adrio_cache
-class PopulationByAge(ADRIO[np.int64, np.int64]):
+class PopulationByAge(_ACS5Mixin, ADRIO[np.int64, np.int64]):
     """
     Processes a population-by-age table to extract the population of a specified age
     bracket, as limited by the age brackets defined by the US Census ACS 5-Year Data
@@ -725,13 +731,6 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
     from the US Census, and [an example of this table for 2023](https://data.census.gov/table/ACSDT5Y2023.B01001).
     """
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=False,
-    )
-
     # a nice feature would be for ADRIOs to suggest defaults for their requirements,
     # so if someone doesn't provide a 'population_by_age_table' for us, we can add
     # it to the requirements resolution automatically; have to make sure this is done
@@ -751,17 +750,25 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return PopulationByAgeTable._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_context(self, context: Context) -> None:
-        _get_scope(self, context)
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     @override
     def inspect(self) -> InspectResult[np.int64, np.int64]:
         self.validate_context(self.context)
-        scope = _get_scope(self, self.context)
+        scope = cast(CensusScope, self.scope)
 
         # NOTE: we don't use the age_ranges() static method here because it's important
         # for us to keep one value per column, even for columns which don't
@@ -788,11 +795,12 @@ class PopulationByAge(ADRIO[np.int64, np.int64]):
         source_np = self.data(PopulationByAge.POP_BY_AGE_TABLE)
         result_np = source_np[:, col_mask].sum(axis=1)
 
+        self.validate_result(self.context, result_np)
         return InspectResult(
             adrio=self,
             source=source_np,
             result=result_np,
-            dtype=self.result_format.value_dtype,
+            dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
             issues={},
         )
@@ -831,7 +839,7 @@ RaceCategory = Literal["White", "Black", "Native", "Asian", "Pacific Islander", 
 
 
 @adrio_cache
-class PopulationByRace(_FetchACS5[np.int64]):
+class PopulationByRace(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
     """
     Loads population by race from the US Census ACS 5-Year Data (group B02001).
     ACS5 data is compiled from surveys taken during a rolling five year period, and
@@ -869,13 +877,6 @@ class PopulationByRace(_FetchACS5[np.int64]):
         "Multiple": "B02001_008E",
     }
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=False,
-    )
-
     _race: RaceCategory
     """The race category to load."""
 
@@ -883,30 +884,29 @@ class PopulationByRace(_FetchACS5[np.int64]):
         self,
         race: RaceCategory,
         *,
-        fix_insufficient_data: Fix[np.int64]
-        | int
-        | Callable[[], int]
-        | Literal[False] = False,
-        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_insufficient_data: FixLikeInt = False,
+        fix_missing: FillLikeInt = False,
     ):
         self._race = race
-        try:
-            fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_insufficient_data`")
-        try:
-            fix_missing = Fill.of_int64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
-        super().__init__(
-            fix_insufficient_data=fix_insufficient_data,
-            fix_missing=fix_missing,
-        )
+        self._fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
+        self._fix_missing = Fill.of_int64(fix_missing)
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return PopulationByRace._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.int64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     @property
     @override
@@ -915,7 +915,7 @@ class PopulationByRace(_FetchACS5[np.int64]):
 
 
 @adrio_cache
-class AverageHouseholdSize(_FetchACS5[np.float64]):
+class AverageHouseholdSize(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
     """
     Loads average household size data, based on the number of people living in a
     household, from the US Census ACS 5-Year Data (variable B25010_001E).
@@ -945,39 +945,28 @@ class AverageHouseholdSize(_FetchACS5[np.float64]):
     def __init__(
         self,
         *,
-        fix_insufficient_data: Fix[np.float64]
-        | float
-        | Callable[[], float]
-        | Literal[False] = False,
-        fix_missing: Fill[np.float64]
-        | float
-        | Callable[[], float]
-        | Literal[False] = False,
+        fix_insufficient_data: FixLikeFloat = False,
+        fix_missing: FillLikeFloat = False,
     ):
-        try:
-            fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_insufficient_data`")
-        try:
-            fix_missing = Fill.of_float64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
-        super().__init__(
-            fix_insufficient_data=fix_insufficient_data,
-            fix_missing=fix_missing,
-        )
-
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.float64,
-        validation=range_mask_fn(minimum=np.float64(0), maximum=None),
-        is_date_value=False,
-    )
+        self._fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
+        self._fix_missing = Fill.of_float64(fix_missing)
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.float64]:
-        return AverageHouseholdSize._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.float64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     @property
     @override
@@ -986,7 +975,7 @@ class AverageHouseholdSize(_FetchACS5[np.float64]):
 
 
 @adrio_cache
-class MedianAge(_FetchACS5[np.float64]):
+class MedianAge(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
     """
     Loads median age data from the US Census ACS 5-Year Data (variable B01002_001E).
     ACS5 data is compiled from surveys taken during a rolling five year period, and
@@ -1015,39 +1004,28 @@ class MedianAge(_FetchACS5[np.float64]):
     def __init__(
         self,
         *,
-        fix_insufficient_data: Fix[np.float64]
-        | float
-        | Callable[[], float]
-        | Literal[False] = False,
-        fix_missing: Fill[np.float64]
-        | float
-        | Callable[[], float]
-        | Literal[False] = False,
+        fix_insufficient_data: FixLikeFloat = False,
+        fix_missing: FillLikeFloat = False,
     ):
-        try:
-            fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_insufficient_data`")
-        try:
-            fix_missing = Fill.of_float64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
-        super().__init__(
-            fix_insufficient_data=fix_insufficient_data,
-            fix_missing=fix_missing,
-        )
-
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.float64,
-        validation=range_mask_fn(minimum=np.float64(0), maximum=None),
-        is_date_value=False,
-    )
+        self._fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
+        self._fix_missing = Fill.of_float64(fix_missing)
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.float64]:
-        return MedianAge._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.float64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     @property
     @override
@@ -1056,7 +1034,7 @@ class MedianAge(_FetchACS5[np.float64]):
 
 
 @adrio_cache
-class MedianIncome(_FetchACS5[np.int64]):
+class MedianIncome(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
     """
     Loads median income data in whole dollars from the US Census ACS 5-Year Data
     (variable B19013_001E), which is adjusted for inflation to the year of the data.
@@ -1086,36 +1064,28 @@ class MedianIncome(_FetchACS5[np.int64]):
     def __init__(
         self,
         *,
-        fix_insufficient_data: Fix[np.int64]
-        | int
-        | Callable[[], int]
-        | Literal[False] = False,
-        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_insufficient_data: FixLikeInt = False,
+        fix_missing: FillLikeInt = False,
     ):
-        try:
-            fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_insufficient_data`")
-        try:
-            fix_missing = Fill.of_int64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
-        super().__init__(
-            fix_insufficient_data=fix_insufficient_data,
-            fix_missing=fix_missing,
-        )
-
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=False,
-    )
+        self._fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
+        self._fix_missing = Fill.of_int64(fix_missing)
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return MedianIncome._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.int64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     @property
     @override
@@ -1124,7 +1094,7 @@ class MedianIncome(_FetchACS5[np.int64]):
 
 
 @adrio_cache
-class GiniIndex(_FetchACS5[np.float64]):
+class GiniIndex(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
     """
     Loads Gini Index data from the US Census ACS 5-Year Data (variable B19083_001E).
     This is a measure of income inequality on a scale from 0 (perfect equality)
@@ -1158,39 +1128,28 @@ class GiniIndex(_FetchACS5[np.float64]):
     def __init__(
         self,
         *,
-        fix_insufficient_data: Fix[np.float64]
-        | float
-        | Callable[[], float]
-        | Literal[False] = False,
-        fix_missing: Fill[np.float64]
-        | float
-        | Callable[[], float]
-        | Literal[False] = False,
+        fix_insufficient_data: FixLikeFloat = False,
+        fix_missing: FillLikeFloat = False,
     ):
-        try:
-            fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_insufficient_data`")
-        try:
-            fix_missing = Fill.of_float64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
-        super().__init__(
-            fix_insufficient_data=fix_insufficient_data,
-            fix_missing=fix_missing,
-        )
-
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.float64,
-        validation=range_mask_fn(minimum=np.float64(0), maximum=np.float64(1.0)),
-        is_date_value=False,
-    )
+        self._fix_insufficient_data = Fix.of_float64(fix_insufficient_data)
+        self._fix_missing = Fill.of_float64(fix_missing)
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.float64]:
-        return GiniIndex._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.float64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, 1.0),
+        )
 
     @property
     @override
@@ -1199,14 +1158,14 @@ class GiniIndex(_FetchACS5[np.float64]):
 
     @override
     def validate_context(self, context: Context) -> None:
-        super().validate_context(context)
+        super(_ACS5Mixin, self).validate_context(context)
         if isinstance(context.scope, BlockGroupScope):
             err = "Gini index is not available for block group scope."
             raise ADRIOContextError(self, context, err)
 
 
 @adrio_cache
-class DissimilarityIndex(ADRIO[np.float64, np.float64]):
+class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
     """
     Calculates the Dissimilarity Index using US Census ACS 5-Year Data (group B02001).
     The dissimilarity index is a measure of segregation comparing two races.
@@ -1253,13 +1212,6 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
     [general information about the dissimilarity index](https://en.wikipedia.org/wiki/Index_of_dissimilarity).
     """  # noqa: E501
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.N,
-        value_dtype=np.float64,
-        validation=range_mask_fn(minimum=np.float64(0), maximum=np.float64(1.0)),
-        is_date_value=False,
-    )
-
     _majority_pop: RaceCategory
     """The race category of the majority population of interest"""
     _minority_pop: RaceCategory
@@ -1282,39 +1234,19 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
         majority_pop: RaceCategory,
         minority_pop: RaceCategory,
         *,
-        fix_insufficient_population: Fix[np.int64]
-        | int
-        | Callable[[], int]
-        | Literal[False] = False,
-        fix_missing_population: Fill[np.int64]
-        | int
-        | Callable[[], int]
-        | Literal[False] = False,
-        fix_not_computable: Fix[np.float64]
-        | float
-        | Callable[[], float]
-        | Literal[False] = False,
+        fix_insufficient_population: FixLikeInt = False,
+        fix_missing_population: FillLikeInt = False,
+        fix_not_computable: FixLikeFloat = False,
     ):
         self._majority_pop = majority_pop
         self._minority_pop = minority_pop
-        try:
-            self._fix_insufficient_population = Fix.of_int64(
-                fix_insufficient_population
-            )
-        except ValueError:
-            raise ValueError("Invalid value for `fix_insufficient_population`")
-        try:
-            self._fix_missing_population = Fill.of_int64(fix_missing_population)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing_population`")
-        try:
-            self._fix_not_computable = Fix.of_float64(fix_not_computable)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_not_computable`")
+        self._fix_insufficient_population = Fix.of_int64(fix_insufficient_population)
+        self._fix_missing_population = Fill.of_int64(fix_missing_population)
+        self._fix_not_computable = Fix.of_float64(fix_not_computable)
 
     @override
     def validate_context(self, context: Context) -> None:
-        _get_scope(self, context)
+        super(_ACS5Mixin, self).validate_context(context)
         if isinstance(context.scope, BlockGroupScope):
             err = (
                 "Dissimilarity index is not available for block group scope. "
@@ -1326,8 +1258,20 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.float64]:
-        return DissimilarityIndex._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.float64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, 1.0),
+        )
 
     @override
     def inspect(self) -> InspectResult[np.float64, np.float64]:
@@ -1345,7 +1289,7 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
         )
 
         # Load populations at the coarse-granularity scope (coarse nodes)
-        high_scope = _get_scope(self, self.context)
+        high_scope = cast(CensusScope, self.scope)
         high_majority = self.defer(majority_race)
         high_minority = self.defer(minority_race)
 
@@ -1415,11 +1359,12 @@ class DissimilarityIndex(ADRIO[np.float64, np.float64]):
                 issues = []
                 result_np = fixed_result
 
+        self.validate_result(self.context, result_np)
         return InspectResult(
             adrio=self,
             source=np.column_stack((low_majority, low_minority, maj_total, min_total)),
             result=result_np,
-            dtype=self.result_format.value_dtype,
+            dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
             issues={k: v for k, v in issues},
         )

@@ -38,6 +38,11 @@ class HasRandomness(Protocol):
         """The random number generator instance."""
 
 
+#######
+# Fix #
+#######
+
+
 class Fix(ABC, Generic[DataT]):
     """
     A method for fixing data issues as part of a `DataPipeline`. `Fix` instances act as
@@ -75,9 +80,7 @@ class Fix(ABC, Generic[DataT]):
         """
 
     @staticmethod
-    def of_int64(
-        fix: "Fix[np.int64] | int | Callable[[], int] | Literal[False]",
-    ) -> "Fix[np.int64]":
+    def of_int64(fix: "FixLikeInt") -> "Fix[np.int64]":
         """
         Convenience constructor for a `Fix` for `int64` data. The type of `Fix`
         returned depends on the type of argument provided.
@@ -109,9 +112,7 @@ class Fix(ABC, Generic[DataT]):
         raise ValueError("Not a valid fix.")
 
     @staticmethod
-    def of_float64(
-        fix: "Fix[np.float64] | float | Callable[[], float] | Literal[False]",
-    ) -> "Fix[np.float64]":
+    def of_float64(fix: "FixLikeFloat") -> "Fix[np.float64]":
         """
         Convenience constructor for a `Fix` for `float64` data. The type of `Fix`
         returned depends on the type of argument provided.
@@ -306,6 +307,18 @@ class DontFix(Fix[Any]):
         return data_df
 
 
+FixLikeInt = Fix[np.int64] | int | Callable[[], int] | Literal[False]
+"""A value which can be coerced into a `Fix` for integers."""
+
+FixLikeFloat = Fix[np.float64] | float | Callable[[], float] | Literal[False]
+"""A value which can be coerced into a `Fix` for floats."""
+
+
+########
+# Fill #
+########
+
+
 class Fill(ABC, Generic[DataT]):
     """
     A method for filling-in missing data as part of a `DataPipeline`. `Fill` instances
@@ -345,9 +358,7 @@ class Fill(ABC, Generic[DataT]):
         """
 
     @staticmethod
-    def of_int64(
-        fill: "Fill[np.int64] | int | Callable[[], int] | Literal[False]",
-    ) -> "Fill[np.int64]":
+    def of_int64(fill: "FillLikeInt") -> "Fill[np.int64]":
         """
         Convenience constructor for a `Fill` for `int64` data. The type of `Fill`
         returned depends on the type of argument provided.
@@ -379,9 +390,7 @@ class Fill(ABC, Generic[DataT]):
         raise ValueError("Not a valid fill.")
 
     @staticmethod
-    def of_float64(
-        fill: "Fill[np.float64] | float | int | Callable[[], float] | Literal[False]",
-    ) -> "Fill[np.float64]":
+    def of_float64(fill: "FillLikeFloat") -> "Fill[np.float64]":
         """
         Convenience constructor for a `Fill` for `float64` data. The type of `Fill`
         returned depends on the type of argument provided.
@@ -581,6 +590,18 @@ class DontFill(Fill[DataT]):
         self, rng, data_np, missing_mask
     ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
         return data_np, missing_mask
+
+
+FillLikeInt = Fill[np.int64] | int | Callable[[], int] | Literal[False]
+"""A value which can be coerced into a `Fill` for integers."""
+
+FillLikeFloat = Fill[np.float64] | float | Callable[[], float] | Literal[False]
+"""A value which can be coerced into a `Fill` for floats."""
+
+
+#################
+# DataPipelines #
+#################
 
 
 def _add_issue(

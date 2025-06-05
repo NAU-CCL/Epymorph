@@ -6,7 +6,7 @@ from datetime import date
 from typing import Any
 
 import numpy as np
-from numpy.typing import DTypeLike, NDArray
+from numpy.typing import NDArray
 
 # Types for attribute declarations:
 # these are expressed as Python types for simplicity.
@@ -43,7 +43,7 @@ def dtype_as_np(dtype: AttributeType) -> np.dtype:
     if dtype is str:
         return np.dtype(np.str_)
     if dtype is date:
-        return np.dtype(np.datetime64)
+        return np.dtype("datetime64[D]")
     if isinstance(dtype, tuple):
         fields = list(dtype)
         if len(fields) == 0:
@@ -106,7 +106,7 @@ def dtype_check(dtype: AttributeType, value: Any) -> bool:
 
 CentroidType: AttributeType = (("longitude", float), ("latitude", float))
 """Structured epymorph type declaration for long/lat coordinates."""
-CentroidDType: DTypeLike = dtype_as_np(CentroidType)
+CentroidDType: np.dtype[np.void] = dtype_as_np(CentroidType)
 """
 The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates).
 """

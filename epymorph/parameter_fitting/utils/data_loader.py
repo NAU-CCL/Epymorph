@@ -8,7 +8,7 @@ from epymorph.adrio.csv import CSVTimeSeries
 from epymorph.parameter_fitting.utils.observations import Observations
 from epymorph.rume import RUME
 from epymorph.simulation import Context
-from epymorph.util import extract_date_value
+from epymorph.util import extract_date_value, is_date_value_dtype
 
 
 class DataLoader:
@@ -74,7 +74,9 @@ class DataLoader:
 
             return dates, cases
 
-        if isinstance(source, ADRIO) and source.result_format.is_date_value:
+        if isinstance(source, ADRIO) and is_date_value_dtype(
+            source.result_format.dtype
+        ):
             ctx = Context.of(
                 data=data,
                 time_frame=self.rume.time_frame,

@@ -11,7 +11,16 @@ from dataclasses import asdict, dataclass
 from functools import cached_property
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Literal, Mapping, NamedTuple, Sequence, TypeGuard, TypeVar
+from typing import (
+    Callable,
+    Literal,
+    Mapping,
+    NamedTuple,
+    Sequence,
+    TypeGuard,
+    TypeVar,
+    overload,
+)
 
 import numpy as np
 from geopandas import GeoDataFrame
@@ -122,23 +131,45 @@ class _DataConfig(NamedTuple):
     of TIGER files.
     """
 
+    granularity: CensusGranularityName
+    """The granularity these details are for."""
     urls: list[str]
     """URLs for all of the required data files."""
     columns: list[tuple[str, str]]
     """Map each column's name in the source file to its final name in the result."""
+    estimated_file_size: int
+    """The approximate size of individual TIGER files at this granularity."""
 
 
-def _load_urls(
+@overload
+def _load_tiger_data(
+    config: _DataConfig,
+    *,
+    ignore_geometry: Literal[True],
+    progress: ProgressCallback | None = None,
+) -> DataFrame: ...
+
+
+@overload
+def _load_tiger_data(
+    config: _DataConfig,
+    *,
+    ignore_geometry: Literal[False],
+    progress: ProgressCallback | None = None,
+) -> GeoDataFrame: ...
+
+
+def _load_tiger_data(
     config: _DataConfig,
     *,
     ignore_geometry: bool,
-    progress: ProgressCallback | None,
-) -> DataFrame:
+    progress: ProgressCallback | None = None,
+) -> DataFrame | GeoDataFrame:
     """
     Load TIGER files either from disk cache or the network.
     The result is processed and returned as one large DataFrame.
     """
-    urls, columns = config
+    _, urls, columns, _ = config
     processing_steps = len(urls) + 1  # add one to account for the post-processing
     try:
         # Fetch the contents of each file and read them as a DataFrame.
@@ -162,37 +193,11 @@ def _load_urls(
         )
         # Drop records that aren't in our supported set of states.
         selection = combined_df["GEOID"].apply(STATE.truncate).isin(_SUPPORTED_STATES)
-        return combined_df[selection]
+        selected_df = combined_df[selection]
+        return selected_df if ignore_geometry else GeoDataFrame(selected_df)
     except Exception as e:
         msg = "Unable to retrieve TIGER files for US Census geography."
         raise GeographyError(msg) from e
-
-
-def _get_geo(
-    config: _DataConfig,
-    progress: ProgressCallback | None,
-) -> GeoDataFrame:
-    """Universal logic for loading a data set with its geography."""
-    return GeoDataFrame(_load_urls(config, ignore_geometry=False, progress=progress))
-
-
-def _get_info(
-    config: _DataConfig,
-    progress: ProgressCallback | None,
-) -> DataFrame:
-    """Universal logic for loading a data set without its geography."""
-    return _load_urls(config, ignore_geometry=True, progress=progress)
-
-
-class CacheEstimate(NamedTuple):
-    """Estimates related to data needed to fulfill TIGER requests."""
-
-    total_cache_size: int
-    """An estimate of the size of the files that we need to have cached to fulfill
-    a request."""
-    missing_cache_size: int
-    """An estimate of the size of the files that are not currently cached that we
-    would need to fulfill a request. Zero if we have all of the files already."""
 
 
 @dataclass(frozen=True)
@@ -338,7 +343,8 @@ def _get_states_config(year: int) -> _DataConfig:
     columns = zip_list(
         cols, ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
     )
-    return _DataConfig(urls, columns)
+    # each states file is approx 9MB
+    return _DataConfig("state", urls, columns, estimated_file_size=9_000_000)
 
 
 def get_states_geo(
@@ -361,7 +367,8 @@ def get_states_geo(
     :
         The TIGER file info with geography.
     """
-    return _get_geo(_get_states_config(year), progress)
+    config = _get_states_config(year)
+    return _load_tiger_data(config, ignore_geometry=False, progress=progress)
 
 
 def get_states_info(
@@ -383,33 +390,8 @@ def get_states_info(
     :
         The TIGER file info without geography.
     """
-    return _get_info(_get_states_config(year), progress)
-
-
-def check_cache_states(year: int) -> CacheEstimate:
-    """
-    Check the cache status for a US states and territories query.
-
-    Parameters
-    ----------
-    year :
-        The geography year.
-
-    Returns
-    -------
-    :
-        The estimate for fetching missing TIGER files, if any.
-    """
-    urls, _ = _get_states_config(year)
-    est_file_size = 9_000_000  # each states file is approx 9MB
-    total_files = len(urls)
-    missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
-    )
-    return CacheEstimate(
-        total_cache_size=total_files * est_file_size,
-        missing_cache_size=missing_files * est_file_size,
-    )
+    config = _get_states_config(year)
+    return _load_tiger_data(config, ignore_geometry=True, progress=progress)
 
 
 @dataclass(frozen=True)
@@ -548,7 +530,8 @@ def _get_counties_config(year: int) -> _DataConfig:
         case _:
             raise GeographyError(f"Unsupported year: {year}")
     columns = zip_list(cols, ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"])
-    return _DataConfig(urls, columns)
+    # each county file is approx 75MB
+    return _DataConfig("county", urls, columns, 75_000_000)
 
 
 def get_counties_geo(
@@ -571,7 +554,8 @@ def get_counties_geo(
     :
         The TIGER file info with geography.
     """
-    return _get_geo(_get_counties_config(year), progress)
+    config = _get_counties_config(year)
+    return _load_tiger_data(config, ignore_geometry=False, progress=progress)
 
 
 def get_counties_info(
@@ -594,33 +578,8 @@ def get_counties_info(
     :
         The TIGER file info without geography.
     """
-    return _get_info(_get_counties_config(year), progress)
-
-
-def check_cache_counties(year: int) -> CacheEstimate:
-    """
-    Check the cache status for a US counties query.
-
-    Parameters
-    ----------
-    year :
-        The geography year.
-
-    Returns
-    -------
-    :
-        The estimate for fetching missing TIGER files, if any.
-    """
-    urls, _ = _get_counties_config(year)
-    est_file_size = 75_000_000  # each county file is approx 75MB
-    total_files = len(urls)
-    missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
-    )
-    return CacheEstimate(
-        total_cache_size=total_files * est_file_size,
-        missing_cache_size=missing_files * est_file_size,
-    )
+    config = _get_counties_config(year)
+    return _load_tiger_data(config, ignore_geometry=True, progress=progress)
 
 
 @dataclass(frozen=True)
@@ -732,14 +691,14 @@ def get_counties(year: int) -> CountiesSummary:
 
 def _get_tracts_config(
     year: int,
-    state_id: Sequence[str] | None = None,
+    state_ids: Sequence[str] | None = None,
 ) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (tracts)."""
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
     states = get_states_info(year)
-    if state_id is not None:
-        states = states[states["GEOID"].isin(state_id)]
+    if state_ids is not None:
+        states = states[states["GEOID"].isin(state_ids)]
 
     match year:
         case year if year in range(2011, 2024):
@@ -773,7 +732,8 @@ def _get_tracts_config(
         case _:
             raise GeographyError(f"Unsupported year: {year}")
     columns = zip_list(cols, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"])
-    return _DataConfig(urls, columns)
+    # each tracts file is approx 7MB
+    return _DataConfig("tract", urls, columns, 7_000_000)
 
 
 def get_tracts_geo(
@@ -798,7 +758,8 @@ def get_tracts_geo(
     :
         The TIGER file info with geography.
     """
-    return _get_geo(_get_tracts_config(year, state_id), progress=progress)
+    config = _get_tracts_config(year, state_id)
+    return _load_tiger_data(config, ignore_geometry=False, progress=progress)
 
 
 def get_tracts_info(
@@ -823,39 +784,8 @@ def get_tracts_info(
     :
         The TIGER file info without geography.
     """
-    return _get_info(_get_tracts_config(year, state_id), progress=progress)
-
-
-def check_cache_tracts(
-    year: int,
-    state_id: Sequence[str] | None = None,
-) -> CacheEstimate:
-    """
-    Check the cache status for a US census tracts query.
-
-    Parameters
-    ----------
-    year :
-        The geography year.
-    state_id :
-        If given, constrain the check to only the files needed
-        for the indicated states (by GEOID).
-
-    Returns
-    -------
-    :
-        The estimate for fetching missing TIGER files, if any.
-    """
-    urls, _ = _get_tracts_config(year, state_id)
-    est_file_size = 7_000_000  # each tracts file is approx 7MB
-    total_files = len(urls)
-    missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
-    )
-    return CacheEstimate(
-        total_cache_size=total_files * est_file_size,
-        missing_cache_size=missing_files * est_file_size,
-    )
+    config = _get_tracts_config(year, state_id)
+    return _load_tiger_data(config, ignore_geometry=True, progress=progress)
 
 
 @dataclass(frozen=True)
@@ -910,14 +840,14 @@ def get_tracts(year: int) -> TractsSummary:
 
 def _get_block_groups_config(
     year: int,
-    state_id: Sequence[str] | None = None,
+    state_ids: Sequence[str] | None = None,
 ) -> _DataConfig:
     """Produce the args for _get_info or _get_geo (block groups)."""
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
     states = get_states_info(year)
-    if state_id is not None:
-        states = states[states["GEOID"].isin(state_id)]
+    if state_ids is not None:
+        states = states[states["GEOID"].isin(state_ids)]
 
     match year:
         case year if year in range(2011, 2024):
@@ -951,7 +881,8 @@ def _get_block_groups_config(
         case _:
             raise GeographyError(f"Unsupported year: {year}")
     columns = zip_list(cols, ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"])
-    return _DataConfig(urls, columns)
+    # each block groups file is approx 1.25MB
+    return _DataConfig("block group", urls, columns, 1_250_000)
 
 
 def get_block_groups_geo(
@@ -977,7 +908,8 @@ def get_block_groups_geo(
     :
         The TIGER file info with geography.
     """
-    return _get_geo(_get_block_groups_config(year, state_id), progress=progress)
+    config = _get_block_groups_config(year, state_id)
+    return _load_tiger_data(config, ignore_geometry=False, progress=progress)
 
 
 def get_block_groups_info(
@@ -1003,39 +935,8 @@ def get_block_groups_info(
     :
         The TIGER file info without geography.
     """
-    return _get_info(_get_block_groups_config(year, state_id), progress=progress)
-
-
-def check_cache_block_groups(
-    year: int,
-    state_id: Sequence[str] | None = None,
-) -> CacheEstimate:
-    """
-    Check the cache status for a US census block groups query.
-
-    Parameters
-    ----------
-    year :
-        The geography year.
-    state_id :
-        If given, constrain the check to only the files needed
-        for the indicated states (by GEOID).
-
-    Returns
-    -------
-    :
-        The estimate for fetching missing TIGER files, if any.
-    """
-    urls, _ = _get_block_groups_config(year, state_id)
-    est_file_size = 1_250_000  # each block groups file is approx 1.25MB
-    total_files = len(urls)
-    missing_files = total_files - sum(
-        1 for u in urls if check_file_in_cache(_url_to_cache_path(u))
-    )
-    return CacheEstimate(
-        total_cache_size=total_files * est_file_size,
-        missing_cache_size=missing_files * est_file_size,
-    )
+    config = _get_block_groups_config(year, state_id)
+    return _load_tiger_data(config, ignore_geometry=True, progress=progress)
 
 
 @dataclass(frozen=True)
@@ -1121,4 +1022,62 @@ def get_summary_of(granularity: CensusGranularityName, year: int) -> Granularity
         case "block group":
             return get_block_groups(year)
         case _:
-            raise GeographyError(f"Unsupported granularity: {granularity}")
+            err = f"Unsupported granularity: {granularity}"
+            raise GeographyError(err)
+
+
+class CacheEstimate(NamedTuple):
+    """Estimates related to data needed to fulfill TIGER requests."""
+
+    total_cache_size: int
+    """An estimate of the size of the files that we need to have cached to fulfill
+    a request."""
+    missing_cache_size: int
+    """An estimate of the size of the files that are not currently cached that we
+    would need to fulfill a request. Zero if we have all of the files already."""
+
+
+def check_cache(
+    granularity: CensusGranularityName,
+    year: int,
+    *,
+    state_ids: Sequence[str] | None = None,
+) -> CacheEstimate:
+    """
+    Check the status of the cache for a specified TIGER granularity and year.
+
+    Parameters
+    ----------
+    granularity :
+        The Census granularity.
+    year :
+        The geography year.
+    state_id :
+        If specified, only consider places in this set of states.
+        Must be in state GEOID (FIPS code) format.
+
+    Returns
+    -------
+    :
+        The estimate of the total size of the cached files for the given granularity
+        and year, as well as how much is not currently cached.
+    """
+    match granularity:
+        case "state":
+            config = _get_states_config(year)
+        case "county":
+            config = _get_counties_config(year)
+        case "tract":
+            config = _get_tracts_config(year, state_ids)
+        case "block group":
+            config = _get_block_groups_config(year, state_ids)
+        case _:
+            err = f"Unsupported granularity: {granularity}"
+            raise GeographyError(err)
+
+    cache_files = [_url_to_cache_path(u) for u in config.urls]
+    missing_files = sum(1 for f in cache_files if not check_file_in_cache(f))
+    return CacheEstimate(
+        total_cache_size=len(cache_files) * config.estimated_file_size,
+        missing_cache_size=missing_files * config.estimated_file_size,
+    )

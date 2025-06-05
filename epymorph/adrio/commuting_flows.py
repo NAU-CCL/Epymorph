@@ -3,6 +3,7 @@ from typing import Callable, Literal, NamedTuple
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from typing_extensions import override
 
 from epymorph.adrio.adrio import (
@@ -11,9 +12,15 @@ from epymorph.adrio.adrio import (
     FetchADRIO,
     PipelineResult,
     ResultFormat,
-    range_mask_fn,
+    adrio_validate_pipe,
 )
 from epymorph.adrio.processing import DataPipeline, Fill, PivotAxis
+from epymorph.adrio.validation import (
+    validate_dtype,
+    validate_numpy,
+    validate_shape,
+    validate_values_in_range,
+)
 from epymorph.cache import check_file_in_cache, load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
 from epymorph.data_usage import AvailableDataEstimate, DataEstimate
@@ -52,6 +59,7 @@ class _Config(NamedTuple):
         return f"commflows:{self.year}"
 
 
+# fmt: off
 _CONFIG = [
     _Config(
         year=2010,
@@ -60,16 +68,8 @@ _CONFIG = [
         header=4,
         footer=3,
         cols=[
-            "res_state_code",
-            "res_county_code",
-            "wrk_state_code",
-            "wrk_county_code",
-            "workers",
-            "moe",
-            "res_state",
-            "res_county",
-            "wrk_state",
-            "wrk_county",
+            "res_state_code", "res_county_code", "wrk_state_code", "wrk_county_code",
+            "workers", "moe", "res_state", "res_county", "wrk_state", "wrk_county",
         ],
         estimate=7_200_000,
     ),
@@ -80,16 +80,9 @@ _CONFIG = [
         header=6,
         footer=2,
         cols=[
-            "res_state_code",
-            "res_county_code",
-            "res_state",
-            "res_county",
-            "wrk_state_code",
-            "wrk_county_code",
-            "wrk_state",
-            "wrk_county",
-            "workers",
-            "moe",
+            "res_state_code", "res_county_code", "res_state", "res_county",
+            "wrk_state_code", "wrk_county_code", "wrk_state", "wrk_county",
+            "workers", "moe",
         ],
         estimate=6_700_000,
     ),
@@ -103,21 +96,15 @@ _CONFIG = [
         header=7,
         footer=4,
         cols=[
-            "res_state_code",
-            "res_county_code",
-            "res_state",
-            "res_county",
-            "wrk_state_code",
-            "wrk_county_code",
-            "wrk_state",
-            "wrk_county",
-            "workers",
-            "moe",
+            "res_state_code", "res_county_code", "res_state", "res_county",
+            "wrk_state_code", "wrk_county_code", "wrk_state", "wrk_county",
+            "workers", "moe",
         ],
         estimate=5_800_000,
     ),
 ]
 """All supported ACS Comm Flow products."""
+# fmt: on
 
 
 class Commuters(FetchADRIO[np.int64, np.int64]):
@@ -150,13 +137,6 @@ class Commuters(FetchADRIO[np.int64, np.int64]):
     from the US Census.
     """  # noqa: E501
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.NxN,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-    )
-    """The format of results."""
-
     _fix_missing: Fill[np.int64]
     """The method to use to fix missing values."""
 
@@ -172,8 +152,20 @@ class Commuters(FetchADRIO[np.int64, np.int64]):
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return Commuters._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.NxN, dtype=np.int64)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(self.result_format.shape.to_tuple(context.dim)),
+            validate_dtype(self.result_format.dtype),
+            validate_values_in_range(0, None),
+        )
 
     def _get_config(self, context: Context) -> tuple[_Config, StateScope | CountyScope]:
         scope = context.scope
@@ -283,7 +275,7 @@ class Commuters(FetchADRIO[np.int64, np.int64]):
                 PivotAxis("geoid_dst", context.scope.node_ids),
             ),
             ndims=2,
-            dtype=self.result_format.value_dtype,
+            dtype=self.result_format.dtype.type,
             rng=context,
         ).finalize(self._fix_missing)
         return pipeline(data_df)

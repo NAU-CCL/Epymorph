@@ -12,7 +12,7 @@ class DataTypeTest(unittest.TestCase):
         self.assertEqual(dtype_as_np(int), np.int64)
         self.assertEqual(dtype_as_np(float), np.float64)
         self.assertEqual(dtype_as_np(str), np.str_)
-        self.assertEqual(dtype_as_np(date), np.datetime64)
+        self.assertEqual(dtype_as_np(date), np.dtype("datetime64[D]"))
 
         struct = (("foo", float), ("bar", int), ("baz", str), ("bux", date))
         self.assertEqual(
@@ -21,7 +21,7 @@ class DataTypeTest(unittest.TestCase):
                 ("foo", np.float64),
                 ("bar", np.int64),
                 ("baz", np.str_),
-                ("bux", np.datetime64),
+                ("bux", np.dtype("datetime64[D]")),
             ],
         )
 

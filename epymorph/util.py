@@ -466,6 +466,84 @@ So basically it implies: `[("date", "datetime64[D]"), ("value", DataT)]`
 """
 
 
+def date_value_dtype(value_dtype: DTypeLike) -> np.dtype:
+    return np.dtype([("date", "datetime64[D]"), ("value", value_dtype)])
+
+
+def is_date_value_dtype(
+    dtype: np.dtype | type[np.generic],
+    *,
+    value_dtype: np.dtype | type[np.generic] | None = None,
+) -> TypeGuard[DateValueType]:
+    """
+    Check if the given dtype is structured with 'date' and 'value' fields.
+
+    Parameters
+    ----------
+    dtype :
+        The dtype to check.
+    value_dtype :
+        The optional expected dtype of the 'value' field. If None (default),
+        the dtype of the 'value' field is not checked.
+
+    Returns
+    -------
+    :
+        True if the dtype is date/value, false otherwise.
+
+    See Also
+    --------
+    [epymorph.util.is_date_value_array][] for examples.
+    """
+
+    if not isinstance(dtype, np.dtype):
+        dtype = np.dtype(dtype)
+    if dtype.names != ("date", "value"):
+        return False
+    if dtype["date"] != np.dtype("datetime64[D]"):
+        return False
+    if value_dtype:
+        if not isinstance(value_dtype, np.dtype):
+            value_dtype = np.dtype(value_dtype)
+        if dtype["value"] != value_dtype:
+            return False
+    return True
+
+
+def is_date_value_array(
+    array: NDArray,
+    *,
+    value_dtype: type[DataT] | None = None,
+) -> TypeGuard[NDArray[DateValueType]]:
+    """
+    Check if the given array is a structured array with 'date' and 'value' fields.
+
+    Parameters
+    ----------
+    array : NDArray
+        The array to check.
+    value_dtype : type[DataT], optional
+        The optional expected dtype of the 'value' field. If None (default),
+        the dtype of the 'value' field is not checked.
+
+    Returns
+    -------
+    TypeGuard[NDArray[DateValueType]]
+        True if the array is a date/value array, false otherwise.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> array = np.array([('2021-01-01', 10), ('2021-01-02', 20)],
+                         dtype=[('date', 'datetime64[D]'), ('value', np.int64)])
+    >>> is_date_value_array(array)
+    True
+    >>> is_date_value_array(array, value_dtype=np.int64)
+    True
+    """
+    return is_date_value_dtype(array.dtype, value_dtype=value_dtype)
+
+
 def to_date_value_array(
     dates: NDArray[np.datetime64],
     values: NDArray[DataT],
@@ -520,46 +598,6 @@ def to_date_value_array(
     result["date"] = dates.reshape(dates.shape + (1,) * (values.ndim - 1))
     result["value"] = values
     return result
-
-
-def is_date_value_array(
-    array: NDArray,
-    value_dtype: type[DataT] | None = None,
-) -> TypeGuard[NDArray[DateValueType]]:
-    """
-    Check if the given array is a structured array with 'date' and 'value' fields.
-
-    Parameters
-    ----------
-    array : NDArray
-        The array to check.
-    value_dtype : type[DataT], optional
-        The optional expected dtype of the 'value' field. If None (default),
-        the dtype of the 'value' field is not checked.
-
-    Returns
-    -------
-    TypeGuard[NDArray[DateValueType]]
-        True if the array is a date/value array, false otherwise.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> array = np.array([('2021-01-01', 10), ('2021-01-02', 20)],
-                         dtype=[('date', 'datetime64[D]'), ('value', np.int64)])
-    >>> is_date_value_array(array)
-    True
-    >>> is_date_value_array(array, value_dtype=np.int64)
-    True
-    """
-    dtype = np.dtype(array.dtype)
-    if getattr(dtype, "names", None) != ("date", "value"):
-        return False
-    if dtype["date"] != np.dtype("datetime64[D]"):
-        return False
-    if value_dtype and dtype["value"] != np.dtype(value_dtype):
-        return False
-    return True
 
 
 def extract_date_value(

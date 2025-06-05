@@ -14,8 +14,10 @@ from typing import Literal, Mapping, Never, Self, Sequence, TypeVar, cast
 import numpy as np
 from geopandas import GeoDataFrame
 from numpy.typing import NDArray
+from pandas import DataFrame
 from typing_extensions import override
 
+import epymorph.geography.us_tiger as tiger
 from epymorph.error import GeographyError
 from epymorph.geography.custom import CustomScope
 from epymorph.geography.scope import (
@@ -33,17 +35,6 @@ from epymorph.geography.us_geography import (
     TRACT,
     CensusGranularity,
     CensusGranularityName,
-)
-from epymorph.geography.us_tiger import (
-    get_block_groups,
-    get_block_groups_geo,
-    get_counties,
-    get_counties_geo,
-    get_states,
-    get_states_geo,
-    get_summary_of,
-    get_tracts,
-    get_tracts_geo,
 )
 from epymorph.util import filter_unique, mask
 
@@ -93,7 +84,7 @@ class CensusScope(ABC, GeoScope):
         return np.array(
             [
                 x
-                for x in get_summary_of(self.granularity, self.year).geoid
+                for x in tiger.get_summary_of(self.granularity, self.year).geoid
                 if g.truncate(x) in self.includes
             ],
             dtype=np.str_,
@@ -187,6 +178,14 @@ class CensusScope(ABC, GeoScope):
             case x:
                 raise ValueError(f"Not a supported granularity: {x}")
 
+    @abstractmethod
+    def get_info(self) -> DataFrame:
+        """
+        Retrieve TIGER info for the nodes in this scope. This is very similar to the
+        `geography` property of `CensusScope`s, but it omits the shape data so it's a
+        little faster for use-cases that don't need it.
+        """
+
 
 ##############################
 # Mixins for creating scopes #
@@ -210,7 +209,7 @@ class _InMixin(CensusScope):
         year: int,
     ) -> Self:
         """Utility classmethod for creating scopes."""
-        g = get_summary_of(includes_granularity, year)
+        g = tiger.get_summary_of(includes_granularity, year)
         return cls(
             includes_granularity=includes_granularity,  # type: ignore
             includes=tuple(g.interpret(includes)),
@@ -374,7 +373,7 @@ class StateScope(_InStatesMixin, CensusScope):
         """
         return cls(
             includes_granularity="state",
-            includes=tuple(get_states(year).geoid),
+            includes=tuple(tiger.get_states(year).geoid),
             year=year,
         )
 
@@ -389,7 +388,7 @@ class StateScope(_InStatesMixin, CensusScope):
         :
             True if this scope includes all supported US states.
         """
-        return np.array_equal(get_states(self.year).geoid, self.node_ids)
+        return np.array_equal(tiger.get_states(self.year).geoid, self.node_ids)
 
     def raise_granularity(self) -> Never:
         raise GeographyError("No granularity higher than state.")
@@ -409,15 +408,21 @@ class StateScope(_InStatesMixin, CensusScope):
     @property
     @override
     def labels_option(self) -> NDArray[np.str_]:
-        mapping = get_states(self.year).state_fips_to_code
+        mapping = tiger.get_states(self.year).state_fips_to_code
         return np.array([mapping[x] for x in self.node_ids], dtype=np.str_)
 
     @cached_property
     @override
     def geography(self) -> GeoDataFrame:  # type: ignore[override]
-        gdf = get_states_geo(self.year)
+        gdf = tiger.get_states_geo(self.year)
         in_scope = gdf["GEOID"].isin(self.node_ids)
         return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
+
+    @override
+    def get_info(self) -> DataFrame:
+        info_df = tiger.get_states_info(self.year)
+        in_scope = info_df["GEOID"].isin(self.node_ids)
+        return info_df[in_scope].sort_values(by="GEOID").reset_index(drop=True)
 
 
 @dataclass(frozen=True)
@@ -459,7 +464,7 @@ class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
         """
         return cls(
             includes_granularity="county",
-            includes=tuple(get_counties(year).geoid),
+            includes=tuple(tiger.get_counties(year).geoid),
             year=year,
         )
 
@@ -492,15 +497,21 @@ class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
     @property
     @override
     def labels_option(self) -> NDArray[np.str_]:
-        mapping = get_counties(self.year).county_fips_to_name
+        mapping = tiger.get_counties(self.year).county_fips_to_name
         return np.array([mapping[x] for x in self.node_ids], dtype=np.str_)
 
     @cached_property
     @override
     def geography(self) -> GeoDataFrame:  # type: ignore[override]
-        gdf = get_counties_geo(self.year)
+        gdf = tiger.get_counties_geo(self.year)
         in_scope = gdf["GEOID"].isin(self.node_ids)
         return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
+
+    @override
+    def get_info(self) -> DataFrame:
+        info_df = tiger.get_counties_info(self.year)
+        in_scope = info_df["GEOID"].isin(self.node_ids)
+        return info_df[in_scope].sort_values(by="GEOID").reset_index(drop=True)
 
 
 @dataclass(frozen=True)
@@ -558,9 +569,16 @@ class TractScope(_InStatesMixin, _InCountiesMixin, _InTractsMixin, CensusScope):
     @override
     def geography(self) -> GeoDataFrame:  # type: ignore[override]
         states = list({STATE.extract(x) for x in self.node_ids})
-        gdf = get_tracts_geo(self.year, states)
+        gdf = tiger.get_tracts_geo(self.year, states)
         in_scope = gdf["GEOID"].isin(self.node_ids)
         return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
+
+    @override
+    def get_info(self) -> DataFrame:
+        states = list({STATE.extract(x) for x in self.node_ids})
+        info_df = tiger.get_tracts_info(self.year, states)
+        in_scope = info_df["GEOID"].isin(self.node_ids)
+        return info_df[in_scope].sort_values(by="GEOID").reset_index(drop=True)
 
 
 @dataclass(frozen=True)
@@ -616,9 +634,16 @@ class BlockGroupScope(
     @override
     def geography(self) -> GeoDataFrame:  # type: ignore[override]
         states = list({STATE.extract(x) for x in self.node_ids})
-        gdf = get_block_groups_geo(self.year, states)
+        gdf = tiger.get_block_groups_geo(self.year, states)
         in_scope = gdf["GEOID"].isin(self.node_ids)
         return gdf[in_scope].sort_values(by="GEOID").reset_index(drop=True)
+
+    @override
+    def get_info(self) -> DataFrame:
+        states = list({STATE.extract(x) for x in self.node_ids})
+        info_df = tiger.get_block_groups_info(self.year, states)
+        in_scope = info_df["GEOID"].isin(self.node_ids)
+        return info_df[in_scope].sort_values(by="GEOID").reset_index(drop=True)
 
 
 #####################
@@ -921,7 +946,7 @@ class StateSelector(_CensusSelector[CensusScopeT, CensusSelectionT]):
         :
             The geo selection.
         """
-        states = get_states(self._scope.year)
+        states = tiger.get_states(self._scope.year)
         geoids = states.interpret(identifiers)
         return self.by_geoid(*geoids)
 
@@ -950,7 +975,7 @@ class CountySelector(StateSelector[CensusScopeT, CensusSelectionT]):
         :
             The geo selection.
         """
-        counties = get_counties(self._scope.year)
+        counties = tiger.get_counties(self._scope.year)
         geoids = counties.interpret(identifiers)
         return self.by_geoid(*geoids)
 
@@ -977,7 +1002,7 @@ class TractSelector(CountySelector[CensusScopeT, CensusSelectionT]):
         :
             The geo selection.
         """
-        tracts = get_tracts(self._scope.year)
+        tracts = tiger.get_tracts(self._scope.year)
         geoids = tracts.interpret(identifiers)
         return self.by_geoid(*geoids)
 
@@ -1004,7 +1029,7 @@ class BlockGroupSelector(TractSelector[CensusScopeT, CensusSelectionT]):
         :
             The geo selection.
         """
-        block_groups = get_block_groups(self._scope.year)
+        block_groups = tiger.get_block_groups(self._scope.year)
         geoids = block_groups.interpret(identifiers)
         return self.by_geoid(*geoids)
 
