@@ -16,15 +16,24 @@ from epymorph.adrio.adrio import (
     PipelineResult,
     ResultFormat,
     adrio_cache,
-    range_mask_fn,
+    adrio_validate_pipe,
     validate_time_frame,
 )
 from epymorph.adrio.processing import (
     DataPipeline,
     DateValueType,
     Fill,
+    FillLikeInt,
     Fix,
+    FixLikeInt,
     PivotAxis,
+)
+from epymorph.adrio.validation import (
+    on_date_values,
+    validate_dtype,
+    validate_numpy,
+    validate_shape,
+    validate_values_in_range,
 )
 from epymorph.data_shape import Shapes
 from epymorph.error import GeographyError
@@ -34,6 +43,7 @@ from epymorph.geography.us_geography import STATE
 from epymorph.geography.us_tiger import get_states
 from epymorph.simulation import Context
 from epymorph.time import DateRange, iso8601
+from epymorph.util import date_value_dtype
 
 
 def healthdata_api_key() -> str | None:
@@ -76,9 +86,9 @@ def _truncate_county_to_scope_fn(scope: GeoScope) -> Callable[[str], str] | None
 ############################
 
 
-class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
+class _HealthdataAnagCw7uMixin(FetchADRIO[DateValueType, np.int64]):
     """
-    An abstract specialization of `FetchADRIO` for ADRIOs which fetch
+    A mixin implementing some of `FetchADRIO`'s API for ADRIOs which fetch
     data from healthdata.gov dataset anag-cw7u: a.k.a.
     "COVID-19 Reported Patient Impact and Hospital Capacity by Facility".
     https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data
@@ -90,41 +100,13 @@ class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
     _TIME_RANGE = DateRange(iso8601("2019-12-29"), iso8601("2024-04-21"), step=7)
     """The time range over which values are available."""
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.AxN,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=True,
-    )
-    """The format of results."""
-
     _REDACTED_VALUE = np.int64(-999999)
     """The value of redacted reports: between 1 and 3 cases."""
 
-    _fix_redacted: Fix[np.int64]
-    """The method to use to replace redacted values (-999999 in the data)."""
-    _fix_missing: Fill[np.int64]
-    """The method to use to fix missing values."""
-
-    def __init__(
-        self,
-        *,
-        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
-        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
-    ):
-        try:
-            self._fix_redacted = Fix.of_int64(fix_redacted)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_redacted`")
-        try:
-            self._fix_missing = Fill.of_int64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
-
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return self._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
 
     @override
     def validate_context(self, context: Context):
@@ -137,20 +119,24 @@ class _HealthdataAnagCw7u(FetchADRIO[DateValueType, np.int64]):
         validate_time_frame(self, context, self._TIME_RANGE)
 
     @override
-    def validate_result(
-        self,
-        context: Context,
-        result: NDArray[DateValueType],
-        *,
-        expected_shape: tuple[int, ...] | None = None,
-    ) -> None:
+    def validate_result(self, context: Context, result: NDArray) -> None:
         time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
-        shp = (len(time_series), context.scope.nodes)
-        super().validate_result(context, result, expected_shape=shp)
+        result_shape = (len(time_series), context.scope.nodes)
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            on_date_values(validate_values_in_range(0, None)),
+        )
 
 
 @adrio_cache
-class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
+class COVIDFacilityHospitalization(
+    _HealthdataAnagCw7uMixin, FetchADRIO[DateValueType, np.int64]
+):
     """
     Loads COVID hospitalization data from HealthData.gov's
     "COVID-19 Reported Patient Impact and Hospital Capacity by Facility"
@@ -190,18 +176,27 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
     _PEDS = "total_pediatric_patients_hospitalized_confirmed_covid_7_day_sum"
 
     _age_group: Literal["adult", "pediatric", "both"]
+    _fix_redacted: Fix[np.int64]
+    _fix_missing: Fill[np.int64]
 
     def __init__(
         self,
         *,
         age_group: Literal["adult", "pediatric", "both"] = "both",
-        fix_redacted: Fix[np.int64] | int | Callable[[], int] | Literal[False] = False,
-        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
+        fix_redacted: FixLikeInt = False,
+        fix_missing: FillLikeInt = False,
     ):
         if age_group not in ("adult", "pediatric", "both"):
             raise ValueError(f"Unsupported `age_group`: {age_group}")
         self._age_group = age_group
-        super().__init__(fix_redacted=fix_redacted, fix_missing=fix_missing)
+        try:
+            self._fix_redacted = Fix.of_int64(fix_redacted)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_redacted`")
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
 
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
@@ -244,7 +239,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
         )
         try:
             return q.query_csv(
-                resource=_HealthdataAnagCw7u._RESOURCE,
+                resource=self._RESOURCE,
                 query=query,
                 api_token=healthdata_api_key(),
             )
@@ -265,7 +260,7 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
                     PivotAxis("geoid", context.scope.node_ids),
                 ),
                 ndims=2,
-                dtype=self.result_format.value_dtype,
+                dtype=self.result_format.dtype["value"].type,
                 rng=context,
             )
             .strip_sentinel("redacted", self._REDACTED_VALUE, self._fix_redacted)
@@ -304,7 +299,9 @@ class COVIDFacilityHospitalization(_HealthdataAnagCw7u):
 
 
 @adrio_cache
-class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
+class InfluenzaFacilityHospitalization(
+    _HealthdataAnagCw7uMixin, FetchADRIO[DateValueType, np.int64]
+):
     """
     Loads influenza hospitalization data from HealthData.gov's
     "COVID-19 Reported Patient Impact and Hospital Capacity by Facility"
@@ -338,6 +335,24 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
     [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data).
     """  # noqa: E501
 
+    _fix_redacted: Fix[np.int64]
+    _fix_missing: Fill[np.int64]
+
+    def __init__(
+        self,
+        *,
+        fix_redacted: FixLikeInt = False,
+        fix_missing: FillLikeInt = False,
+    ):
+        try:
+            self._fix_redacted = Fix.of_int64(fix_redacted)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_redacted`")
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
         query = q.Query(
@@ -366,7 +381,7 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
         )
         try:
             return q.query_csv(
-                resource=_HealthdataAnagCw7u._RESOURCE,
+                resource=self._RESOURCE,
                 query=query,
                 api_token=healthdata_api_key(),
             )
@@ -387,7 +402,7 @@ class InfluenzaFacilityHospitalization(_HealthdataAnagCw7u):
                     PivotAxis("geoid", context.scope.node_ids),
                 ),
                 ndims=2,
-                dtype=self.result_format.value_dtype,
+                dtype=self.result_format.dtype["value"].type,
                 rng=context,
             )
             .strip_sentinel(
@@ -437,16 +452,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
     _TIME_RANGE = DateRange(iso8601("2022-02-24"), iso8601("2023-05-11"), step=7)
     """The time range over which values are available."""
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.AxN,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=True,
-    )
-    """The format of results."""
-
     _fix_missing: Fill[np.int64]
-    """The method to use to fix missing values."""
 
     def __init__(
         self,
@@ -460,8 +466,8 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return self._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
 
     @override
     def validate_context(self, context: Context):
@@ -535,7 +541,7 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
                     PivotAxis("geoid", context.scope.node_ids),
                 ),
                 ndims=2,
-                dtype=self.result_format.value_dtype,
+                dtype=self.result_format.dtype["value"].type,
                 rng=context,
             )
             .map_column(
@@ -548,16 +554,18 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
         return pipeline(data_df).to_date_value(time_series)
 
     @override
-    def validate_result(
-        self,
-        context: Context,
-        result: NDArray[DateValueType],
-        *,
-        expected_shape: tuple[int, ...] | None = None,
-    ) -> None:
+    def validate_result(self, context: Context, result: NDArray) -> None:
         time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
-        shp = (len(time_series), context.scope.nodes)
-        super().validate_result(context, result, expected_shape=shp)
+        result_shape = (len(time_series), context.scope.nodes)
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            on_date_values(validate_values_in_range(0, None)),
+        )
 
 
 ##########################
@@ -565,9 +573,9 @@ class COVIDCountyCases(FetchADRIO[DateValueType, np.int64]):
 ##########################
 
 
-class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
+class _DataCDCAemtMg7gMixin(FetchADRIO[DateValueType, np.int64]):
     """
-    An abstract specialization of `FetchADRIO` for ADRIOs which fetch
+    An mixin implemeting some of `FetchADRIO`'s API for ADRIOs which fetch
     data from cdc.gov dataset aemt-mg7g: a.k.a.
     "Weekly United States Hospitalization Metrics by Jurisdiction, During Mandatory
     Reporting Period from August 1, 2020 to April 30, 2024, and for Data Reported
@@ -587,36 +595,17 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
     )
     """The time range over which values were reported voluntarily."""
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.AxN,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=True,
-    )
-    """The format of results."""
-
     _column: str
     """The name of the data source column to fetch for this ADRIO."""
     _fix_missing: Fill[np.int64]
     """The method to use to fix missing values."""
     _allow_voluntary: bool
-
-    def __init__(
-        self,
-        *,
-        fix_missing: Fill[np.int64] | int | Callable[[], int] | Literal[False] = False,
-        allow_voluntary: bool = True,
-    ):
-        try:
-            self._fix_missing = Fill.of_int64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
-        self._allow_voluntary = allow_voluntary
+    """Whether or not to accept voluntary data."""
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return self._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
 
     @override
     def validate_context(self, context: Context):
@@ -679,7 +668,7 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
                 PivotAxis("geoid", context.scope.node_ids),
             ),
             ndims=2,
-            dtype=self.result_format.value_dtype,
+            dtype=self.result_format.dtype["value"].type,
             rng=context,
         ).finalize(self._fix_missing)
         result = pipeline(data_df)
@@ -704,20 +693,24 @@ class _DataCDCAemtMg7g(FetchADRIO[DateValueType, np.int64]):
         return result.to_date_value(time_series)
 
     @override
-    def validate_result(
-        self,
-        context: Context,
-        result: NDArray[DateValueType],
-        *,
-        expected_shape: tuple[int, ...] | None = None,
-    ) -> None:
+    def validate_result(self, context: Context, result: NDArray) -> None:
         time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
-        shp = (len(time_series), context.scope.nodes)
-        super().validate_result(context, result, expected_shape=shp)
+        result_shape = (len(time_series), context.scope.nodes)
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            on_date_values(validate_values_in_range(0, None)),
+        )
 
 
 @adrio_cache
-class COVIDStateHospitalization(_DataCDCAemtMg7g):
+class COVIDStateHospitalization(
+    _DataCDCAemtMg7gMixin, FetchADRIO[DateValueType, np.int64]
+):
     """
     Loads COVID hospitalization data from data.cdc.gov's dataset named
     "Weekly United States Hospitalization Metrics by Jurisdiction, During Mandatory
@@ -754,9 +747,23 @@ class COVIDStateHospitalization(_DataCDCAemtMg7g):
 
     _column = "total_admissions_all_covid_confirmed"
 
+    def __init__(
+        self,
+        *,
+        fix_missing: FillLikeInt = False,
+        allow_voluntary: bool = True,
+    ):
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+        self._allow_voluntary = allow_voluntary
+
 
 @adrio_cache
-class InfluenzaStateHospitalization(_DataCDCAemtMg7g):
+class InfluenzaStateHospitalization(
+    _DataCDCAemtMg7gMixin, FetchADRIO[DateValueType, np.int64]
+):
     """
     Loads influenza hospitalization data from data.cdc.gov's dataset named
     "Weekly United States Hospitalization Metrics by Jurisdiction, During Mandatory
@@ -792,6 +799,18 @@ class InfluenzaStateHospitalization(_DataCDCAemtMg7g):
     """  # noqa: E501
 
     _column = "total_admissions_all_influenza_confirmed"
+
+    def __init__(
+        self,
+        *,
+        fix_missing: FillLikeInt = False,
+        allow_voluntary: bool = True,
+    ):
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+        self._allow_voluntary = allow_voluntary
 
 
 ##########################
@@ -845,14 +864,6 @@ class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
     _WEEKLY_TIME_RANGE = DateRange(iso8601("2022-06-22"), iso8601("2023-05-10"), step=7)
     """The time range during which data were reported weekly."""
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.AxN,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=True,
-    )
-    """The format of results."""
-
     _vaccine_status: Literal[
         "at least one dose", "full series", "full series and booster"
     ]
@@ -882,8 +893,8 @@ class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return self._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
 
     @override
     def validate_context(self, context: Context):
@@ -987,7 +998,7 @@ class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
                     PivotAxis("geoid", context.scope.node_ids),
                 ),
                 ndims=2,
-                dtype=self.result_format.value_dtype,
+                dtype=self.result_format.dtype["value"].type,
                 rng=context,
             )
             .map_column(
@@ -999,16 +1010,18 @@ class COVIDVaccination(FetchADRIO[DateValueType, np.int64]):
         return pipeline(data_df).to_date_value(time_series)
 
     @override
-    def validate_result(
-        self,
-        context: Context,
-        result: NDArray[DateValueType],
-        *,
-        expected_shape: tuple[int, ...] | None = None,
-    ) -> None:
+    def validate_result(self, context: Context, result: NDArray) -> None:
         time_series = self._calculate_time_series()
-        shp = (len(time_series), context.scope.nodes)
-        super().validate_result(context, result, expected_shape=shp)
+        result_shape = (len(time_series), context.scope.nodes)
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            on_date_values(validate_values_in_range(0, None)),
+        )
 
 
 ##########################
@@ -1058,14 +1071,6 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
     _TIME_RANGE = DateRange(iso8601("2020-01-04"), iso8601("2023-04-01"), step=7)
     """The time range over which values are available."""
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.AxN,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=True,
-    )
-    """The format of results."""
-
     _cause_of_death: Literal["all", "COVID-19"]
     """The cause of death."""
     _fix_redacted: Fix[np.int64]
@@ -1095,8 +1100,8 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return self._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
 
     @override
     def validate_context(self, context: Context):
@@ -1174,7 +1179,7 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
         context: Context,
         data_df: pd.DataFrame,
     ) -> PipelineResult[DateValueType]:
-        value_dtype = self.result_format.value_dtype
+        value_dtype = self.result_format.dtype["value"].type
         time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
         pipeline = (
             DataPipeline(
@@ -1203,16 +1208,18 @@ class CountyDeaths(FetchADRIO[DateValueType, np.int64]):
         return pipeline(data_df).to_date_value(time_series)
 
     @override
-    def validate_result(
-        self,
-        context: Context,
-        result: NDArray[DateValueType],
-        *,
-        expected_shape: tuple[int, ...] | None = None,
-    ) -> None:
+    def validate_result(self, context: Context, result: NDArray) -> None:
         time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
-        shp = (len(time_series), context.scope.nodes)
-        super().validate_result(context, result, expected_shape=shp)
+        result_shape = (len(time_series), context.scope.nodes)
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            on_date_values(validate_values_in_range(0, None)),
+        )
 
 
 ##########################
@@ -1263,14 +1270,6 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
             step=7,
         )
 
-    _RESULT_FORMAT = ResultFormat(
-        shape=Shapes.AxN,
-        value_dtype=np.int64,
-        validation=range_mask_fn(minimum=np.int64(0), maximum=None),
-        is_date_value=True,
-    )
-    """The format of results."""
-
     _cause_of_death: Literal["all", "COVID-19", "influenza", "pneumonia"]
     """The cause of death."""
     _fix_redacted: Fix[np.int64]
@@ -1300,8 +1299,8 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
 
     @property
     @override
-    def result_format(self) -> ResultFormat[np.int64]:
-        return self._RESULT_FORMAT
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
 
     @override
     def validate_context(self, context: Context):
@@ -1372,7 +1371,7 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
         context: Context,
         data_df: pd.DataFrame,
     ) -> PipelineResult[DateValueType]:
-        value_dtype = self.result_format.value_dtype
+        value_dtype = self.result_format.dtype["value"].type
         time_series = self._time_range().overlap_or_raise(context.time_frame).to_numpy()
         pipeline = (
             DataPipeline(
@@ -1397,13 +1396,15 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
         return pipeline(data_df).to_date_value(time_series)
 
     @override
-    def validate_result(
-        self,
-        context: Context,
-        result: NDArray[DateValueType],
-        *,
-        expected_shape: tuple[int, ...] | None = None,
-    ) -> None:
+    def validate_result(self, context: Context, result: NDArray) -> None:
         time_series = self._time_range().overlap_or_raise(context.time_frame)
-        shp = (len(time_series), context.scope.nodes)
-        super().validate_result(context, result, expected_shape=shp)
+        result_shape = (len(time_series), context.scope.nodes)
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            on_date_values(validate_values_in_range(0, None)),
+        )
