@@ -11,11 +11,11 @@ from epymorph.adrio.adrio import (
     ADRIO,
     ADRIOContextError,
     InspectResult,
-    ResultFormat,
     adrio_cache,
     adrio_validate_pipe,
 )
 from epymorph.adrio.validation import (
+    ResultFormat,
     on_structured,
     validate_dtype,
     validate_numpy,

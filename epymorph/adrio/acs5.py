@@ -20,7 +20,6 @@ from epymorph.adrio.adrio import (
     FetchADRIO,
     InspectResult,
     PipelineResult,
-    ResultFormat,
     ResultT,
     ValueT,
     adrio_cache,
@@ -38,6 +37,7 @@ from epymorph.adrio.processing import (
     PivotAxis,
 )
 from epymorph.adrio.validation import (
+    ResultFormat,
     validate_dtype,
     validate_numpy,
     validate_shape,

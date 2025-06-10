@@ -11,11 +11,11 @@ from epymorph.adrio.adrio import (
     ADRIOContextError,
     FetchADRIO,
     PipelineResult,
-    ResultFormat,
     adrio_validate_pipe,
 )
 from epymorph.adrio.processing import DataPipeline, Fill, PivotAxis
 from epymorph.adrio.validation import (
+    ResultFormat,
     validate_dtype,
     validate_numpy,
     validate_shape,

@@ -14,7 +14,6 @@ from epymorph.adrio.adrio import (
     ADRIOContextError,
     FetchADRIO,
     PipelineResult,
-    ResultFormat,
     adrio_cache,
     adrio_validate_pipe,
     validate_time_frame,
@@ -29,6 +28,7 @@ from epymorph.adrio.processing import (
     PivotAxis,
 )
 from epymorph.adrio.validation import (
+    ResultFormat,
     on_date_values,
     validate_dtype,
     validate_numpy,
