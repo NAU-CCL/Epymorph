@@ -25,6 +25,8 @@ from typing_extensions import deprecated, override
 
 from epymorph.adrio.processing import PipelineResult
 from epymorph.adrio.validation import (
+    Invalid,
+    ResultFormat,
     Validator,
     validate_dtype,
     validate_numpy,
@@ -595,31 +597,6 @@ class InspectResult(Generic[ResultT, ValueT]):
         return "\n".join(lines)
 
 
-@dataclass(frozen=True)
-class ResultFormat:
-    """
-    Describes the properties of the expected result of evaluating an ADRIO.
-
-    Parameters
-    ----------
-    shape :
-        The expected shape of the result array.
-    dtype :
-        The dtype describing the result array.
-    """
-
-    def __init__(self, shape: DataShape, dtype: np.dtype | type[np.generic]):
-        if not isinstance(dtype, np.dtype):
-            dtype = np.dtype(dtype)
-        object.__setattr__(self, "shape", shape)
-        object.__setattr__(self, "dtype", dtype)
-
-    shape: DataShape
-    """The expected shape of the result array."""
-    dtype: np.dtype
-    """The dtype describing the result array."""
-
-
 class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
     """
     ADRIOs (or Abstract Data Resource Interface Objects) are functions which are
@@ -947,8 +924,29 @@ def adrio_validate_pipe(
     result: NDArray[ResultT],
     *validators: Validator,
 ) -> None:
+    """
+    Applies a sequence of validator function to the result of an ADRIO,
+    using that ADRIO's context and raising an appropriate error if the
+    result is invalid.
+
+    Parameters
+    ----------
+    adrio :
+        The ADRIO instance.
+    context :
+        The current simulation context.
+    result :
+        The ADRIO result array.
+    *validators :
+        The sequence of validation checks to apply.
+
+    Raises
+    ------
+    ADRIOProcessingError
+        If the result is invalid.
+    """
     v = validate_pipe(*validators)(result)
-    if v.kind == "invalid":
+    if isinstance(v, Invalid):
         raise ADRIOProcessingError(adrio, context, v.error)
 
 
