@@ -226,7 +226,14 @@ def validate_dtype(dtype: np.dtype | type[np.generic]) -> Validator:
         nonlocal dtype
         if not isinstance(dtype, np.dtype):
             dtype = np.dtype(dtype)
-        if np.dtype(values.dtype) != dtype:
+        values_dtype = np.dtype(values.dtype)
+        if dtype.kind == "U":
+            # for strings, ignore length
+            valid = values_dtype.kind == "U"
+        else:
+            # for other types, match dtype exactly
+            valid = values_dtype == dtype
+        if not valid:
             return Invalid(
                 "result was not the expected data type\n"
                 f"got {np.dtype(values.dtype)}, expected {(np.dtype(dtype))}"
