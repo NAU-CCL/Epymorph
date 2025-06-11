@@ -19,6 +19,7 @@ from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
+from numpy.core.records import fromarrays
 from numpy.typing import NDArray
 from sparklines import sparklines
 from typing_extensions import deprecated, override
@@ -1021,54 +1022,120 @@ def validate_time_frame(
 ##################
 
 
-class NodeID(ADRIOLegacy[np.str_]):
+class NodeID(ADRIO[np.str_, np.str_]):
     """An ADRIO that provides the node IDs as they exist in the geo scope."""
 
+    @property
     @override
-    def evaluate_adrio(self) -> NDArray:
-        return self.scope.node_ids
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.str_)
+
+    @override
+    def validate_context(self, context: Context) -> None:
+        # any context with a scope is valid
+        if context.scope is None:
+            raise ADRIOContextError(self, context, "scope is required")
+
+    @override
+    def inspect(self) -> InspectResult[np.str_, np.str_]:
+        return InspectResult(
+            adrio=self,
+            source=self.scope.node_ids,
+            result=self.scope.node_ids,
+            shape=self.result_format.shape,
+            dtype=self.result_format.dtype.type,
+            issues={},
+        )
 
 
-class Scale(ADRIOLegacy[np.float64]):
+class Scale(ADRIO[np.float64, np.float64]):
     """Scales the result of another ADRIO by multiplying values by the given factor."""
 
-    _parent: ADRIOLegacy[np.float64]
+    _parent: ADRIO[np.float64, np.float64]
     _factor: float
 
-    def __init__(self, parent: ADRIOLegacy[np.float64], factor: float):
+    def __init__(self, parent: ADRIO[np.float64, np.float64], factor: float):
         """
         Initializes scaling with the ADRIO to be scaled and with the factor to multiply
         those resulting ADRIO values by.
 
         Parameters
         ----------
-        parent : Adrio[np.int64 | np.float64]
-            The ADRIO to scale all values for.
-        factor : float
+        parent :
+            The ADRIO whose results will be scaled.
+        factor :
             The factor to multiply all resulting ADRIO values by.
         """
         self._parent = parent
         self._factor = factor
 
+    @property
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
-        return self.defer(self._parent).astype(dtype=np.float64) * self._factor
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=self._parent.result_format.shape, dtype=np.float64)
+
+    @override
+    def validate_context(self, context: Context) -> None:
+        # if parent scope is valid, we're good
+        self._parent.validate_context(context)
+
+    @override
+    def inspect(self) -> InspectResult[np.float64, np.float64]:
+        defer_result = self.defer_context(self._parent).inspect()
+        return InspectResult(
+            adrio=self,
+            source=defer_result.result,
+            result=defer_result.result.astype(np.float64) * self._factor,
+            shape=defer_result.shape,
+            dtype=np.float64,
+            issues=defer_result.issues,
+        )
 
 
-class PopulationPerKM2(ADRIOLegacy[np.float64]):
+class PopulationPerKM2(ADRIO[np.float64, np.float64]):
     """
-    Calculates population density by combining the values from attributes named
-    `population` and `land_area_km2`. You must provide those attributes
-    separately.
+    Calculates population density by combining the values from data attributes
+    for population and land area.
+
+    This ADRIO requires two data attributes:
+
+    - "population": the population of the node
+    - "land_area_km2": the land area of the node in square kilometers
     """
 
     POPULATION = AttributeDef("population", int, Shapes.N)
     LAND_AREA_KM2 = AttributeDef("land_area_km2", float, Shapes.N)
 
-    requirements = [POPULATION, LAND_AREA_KM2]
+    requirements = (POPULATION, LAND_AREA_KM2)
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def evaluate_adrio(self) -> NDArray[np.float64]:
+    def validate_context(self, context: Context) -> None:
+        pass  # data attributes are the only requirements
+
+    @override
+    def inspect(self) -> InspectResult[np.float64, np.float64]:
         pop = self.data(self.POPULATION)
         area = self.data(self.LAND_AREA_KM2)
-        return (pop / area).astype(dtype=np.float64)
+        issues = {}
+        if np.any(pop_mask := np.ma.getmaskarray(pop)):
+            issues["population_masked", pop_mask]
+        if np.any(area_mask := np.ma.getmaskarray(area)):
+            issues["land_area_km2_masked", area_mask]
+
+        result = (pop / area).astype(dtype=np.float64)
+        return InspectResult(
+            adrio=self,
+            source=fromarrays(
+                [pop, area],
+                names=["population", "land_area_km2"],  # type: ignore
+            ),
+            result=result,
+            dtype=self.result_format.dtype.type,
+            shape=self.result_format.shape,
+            issues=issues,
+        )
