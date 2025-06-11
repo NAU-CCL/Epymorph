@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from typing_extensions import override
 
 from epymorph.adrio import adrio
@@ -9,7 +10,7 @@ from epymorph.geography.us_census import CountyScope
 from epymorph.simulation import Context
 
 
-def test_node_id():
+def test_node_id_01():
     expected = np.array(["04005", "04013"], dtype=np.str_)
     actual = (
         adrio.NodeID()
@@ -29,6 +30,12 @@ def test_node_id():
         .evaluate()
     )
     assert np.array_equal(actual, expected)
+
+
+def test_node_id_02():
+    # Error: no scope provided
+    with pytest.raises(adrio.ADRIOContextError):
+        adrio.NodeID().with_context().evaluate()
 
 
 class _TestADRIO(adrio.ADRIO[np.float64, np.float64]):

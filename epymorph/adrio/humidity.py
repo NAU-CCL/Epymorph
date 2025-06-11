@@ -5,12 +5,14 @@ from typing_extensions import override
 
 from epymorph.adrio.adrio import (
     ADRIO,
+    ADRIOContextError,
     InspectResult,
     adrio_cache,
 )
 from epymorph.adrio.validation import ResultFormat
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
+from epymorph.error import MissingContextError
 from epymorph.simulation import Context
 
 
@@ -115,10 +117,16 @@ class AbsoluteHumidity(ADRIO[np.float64, np.float64]):
 
     @override
     def validate_context(self, context: Context) -> None:
-        pass  # data attributes are the only requirements
+        # need scope and time_frame in order to validate result shape
+        try:
+            context.scope
+            context.time_frame
+        except MissingContextError as e:
+            raise ADRIOContextError(self, self.context, str(e))
 
     @override
     def inspect(self) -> InspectResult[np.float64, np.float64]:
+        self.validate_context(self.context)
         temperature = self.data(_TEMPERATURE)
         dewpoint = self.data(_DEWPOINT)
         issues = {}
@@ -127,13 +135,15 @@ class AbsoluteHumidity(ADRIO[np.float64, np.float64]):
         if np.any(dewpoint_mask := np.ma.getmaskarray(dewpoint)):
             issues["dewpoint_masked", dewpoint_mask]
 
+        result = calculate_absolute_humidity(temperature, dewpoint)
+        self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
             source=fromarrays(
                 [temperature, dewpoint],
                 names=["temperature", "dewpoint"],  # type: ignore
             ),
-            result=calculate_absolute_humidity(temperature, dewpoint),
+            result=result,
             dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
             issues=issues,
@@ -161,10 +171,16 @@ class RelativeHumidity(ADRIO[np.float64, np.float64]):
 
     @override
     def validate_context(self, context: Context) -> None:
-        pass  # data attributes are the only requirements
+        # need scope and time_frame in order to validate result shape
+        try:
+            context.scope
+            context.time_frame
+        except MissingContextError as e:
+            raise ADRIOContextError(self, self.context, str(e))
 
     @override
     def inspect(self) -> InspectResult[np.float64, np.float64]:
+        self.validate_context(self.context)
         temperature = self.data(_TEMPERATURE)
         dewpoint = self.data(_DEWPOINT)
         issues = {}
@@ -173,13 +189,15 @@ class RelativeHumidity(ADRIO[np.float64, np.float64]):
         if np.any(dewpoint_mask := np.ma.getmaskarray(dewpoint)):
             issues["dewpoint_masked", dewpoint_mask]
 
+        result = calculate_relative_humidity(temperature, dewpoint)
+        self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
             source=fromarrays(
                 [temperature, dewpoint],
                 names=["temperature", "dewpoint"],  # type: ignore
             ),
-            result=calculate_relative_humidity(temperature, dewpoint),
+            result=result,
             dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
             issues=issues,

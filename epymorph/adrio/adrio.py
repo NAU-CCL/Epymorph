@@ -1032,16 +1032,23 @@ class NodeID(ADRIO[np.str_, np.str_]):
 
     @override
     def validate_context(self, context: Context) -> None:
-        # any context with a scope is valid
-        if context.scope is None:
-            raise ADRIOContextError(self, context, "scope is required")
+        try:
+            context.scope  # scope is required
+        except MissingContextError as e:
+            raise ADRIOContextError(self, self.context, str(e))
 
     @override
     def inspect(self) -> InspectResult[np.str_, np.str_]:
+        try:
+            self.validate_context(self.context)
+        except MissingContextError as e:
+            raise ADRIOContextError(self, self.context, str(e))
+        result = self.scope.node_ids
+        self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
-            source=self.scope.node_ids,
-            result=self.scope.node_ids,
+            source=result,
+            result=result,
             shape=self.result_format.shape,
             dtype=self.result_format.dtype.type,
             issues={},
@@ -1081,11 +1088,17 @@ class Scale(ADRIO[np.float64, np.float64]):
 
     @override
     def inspect(self) -> InspectResult[np.float64, np.float64]:
+        try:
+            self.validate_context(self.context)
+        except MissingContextError as e:
+            raise ADRIOContextError(self, self.context, str(e))
         defer_result = self.defer_context(self._parent).inspect()
+        result = defer_result.result.astype(np.float64) * self._factor
+        self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
             source=defer_result.result,
-            result=defer_result.result.astype(np.float64) * self._factor,
+            result=result,
             shape=defer_result.shape,
             dtype=np.float64,
             issues=defer_result.issues,
@@ -1115,10 +1128,14 @@ class PopulationPerKM2(ADRIO[np.float64, np.float64]):
 
     @override
     def validate_context(self, context: Context) -> None:
-        pass  # data attributes are the only requirements
+        try:
+            context.scope  # scope is required
+        except MissingContextError as e:
+            raise ADRIOContextError(self, self.context, str(e))
 
     @override
     def inspect(self) -> InspectResult[np.float64, np.float64]:
+        self.validate_context(self.context)
         pop = self.data(self.POPULATION)
         area = self.data(self.LAND_AREA_KM2)
         issues = {}
@@ -1128,6 +1145,7 @@ class PopulationPerKM2(ADRIO[np.float64, np.float64]):
             issues["land_area_km2_masked", area_mask]
 
         result = (pop / area).astype(dtype=np.float64)
+        self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
             source=fromarrays(

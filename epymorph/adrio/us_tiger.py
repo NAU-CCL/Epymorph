@@ -25,6 +25,7 @@ from epymorph.adrio.validation import (
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidDType, StructDType
 from epymorph.data_usage import AvailableDataEstimate
+from epymorph.error import MissingContextError
 from epymorph.geography.us_census import CensusScope, StateScope
 from epymorph.geography.us_tiger import check_cache, is_tiger_year
 from epymorph.simulation import Context
@@ -35,10 +36,14 @@ class _USTIGERMixin(ADRIO):
 
     @override
     def validate_context(self, context: Context) -> None:
-        if not isinstance(context.scope, CensusScope):
+        try:
+            scope = context.scope  # scope is required
+        except MissingContextError as e:
+            raise ADRIOContextError(self, context, str(e))
+        if not isinstance(scope, CensusScope):
             err = "Census scope is required for us_tiger attributes."
             raise ADRIOContextError(self, context, err)
-        year = context.scope.year
+        year = scope.year
         if not is_tiger_year(year):
             err = f"{year} is not a supported year for us_tiger attributes."
             raise ADRIOContextError(self, context, err)
