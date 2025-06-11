@@ -204,6 +204,35 @@ def validate_shape(shape: tuple[int, ...]) -> Validator:
     return _validate_shape
 
 
+def validate_shape_unchecked_arbitrary(shape: tuple[int, ...]) -> Validator:
+    """
+    Creates a validator which checks the given shape with the special exception that
+    if an axis is specified as -1, any length (one or greater) is permitted. There must
+    still be the same number of dimensions in the result.
+
+    Parameters
+    ----------
+    shape :
+        The expected result shape.
+
+    Returns
+    -------
+    :
+        A validator function.
+    """
+
+    def _validate_shape(values: NDArray) -> ValidationResult:
+        err = "result was an invalid shape:\ngot {}, expected {}"
+        if len(values.shape) != len(shape):
+            return Invalid(err.format(values.shape, shape))
+        for actual_length, expected_length in zip(values.shape, shape, strict=True):
+            if expected_length != -1 and expected_length != actual_length:
+                return Invalid(err.format(values.shape, shape))
+        return VALID
+
+    return _validate_shape
+
+
 def validate_dtype(dtype: np.dtype | type[np.generic]) -> Validator:
     """
     Creates a validator which checks the given dtype.
