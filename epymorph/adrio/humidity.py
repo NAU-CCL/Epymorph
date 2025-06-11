@@ -121,17 +121,22 @@ class AbsoluteHumidity(ADRIO[np.float64, np.float64]):
     def inspect(self) -> InspectResult[np.float64, np.float64]:
         temperature = self.data(_TEMPERATURE)
         dewpoint = self.data(_DEWPOINT)
-        np_humidity = calculate_absolute_humidity(temperature, dewpoint)
+        issues = {}
+        if np.any(temperature_mask := np.ma.getmaskarray(temperature)):
+            issues["temperature_masked", temperature_mask]
+        if np.any(dewpoint_mask := np.ma.getmaskarray(dewpoint)):
+            issues["dewpoint_masked", dewpoint_mask]
+
         return InspectResult(
             adrio=self,
             source=fromarrays(
                 [temperature, dewpoint],
                 names=["temperature", "dewpoint"],  # type: ignore
             ),
-            result=np_humidity,
+            result=calculate_absolute_humidity(temperature, dewpoint),
             dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
-            issues={},
+            issues=issues,
         )
 
 
@@ -162,15 +167,20 @@ class RelativeHumidity(ADRIO[np.float64, np.float64]):
     def inspect(self) -> InspectResult[np.float64, np.float64]:
         temperature = self.data(_TEMPERATURE)
         dewpoint = self.data(_DEWPOINT)
-        np_humidity = calculate_relative_humidity(temperature, dewpoint)
+        issues = {}
+        if np.any(temperature_mask := np.ma.getmaskarray(temperature)):
+            issues["temperature_masked", temperature_mask]
+        if np.any(dewpoint_mask := np.ma.getmaskarray(dewpoint)):
+            issues["dewpoint_masked", dewpoint_mask]
+
         return InspectResult(
             adrio=self,
             source=fromarrays(
                 [temperature, dewpoint],
                 names=["temperature", "dewpoint"],  # type: ignore
             ),
-            result=np_humidity,
+            result=calculate_relative_humidity(temperature, dewpoint),
             dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
-            issues={},
+            issues=issues,
         )
