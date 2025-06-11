@@ -46,6 +46,7 @@ from epymorph.adrio.validation import (
 from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
+from epymorph.error import MissingContextError
 from epymorph.geography.us_census import (
     BlockGroupScope,
     CensusScope,
@@ -407,13 +408,17 @@ class _ACS5Mixin(ADRIO):
                 "Please set the environment variable 'CENSUS_API_KEY'"
             )
             raise ADRIOContextError(self, context, err)
-        if not isinstance(context.scope, CensusScope):
+        try:
+            scope = context.scope  # scope is required
+        except MissingContextError as e:
+            raise ADRIOContextError(self, self.context, str(e))
+        if not isinstance(scope, CensusScope):
             err = "US Census geo scope required."
             raise ADRIOContextError(self, context, err)
-        if context.scope.year not in ACS5_YEARS:
-            err = f"{context.scope.year} is not a supported year for ACS5 data."
+        if scope.year not in ACS5_YEARS:
+            err = f"{scope.year} is not a supported year for ACS5 data."
             raise ADRIOContextError(self, context, err)
-        if isinstance(context.scope, BlockGroupScope) and context.scope.year <= 2012:
+        if isinstance(scope, BlockGroupScope) and scope.year <= 2012:
             err = (
                 "Block group ACS5 data is not available via this API for 2012 or prior."
             )

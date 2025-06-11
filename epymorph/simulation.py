@@ -433,7 +433,7 @@ class Context(ABC):
                 )
                 raise MissingContextError(err)
 
-            return missing_context
+            return property(missing_context)
 
         def make_getter(component, value):
             if value is None:

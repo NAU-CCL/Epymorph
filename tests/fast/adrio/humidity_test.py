@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 
 from epymorph.adrio import humidity
+from epymorph.error import DataAttributeError, DimensionError
 from epymorph.geography.us_census import CountyScope
 from epymorph.time import TimeFrame
 
@@ -55,7 +57,7 @@ _DEWPOINT = np.array([
 # fmt: on
 
 
-def test_relative_humidity():
+def test_relative_humidity_01():
     # fmt: off
     expected = np.array([
         [66.66091177, 56.95560613, 63.81925023, 66.2885902 , 55.13962758,
@@ -94,6 +96,61 @@ def test_relative_humidity():
 
     assert actual.dtype == expected.dtype
     assert np.allclose(actual, expected)
+
+
+def test_relative_humidity_02():
+    # Error: missing data attributes
+    with pytest.raises(DataAttributeError):
+        (
+            humidity.RelativeHumidity()
+            .with_context(
+                scope=CountyScope.in_states(["AZ"], year=2020),
+                time_frame=TimeFrame.rangex("2020-01-01", "2020-01-07"),
+                params={
+                    "temperature": _TEMPERATURE,
+                },
+            )
+            .evaluate()
+        )
+
+
+def test_relative_humidity_03():
+    # Error: missing context
+
+    # NOTE: the error handling for the following cases is somewhat unfortunate.
+    # A missing scope or time_frame also causes attribute evaluation to fail because
+    # that process needs the shape info. Because this happens before context validation
+    # we can't raise a more appropriate ADRIOContextError.
+    # Need to rethink the sequencing of parameter evaluation... maybe do it lazily upon
+    # first `self.data()` access.
+
+    with pytest.raises(DimensionError):
+        (
+            humidity.RelativeHumidity()
+            .with_context(
+                scope=CountyScope.in_states(["AZ"], year=2020),
+                # no time_frame
+                params={
+                    "temperature": _TEMPERATURE,
+                    "dewpoint": _DEWPOINT,
+                },
+            )
+            .evaluate()
+        )
+
+    with pytest.raises(DimensionError):
+        (
+            humidity.RelativeHumidity()
+            .with_context(
+                # no scope
+                time_frame=TimeFrame.rangex("2020-01-01", "2020-01-07"),
+                params={
+                    "temperature": _TEMPERATURE,
+                    "dewpoint": _DEWPOINT,
+                },
+            )
+            .evaluate()
+        )
 
 
 def test_absolute_humidity():
