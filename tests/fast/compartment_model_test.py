@@ -482,14 +482,14 @@ class CompartmentModelTest(unittest.TestCase):
 
         multi_ipm = CombinedCompartmentModel(strata, meta_requirements, meta_edges)
 
-        self.assertEquals(
+        self.assertEqual(
             [x.name.full for x in multi_ipm.compartments],
             ["S_one", "I_one", "R_one", "S_two", "I_two", "R_two"],
         )
 
         n = CompartmentName
         self.assertTrue(are_instances([*multi_ipm.transitions], EdgeDef))
-        self.assertEquals(
+        self.assertEqual(
             [
                 (x.name.compartment_from, x.name.compartment_to)
                 for x in multi_ipm.transitions
