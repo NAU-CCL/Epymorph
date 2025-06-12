@@ -4,7 +4,7 @@ import numpy as np
 from pandas import read_csv
 
 from epymorph.adrio.adrio import ADRIO
-from epymorph.adrio.csv import CSVTimeSeries
+from epymorph.adrio.csv import CSVFileTxN
 from epymorph.parameter_fitting.utils.observations import Observations
 from epymorph.rume import RUME
 from epymorph.simulation import Context
@@ -63,7 +63,7 @@ class DataLoader:
         data = self.rume.evaluate_params(rng)
         source = observations.source
 
-        if isinstance(source, CSVTimeSeries):
+        if isinstance(source, CSVFileTxN):
             csv_df = read_csv(source.file_path)
 
             cases = source.with_context_internal(
