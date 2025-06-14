@@ -163,7 +163,10 @@ class ConstantFix(Fix[DataT]):
     @override
     def __call__(self, rng, replace, columns, data_df):
         return data_df.assign(
-            **{col: data_df[col].replace(replace, self.with_value) for col in columns}
+            **{
+                col: data_df[col].replace(replace, self.with_value)  # type: ignore
+                for col in columns
+            }
         )
 
 
