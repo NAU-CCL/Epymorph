@@ -455,9 +455,11 @@ class InspectResult(Generic[ResultT, ValueT]):
 
     adrio: "ADRIO[ResultT, ValueT]"
     """A reference to the ADRIO which produced this result."""
-    source: pd.DataFrame | NDArray
+    source: pd.DataFrame | NDArray | None
     """
     The data as fetched from the source. This can be useful for debugging data issues.
+    May be `None` if the source data isn't suitable for being included with the result
+    (maybe it's too large or in an awkward format, etc.)
     """
     result: NDArray[ResultT]
     """The final result produced by the ADRIO."""
