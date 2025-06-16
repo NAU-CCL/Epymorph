@@ -27,9 +27,6 @@ from epymorph.simulation import Context
 
 _LODES_CACHE_PATH = module_cache_path(__name__)
 
-_LODES_VERSION = "LODES8"
-"""The current version of LODES"""
-
 JobType = Literal[
     "All Jobs",
     "Primary Jobs",
@@ -89,10 +86,18 @@ class _LodesFile(NamedTuple):
     state: str
     file: _FileType
     url: str
+    cache_path: Path
 
 
 def _lodes_files(scope: CensusScope, year: int, job: _JobCode) -> list[_LodesFile]:
     """Compute the complete list of LODES files needed."""
+    version = "LODES8"  # we only support LODES v8 currently
+
+    def file_for(state, file_type):
+        url = f"https://lehd.ces.census.gov/data/lodes/{version}/{state}/od/{state}_od_{file_type}_{job}_{year}.csv.gz"
+        cache_path = _LODES_CACHE_PATH / Path(url).name
+        return _LodesFile(state, file_type, url, cache_path)
+
     # files are state-based
     states = list(STATE.truncate_unique(scope.node_ids))
     state_fips_to_code = get_states(scope.year).state_fips_to_code
@@ -101,16 +106,7 @@ def _lodes_files(scope: CensusScope, year: int, job: _JobCode) -> list[_LodesFil
     # if there's more than one state, we will need to load both main and aux files
     file_types: list[_FileType] = ["main", "aux"] if len(states) > 1 else ["main"]
 
-    # urls for all files for all involved states
-    return [
-        _LodesFile(
-            state=state,
-            file=file,
-            url=f"https://lehd.ces.census.gov/data/lodes/{_LODES_VERSION}/{state}/od/{state}_od_{file}_{job}_{year}.csv.gz",
-        )
-        for state in state_codes
-        for file in file_types
-    ]
+    return [file_for(s, f) for s in state_codes for f in file_types]
 
 
 class _LodesADRIOMixin(ADRIO[np.int64, np.int64]):
@@ -241,11 +237,8 @@ class _LodesADRIOMixin(ADRIO[np.int64, np.int64]):
 
         # for each file, a tuple: (size estimate, already cached?)
         files = [
-            (
-                _file_size(state, file, job_code),
-                check_file_in_cache(_LODES_CACHE_PATH / Path(url).name),
-            )
-            for state, file, url in _lodes_files(scope, year, job_code)
+            (_file_size(state, file, job_code), check_file_in_cache(cache_path))
+            for state, file, _, cache_path in _lodes_files(scope, year, job_code)
         ]
 
         total = sum(size for size, _ in files)
@@ -274,9 +267,8 @@ class _LodesADRIOMixin(ADRIO[np.int64, np.int64]):
         processing_steps = len(files) + 1
         for i, file in enumerate(files):
             try:
-                cache_path = _LODES_CACHE_PATH / Path(file.url).name
                 file_df = pd.read_csv(
-                    load_or_fetch_url(file.url, cache_path),
+                    load_or_fetch_url(file.url, file.cache_path),
                     compression="gzip",
                     dtype={"w_geocode": str, "h_geocode": str, worker_type: int},
                     usecols=["w_geocode", "h_geocode", worker_type],
