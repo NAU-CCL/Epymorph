@@ -73,7 +73,7 @@ jobs:
         run: aws s3 sync s3://epymorph-gha-cache .cache
 
       - name: Run unit tests
-        run: uv run pytest tests/fast
+        run: uv run pytest tests/fast --vcr-mode=replay
 
   # Second job: iff tests succeed, build and publish the release (not matrixed).
   build-release:

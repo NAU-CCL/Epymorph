@@ -1,5 +1,8 @@
 """
-A place to put pytest configuration for the 'slow' tests package.
+Our custom pytest configuration.
+
+Most of the functionality in this file enables us to use VCR to record HTTP
+request/response activity during tests.
 """
 
 import gzip
@@ -11,10 +14,6 @@ from vcr import VCR
 from vcr.config import RecordMode
 from vcr.persisters.filesystem import CassetteDecodeError, CassetteNotFoundError
 from vcr.serialize import deserialize, serialize
-
-# NOTE: most of the functionality in this file enables us to use VCR to record HTTP
-# request/response activity during tests. Because this is a conftest.py file, this
-# functionality is only available in the `slow` tests package.
 
 
 class GzipPersister:
@@ -61,21 +60,22 @@ class OverwriteGzipPersister:
 # The built-in options are kinda confusing and insufficient besides.
 #
 # Our options are:
-# - replay: (default) replay cassettes only, no recording
-# - record: record cassettes only, no replaying
+# - auto: (default) record new cassettes, replay old cassettes
+# - replay: replay cassettes only, no recording
+# - rerecord: delete and re-record all cassettes, no replaying
 #
 # Implementation: "replay" acts like vcrpy's "none" mode;
-# "record" acts like "once" mode but it first deletes existing cassettes,
+# "rerecord" acts like "once" mode but it first deletes existing cassettes,
 # effectively overwriting them.
 _RECORD_MODE_KEY = "--vcr-mode"
-_RECORD_MODE_VALUES = ("replay", "record")
+_RECORD_MODE_VALUES = ("auto", "replay", "rerecord")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         _RECORD_MODE_KEY,
         action="store",
-        default="replay",
+        default="auto",
         choices=_RECORD_MODE_VALUES,
         help="VCR record mode.",
     )
@@ -103,17 +103,19 @@ def vcr_config():
 @pytest.fixture(scope="module", autouse=True)
 def vcr(request, vcr_config):
     record_mode = request.config.getoption(_RECORD_MODE_KEY)
-    if record_mode not in _RECORD_MODE_VALUES:
-        err = f"Unknown --vcr-mode: '{record_mode}'"
-        raise ValueError(err)
-
     match record_mode:
+        case "auto":
+            vcrpy_mode = RecordMode.NEW_EPISODES
+            persister = GzipPersister()
         case "replay":
             vcrpy_mode = RecordMode.NONE
             persister = GzipPersister()
         case "record":
             vcrpy_mode = RecordMode.ONCE
             persister = OverwriteGzipPersister()
+        case _:
+            err = f"Unknown --vcr-mode: '{record_mode}'"
+            raise ValueError(err)
 
     # Always drop response headers in VCR cassettes.
     # We don't need them, they're verbose, and they often contain sensitive info.

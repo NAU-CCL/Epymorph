@@ -60,4 +60,4 @@ jobs:
         run: uv sync --frozen --all-extras --dev
 
       - name: Run unit tests
-        run: uv run pytest tests/fast
+        run: uv run pytest tests/fast --vcr-mode=replay
