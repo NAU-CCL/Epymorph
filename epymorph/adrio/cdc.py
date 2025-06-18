@@ -1,7 +1,8 @@
 import dataclasses
 import os
+from abc import abstractmethod
 from datetime import date, timedelta
-from typing import Callable, Literal, cast
+from typing import Callable, Literal, TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,7 @@ from epymorph.adrio.processing import (
     DataPipeline,
     DateValueType,
     Fill,
+    FillLikeFloat,
     FillLikeInt,
     Fix,
     FixLikeInt,
@@ -1408,3 +1410,412 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
             validate_dtype(self.result_format.dtype),
             on_date_values(validate_values_in_range(0, None)),
         )
+
+
+##########################
+# DATA.CDC.GOV mpgq-jmmr #
+##########################
+
+ResultT = TypeVar("ResultT", bound=np.generic)
+
+
+class _DataCDCMpgqJmmrMixin(FetchADRIO[DateValueType, ResultT]):
+    """
+    An mixin implemeting some of `FetchADRIO`'s API for ADRIOs which fetch
+    data from cdc.gov dataset mpgq-jmmr: a.k.a.
+    "Weekly Hospital Respiratory Data (HRD) Metrics by Jurisdiction,
+    National Healthcare Safety Network (NHSN) (Preliminary)".
+    https://data.cdc.gov/Public-Health-Surveillance/Weekly-Hospital-Respiratory-Data-HRD-Metrics-by-Ju/mpgq-jmmr/about_data
+    """
+
+    _RESOURCE = q.SocrataResource(domain="data.cdc.gov", id="mpgq-jmmr")
+    """The Socrata API endpoint."""
+
+    _TIME_RANGE = DateRange.until_date(
+        start_date=iso8601("2024-11-02"),
+        max_end_date=date.today() - timedelta(days=1),
+        step=7,
+    )
+    """The time range over which values are available."""
+
+    _fix_missing: Fill[ResultT]
+    """The method to use to fix missing values."""
+
+    @property
+    @abstractmethod
+    def _column_name(self) -> str:
+        """The column to fetch from the data source."""
+
+    @override
+    def validate_context(self, context: Context):
+        if not isinstance(context.scope, StateScope):
+            err = "US State geo scope required."
+            raise ADRIOContextError(self, context, err)
+        # No geo year restriction since state-equivalents are the same
+        # for the entire supported time range.
+        validate_time_frame(self, context, self._TIME_RANGE)
+
+    @override
+    def _fetch(self, context: Context) -> pd.DataFrame:
+        scope = cast(StateScope, self.context.scope)
+        state_info = get_states(scope.year)
+        to_postal = state_info.state_fips_to_code
+        to_fips = state_info.state_code_to_fips
+
+        val_dtype = self.result_format.dtype["value"]
+        col_type = "float" if val_dtype == np.float64 else "int"
+
+        query = q.Query(
+            select=(
+                q.Select("weekendingdate", "date", as_name="date"),
+                q.Select("jurisdiction", "str", as_name="geoid"),
+                q.Select(self._column_name, col_type, as_name="value"),
+            ),
+            where=q.And(
+                q.DateBetween(
+                    "weekendingdate",
+                    context.time_frame.start_date,
+                    context.time_frame.end_date,
+                ),
+                q.In("jurisdiction", [to_postal[x] for x in scope.node_ids]),
+                q.NotNull(self._column_name),
+            ),
+            order_by=(
+                q.Ascending("weekendingdate"),
+                q.Ascending("jurisdiction"),
+                q.Ascending(":id"),
+            ),
+        )
+        try:
+            result_df = q.query_csv(
+                resource=self._RESOURCE,
+                query=query,
+                api_token=data_cdc_api_key(),
+            )
+            result_df["geoid"] = result_df["geoid"].apply(lambda x: to_fips[x])
+            return result_df
+        except Exception as e:
+            raise ADRIOCommunicationError(self, context) from e
+
+    @override
+    def _process(
+        self,
+        context: Context,
+        data_df: pd.DataFrame,
+    ) -> PipelineResult[DateValueType]:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
+        pipeline = DataPipeline(
+            axes=(
+                PivotAxis("date", time_series),
+                PivotAxis("geoid", context.scope.node_ids),
+            ),
+            ndims=2,
+            dtype=self.result_format.dtype["value"].type,
+            rng=context,
+        ).finalize(self._fix_missing)
+        result = pipeline(data_df)
+        return result.to_date_value(time_series)
+
+    @override
+    def validate_result(self, context: Context, result: NDArray) -> None:
+        time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame)
+        result_shape = (len(time_series), context.scope.nodes)
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape(result_shape),
+            validate_dtype(self.result_format.dtype),
+            on_date_values(validate_values_in_range(0, None)),
+        )
+
+
+@adrio_cache
+class CurrentStateHospitalization(
+    _DataCDCMpgqJmmrMixin[np.int64], FetchADRIO[DateValueType, np.int64]
+):
+    """
+    Loads disease-specific hospitalization data from data.cdc.gov's dataset named
+    "Weekly Hospital Respiratory Data (HRD) Metrics by Jurisdiction,
+    National Healthcare Safety Network (NHSN) (Preliminary)".
+
+    The data are currently being reported by healthcare facilities on a weekly basis to
+    CDC's National Healthcare Safety Network. This ADRIO loads recent data from the
+    source, starting 2024-11-02 and onward. (Data exist before this date but with some
+    caveats; see `COVIDStateHospitalization` and `InfluenzaStateHospitalization` for
+    ADRIOs which support earlier, archived data.) The data were aggregated by CDC to
+    the US State level.
+
+    This ADRIO supports geo scopes at US State granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Dates represent the MMWR week ending date of the
+    data collection week. Values are tuples of date and the integer number of reported
+    hospitalizations.
+
+    Parameters
+    ----------
+    fix_missing :
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Public-Health-Surveillance/Weekly-Hospital-Respiratory-Data-HRD-Metrics-by-Ju/mpgq-jmmr/about_data).
+    [epymorph.adrio.cdc.COVIDStateHospitalization][] and
+    [epymorph.adrio.cdc.InfluenzaStateHospitalization][] for data prior to 2024-11-01.
+    """  # noqa: E501
+
+    Disease = Literal["Covid", "Influenza", "RSV"]
+    """A disease category available in this data."""
+    AgeGroup = Literal["Total", "Adult", "Pediatric"]
+    """An age category available in this data."""
+
+    _DISEASE_VALUES = {
+        "Covid": "c19",
+        "Influenza": "flu",
+        "RSV": "rsv",
+    }
+
+    # column name format is primarily dependent on the chosen age group,
+    # and then we insert the disease identifier
+    _AGE_GROUP_VALUES = {
+        "Total": "totalconf{}hosppats",
+        "Adult": "numconf{}hosppatsadult",
+        "Pediatric": "numconf{}hosppatsped",
+    }
+
+    _disease: Disease
+    """The disease to load."""
+    _age_group: AgeGroup
+    """The age group to load."""
+
+    def __init__(
+        self,
+        *,
+        disease: Disease,
+        age_group: AgeGroup = "Total",
+        fix_missing: FillLikeInt = False,
+    ):
+        if disease not in self._DISEASE_VALUES:
+            err = f"Not a supported disease type: {disease}"
+            raise ValueError(err)
+        if age_group not in self._AGE_GROUP_VALUES:
+            err = f"Not a supported age group type: {age_group}"
+            raise ValueError(err)
+        self._disease = disease
+        self._age_group = age_group
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def _column_name(self) -> str:
+        disease = self._DISEASE_VALUES[self._disease]
+        column_template = self._AGE_GROUP_VALUES[self._age_group]
+        return column_template.format(disease)
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
+
+
+@adrio_cache
+class CurrentStateHospitalizationICU(
+    _DataCDCMpgqJmmrMixin[np.float64], FetchADRIO[DateValueType, np.float64]
+):
+    """
+    Loads disease-specific ICU hospitalization data from data.cdc.gov's dataset named
+    "Weekly Hospital Respiratory Data (HRD) Metrics by Jurisdiction,
+    National Healthcare Safety Network (NHSN) (Preliminary)".
+
+    The data are currently being reported by healthcare facilities on a weekly basis to
+    CDC's National Healthcare Safety Network. This ADRIO loads recent data from the
+    source, starting 2024-11-02 and onward. The data were aggregated by CDC to
+    the US State level.
+
+    This ADRIO supports geo scopes at US State granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Dates represent the MMWR week ending date of the
+    data collection week. Values are tuples of date and the integer number of reported
+    ICU hospitalizations.
+
+    Parameters
+    ----------
+    fix_missing :
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Public-Health-Surveillance/Weekly-Hospital-Respiratory-Data-HRD-Metrics-by-Ju/mpgq-jmmr/about_data).
+    """  # noqa: E501
+
+    Disease = Literal["Covid", "Influenza", "RSV"]
+    """A disease category available in this data."""
+    AgeGroup = Literal["Total", "Adult", "Pediatric"]
+    """An age category available in this data."""
+
+    _DISEASE_VALUES = {
+        "Covid": "c19",
+        "Influenza": "flu",
+        "RSV": "rsv",
+    }
+
+    # column name format is primarily dependent on the chosen age group,
+    # and then we insert the disease identifier
+    _AGE_GROUP_VALUES = {
+        "Total": "totalconf{}icupats",
+        "Adult": "numconf{}icupatsadult",
+        "Pediatric": "numconf{}icupatsped",
+    }
+
+    _disease: Disease
+    """The disease to load."""
+    _age_group: AgeGroup
+    """The age group to load."""
+
+    def __init__(
+        self,
+        *,
+        disease: Disease,
+        age_group: AgeGroup = "Total",
+        fix_missing: FillLikeFloat = False,
+    ):
+        if disease not in self._DISEASE_VALUES:
+            err = f"Not a supported disease type: {disease}"
+            raise ValueError(err)
+        if age_group not in self._AGE_GROUP_VALUES:
+            err = f"Not a supported age group type: {age_group}"
+            raise ValueError(err)
+        self._disease = disease
+        self._age_group = age_group
+        try:
+            self._fix_missing = Fill.of_float64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def _column_name(self) -> str:
+        disease = self._DISEASE_VALUES[self._disease]
+        column_template = self._AGE_GROUP_VALUES[self._age_group]
+        return column_template.format(disease)
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.float64))
+
+
+@adrio_cache
+class CurrentStateAdmissions(
+    _DataCDCMpgqJmmrMixin[np.int64], FetchADRIO[DateValueType, np.int64]
+):
+    """
+    Loads disease-specific hospital admissions data from data.cdc.gov's dataset named
+    "Weekly Hospital Respiratory Data (HRD) Metrics by Jurisdiction,
+    National Healthcare Safety Network (NHSN) (Preliminary)".
+
+    The data are currently being reported by healthcare facilities on a weekly basis to
+    CDC's National Healthcare Safety Network. This ADRIO loads recent data from the
+    source, starting 2024-11-02 and onward. (Data exist before this date but with some
+    caveats; see `COVIDStateHospitalization` and `InfluenzaStateHospitalization` for
+    ADRIOs which support earlier, archived data.) The data were aggregated by CDC to
+    the US State level.
+
+    This ADRIO supports geo scopes at US State granularity. The data
+    loaded will be matched to the simulation time frame. The result is a 2D matrix
+    where the first axis represents reporting weeks during the time frame and the
+    second axis is geo scope nodes. Dates represent the MMWR week ending date of the
+    data collection week. Values are tuples of date and the integer number of reported
+    hospital admissions.
+
+    Parameters
+    ----------
+    fix_missing :
+        The method to use to fix missing values.
+
+    See Also
+    --------
+    [The dataset documentation](https://data.cdc.gov/Public-Health-Surveillance/Weekly-Hospital-Respiratory-Data-HRD-Metrics-by-Ju/mpgq-jmmr/about_data).
+    [epymorph.adrio.cdc.COVIDStateHospitalization][] and
+    [epymorph.adrio.cdc.InfluenzaStateHospitalization][] for data prior to 2024-11-01.
+    """  # noqa: E501
+
+    Disease = Literal["Covid", "Influenza", "RSV"]
+    """A disease category available in this data."""
+    AgeGroup = Literal[
+        "0 to 4",
+        "5 to 17",
+        "18 to 49",
+        "50 to 64",
+        "65 to 74",
+        "75 and above",
+        "Unknown",
+        "Adult",
+        "Pediatric",
+        "Total",
+    ]
+    """An age category available in this data."""
+
+    _DISEASE_VALUES = {
+        "Covid": "c19",
+        "Influenza": "flu",
+        "RSV": "rsv",
+    }
+
+    # column name format is primarily dependent on the chosen age group,
+    # and then we insert the disease identifier
+    _AGE_GROUP_VALUES = {
+        "0 to 4": "numconf{}newadmped0to4",
+        "5 to 17": "numconf{}newadmped5to17",
+        "18 to 49": "numconf{}newadmadult18to49",
+        "50 to 64": "numconf{}newadmadult50to64",
+        "65 to 74": "numconf{}newadmadult65to74",
+        "75 and above": "numconf{}newadmadult75plus",
+        "Unknown": "numconf{}newadmunk",
+        "Adult": "totalconf{}newadmadult",
+        "Pediatric": "totalconf{}newadmped",
+        "Total": "totalconf{}newadm",
+    }
+
+    _disease: Disease
+    """The disease to load."""
+    _age_group: AgeGroup
+    """The age group to load."""
+
+    def __init__(
+        self,
+        *,
+        disease: Disease,
+        age_group: AgeGroup = "Total",
+        fix_missing: FillLikeInt = False,
+    ):
+        if disease not in self._DISEASE_VALUES:
+            err = f"Not a supported disease type: {disease}"
+            raise ValueError(err)
+        if age_group not in self._AGE_GROUP_VALUES:
+            err = f"Not a supported age group type: {age_group}"
+            raise ValueError(err)
+        self._disease = disease
+        self._age_group = age_group
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
+
+    @property
+    @override
+    def _column_name(self) -> str:
+        disease = self._DISEASE_VALUES[self._disease]
+        column_template = self._AGE_GROUP_VALUES[self._age_group]
+        return column_template.format(disease)
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(np.int64))
