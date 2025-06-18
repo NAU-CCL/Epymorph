@@ -22,7 +22,7 @@ import pandas as pd
 from numpy.core.records import fromarrays
 from numpy.typing import NDArray
 from sparklines import sparklines
-from typing_extensions import deprecated, override
+from typing_extensions import override
 
 from epymorph.adrio.processing import PipelineResult
 from epymorph.adrio.validation import (
@@ -64,179 +64,9 @@ progress.
 _events = EventBus()
 
 
-#################################################
-# ADRIOLegacy: old-style ADRIOS (to be removed) #
-#################################################
-
-
-@deprecated("Prefer ADRIO.")
-class ADRIOLegacy(SimulationFunction[NDArray[ResultDType]]):
-    """
-    ADRIO (or Abstract Data Resource Interface Object) are functions which are intended
-    to load data from external sources for epymorph simulations. This may be from
-    web APIs, local files or database, or anything imaginable.
-
-    `ADRIO` is generic on the dtype of the numpy array which it produces
-    (`ResultDType`).
-
-    Implementation Notes
-    --------------------
-    Implement this class by overriding `evaluate_adrio`; your implementation should
-    call `progress` to report download/processing progress if applicable.
-    Do not override `evaluate` unless you need to alter the base behavior.
-    Override `estimate_data` if it's possible to estimate data usage ahead of time.
-
-    When evaluating an ADRIO, call `evaluate`, not `evaluate_adrio`.
-    """
-
-    def estimate_data(self) -> DataEstimate:
-        """
-        Estimate the data usage for this ADRIO in a RUME.
-
-        Returns
-        -------
-        :
-            The data usage estimate. If a reasonable estimate cannot be made,
-            returns `EmptyDataEstimate`.
-        """
-        return EmptyDataEstimate(self.class_name)
-
-    @abstractmethod
-    def evaluate_adrio(self) -> NDArray[ResultDType]:
-        """
-        Implement this method to provide logic for the function.
-        Use self methods and properties to access the simulation context or defer
-        processing to another function.
-
-        Returns
-        -------
-        :
-            The data array.
-        """
-
-    @override
-    def evaluate(self) -> NDArray[ResultDType]:
-        """
-        Fully evaluate the ADRIO.
-
-        Returns
-        -------
-        :
-            The data array.
-        """
-        _events.on_adrio_progress.publish(
-            ADRIOProgress(
-                adrio_name=self.class_name,
-                attribute=self.name,
-                final=False,
-                ratio_complete=0,
-                download=None,
-                duration=None,
-            )
-        )
-        t0 = perf_counter()
-        result = self.evaluate_adrio()
-        t1 = perf_counter()
-        _events.on_adrio_progress.publish(
-            ADRIOProgress(
-                adrio_name=self.class_name,
-                attribute=self.name,
-                final=True,
-                ratio_complete=1,
-                download=None,
-                duration=t1 - t0,
-            )
-        )
-        return result
-
-    @final
-    def progress(
-        self,
-        ratio_complete: float,
-        download: DownloadActivity | None = None,
-    ) -> None:
-        """
-        Emit a progress event.
-
-        Parameters
-        ----------
-        ratio_complete :
-            The ratio of how much work the ADRIO has completed in total;
-            0 meaning no progress and 1 meaning it is finished.
-        download :
-            Describes current network activity. If there is no network activity
-            to report or if it cannot be measured, provide `None`.
-        """
-        _events.on_adrio_progress.publish(
-            ADRIOProgress(
-                adrio_name=self.class_name,
-                attribute=self.name,
-                final=False,
-                ratio_complete=ratio_complete,
-                download=download,
-                duration=None,
-            )
-        )
-
-
-@evaluate_param.register
-def _(
-    value: ADRIOLegacy,
-    name: AbsoluteName,
-    data: DataResolver,
-    scope: GeoScope | None,
-    time_frame: TimeFrame | None,
-    ipm: BaseCompartmentModel | None,
-    rng: np.random.Generator | None,
-) -> AttributeArray:
-    # depth-first evaluation guarantees `data` has our dependencies.
-    ctx = Context.of(name, data, scope, time_frame, ipm, rng)
-    sim_func = value.with_context_internal(ctx)
-    return sim_func.evaluate()
-
-
-_ADRIOLegacyClassT = TypeVar("_ADRIOLegacyClassT", bound=ADRIOLegacy)
-
-
-def adrio_legacy_cache(cls: type[_ADRIOLegacyClassT]) -> type[_ADRIOLegacyClassT]:
-    """
-    `ADRIOLegacy` class decorator which adds result-caching behavior.
-
-    Examples
-    --------
-    >>> @adrio_legacy_cache
-    >>> class MyADRIO(ADRIOLegacy[np.int64]):
-    >>>     # Now this ADRIO will cache its results.
-    >>>     # ...
-    """
-
-    orig_with_context = cls.with_context_internal
-    orig_evaluate = cls.evaluate
-    ctx_cache_key = "__with_context_cache__"
-    eval_cache_key = "__evaluate_cache__"
-
-    @functools.wraps(orig_with_context)
-    def with_context_internal(self, context: Context):
-        curr_hash = context.hash(self.requirements)
-        cached_hash, cached_instance = getattr(self, ctx_cache_key, (None, None))
-        if cached_instance is None or cached_hash != curr_hash:
-            cached_instance = orig_with_context(self, context)
-            cached_hash = curr_hash
-            setattr(self, ctx_cache_key, (cached_hash, cached_instance))
-            setattr(self, eval_cache_key, None)
-        return cached_instance
-
-    @functools.wraps(orig_evaluate)
-    def evaluate(self):
-        cached_value = getattr(self, eval_cache_key, None)
-        if cached_value is None:
-            cached_value = orig_evaluate(self)
-            setattr(self, eval_cache_key, cached_value)
-        return cached_value
-
-    cls.with_context_internal = with_context_internal
-    cls.evaluate = evaluate
-    return cls
+#########
+# ADRIO #
+#########
 
 
 _ADRIOClassT = TypeVar("_ADRIOClassT", bound="ADRIO")
@@ -281,11 +111,6 @@ def adrio_cache(cls: type[_ADRIOClassT]) -> type[_ADRIOClassT]:
     cls.with_context_internal = with_context_internal
     cls.evaluate = evaluate
     return cls
-
-
-#########
-# ADRIO #
-#########
 
 
 def _adrio_name(adrio: "ADRIO", context: Context) -> str:
@@ -953,39 +778,6 @@ def adrio_validate_pipe(
         raise ADRIOProcessingError(adrio, context, v.error)
 
 
-def range_mask_fn(
-    *,
-    minimum: ValueT | None,
-    maximum: ValueT | None,
-) -> Callable[[NDArray[ValueT]], NDArray[np.bool_]]:
-    """
-    Constructs a validation function for checking that values are in a given range.
-
-    This function is generic in the dtype of arrays it checks (`ValueT`).
-
-    Parameters
-    ----------
-    minimum :
-        The minimum valid value, or `None` if there is no minimum.
-    maximum :
-        The maximum valid value, or `None` is there is no maximum.
-
-    Returns
-    -------
-    :
-        The validation function.
-    """
-    match (minimum, maximum):
-        case (None, None):
-            return lambda xs: np.ones_like(xs, dtype=np.bool_)
-        case (minimum, None):
-            return lambda xs: xs >= minimum
-        case (None, maximum):
-            return lambda xs: xs <= maximum
-        case (minimum, maximum):
-            return lambda xs: (xs >= minimum) & (xs <= maximum)
-
-
 def validate_time_frame(
     adrio: ADRIO,
     context: Context,
@@ -1049,7 +841,7 @@ class NodeID(ADRIO[np.str_, np.str_]):
         self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
-            source=result,
+            source=None,
             result=result,
             shape=self.result_format.shape,
             dtype=self.result_format.dtype.type,
