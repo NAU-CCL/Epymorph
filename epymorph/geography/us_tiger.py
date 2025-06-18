@@ -1052,7 +1052,7 @@ def check_cache(
         The Census granularity.
     year :
         The geography year.
-    state_id :
+    state_ids :
         If specified, only consider places in this set of states.
         Must be in state GEOID (FIPS code) format.
 

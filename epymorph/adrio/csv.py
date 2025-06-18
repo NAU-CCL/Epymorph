@@ -105,7 +105,18 @@ class CSVFileN(_CSVMixin, ADRIO[np.generic, np.generic]):
 
     Parameters
     ----------
-    TODO
+    file_path :
+        The path to the CSV file containing data.
+    dtype :
+        The data type of values in the data column.
+    key_col :
+        Numerical index of the column containing information to identify geographies.
+    key_type :
+        The type of geographic identifier in the key column.
+    data_col :
+        Numerical index of the column containing the data of interest.
+    skiprows :
+        Number of header rows in the file to be skipped.
     """
 
     file_path: Path
@@ -200,7 +211,22 @@ class CSVFileTxN(_CSVMixin, ADRIO[np.generic, np.generic]):
 
     Parameters
     ----------
-    TODO
+    file_path :
+        The path to the CSV file containing data.
+    dtype :
+        The data type of values in the data column.
+    key_col :
+        Numerical index of the column containing information to identify geographies.
+    key_type :
+        The type of geographic identifier in the key column.
+    time_col :
+        The numerical index of the column containing time information.
+    data_col :
+        Numerical index of the column containing the data of interest.
+    skiprows :
+        Number of header rows in the file to be skipped.
+    date_range :
+        The time period encompassed by data in the file.
     """
 
     file_path: Path
@@ -345,7 +371,20 @@ class CSVFileNxN(_CSVMixin, ADRIO[np.generic, np.generic]):
 
     Parameters
     ----------
-    TODO
+    file_path :
+        The path to the CSV file containing data.
+    dtype :
+        The data type of values in the data column.
+    from_key_col :
+        Index of the column identifying source geographies.
+    to_key_col :
+        Index of the column identifying destination geographies.
+    key_type :
+        The type of geographic identifier in the key columns.
+    data_col :
+        Index of the column containing the data of interest.
+    skiprows :
+        Number of header rows in the file to be skipped.
     """
 
     file_path: Path
