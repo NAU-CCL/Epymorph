@@ -198,7 +198,7 @@ class DateRange:
             start=self.start_date,
             stop=self.end_date + step,
             step=step,
-            dtype=np.datetime64,
+            dtype="datetime64[D]",
         )
 
 
