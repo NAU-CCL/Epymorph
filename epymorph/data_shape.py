@@ -411,6 +411,9 @@ class Shapes:
     # - C is the number of IPM compartments
     # - A is any length (arbitrary; this dimension is effectively unchecked)
 
+    # Note: epymorph.simulation.validate_context_for_shape must be updated
+    # when adding new axes designations.
+
     Scalar = Scalar()
     T = Time()
     N = Node()

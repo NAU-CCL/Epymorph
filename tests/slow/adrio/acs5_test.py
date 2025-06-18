@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from epymorph.adrio import acs5
-from epymorph.adrio.adrio import ADRIOContextError, ADRIOProcessingError
+from epymorph.adrio.adrio import ADRIOContextError, ADRIOProcessingError, FetchADRIO
 from epymorph.error import DataAttributeError
 from epymorph.kit import *
 from epymorph.simulation import Context
@@ -25,7 +25,7 @@ def vcr_config():
 
 
 def test_fetch_acs5_validate_context(monkeypatch):
-    class MockADRIO(acs5._FetchACS5):
+    class MockADRIO(acs5._ACS5FetchMixin, FetchADRIO):
         @property
         def _variables(self):
             raise NotImplementedError()

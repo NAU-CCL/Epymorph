@@ -14,11 +14,21 @@ from abc import abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Callable, Generator, Iterable, Literal, Protocol, Sequence, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Literal,
+    Protocol,
+    Sequence,
+    TypeVar,
+)
 from urllib.parse import quote, urlencode
 
 import numpy as np
 import pandas as pd
+import requests
 from numpy.typing import DTypeLike
 from typing_extensions import override
 
@@ -95,6 +105,11 @@ class SocrataResource:
     def url(self) -> str:
         """The URL for this resource."""
         return f"https://{self.domain}/resource/{self.id}"
+
+    @property
+    def metadata_url(self) -> str:
+        """The URL for the metadata description of the resource (JSON format)."""
+        return f"https://{self.domain}/api/views/{self.id}.json"
 
 
 # ARCHITECTURE NOTE: what follows is a collection of objects which model a SOQL query.
@@ -440,6 +455,26 @@ class Query:
         if self.order_by is not None and len(self.order_by) > 0:
             return f"{soql} ORDER BY {_list(self.order_by)}"
         return soql
+
+
+def get_metadata(resource: SocrataResource) -> Any:
+    """
+    Retrieve the JSON-formatted metadata for the given resource.
+
+    Parameters
+    ----------
+    resource :
+        The data resource.
+
+    Returns
+    -------
+    :
+        The JSON metadata.
+    """
+    response = requests.get(resource.metadata_url, timeout=60)
+    response.raise_for_status()
+    metadata = response.json()
+    return metadata
 
 
 def query_csv(

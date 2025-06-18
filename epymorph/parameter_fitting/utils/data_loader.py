@@ -4,11 +4,11 @@ import numpy as np
 from pandas import read_csv
 
 from epymorph.adrio.adrio import ADRIO
-from epymorph.adrio.csv import CSVTimeSeries
+from epymorph.adrio.csv import CSVFileTxN
 from epymorph.parameter_fitting.utils.observations import Observations
 from epymorph.rume import RUME
 from epymorph.simulation import Context
-from epymorph.util import extract_date_value
+from epymorph.util import extract_date_value, is_date_value_dtype
 
 
 class DataLoader:
@@ -63,7 +63,7 @@ class DataLoader:
         data = self.rume.evaluate_params(rng)
         source = observations.source
 
-        if isinstance(source, CSVTimeSeries):
+        if isinstance(source, CSVFileTxN):
             csv_df = read_csv(source.file_path)
 
             cases = source.with_context_internal(
@@ -74,7 +74,9 @@ class DataLoader:
 
             return dates, cases
 
-        if isinstance(source, ADRIO) and source.result_format.is_date_value:
+        if isinstance(source, ADRIO) and is_date_value_dtype(
+            source.result_format.dtype
+        ):
             ctx = Context.of(
                 data=data,
                 time_frame=self.rume.time_frame,
