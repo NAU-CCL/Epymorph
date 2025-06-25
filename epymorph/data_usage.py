@@ -1,3 +1,7 @@
+"""
+Data usage estimation and reporting.
+"""
+
 from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
@@ -11,61 +15,119 @@ from humanize import naturaldelta, naturalsize
 
 @dataclass(frozen=True)
 class EmptyDataEstimate:
-    """An empty data estimate given that the provided data does not support the
-    calculation of the data usage of a data fetch operation."""
+    """
+    When an entity is not capable of making a data usage estimate, it returns
+    `EmptyDataEstimate` as a placeholder.
+
+    Parameters
+    ----------
+    name :
+        The name of the entity that provided the estimate.
+    """
 
     name: str
-    """The name of the given ADRIO."""
+    """The name of the entity that provided the estimate."""
 
 
 @dataclass(frozen=True)
 class AvailableDataEstimate:
-    """An estimate for the data usage of a data fetch operation.
+    """
+    An estimate for the data usage of a data fetch operation.
 
     Operations may download data and may utilize disk caching, so we would like
-    to be able to estimate ahead of time how much data to expect.
-    A concrete example of such an operation are ADRIOs fetch data from a third-party
-    source during the preparation of a RUME.
-    NOTE: all values are estimated and their accuracy may vary.
+    to be able to estimate ahead of time how much data to expect. Because these are
+    estimates, accuracy is not guaranteed.
+
+    For example, an ADRIO which fetches data from a third-party source may be able to
+    estimate ahead of time how much data needs to be downloaded and stored.
+
+    Parameters
+    ----------
+    name :
+        The name of the entity that provided the estimate.
+    cache_key :
+        A unique identifier for the data this estimate is about.
+    new_network_bytes :
+        How much new data (in bytes) will need to be downloaded.
+    max_bandwidth :
+        A source-specific limit on download bandwidth in bytes per second.
+    new_cache_bytes :
+        How much new data (in bytes) will be written to disk cache.
+    total_cache_bytes :
+        The total data (in bytes) that will be in the cache after fetch.
+        This includes newly-cached and previously-cached files.
     """
 
     name: str
-    """What is responsible for loading this data?"""
+    """The name of the entity that provided the estimate."""
     cache_key: str
-    """Multiple things may in fact load the same set of data; even though both would
-    report the same estimate for missing data, only the first one to load would really
-    incur that cost. The others would then find the cached data waiting.
-    This key should make it possible to discover this case -- if two estimates are
-    produced with the same key, it can be assumed that the estimate should only
-    be counted once. Cache keys are only comparable within a single simulation context,
+    """
+    A unique identifier for the data this estimate is about.
+
+    Multiple entities may load the same set of data; although both would report the same
+    estimate, the actual data usage only happens for the first one to load. The rest
+    would find and return the cached data. This key is used to distinguish this case --
+    if two estimates share the same key, we can assume the estimate should only be
+    counted once. Cache keys are only comparable within a single simulation context,
     so we don't need to perfectly distinguish between different scopes or time frames.
     """
     new_network_bytes: int
     """How much new data (in bytes) will need to be downloaded."""
     max_bandwidth: int | None
-    """A source-specific limit on download bandwidth (in bytes per second).
-    (Some sources may impose known limits on downloads.)
+    """
+    A source-specific limit on download bandwidth in bytes per second.
+    (In case data sources impose known limits on download speed.)
     """
     new_cache_bytes: int
     """How much new data (in bytes) will be written to disk cache."""
     total_cache_bytes: int
-    """The total data (in bytes) that will be in the cache after fetch.
-    This includes new cached files and previously cached files."""
+    """
+    The total data (in bytes) that will be in the cache after fetch.
+    This includes newly-cached and previously-cached files.
+    """
 
 
 DataEstimate = EmptyDataEstimate | AvailableDataEstimate
+"""`DataEstimate`s can be either empty or non-empty."""
 
 
 @runtime_checkable
 class CanEstimateData(Protocol):
+    """
+    A checkable protocol which indicates entities that can produce data estimates.
+    """
+
     @abstractmethod
     def estimate_data(self) -> DataEstimate:
-        """Estimate the data usage for this entity.
-        If a reasonable estimate cannot be made, return EmptyDataEstimate."""
+        """
+        Estimate the data usage for this entity.
+
+        If a reasonable estimate cannot be made, return an `EmptyDataEstimate`.
+
+        Returns
+        -------
+        :
+            The data estimate.
+        """
 
 
 @dataclass(frozen=True)
 class DataEstimateTotal:
+    """
+    The computed total of one or more estimates.
+
+    Parameters
+    ----------
+    new_network_bytes :
+        How much new data (in bytes) will need to be downloaded.
+    new_cache_bytes :
+        How much new data (in bytes) will be written to disk cache.
+    total_cache_bytes :
+        The total data (in bytes) that will be in the cache after fetch.
+    download_time :
+        The estimated time (in seconds) to download all new data.
+    """
+
     new_network_bytes: int
     """How much new data (in bytes) will need to be downloaded."""
     new_cache_bytes: int
@@ -80,10 +142,23 @@ def estimate_total(
     estimates: Sequence[DataEstimate],
     max_bandwidth: int,
 ) -> DataEstimateTotal:
-    """Combines a number of individual data estimates into a total.
+    """
+    Computes the total of a set of data estimates.
 
-    Includes a total download time with the assumed bandwidth limit
-    as well as source-specific bandwidth limits.
+    A download time estimate is also provided, taking into account the assumed bandwidth
+    limit (`max_bandwidth`) as well as any source-specific bandwidth limits.
+
+    Parameters
+    ----------
+    estimates :
+        The estimates to combine.
+    max_bandwidth :
+        The assumed maximum download bandwidth, in bytes per second.
+
+    Returns
+    -------
+    :
+        The estimate total.
     """
     new_net = 0
     new_cache = 0
@@ -92,16 +167,17 @@ def estimate_total(
 
     cache_keys = set[str]()
     for e in estimates:
-        if isinstance(e, AvailableDataEstimate):
-            if e.cache_key in cache_keys:
-                continue
-            cache_keys.add(e.cache_key)
-            new_net += e.new_network_bytes
-            new_cache += e.new_cache_bytes
-            tot_cache += e.total_cache_bytes
-            download_time += e.new_network_bytes / (
-                min(max_bandwidth, e.max_bandwidth or inf)
-            )
+        if not isinstance(e, AvailableDataEstimate):
+            continue
+        if e.cache_key in cache_keys:
+            continue
+        cache_keys.add(e.cache_key)
+        new_net += e.new_network_bytes
+        new_cache += e.new_cache_bytes
+        tot_cache += e.total_cache_bytes
+        download_time += e.new_network_bytes / (
+            min(max_bandwidth, e.max_bandwidth or inf)
+        )
 
     return DataEstimateTotal(new_net, new_cache, tot_cache, download_time)
 
@@ -111,12 +187,27 @@ def estimate_report(
     estimates: Sequence[DataEstimate],
     max_bandwidth: int,
 ) -> list[str]:
-    """Generate a report from the given set of data estimates.
+    """
+    Generate a report from the given set of data estimates.
 
-    Describes an itemized list of how much data will be downloaded and
-    how much new data will be written to cache, then totals that up
-    and reports how long that will take and whether or not there is enough
-    available disk space."""
+    The report describes an itemized list of how much data will be downloaded and how
+    much new data will be written to cache, then totals that up and reports how long
+    that will take and whether or not there is enough available disk space.
+
+    Parameters
+    ----------
+    cache_path :
+        The path of epymorph's cache folder.
+    estimates :
+        The data estimates.
+    max_bandwidth :
+        The assumed maximum download bandwidth, in bytes per second.
+
+    Returns
+    -------
+    :
+        The report, as a list of lines.
+    """
     # short-hand formatting functions
     ff = partial(naturalsize, binary=False)  # format file size
     ft = naturaldelta  # format time duration

@@ -33,6 +33,13 @@ from epymorph.time import DateRange
 from epymorph.util import identity
 
 GeoKeyType = Literal["state_abbrev", "county_state", "geoid"]
+"""
+The format to use when interpreting values in a geo node identity column.
+
+- `state_abbrev` handles postal codes; e.g., "NY" for New York
+- `county_state` handles county name comma state postal code; e.g., "Albany, NY"
+- `geoid` handles FIPS code, a.k.a. GEOID, format; e.g., "36001" for Albany, New York
+"""
 
 
 class _CSVMixin(ADRIO):
@@ -47,9 +54,8 @@ class _CSVMixin(ADRIO):
 
     def parse_geo_key(self, csv_df: DataFrame, key_cols: list[str]) -> DataFrame:
         """
-        Reads labels from a dataframe according to key type specified and replaces them
-        with a uniform value to sort by.
-        Returns dataframe with values replaced in the label column.
+        Convert all columns in `key_cols` using this ADRIO's key type. Returns a copy
+        of the `DataFrame` where the values have been converted to GEOID format.
         """
         match self.key_type:
             case "state_abbrev":
@@ -65,10 +71,7 @@ class _CSVMixin(ADRIO):
         return result_df
 
     def parse_state_abbrev(self, keys: Series) -> Series:
-        """
-        Replaces values in label column containing state abreviations (i.e. AZ) with
-        state fips codes and filters out any not in the specified geographic scope.
-        """
+        # Parse state postal codes, e.g., AZ
         if not isinstance(self.scope, StateScope):
             err = "State scope is required to use state abbreviation key format."
             raise ADRIOProcessingError(self, self.context, err)
@@ -81,11 +84,7 @@ class _CSVMixin(ADRIO):
         return new_keys
 
     def parse_county_state(self, keys: Series) -> Series:
-        """
-        Replaces values in label column containing county and state names
-        (i.e. Maricopa, Arizona) with state county fips codes and filters out
-        any not in the specified geographic scope.
-        """
+        # Parse county name and state postal code, e.g., Maricopa, AZ
         if not isinstance(self.scope, CountyScope):
             err = "County scope is required to use county, state key format."
             raise ADRIOProcessingError(self, self.context, err)

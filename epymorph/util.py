@@ -648,12 +648,16 @@ def extract_date_value(
 # Matchers
 
 
-T_contra = TypeVar("T_contra", contravariant=True)
+MatcherValueType_contra = TypeVar("MatcherValueType_contra", contravariant=True)
+"""The type of a value matcher by a `Matcher`."""
 
 
-class Matcher(Generic[T_contra], ABC):
+class Matcher(Generic[MatcherValueType_contra], ABC):
     """
-    A generic matcher. Returns True if a match, False otherwise.
+    The root class for a family of predicates on values; `Matcher` child classes
+    are written to match specific types of values, and encode conditions against which
+    values are tested. Once you have a concrete `Matcher` instance, you use it like a
+    function (it implements `__call__` semantics) to test a value.
     """
 
     # Note: Matchers are contravariant: you can substitute a Matcher of a broader type
@@ -662,12 +666,30 @@ class Matcher(Generic[T_contra], ABC):
 
     @abstractmethod
     def expected(self) -> str:
-        """Describes what the expected value is."""
-        raise NotImplementedError
+        """
+        The description of what this matcher's expected valid value(s) are.
+
+        Returns
+        -------
+        :
+            The value(s) we expect to match, as a string.
+        """
 
     @abstractmethod
     def __call__(self, value: Any) -> bool:
-        raise NotImplementedError
+        """
+        Test whether or not the given value matches this matcher.
+
+        Parameters
+        ----------
+        value :
+            The value to match.
+
+        Returns
+        -------
+        :
+            Whether or not the match is successful.
+        """
 
 
 class MatchAny(Matcher[Any]):
@@ -680,12 +702,12 @@ class MatchAny(Matcher[Any]):
         return True
 
 
-class MatchEqual(Matcher[T_contra]):
+class MatchEqual(Matcher[MatcherValueType_contra]):
     """Matches a specific value by checking for equality (==)."""
 
-    _acceptable: T_contra
+    _acceptable: MatcherValueType_contra
 
-    def __init__(self, acceptable: T_contra):
+    def __init__(self, acceptable: MatcherValueType_contra):
         self._acceptable = acceptable
 
     def expected(self) -> str:
@@ -695,18 +717,18 @@ class MatchEqual(Matcher[T_contra]):
         return value == self._acceptable
 
 
-class MatchAnyIn(Matcher[T_contra]):
+class MatchAnyIn(Matcher[MatcherValueType_contra]):
     """Matches for presence in a list of values (in)."""
 
-    _acceptable: list[T_contra]
+    _acceptable: list[MatcherValueType_contra]
 
-    def __init__(self, acceptable: list[T_contra]):
+    def __init__(self, acceptable: list[MatcherValueType_contra]):
         self._acceptable = acceptable
 
     def expected(self) -> str:
         return f"one of [{', '.join((str(x) for x in self._acceptable))}]"
 
-    def __call__(self, value: T_contra) -> bool:
+    def __call__(self, value: MatcherValueType_contra) -> bool:
         return value in self._acceptable
 
 
