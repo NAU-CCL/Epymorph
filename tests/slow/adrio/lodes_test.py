@@ -4,6 +4,7 @@ import pytest
 from epymorph.adrio import lodes
 from epymorph.adrio.adrio import ADRIOContextError
 from epymorph.data_usage import AvailableDataEstimate
+from epymorph.error import MissingContextError
 from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -57,6 +58,13 @@ def test_commuters_bad_scope_year():
     with pytest.raises(ADRIOContextError, match="Invalid scope year"):
         lodes.Commuters(year=2020).with_context(
             scope=StateScope.in_states(["AZ"], year=2019),
+        ).evaluate()
+
+
+def test_commuters_no_time_frame_no_year():
+    with pytest.raises(MissingContextError, match="time_frame"):
+        lodes.Commuters().with_context(
+            scope=StateScope.in_states(["AZ"], year=2020),
         ).evaluate()
 
 

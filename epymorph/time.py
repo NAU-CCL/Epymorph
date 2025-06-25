@@ -389,6 +389,21 @@ class TimeFrame:
         """
         return np.array(list(self), dtype=np.datetime64)
 
+    def to_date_range(self) -> DateRange:
+        """
+        Returns a date range that corresponds to this time frame's
+        start and end date.
+
+        Returns
+        -------
+        :
+            A matching date range.
+        """
+        return DateRange(
+            start_date=self.start_date,
+            end_date=self.end_date,
+        )
+
     @property
     def select(self) -> "TimeSelector":
         """Create a time-axis strategy from this time frame.

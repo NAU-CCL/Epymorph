@@ -150,16 +150,6 @@ class _LodesADRIOMixin(ADRIO[np.int64, np.int64]):
             return self._override_year
         return self.time_frame.start_date.year
 
-    def _check_year(self) -> None:
-        """
-        Check the data year is in the supported range and raise ValueError if not.
-        This is intended to be called during initialization,
-        after self._override_year has been set (if applicable).
-        """
-        if self.data_year not in range(2002, 2022):
-            err = "Invalid year. LODES data is only available for 2002-2021"
-            raise ValueError(err)
-
     @property
     @override
     def result_format(self) -> ResultFormat:
@@ -179,9 +169,13 @@ class _LodesADRIOMixin(ADRIO[np.int64, np.int64]):
             err = "Invalid scope year; LODES requires 2020 Census geography."
             raise ADRIOContextError(self, context, err)
 
+        year = self.data_year
+        if year not in range(2002, 2022):
+            err = "Invalid year. LODES data is only available for 2002-2021"
+            raise ValueError(err)
+
         # LODES year and state exceptions
         # exceptions can be found in this document for LODES8.1: https://lehd.ces.census.gov/data/lodes/LODES8/LODESTechDoc8.1.pdf
-        year = self.data_year
         states = list(STATE.truncate_unique(scope.node_ids))
         invalid_conditions = [
             (
@@ -350,7 +344,6 @@ class Commuters(_LodesADRIOMixin, ADRIO[np.int64, np.int64]):
     def __init__(self, *, year: int | None = None, job_type: JobType = "All Jobs"):
         self._override_year = year
         self._job_type = job_type
-        self._check_year()
 
     @property
     @override
@@ -397,7 +390,6 @@ class CommutersByAge(_LodesADRIOMixin, ADRIO[np.int64, np.int64]):
         self._override_year = year
         self._job_type = job_type
         self._age_range = age_range
-        self._check_year()
 
     @property
     @override
@@ -451,7 +443,6 @@ class CommutersByEarnings(_LodesADRIOMixin, ADRIO[np.int64, np.int64]):
         self._override_year = year
         self._job_type = job_type
         self._earning_range = earning_range
-        self._check_year()
 
     @property
     @override
@@ -505,7 +496,6 @@ class CommutersByIndustry(_LodesADRIOMixin, ADRIO[np.int64, np.int64]):
         self._override_year = year
         self._job_type = job_type
         self._industry = industry
-        self._check_year()
 
     @property
     @override
