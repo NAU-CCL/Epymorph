@@ -1,7 +1,9 @@
 """
-epymorph's event frameworks.
-The idea is to have a set of classes which define event protocols for
-logical components of epymorph.
+epymorph's event framework.
+
+epymorph components may define a set of events relevant to their function,
+and during processing can publish to the singleton `EventBus` for subscription
+and processing by other systems.
 """
 
 from typing import NamedTuple
@@ -19,7 +21,7 @@ from epymorph.util import Event, Singleton
 
 
 class OnStart(NamedTuple):
-    """The payload of a simulation on_start event."""
+    """Event payload for the start of a simulation."""
 
     simulator: str
     """Name of the simulator class."""
@@ -28,7 +30,7 @@ class OnStart(NamedTuple):
 
 
 class OnTick(NamedTuple):
-    """The payload of a Simulation tick event."""
+    """Event payload for the completion of a simulation tick."""
 
     tick_index: int
     """The index of the just-completed tick."""
@@ -42,7 +44,7 @@ class OnTick(NamedTuple):
 
 
 class OnMovementStart(NamedTuple):
-    """The payload for the event when movement processing starts for a tick."""
+    """Event payload for the start of movement processing during a tick."""
 
     tick: int
     """Which simulation tick."""
@@ -53,7 +55,7 @@ class OnMovementStart(NamedTuple):
 
 
 class OnMovementClause(NamedTuple):
-    """The payload for the event when a single movement clause has been processed."""
+    """Event payload for the completion of processing a movement clause."""
 
     tick: int
     """Which simulation tick."""
@@ -82,9 +84,7 @@ class OnMovementClause(NamedTuple):
 
 
 class OnMovementFinish(NamedTuple):
-    """
-    The payload for the event when movement processing finishes for one simulation tick.
-    """
+    """Event payload for the completion of movement processing during a tick."""
 
     tick: int
     """Which simulation tick."""
@@ -102,12 +102,13 @@ class OnMovementFinish(NamedTuple):
 
 
 class DownloadActivity(NamedTuple):
-    """A description of ADRIO network download activity.
+    """
+    Part of the `ADRIOProgress` event payload describing ADRIO network activity.
 
     All fields are optional, as it may be possible to measure some but not others
-    depending on the data source. ADRIOs should avoid reporting DownloadActivity
-    where all fields are None, and should instead just report None for
-    `AdrioProgress.download`"""
+    depending on the data source. ADRIOs should avoid reporting empty activity
+    events and instead instead just report `None` (see `ADRIO` methods).
+    """
 
     total: int | None
     """How many bytes are expected to be downloaded?"""
@@ -118,12 +119,14 @@ class DownloadActivity(NamedTuple):
 
 
 class ADRIOProgress(NamedTuple):
-    """The payload of AdrioEvents.on_adrio_progress
+    """
+    Event payload for ADRIO data processing progress.
 
-    Perhaps not all ADRIOs will report progress, but those that do
+    Not all ADRIOs will be able to report progress meaningfully, but those that do
     should emit one event when they start (with `ratio_complete` == 0)
     and one when they finish (with `ratio_complete` == 1). They are free
-    to report as many intermediate progress events as they like."""
+    to report as many intermediate progress events as they like.
+    """
 
     adrio_name: str
     """The full name of the ADRIO class."""
@@ -145,7 +148,12 @@ class ADRIOProgress(NamedTuple):
 
 
 class EventBus(metaclass=Singleton):
-    """The one-stop for epymorph events. This class uses the singleton pattern."""
+    """
+    A singleton for epymorph event publishing and subscription.
+
+    Obtain a reference to the global event bus by constructing it as usual --
+    `EventBus()` -- but be aware that this will produce the same instance every time.
+    """
 
     # Simulation Events
     on_start: Event[OnStart]

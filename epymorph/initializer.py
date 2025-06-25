@@ -1,13 +1,13 @@
 """
 Initializers are responsible for setting up the initial conditions for the simulation:
 the populations at each node, and which disease compartments they belong to.
-There are potentially many ways to do this, driven by source data from
-the geo or simulation parameters, so this module provides a uniform interface
-to accomplish the task, as well as a few common implementations.
+It may draw from simulation parameters to do so. As there are many valid ways to do
+this, this module provides a uniform interface to accomplish the task as well as a few
+common implementations.
 """
 
 from abc import ABC
-from typing import cast
+from typing import ClassVar, cast
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -25,15 +25,25 @@ from epymorph.util import Matcher, NumpyTypeError, check_ndarray, dtype_name, ma
 
 class Initializer(SimulationFunction[SimArray], ABC):
     """
-    Represents an initialization routine responsible for determining the initial values
+    An initialization routine responsible for determining the initial values
     of populations by IPM compartment for every simulation node.
     """
 
     def as_compartment(self, name_or_index: int | str) -> int:
-        """Convert a compartment identifier to a compartment index.
-        You can specify a string -- which will be interpreted as a compartment name --
-        or an integer -- which will be interpreted as an index.
-        Raises InitException if the compartment identifier is not valid.
+        """
+        Convert a compartment identifier to a compartment index.
+
+        Parameters
+        ----------
+        name_or_index :
+            Identifies the compartment; usually a compartment name.
+            However this can also be an integer index, in which case we check that the
+            index is valid and then return it.
+
+        Raises
+        ------
+        InitError
+            If the compartment identifier is not valid.
         """
         try:
             if isinstance(name_or_index, int):
@@ -81,6 +91,7 @@ class Initializer(SimulationFunction[SimArray], ABC):
         shape: DataShape | Matcher,
         exact: bool = True,
     ) -> NDArray:
+        # A general validation utility for input arrays.
         try:
             shape_match = (
                 DataShapeMatcher(shape, self.dim, exact=exact)
@@ -110,7 +121,9 @@ class Initializer(SimulationFunction[SimArray], ABC):
             raise InitError(err)
 
 
-# Pre-baked initializer implementations
+#######################
+# Initializer Library #
+#######################
 
 
 _POPULATION_ATTR = AttributeDef(
@@ -124,8 +137,13 @@ _LABEL_ATTR = AttributeDef(
 
 class NoInfection(Initializer):
     """
-    An initializer that places all 'population' individuals in a single compartment
-    (default: the first compartment).
+    An initializer that places all individuals in a single compartment.
+    Requires "population" as a data attribute.
+
+    Parameters
+    ----------
+    initial_compartment :
+        The compartment name or index in which to start the population.
     """
 
     requirements = (_POPULATION_ATTR,)
@@ -136,7 +154,16 @@ class NoInfection(Initializer):
     def __init__(self, initial_compartment: int | str = 0):
         self.initial_compartment = initial_compartment
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         pop = self.data(_POPULATION_ATTR)
         result = np.zeros(self._nxc, dtype=SimDType)
         initial = self.as_compartment(self.initial_compartment)
@@ -147,7 +174,12 @@ class NoInfection(Initializer):
 class Explicit(Initializer):
     """
     An initializer that sets all compartment populations directly.
-    You provide the (N,C) array and we use a copy of it.
+    You provide the (N,C)-shaped array and the initializer returns a copy of it.
+
+    Parameters
+    ----------
+    initials :
+        The literal initial values to use.
     """
 
     initials: NDArray | list[list[int]]
@@ -156,7 +188,16 @@ class Explicit(Initializer):
     def __init__(self, initials: NDArray | list[list[int]]):
         self.initials = initials
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         return self._condition_input_array(
             self.initials,
             "initials",
@@ -168,11 +209,14 @@ class Explicit(Initializer):
 
 class Proportional(Initializer):
     """
-    Set all compartments as a proportion of their population according to the geo.
-    The parameter array provided to this initializer will be normalized, then multiplied
-    element-wise by the geo population. So you're free to express the proportions
-    in any way, (as long as no row is zero). Parameters:
-    - `ratios` a (C,) or (N,C) numpy array describing the ratios for each compartment
+    An initializer that sets all compartments as a proportion of their population.
+    Requires "population" as a data attribute.
+
+    Parameters
+    ----------
+    ratios :
+        A (C,)- or (N,C)-shaped array describing the ratios for each compartment.
+        Row values will be normalized, such that they sum to 1.
     """
 
     requirements = (_POPULATION_ATTR,)
@@ -196,7 +240,16 @@ class Proportional(Initializer):
     ):
         self.ratios = ratios
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         ratios = self._condition_input_array(
             self.ratios,
             "ratios",
@@ -217,19 +270,23 @@ class Proportional(Initializer):
 
 class SeededInfection(Initializer, ABC):
     """
-    Abstract base class for initializers which seed an infection to start. We assume
-    most people start out in a particular compartment (default: the first) and if chosen
-    for infection, are placed in another compartment (default: the second). The user
-    can identify which two compartments to use, but it can only be two compartments.
-    Parameters:
-    - `initial_compartment` which compartment (by index) is "not infected", where most
-        individuals start out
-    - `infection_compartment` which compartment (by index) will be seeded as the
-        initial infection
+    Abstract base class for initializers which seed an initial infection.
+    It assumes most people start out in a particular compartment (default: the first)
+    and if chosen for infection, are moved to another compartment (default: the second).
+
+    You can customize which two compartments to use, but it can only be two.
+
+    Parameters
+    ----------
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
     """
 
-    DEFAULT_INITIAL = 0
-    DEFAULT_INFECTION = 1
+    DEFAULT_INITIAL: ClassVar = 0
+    DEFAULT_INFECTION: ClassVar = 1
 
     initial_compartment: int | str
     """The IPM compartment for non-infected individuals."""
@@ -249,10 +306,21 @@ class IndexedLocations(SeededInfection):
     """
     Infect a fixed number of people distributed (proportional to their population)
     across a selection of nodes. A multivariate hypergeometric draw using the available
-    populations is used to distribute infections. Parameters:
-    - `selection` a one-dimensional array of indices;
-        all values must be in range (-N,+N)
-    - `seed_size` the number of individuals to infect in total
+    populations in each node is used to distribute infections.
+
+    Requires "population" as a data attribute.
+
+    Parameters
+    ----------
+    selection :
+        The list of node indices to infect; all values must be in range (-N,+N).
+    seed_size :
+        The number of individuals to infect in total.
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
     """
 
     requirements = (_POPULATION_ATTR,)
@@ -279,7 +347,16 @@ class IndexedLocations(SeededInfection):
         self.selection = selection
         self.seed_size = seed_size
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         initial = self.as_compartment(self.initial_compartment)
         infection = self.as_compartment(self.infection_compartment)
 
@@ -331,9 +408,21 @@ class IndexedLocations(SeededInfection):
 
 class SingleLocation(IndexedLocations):
     """
-    Infect a fixed number of people at a single location (by index). Parameters:
-    - `location` the index of the node in which to seed an initial infection
-    - `seed_size` the number of individuals to infect in total
+    Infect a fixed number of people at a single location (by index).
+
+    Requires "population" as a data attribute.
+
+    Parameters
+    ----------
+    location :
+        The index of the node in which to seed an initial infection.
+    seed_size :
+        The number of individuals to infect in total.
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
     """
 
     requirements = (_POPULATION_ATTR,)
@@ -352,7 +441,16 @@ class SingleLocation(IndexedLocations):
             infection_compartment=infection_compartment,
         )
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         N = self.scope.nodes
         if not -N < self.selection[0] < N:
             err = (
@@ -366,9 +464,20 @@ class SingleLocation(IndexedLocations):
 class LabeledLocations(SeededInfection):
     """
     Infect a fixed number of people distributed to a selection of locations (by label).
-    Parameters:
-    - `labels` the labels of the locations to select for infection
-    - `seed_size` the number of individuals to infect in total
+
+    Requires "population" and "label" as data attributes.
+
+    Parameters
+    ----------
+    labels :
+        The labels of the locations to select for infection.
+    seed_size :
+        The number of individuals to infect in total.
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
     """
 
     requirements = (_POPULATION_ATTR, _LABEL_ATTR)
@@ -389,7 +498,16 @@ class LabeledLocations(SeededInfection):
         self.labels = labels
         self.seed_size = seed_size
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         geo_labels = self.data(_LABEL_ATTR)
         labels = self._condition_input_array(
             self.labels,
@@ -417,9 +535,21 @@ class LabeledLocations(SeededInfection):
 
 class RandomLocations(SeededInfection):
     """
-    Seed an infection in a number of randomly selected locations. Parameters:
-    - `num_locations` the number of locations to choose
-    - `seed_size` the number of individuals to infect in total
+    Seed an infection in a number of randomly selected locations.
+
+    Requires "population" as a data attribute.
+
+    Parameters
+    ----------
+    num_locations :
+        The number of locations to choose.
+    seed_size :
+        The number of individuals to infect in total.
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
     """
 
     requirements = (_POPULATION_ATTR,)
@@ -440,7 +570,16 @@ class RandomLocations(SeededInfection):
         self.num_locations = num_locations
         self.seed_size = seed_size
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         N = self.scope.nodes
         if not 0 < self.num_locations <= N:
             err = (
@@ -462,8 +601,24 @@ class RandomLocations(SeededInfection):
 
 class TopLocations(SeededInfection):
     """
-    Infect a fixed number of people across a fixed number of locations,
-    selecting the top locations as measured by a given geo attribute.
+    Infect a fixed number of people across a fixed number of locations, selecting the
+    top locations as measured by a given data attribute.
+
+    Requires "population" and the top attribute as data attributes.
+
+    Parameters
+    ----------
+    top_attribute :
+        The attribute to use in determining the "top" locations. Must be numeric data.
+    num_locations :
+        The number of locations to choose.
+    seed_size :
+        The number of individuals to infect in total.
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
     """
 
     # attributes is set in constructor
@@ -499,7 +654,16 @@ class TopLocations(SeededInfection):
         self.num_locations = num_locations
         self.seed_size = seed_size
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         N = self.scope.nodes
         if not 0 < self.num_locations <= N:
             err = (
@@ -529,8 +693,25 @@ class TopLocations(SeededInfection):
 
 class BottomLocations(SeededInfection):
     """
-    Infect a fixed number of people across a fixed number of locations,
-    selecting the bottom locations as measured by a given geo attribute.
+    Infect a fixed number of people across a fixed number of locations, selecting the
+    bottom locations as measured by a given geo attribute.
+
+    Requires "population" and the bottom attribute as data attributes.
+
+    Parameters
+    ----------
+    bottom_attribute :
+        The attribute to use in determining the "bottom" locations. Must be numeric
+        data.
+    num_locations :
+        The number of locations to choose.
+    seed_size :
+        The number of individuals to infect in total.
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
     """
 
     # attributes is set in constructor
@@ -568,7 +749,16 @@ class BottomLocations(SeededInfection):
         self.num_locations = num_locations
         self.seed_size = seed_size
 
+    @override
     def evaluate(self) -> SimArray:
+        """
+        Evaluates the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
         N = self.scope.nodes
         if not 0 < self.num_locations <= N:
             err = (
