@@ -19,7 +19,7 @@ from epymorph.compartment_model import (
 from epymorph.data_type import AttributeValue, SimArray, SimDType
 from epymorph.database import DataResolver
 from epymorph.error import (
-    IPMSimInvalidProbsError,
+    IPMSimInvalidForkError,
     IPMSimLessThanZeroError,
     IPMSimNaNError,
 )
@@ -252,7 +252,7 @@ class IPMExecutor:
                         prob = prob_lambda(rate_args)
                         if any(n < 0 for n in prob):
                             err = self._get_invalid_prob_args(rate_args, node, tick, t)
-                            raise IPMSimInvalidProbsError(err)
+                            raise IPMSimInvalidForkError(err)
                         occur[index : (index + size)] = self._rng.multinomial(
                             n=self._rng.poisson(rate * tick.tau),
                             pvals=prob,
