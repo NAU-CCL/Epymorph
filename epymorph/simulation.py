@@ -1,6 +1,7 @@
 """General simulation requisites and utility functions."""
 
 import functools
+import re
 from abc import ABC, ABCMeta, abstractmethod
 from copy import deepcopy
 from datetime import date, timedelta
@@ -35,7 +36,7 @@ from epymorph.attribute import (
     NamePattern,
 )
 from epymorph.compartment_model import BaseCompartmentModel
-from epymorph.data_shape import Dimensions
+from epymorph.data_shape import DataShape, Dimensions
 from epymorph.data_type import (
     AttributeArray,
     ScalarDType,
@@ -433,7 +434,7 @@ class Context(ABC):
                 )
                 raise MissingContextError(err)
 
-            return missing_context
+            return property(missing_context)
 
         def make_getter(component, value):
             if value is None:
@@ -481,6 +482,47 @@ class Context(ABC):
             },
         )
         return instance()
+
+
+def validate_context_for_shape(context: Context, shape: DataShape) -> None:
+    """
+    Checks that the elements of a context which are required to compute the given
+    shape have been provided in the context. For example, if the shape contains an "N"
+    axis, the context must include a scope or else there's no knowing how long that axis
+    should be.
+
+    Parameters
+    ----------
+    context :
+        The simulation context.
+    shape :
+        The shape to check.
+
+    Raises
+    ------
+    MissingContextError
+        If any required context has not been provided.
+    """
+
+    # NOTE: this check ensures this function remains in sync with all defined shapes.
+    # We could easily add another axis designation to DataShape but forget to update
+    # this function.
+    shape_str = str(shape)
+    if re.search("[^TNCEAx]", shape_str) is not None:
+        err = (
+            f"Unsupported character in shape designation: {shape_str}"
+            "This indicates that the `validate_context_for_shape` function was not "
+            "correctly updated when new shape designations were added."
+        )
+        raise RuntimeError(err)
+
+    # Check for required context.
+    if "N" in shape_str:
+        context.scope  # scope is required
+    if "T" in shape_str:
+        context.time_frame  # time_frame is required
+    if "C" in shape_str or "E" in shape_str:
+        context.ipm  # ipm is required
 
 
 _EMPTY_CONTEXT = Context.of(NAME_PLACEHOLDER)

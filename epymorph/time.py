@@ -198,7 +198,7 @@ class DateRange:
             start=self.start_date,
             stop=self.end_date + step,
             step=step,
-            dtype=np.datetime64,
+            dtype="datetime64[D]",
         )
 
 
@@ -388,6 +388,21 @@ class TimeFrame:
             The equivalent numpy array.
         """
         return np.array(list(self), dtype=np.datetime64)
+
+    def to_date_range(self) -> DateRange:
+        """
+        Returns a date range that corresponds to this time frame's
+        start and end date.
+
+        Returns
+        -------
+        :
+            A matching date range.
+        """
+        return DateRange(
+            start_date=self.start_date,
+            end_date=self.end_date,
+        )
 
     @property
     def select(self) -> "TimeSelector":

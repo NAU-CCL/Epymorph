@@ -28,8 +28,7 @@ class CustomScope(GeoScope):
     Parameters
     ----------
     nodes :
-        The identifiers for all nodes in the scope. The order in which you specify
-        these IDs will be the canonical node order.
+        The identifiers for all nodes in the scope.
     """
 
     _nodes: NDArray[np.str_]
@@ -37,7 +36,7 @@ class CustomScope(GeoScope):
     def __init__(self, nodes: NDArray[np.str_] | list[str]):
         if isinstance(nodes, list):
             nodes = np.array(nodes, dtype=np.str_)
-        self._nodes = nodes
+        self._nodes = np.sort(np.unique(nodes))
 
     @property
     @override

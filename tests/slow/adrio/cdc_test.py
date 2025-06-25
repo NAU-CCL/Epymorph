@@ -5,6 +5,7 @@ from epymorph.adrio import cdc
 from epymorph.adrio.processing import RandomFix
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.time import TimeFrame
+from epymorph.util import extract_date_value, to_date_value_array
 
 # NOTE: these tests use VCR to record HTTP requests.
 # To re-record this test, load a census API key into the environment, then:
@@ -906,3 +907,171 @@ def test_state_deaths_large_request():
 
     # And we should get an appropriate-shaped response.
     assert actual.shape == (1, scope.nodes)
+
+
+##########################
+# DATA.CDC.GOV mpqg-jmmr #
+##########################
+
+
+def dehydrate_data(keys, data_arrays):
+    # Utility function for condensing test data.
+    # Assumes all arrays share the same date sequence.
+    dates, _ = extract_date_value(data_arrays[0])
+    ds = "".join(np.array2string(dates, separator=",").split())
+    lines = []
+    lines.append("# fmt: off")
+    lines.append(f"_DATES = {ds}")
+    lines.append("_EXPECTED = {")
+    for key, arr in zip(keys, data_arrays, strict=True):
+        val = "".join(np.array2string(arr["value"], separator=",").split())
+        lines.append(f"    {str(key)}: {val},")
+    lines.append("}")
+    lines.append("# fmt: on")
+    return "\n".join(lines).replace("'", '"')
+
+
+def rehydrate_data(dates, values, value_dtype):
+    # Utility function to load condensed test data.
+    return to_date_value_array(
+        np.array(dates, dtype="datetime64[D]"),
+        np.array(values, dtype=value_dtype),
+    )
+
+
+# fmt: off
+_EXP_DATES_CSH = ["2024-11-02","2024-11-09","2024-11-16","2024-11-23","2024-11-30"]
+_EXP_VALUES_CSH = {
+    ("Covid", "Total"): [[166,35],[218,49],[221,43],[248,60],[258,61]],
+    ("Covid", "Adult"): [[161,35],[214,48],[216,42],[241,60],[250,60]],
+    ("Covid", "Pediatric"): [[5,0],[4,1],[5,1],[7,0],[8,1]],
+    ("Influenza", "Total"): [[51,2],[73,10],[132,11],[141,9],[180,18]],
+    ("Influenza", "Adult"): [[40,2],[61,10],[121,11],[130,9],[159,18]],
+    ("Influenza", "Pediatric"): [[11,0],[12,0],[11,0],[11,0],[21,0]],
+    ("RSV", "Total"): [[0,1],[1,3],[7,3],[10,5],[14,5]],
+    ("RSV", "Adult"): [[0,0],[1,2],[4,1],[2,0],[7,2]],
+    ("RSV", "Pediatric"): [[0,1],[0,1],[3,2],[8,5],[7,3]],
+}
+# fmt: on
+
+
+@pytest.mark.vcr
+@pytest.mark.parametrize(("disease", "amount"), _EXP_VALUES_CSH.keys())
+def test_current_state_hospitalization_matrix(disease, amount):
+    expected = rehydrate_data(
+        _EXP_DATES_CSH,
+        _EXP_VALUES_CSH[(disease, amount)],
+        np.int64,
+    )
+    actual = (
+        cdc.CurrentStateHospitalization(
+            disease=disease,
+            age_group=amount,
+        )
+        .with_context(
+            scope=StateScope.in_states(["AZ", "NM"], year=2020),
+            time_frame=TimeFrame.rangex("2024-11-02", "2024-12-01"),
+        )
+        .evaluate()
+    )
+    assert not np.ma.is_masked(actual["value"])
+    np.testing.assert_array_equal(actual, expected, strict=True)
+
+
+# fmt: off
+_EXP_DATES_CSHI = ["2024-11-02","2024-11-09","2024-11-16","2024-11-23","2024-11-30"]
+_EXP_VALUES_CSHI = {
+    ("Covid", "Total"): [[21.,5.],[28.,6.],[43.,4.],[37.,4.],[29.,9.]],
+    ("Covid", "Adult"): [[18.,5.],[27.,6.],[41.,4.],[35.,4.],[27.,9.]],
+    ("Covid", "Pediatric"): [[3.,0.],[1.,0.],[2.,0.],[2.,0.],[2.,0.]],
+    ("Influenza", "Total"): [[10.,0.],[9.,2.],[13.,1.],[25.,3.],[20.,1.]],
+    ("Influenza", "Adult"): [[8.,0.],[7.,2.],[12.,1.],[23.,3.],[19.,1.]],
+    ("Influenza", "Pediatric"): [[2.,0.],[2.,0.],[1.,0.],[2.,0.],[1.,0.]],
+    ("RSV", "Total"): [[0.,0.],[0.,0.],[0.,0.],[0.,0.],[1.,1.]],
+    ("RSV", "Adult"): [[0.,0.],[0.,0.],[0.,0.],[0.,0.],[0.,0.]],
+    ("RSV", "Pediatric"): [[0.,0.],[0.,0.],[0.,0.],[0.,0.],[1.,1.]],
+}
+# fmt: on
+
+
+@pytest.mark.vcr
+@pytest.mark.parametrize(("disease", "amount"), _EXP_VALUES_CSHI.keys())
+def test_current_state_hospitalization_icu_matrix(disease, amount):
+    expected = rehydrate_data(
+        _EXP_DATES_CSHI,
+        _EXP_VALUES_CSHI[(disease, amount)],
+        np.float64,
+    )
+    actual = (
+        cdc.CurrentStateHospitalizationICU(
+            disease=disease,
+            age_group=amount,
+        )
+        .with_context(
+            scope=StateScope.in_states(["AZ", "NM"], year=2020),
+            time_frame=TimeFrame.rangex("2024-11-02", "2024-12-01"),
+        )
+        .evaluate()
+    )
+    assert not np.ma.is_masked(actual["value"])
+    np.testing.assert_array_equal(actual, expected, strict=True)
+
+
+# fmt: off
+_EXP_DATES_CSA = ["2024-11-02","2024-11-09","2024-11-16","2024-11-23","2024-11-30"]
+_EXP_VALUES_CSA = {
+    ("Covid", "0 to 4"): [[0,3],[0,3],[8,5],[9,5],[9,5]],
+    ("Covid", "5 to 17"): [[4,0],[3,3],[6,0],[9,3],[8,3]],
+    ("Covid", "18 to 49"): [[41,3],[74,14],[89,16],[132,26],[101,26]],
+    ("Covid", "50 to 64"): [[59,3],[72,11],[84,14],[121,18],[119,10]],
+    ("Covid", "65 to 74"): [[100,3],[86,20],[147,16],[180,17],[172,29]],
+    ("Covid", "75 and above"): [[245,6],[284,40],[332,31],[319,50],[333,50]],
+    ("Covid", "Unknown"): [[2,0],[0,0],[9,0],[9,0],[1,0]],
+    ("Covid", "Adult"): [[445,15],[516,85],[652,77],[752,111],[725,115]],
+    ("Covid", "Pediatric"): [[4,3],[3,6],[14,5],[18,8],[17,8]],
+    ("Covid", "Total"): [[451,18],[519,91],[675,82],[779,119],[743,123]],
+    ("Influenza", "0 to 4"): [[1,0],[11,0],[4,3],[6,3],[23,2]],
+    ("Influenza", "5 to 17"): [[13,0],[8,2],[5,2],[22,0],[15,6]],
+    ("Influenza", "18 to 49"): [[41,2],[71,4],[56,4],[116,10],[146,20]],
+    ("Influenza", "50 to 64"): [[28,0],[76,2],[75,2],[73,7],[77,13]],
+    ("Influenza", "65 to 74"): [[33,0],[34,2],[69,5],[110,2],[111,7]],
+    ("Influenza", "75 and above"): [[12,0],[62,6],[116,2],[144,6],[169,7]],
+    ("Influenza", "Unknown"): [[1,0],[0,0],[4,3],[4,0],[0,0]],
+    ("Influenza", "Adult"): [[114,2],[243,14],[316,13],[443,25],[503,47]],
+    ("Influenza", "Pediatric"): [[14,0],[19,2],[9,5],[28,3],[38,8]],
+    ("Influenza", "Total"): [[129,2],[262,16],[329,21],[475,28],[541,55]],
+    ("RSV", "0 to 4"): [[0,0],[5,1],[1,1],[21,4],[12,4]],
+    ("RSV", "5 to 17"): [[0,0],[0,0],[0,0],[3,0],[1,1]],
+    ("RSV", "18 to 49"): [[0,0],[0,0],[0,0],[1,0],[2,0]],
+    ("RSV", "50 to 64"): [[0,3],[0,5],[0,6],[0,0],[2,0]],
+    ("RSV", "65 to 74"): [[0,0],[1,0],[1,0],[1,0],[2,0]],
+    ("RSV", "75 and above"): [[0,0],[1,0],[4,0],[3,0],[2,1]],
+    ("RSV", "Unknown"): [[0,0],[0,0],[0,0],[0,0],[0,0]],
+    ("RSV", "Adult"): [[0,3],[2,5],[5,6],[5,0],[8,1]],
+    ("RSV", "Pediatric"): [[0,0],[5,1],[1,1],[24,4],[13,5]],
+    ("RSV", "Total"): [[0,3],[7,6],[6,7],[29,4],[21,6]],
+}
+# fmt: on
+
+
+@pytest.mark.vcr
+@pytest.mark.parametrize(("disease", "amount"), _EXP_VALUES_CSA.keys())
+def test_current_state_admissions_matrix(disease, amount):
+    expected = rehydrate_data(
+        _EXP_DATES_CSA,
+        _EXP_VALUES_CSA[(disease, amount)],
+        np.int64,
+    )
+    actual = (
+        cdc.CurrentStateAdmissions(
+            disease=disease,
+            age_group=amount,
+        )
+        .with_context(
+            scope=StateScope.in_states(["AZ", "NM"], year=2020),
+            time_frame=TimeFrame.rangex("2024-11-02", "2024-12-01"),
+        )
+        .evaluate()
+    )
+    assert not np.ma.is_masked(actual["value"])
+    np.testing.assert_array_equal(actual, expected, strict=True)
