@@ -1,6 +1,4 @@
-"""
-Tools for processing epymorph data.
-"""
+"""General tools for processing epymorph data."""
 
 import dataclasses
 from abc import abstractmethod
@@ -24,7 +22,9 @@ from epymorph.util import mask
 
 
 class Output(Protocol):
-    """A generic output interface."""
+    """A generic simulation result."""
+
+    # NOTE: this decouples us from concrete Output implementations.
 
     rume: RUME
     """The RUME used in the simulation that generated this output."""
@@ -41,10 +41,12 @@ def _validate(
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,
 ) -> None:
-    # Check that the given axis strategies are in-fact based on the same elements that
-    # produced the output.
-    # For example, it's an error to run a RUME with one scope, then
-    # try to render a table using a selection on a completely different scope.
+    """
+    Check that the given axis strategies use the same objects that produced the output.
+
+    For example, it's an error to run a RUME with one scope, then try to render a table
+    using a selection on a completely different scope.
+    """
     if geo.scope is not output.rume.scope:
         err = (
             "When applying a geo selection to an output, both selection and "
@@ -86,11 +88,37 @@ def munge(
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,
 ) -> pd.DataFrame:
-    """Applies all select/group/aggregate operations to an output dataframe.
-    Returns a dataframe with columns "time", "geo", and a column per selected quantity.
-    The values in "time" and "geo" come from the chosen aggregation for those axes.
-    Without any group or aggregation specified, "time" is the simulation ticks
-    and "geo" is node IDs.
+    """
+    Applies select/group/aggregate operations to an output dataframe.
+
+    This function powers many of our more-specialized output processing tools, but we
+    expose this general utility to enable re-use of this logic in more use-cases.
+
+    Parameters
+    ----------
+    geo :
+        The geo-axis strategy.
+    time :
+        The time-axis strategy.
+    quantity :
+        The quantity-axis strategy.
+
+    Returns
+    -------
+    :
+        The munged result.
+
+        It is a dataframe with columns "time", "geo", and a column per selected
+        quantity. The values in "time" and "geo" come from the chosen aggregation
+        for those axes. Without any group or aggregation specified, "time" is the
+        simulation ticks and "geo" is node IDs.
+
+    Raises
+    ------
+    ValueError
+        If the axis strategies don't refer to the same `RUME` used to produce the
+        `Output`. Generally it's safest to create the axis strategies using the methods
+        from an output's `RUME` object.
     """
     _validate(output, geo, time, quantity)
 
@@ -202,6 +230,7 @@ def munge(
 
 
 RumeT = TypeVar("RumeT", bound=RUME)
+"""A type of RUME."""
 
 
 def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> RumeT:

@@ -1,4 +1,4 @@
-"""For logging epymorph simulations to a file."""
+"""Logging epymorph simulations to a file."""
 
 from contextlib import contextmanager
 from logging import BASIC_FORMAT, DEBUG, NOTSET, FileHandler, Formatter, getLogger
@@ -24,7 +24,27 @@ def file_log(
     log_file: str = "debug.log",
     log_level: str | int = DEBUG,
 ) -> Generator[None, None, None]:
-    """Enable detailed file logging during a simulation."""
+    """
+    Run simulations in this context manager to write detailed simulation activity
+    to a log file.
+
+    Parameters
+    ----------
+    log_file :
+        The path to the log file to write. Can be relative to the current working
+        directory.
+    log_level :
+        The log level to use; accepts any argument valid for
+        [logging.Handler.setLevel][].
+
+    Examples
+    --------
+    ```python
+    with file_log("my_log_file.log"):
+        sim = BasicSimulator(rume)
+        my_results = sim.run()
+    ```
+    """
 
     # Initialize the logging system and create some Loggers for epymorph subsystems.
     log_handler = FileHandler(log_file, "w", "utf8")

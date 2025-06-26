@@ -1,8 +1,4 @@
-"""
-Contexts which provide console messaging for epymorph processes like simulation runs
-and ADRIO fetching. It's nice to have some console output to show progress during
-long-running tasks!
-"""
+"""Displaying epymorph simulation progress in console (or similar outputs)."""
 # ruff: noqa: T201
 
 from contextlib import contextmanager
@@ -23,20 +19,30 @@ _events = EventBus()
 
 @contextmanager
 def sim_messaging(
+    *,
     adrio: bool = True,
     live: bool = True,
 ) -> Generator[None, None, None]:
     """
-    Produce console messaging during simulation runs to demonstrate progress.
+    Run simulations in this context manager to output (print) progress messages during
+    simulation activity.
 
     Parameters
     ----------
-    adrio : bool, default=True
-        True to display ADRIO progress updates
-    live : bool, default=True
+    adrio :
+        True to include ADRIO progress updates.
+    live :
         True if this is being used in an interactive environment like
-        a Jupyter Notebook; presentation may look better in
-        some environments by setting this to False (e.g., Quarto)
+        the console or a Jupyter Notebook. When rendering static documents
+        (such as with Quarto), the output may look better by setting this to False.
+
+    Examples
+    --------
+    ```python
+    with sim_messaging():
+        sim = BasicSimulator(rume)
+        my_results = sim.run()
+    ```
     """
 
     start_time: float | None = None
