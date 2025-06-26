@@ -15,7 +15,6 @@ from epymorph.compartment_model import (
     QuantitySelection,
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
-from epymorph.log.messaging import sim_messaging
 from epymorph.rume import RUME
 from epymorph.time import Dim, TimeAggregation, TimeSelection
 from epymorph.util import mask
@@ -233,30 +232,64 @@ RumeT = TypeVar("RumeT", bound=RUME)
 """A type of RUME."""
 
 
-def memoize_rume(path: str | Path, rume: RumeT, *, refresh: bool = False) -> RumeT:
-    """Stores/loads a RUME's ADRIO data using a local file.
+def memoize_rume(
+    path: str | Path,
+    rume: RumeT,
+    *,
+    refresh: bool = False,
+    rng: np.random.Generator | None = None,
+) -> RumeT:
+    """
+    Caches a RUME's parameter data using a local file.
 
-    This is intended as a utility for working with RUMEs that use data from ADRIOs.
-    For example, working interactively in a Notebook you may have to reload the Notebook
-    many times, which could take seconds or minutes each time just to fetch data.
-    It's convenient to avoid that delay so that's where this function comes in.
+    If the file doesn't exist, the RUME's parameters are evaluated and saved.
+    If the file does exist (and we're not forcing a refresh), values are loaded from
+    the file and the RUME's parameters are overridden to use those values.
+
+    This is intended as a utility for working with RUMEs that use data from ADRIOs
+    that may be expensive to fetch repeatedly.
+
+    For example, working interactively in a Notebook you may have to reprocess code
+    cells many times, which could mean spending a long time re-fetching data and/or
+    incurring API usage costs. This function helps you avoid those costs.
+
+    Parameters
+    ----------
+    path :
+        The path to the cache file.
+    rume :
+        The RUME to use.
+    refresh :
+        True to force this logic to ignore any existing cache file. Parameters will be
+        evaluated and the cache file will be overwritten.
+    rng :
+        A random number generator instance to use. Otherwise we'll use numpy's default
+        RNG.
+
+    Returns
+    -------
+    :
+        A clone of the `RUME` with all parameters replaced by the fully-evaluated numpy
+        data arrays.
+
+    Warning
+    -------
     This is not a full serialization of the RUME, so if you change the RUME config
-    you should not re-use the cache file; passing `refresh=True` is an easy way to make
-    this function ignore any previously stored file."""
+    you should _not_ re-use the cache file; passing `refresh=True` is an easy way to
+    make this function ignore any previously saved file.
+    """
     path = Path(path)
     if not refresh and path.exists():
-        # Load from cache; clone RUME and replace ADRIOs with ndarrays
-        cached = dict(np.load(path))
-        return dataclasses.replace(
-            rume,
-            params={NamePattern.parse(key): value for key, value in cached.items()},
-        )
+        # Load from cache
+        param_values = dict(np.load(path))
     else:
-        # Save to cache; evaluate parameters and store the resulting ndarrays
-        with sim_messaging():
-            values = rume.evaluate_params(rng=np.random.default_rng()).to_dict(
-                simplify_names=True
-            )
+        # Save to cache
+        # Evaluate parameters and store the resulting arrays
+        resolver = rume.evaluate_params(rng=rng or np.random.default_rng())
+        param_values = resolver.to_dict(simplify_names=True)
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(path, **values)
-        return rume
+        np.savez(path, **param_values)
+
+    # In either case: clone RUME and replace all parameters from saved arrays
+    params = {NamePattern.parse(key): value for key, value in param_values.items()}
+    return dataclasses.replace(rume, params=params)
