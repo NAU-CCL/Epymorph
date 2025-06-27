@@ -1,6 +1,4 @@
-"""
-Classes for representing simulation results.
-"""
+"""The simulation results for basic simulations."""
 
 import dataclasses
 from dataclasses import dataclass, field
@@ -20,6 +18,7 @@ from epymorph.tools.out_plot import PlotRendererMixin
 from epymorph.tools.out_table import TableRendererMixin
 
 RUMEType_co = TypeVar("RUMEType_co", covariant=True, bound=RUME[GeoScope])
+"""The type of a `RUME` used to produce an `Output`."""
 
 
 @dataclass(frozen=True)
@@ -30,35 +29,64 @@ class Output(
     Generic[RUMEType_co],
 ):
     """
-    The output of a simulation run, including compartment data for all locations and
-    all IPM compartments and event data for all locations and all IPM events.
+    The output of a `BasicSimulation` run, including time series for compartment data
+    and transition events for all locations.
+
+    Parameters
+    ----------
+    rume :
+        The `RUME` used in the simulation that generated this output.
+    initial :
+        The simulation's initial compartments by location and compartment.
+    visit_compartments :
+        Compartment data collected in the node where individuals are visiting.
+    visit_events :
+        Event data collected in the node where individuals are visiting.
+    home_compartments :
+        Compartment data collected in the node where individuals reside.
+    home_events :
+        Event data collected in the node where individuals reside.
+
+    See Also
+    --------
+    [epymorph.simulator.basic.basic_simulator.BasicSimulator][] which is the most common
+    way to create an output.
     """
 
     rume: RUMEType_co  # type: ignore (pylance can't tell that rume is immutable)
-    """The Rume used in the simulation that generated this output."""
+    """The `RUME` used in the simulation that generated this output."""
 
     initial: NDArray[SimDType]
     """
-    Initial compartments by location and compartment.
+    The simulation's initial compartments by location and compartment.
     Array of shape (N,C) where N is the number of locations,
     and C is the number of compartments
     """
 
     visit_compartments: NDArray[SimDType]
-    """Compartment data collected in the node where individuals are visiting.
-    See `compartments` for more information."""
+    """
+    Compartment data collected in the node where individuals are visiting.
+    See `compartments` for more information.
+    """
     visit_events: NDArray[SimDType]
-    """Event data collected in the node where individuals are visiting.
-    See `events` for more information."""
+    """
+    Event data collected in the node where individuals are visiting.
+    See `events` for more information.
+    """
     home_compartments: NDArray[SimDType]
-    """Compartment data collected in the node where individuals reside.
-    See `compartments` for more information."""
+    """
+    Compartment data collected in the node where individuals reside.
+    See `compartments` for more information.
+    """
     home_events: NDArray[SimDType]
-    """Event data collected in the node where individuals reside.
-    See `events` for more information."""
+    """
+    Event data collected in the node where individuals reside.
+    See `events` for more information.
+    """
 
     data_mode: Literal["visit", "home"] = field(default="visit")
-    """Controls which data is returned by the `compartments` and `events` properties.
+    """
+    Controls which data is returned by the `compartments` and `events` properties.
     Although you can access both data sets, it's helpful to have a default for things
     like our plotting and mapping tools. Defaults to "visit".
 
@@ -139,7 +167,7 @@ class Output(
     @property
     @override
     def dataframe(self) -> pd.DataFrame:
-        """Returns the output data in DataFrame form, using the current data mode."""
+        """Returns the output data as a data frame, using the current data mode."""
         # NOTE: reshape ordering is critical, because the index column creation
         # must assume ordering happens in a specific way.
         # C ordering causes the later index (node) to change fastest and the
