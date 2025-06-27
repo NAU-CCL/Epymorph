@@ -1,3 +1,5 @@
+"""ADRIOs for caculating absolute or relative humidity."""
+
 import numpy as np
 from numpy.core.records import fromarrays
 from numpy.typing import NDArray
@@ -21,7 +23,7 @@ def calculate_relative_humidity(
     dewpoint: NDArray[np.float64],
 ) -> NDArray[np.float64]:
     """
-    Calculates relative humidity in percent (0 to 100). The calculation is designed to
+    Calculate relative humidity in percent (0 to 100). The calculation is designed to
     be vectorized over the input arrays, so they must be compatible shapes.
 
     Note: results may exceed 100% if temperature and dew point close in value.
@@ -59,7 +61,7 @@ def calculate_absolute_humidity(
     dewpoint: NDArray[np.float64],
 ) -> NDArray[np.float64]:
     """
-    Calculates absolute humidity in kilograms per cubic meter. The calculation is
+    Calculate absolute humidity in kilograms per cubic meter. The calculation is
     designed to be vectorized over the input arrays, so they must be compatible shapes.
 
     Parameters

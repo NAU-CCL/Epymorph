@@ -1,3 +1,5 @@
+"""ADRIOs for US Census Bureau American Community Survey Commuting Flows data."""
+
 from pathlib import Path
 from typing import Callable, Literal, NamedTuple
 

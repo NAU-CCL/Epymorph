@@ -165,7 +165,7 @@ def error_gate(
     *reraises: type[Exception],
 ):
     """
-    A context manager that standardizes errors linked to a particular simulation phase.
+    Begin a context that standardizes errors linked to a particular simulation phase.
     Wrap the phase in an error gate and all exceptions raised within will be normalized.
 
     If an exception of type `exception_type` is caught, it will be re-raised as-is.

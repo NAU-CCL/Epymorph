@@ -1,6 +1,4 @@
-"""
-Implements a generic geo scope capable of representing arbitrary geographies.
-"""
+"""Implements a generic geo scope capable of representing arbitrary geographies."""
 
 from dataclasses import dataclass
 from typing import Never
@@ -66,7 +64,7 @@ class CustomSelection(GeoSelection[CustomScope]):
 
     def group(self, grouping: GeoGrouping) -> GeoGroup[CustomScope]:
         """
-        Groups the geo axis using the specified grouping.
+        Group the geo axis using the specified grouping.
 
         Parameters
         ----------

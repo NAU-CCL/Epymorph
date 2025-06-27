@@ -17,6 +17,7 @@ from math import isclose
 from typing import Any, Literal, Sequence, Type, TypeVar, cast
 
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.attribute import AttributeDef
 from epymorph.data_type import SimDType
@@ -41,7 +42,7 @@ _day_of_week_pattern = r"\b(M|T|W|Th|F|Sa|Su)\b"
 
 def parse_days_of_week(dow: str) -> tuple[DayOfWeek, ...]:
     """
-    Parses a list of days of the week using our standard abbreviations:
+    Parse a list of days of the week using our standard abbreviations:
     M, T, W, Th, F, Sa, Su.
 
     Parameters
@@ -94,6 +95,7 @@ class MovementPredicate(ABC):
 class EveryDay(MovementPredicate):
     """Return true for every day."""
 
+    @override
     def evaluate(self, tick: Tick) -> bool:
         return True
 
@@ -118,6 +120,7 @@ class DayIs(MovementPredicate):
         else:
             self.week_days = tuple(week_days)
 
+    @override
     def evaluate(self, tick: Tick) -> bool:
         return tick.date.weekday() in self.week_days
 
@@ -210,7 +213,7 @@ class MovementClause(
 
     def is_active(self, tick: Tick) -> bool:
         """
-        Should this movement clause be applied this tick?
+        Check if this movement clause should be applied this tick.
 
         Parameters
         ----------

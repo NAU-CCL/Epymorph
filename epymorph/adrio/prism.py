@@ -86,9 +86,7 @@ class _Sampler(Protocol):
 
 
 class _CentroidSampler(_Sampler):
-    """
-    A simple sampler that uses the data value of the pixel which contains each centroid.
-    """
+    """A sampler that uses the data value of the pixel containing each centroid."""
 
     @override
     def sample(self, raster: rio.DatasetReader, centroids: NDArray) -> list[float]:

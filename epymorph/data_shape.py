@@ -55,9 +55,8 @@ class Dimensions(Protocol):
         E: int | None = None,
     ) -> "Dimensions":
         """
-        Convenience constructor which returns either a `CompleteDimensions` or
-        `PartialDimensions` instance based on whether or not the dimensions are fully
-        specified.
+        Construct either a `CompleteDimensions` or `PartialDimensions` instance,
+        depending on whether or not the dimensions are fully specified.
 
         Parameters
         ----------
@@ -185,7 +184,7 @@ class DataShape(ABC):
     @abstractmethod
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
         """
-        Returns a tuple with the lengths of the dimensions in this shape.
+        Return a tuple with the lengths of the dimensions in this shape.
 
         Parameters
         ----------
@@ -202,7 +201,7 @@ class DataShape(ABC):
     @abstractmethod
     def matches(self, dim: Dimensions, value: NDArray) -> bool:
         """
-        Does the given value match this shape expression?
+        Check if the given value matches this shape expression.
 
         Parameters
         ----------
@@ -437,9 +436,7 @@ class TimeAndNode(DataShape):
 
 @dataclass(frozen=True)
 class NodeAndArbitrary(DataShape):
-    """
-    An array of size exactly-N by any dimension: N being the number of simulation nodes.
-    """
+    """An array of size exactly-N by any dimension: N is the number of geo nodes."""
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -463,9 +460,7 @@ class NodeAndArbitrary(DataShape):
 
 @dataclass(frozen=True)
 class ArbitraryAndNode(DataShape):
-    """
-    An array of size any dimension by exactly-N: N being the number of simulation nodes.
-    """
+    """An array of size any dimension by exactly-N: N is the number of geo nodes."""
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:

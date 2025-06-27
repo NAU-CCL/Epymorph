@@ -93,7 +93,7 @@ class ModuleNamespace:
 
     def to_absolute(self, attrib_id: str) -> "AbsoluteName":
         """
-        Creates an absolute name by providing the attribute ID.
+        Create an absolute name by providing the attribute ID.
 
         Parameters
         ----------
@@ -168,7 +168,7 @@ class AbsoluteName:
 
     def in_strata(self, new_strata: str) -> "AbsoluteName":
         """
-        Creates a new `AbsoluteName` that is a copy of this name
+        Create a new `AbsoluteName` that is a copy of this name
         but with the given strata.
 
         Parameters
@@ -185,7 +185,7 @@ class AbsoluteName:
 
     def with_id(self, new_id: str) -> "AbsoluteName":
         """
-        Creates a new `AbsoluteName` that is a copy of this name
+        Create a new `AbsoluteName` that is a copy of this name
         but with the given ID.
 
         Parameters
@@ -202,7 +202,7 @@ class AbsoluteName:
 
     def to_namespace(self) -> ModuleNamespace:
         """
-        Extracts the module namespace part of this name.
+        Extract the module namespace part of this name.
 
         Returns
         -------
@@ -213,7 +213,7 @@ class AbsoluteName:
 
     def to_pattern(self) -> "NamePattern":
         """
-        Converts this name to a pattern that is an exact match for this name.
+        Convert this name to a pattern that is an exact match for this name.
 
         Returns
         -------
@@ -291,7 +291,7 @@ class ModuleName:
 
     def to_absolute(self, strata: str) -> AbsoluteName:
         """
-        Creates an absolute name by providing the strata.
+        Create an absolute name by providing the strata.
 
         Parameters
         ----------
@@ -530,7 +530,7 @@ class ModuleNamePattern:
 
     def to_absolute(self, strata: str) -> NamePattern:
         """
-        Creates a full name pattern by providing the strata.
+        Create a full name pattern by providing the strata.
 
         Parameters
         ----------

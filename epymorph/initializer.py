@@ -157,7 +157,7 @@ class NoInfection(Initializer):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -191,7 +191,7 @@ class Explicit(Initializer):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -243,7 +243,7 @@ class Proportional(Initializer):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -350,7 +350,7 @@ class IndexedLocations(SeededInfection):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -444,7 +444,7 @@ class SingleLocation(IndexedLocations):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -501,7 +501,7 @@ class LabeledLocations(SeededInfection):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -573,7 +573,7 @@ class RandomLocations(SeededInfection):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -657,7 +657,7 @@ class TopLocations(SeededInfection):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------
@@ -752,7 +752,7 @@ class BottomLocations(SeededInfection):
     @override
     def evaluate(self) -> SimArray:
         """
-        Evaluates the initializer in the current context.
+        Evaluate the initializer in the current context.
 
         Returns
         -------

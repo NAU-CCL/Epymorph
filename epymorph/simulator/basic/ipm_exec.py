@@ -1,5 +1,7 @@
 """
-IPM executor classes handle the logic for processing the IPM step of the simulation.
+`IPMExecutor` is part of the internal workings of `BasicSimulator`, implementing the
+logic for processing the IPM phase of the simulation. Most users will not use this
+module directly.
 """
 
 from dataclasses import dataclass
@@ -54,22 +56,28 @@ class Result(NamedTuple):
 
 @dataclass(frozen=True)
 class CompiledEdge:
-    """Lambdified EdgeDef (no fork). Effectively: `poisson(rate * tau)`"""
+    """Lambdified `EdgeDef` (no fork). Effectively: `poisson(rate * tau)`."""
 
     size: ClassVar[int] = 1
+    """The number of edges in this transition."""
     rate_lambda: SympyLambda
+    """The lambdified edge rate."""
 
 
 @dataclass(frozen=True)
 class CompiledFork:
-    """Lambdified ForkDef. Effectively: `multinomial(poisson(rate * tau), prob)`"""
+    """Lambdified `ForkDef`. Effectively: `multinomial(poisson(rate * tau), prob)`."""
 
     size: int
+    """The number of edges in this transition."""
     rate_lambda: SympyLambda
+    """The lambdified edge base rate."""
     prob_lambda: SympyLambda
+    """The lambdified edge fork probabilities."""
 
 
 CompiledTransition = CompiledEdge | CompiledFork
+"""A transition is either a fork or a plain edge."""
 
 
 def _compile_transitions(model: BaseCompartmentModel) -> list[CompiledTransition]:
@@ -111,33 +119,46 @@ def _make_apply_matrix(ipm: BaseCompartmentModel) -> SimArray:
 
 
 class IPMExecutor:
-    """The standard implementation of compartment model IPM execution."""
+    """
+    The standard implementation of compartment model IPM execution.
+
+    Parameters
+    ----------
+    rume :
+        The RUME.
+    world :
+        The world state.
+    data_resolver :
+        The evaluated data attributes of the simulation.
+    rng :
+        The simulation RNG.
+    """
 
     _rume: RUME
-    """the RUME"""
+    """The RUME."""
     _world: World
-    """the world state"""
+    """The world state."""
     _rng: np.random.Generator
-    """the simulation RNG"""
+    """The simulation RNG."""
 
     _trxs: list[CompiledTransition]
-    """compiled transitions"""
+    """Compiled transitions."""
     _apply_matrix: NDArray[SimDType]
     """
-    a matrix defining how each event impacts each compartment
-    (subtracting or adding individuals)
+    A matrix defining how each event impacts each compartment
+    (subtracting or adding individuals).
     """
     _events_leaving_compartment: list[list[int]]
     """
-    mapping from compartment index to the list of event indices
-    which source from that compartment
+    Mapping from compartment index to the list of event indices
+    which source from that compartment.
     """
     _source_compartment_for_event: list[int]
-    """mapping from event index to the compartment index it sources from"""
+    """Mapping from event index to the compartment index it sources from."""
     _attr_values: Iterator[list[AttributeValue]]
     """
-    a generator for the list of arguments (from attributes) needed to evaluate
-    transition functions
+    A generator for the list of arguments (from attributes) needed to evaluate
+    transition functions.
     """
 
     def __init__(
@@ -176,9 +197,18 @@ class IPMExecutor:
 
     def apply(self, tick: Tick) -> Result:
         """
-        Applies the IPM for this tick, mutating the world state.
-        Returns the location-specific events that happened this tick (an (N,E) array)
-        and the new compartments resulting from these events (an (N,C) array).
+        Apply the IPM for this tick, mutating the world state.
+
+        Parameters
+        ----------
+        tick :
+            Which tick to process.
+
+        Returns
+        -------
+        :
+            The location-specific events that happened this tick (an (N,E) array)
+            and the new compartments resulting from these events (an (N,C) array).
         """
         N = self._rume.scope.nodes
         C = self._rume.ipm.num_compartments
@@ -296,9 +326,7 @@ class IPMExecutor:
         cohorts: Sequence[Cohort],
         events: NDArray[SimDType],  # (E,) array
     ) -> NDArray[SimDType]:
-        """
-        Distribute events across a location's cohorts. Returns an (X,E) result.
-        """
+        """Distribute events across a location's cohorts. Returns an (X,E) result."""
         cohort_array = np.array(
             [x.compartments for x in cohorts],
             dtype=SimDType,
@@ -341,6 +369,7 @@ class IPMExecutor:
     def _get_default_error_args(
         self, rate_attrs: list, node: int, tick: Tick
     ) -> list[tuple[str, dict]]:
+        """Assemble arguments error messages."""
         cvals = {
             name: value
             for name, value in zip(
@@ -368,6 +397,7 @@ class IPMExecutor:
         tick: Tick,
         transition: CompiledFork,
     ) -> list[tuple[str, dict]]:
+        """Assemble arguments error messages."""
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)
@@ -392,6 +422,7 @@ class IPMExecutor:
         tick: Tick,
         transition: CompiledEdge | CompiledFork,
     ) -> list[tuple[str, dict]]:
+        """Assemble arguments for error messages."""
         arg_list = self._get_default_error_args(rate_attrs, node, tick)
 
         transition_index = self._trxs.index(transition)

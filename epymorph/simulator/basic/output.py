@@ -103,14 +103,18 @@ class Output(
 
     @cached_property
     def data_by_visit(self) -> "Output":
-        """Returns an Output object that contains the same set of data, but uses
-        'visit' as the default data mode."""
+        """
+        Return an `Output` object that contains the same set of data, but uses
+        'visit' as the default data mode.
+        """
         return self._with_data_mode("visit")
 
     @cached_property
     def data_by_home(self) -> "Output":
-        """Returns an Output object that contains the same set of data, but uses
-        'home' as the default data mode."""
+        """
+        Return an `Output` object that contains the same set of data, but uses
+        'home' as the default data mode.
+        """
         return self._with_data_mode("home")
 
     @property

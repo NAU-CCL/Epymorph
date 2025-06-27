@@ -105,7 +105,7 @@ In some TIGER years, data for the 4 territories were given in separate files.
 
 def is_tiger_year(year: int) -> TypeGuard[TigerYear]:
     """
-    A type-guard function to ensure a year is a supported TIGER year.
+    Check that a year is a supported TIGER year, as a type guard.
 
     Parameters
     ----------
@@ -467,7 +467,7 @@ class StatesSummary(GranularitySummary):
 @cache_transparent
 def get_states(year: int) -> StatesSummary:
     """
-    Loads US States information (assumed to be invariant for all supported years).
+    Load US States information (assumed to be invariant for all supported years).
 
     Parameters
     ----------
@@ -649,7 +649,7 @@ class CountiesSummary(GranularitySummary):
 @cache_transparent
 def get_counties(year: int) -> CountiesSummary:
     """
-    Loads US Counties information for the given year.
+    Load US Counties information for the given year.
 
     Parameters
     ----------
@@ -807,7 +807,7 @@ class TractsSummary(GranularitySummary):
 @cache_transparent
 def get_tracts(year: int) -> TractsSummary:
     """
-    Loads US Census Tracts information for the given year.
+    Load US Census Tracts information for the given year.
 
     Parameters
     ----------
@@ -958,7 +958,7 @@ class BlockGroupsSummary(GranularitySummary):
 @cache_transparent
 def get_block_groups(year: int) -> BlockGroupsSummary:
     """
-    Loads US Census Block Group information for the given year.
+    Load US Census Block Group information for the given year.
 
     Parameters
     ----------

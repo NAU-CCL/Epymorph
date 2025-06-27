@@ -1,3 +1,5 @@
+"""ADRIO for loading data from a compressed numpy data file (.npy or .npz)."""
+
 from pathlib import Path
 
 import numpy as np

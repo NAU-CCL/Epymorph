@@ -1,6 +1,4 @@
-"""
-Data usage estimation and reporting.
-"""
+"""Data usage estimation and reporting."""
 
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -93,9 +91,7 @@ DataEstimate = EmptyDataEstimate | AvailableDataEstimate
 
 @runtime_checkable
 class CanEstimateData(Protocol):
-    """
-    A checkable protocol which indicates entities that can produce data estimates.
-    """
+    """A checkable protocol which indicates entities that can produce data estimates."""
 
     @abstractmethod
     def estimate_data(self) -> DataEstimate:
@@ -143,7 +139,7 @@ def estimate_total(
     max_bandwidth: int,
 ) -> DataEstimateTotal:
     """
-    Computes the total of a set of data estimates.
+    Compute the total of a set of data estimates.
 
     A download time estimate is also provided, taking into account the assumed bandwidth
     limit (`max_bandwidth`) as well as any source-specific bandwidth limits.

@@ -88,13 +88,15 @@ def munge(
     quantity: QuantitySelection | QuantityAggregation,
 ) -> pd.DataFrame:
     """
-    Applies select/group/aggregate operations to an output dataframe.
+    Apply select/group/aggregate operations to an output dataframe.
 
     This function powers many of our more-specialized output processing tools, but we
     expose this general utility to enable re-use of this logic in more use-cases.
 
     Parameters
     ----------
+    output :
+        The result data to process.
     geo :
         The geo-axis strategy.
     time :
@@ -240,7 +242,7 @@ def memoize_rume(
     rng: np.random.Generator | None = None,
 ) -> RumeT:
     """
-    Caches a RUME's parameter data using a local file.
+    Cache a RUME's parameter data using a local file.
 
     If the file doesn't exist, the RUME's parameters are evaluated and saved.
     If the file does exist (and we're not forcing a refresh), values are loaded from

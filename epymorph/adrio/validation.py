@@ -87,7 +87,7 @@ Validator = Callable[[NDArray], ValidationResult]
 
 def validate_pipe(*validators: Validator) -> Validator:
     """
-    Creates a validator by chaining multiple other validators. Validators are evaluated
+    Create a validator by chaining multiple other validators. Validators are evaluated
     such that they short-circuit on the first invalid result, in which case only that
     invalid result is returned. If all validators pass, `Valid` is returned.
 
@@ -114,7 +114,7 @@ def validate_pipe(*validators: Validator) -> Validator:
 
 def validate_numpy() -> Validator:
     """
-    Creates a validator which checks that the result is a numpy array.
+    Create a validator which checks that the result is a numpy array.
 
     Returns
     -------
@@ -135,7 +135,7 @@ def validate_values_in_range(
     maximum: int | float | None,
 ) -> Validator:
     """
-    Creates a validator which checks that numeric values fall within the specified
+    Create a validator which checks that numeric values fall within the specified
     range.
 
     Assumes the values are not structured; if you wish to validate structured data
@@ -175,7 +175,7 @@ def validate_values_in_range(
 
 def validate_shape(shape: tuple[int, ...]) -> Validator:
     """
-    Creates a validator which checks the given shape.
+    Create a validator which checks the given shape.
 
     Parameters
     ----------
@@ -206,7 +206,7 @@ def validate_shape(shape: tuple[int, ...]) -> Validator:
 
 def validate_shape_unchecked_arbitrary(shape: tuple[int, ...]) -> Validator:
     """
-    Creates a validator which checks the given shape with the special exception that
+    Create a validator which checks the given shape with the special exception that
     if an axis is specified as -1, any length (one or greater) is permitted. There must
     still be the same number of dimensions in the result.
 
@@ -235,7 +235,7 @@ def validate_shape_unchecked_arbitrary(shape: tuple[int, ...]) -> Validator:
 
 def validate_dtype(dtype: np.dtype | type[np.generic]) -> Validator:
     """
-    Creates a validator which checks the given dtype.
+    Create a validator which checks the given dtype.
 
     Assumes the values are not structured; if you wish to validate structured data
     combine this function with a wrapper like `on_date_values` or `on_structured`.
@@ -274,7 +274,7 @@ def validate_dtype(dtype: np.dtype | type[np.generic]) -> Validator:
 
 def on_date_values(validator: Validator) -> Validator:
     """
-    Wraps a validator function so that it can check the values of a date/value array.
+    Wrap a validator function so that it can check the values of a date/value array.
 
     Parameters
     ----------
@@ -298,7 +298,7 @@ def on_date_values(validator: Validator) -> Validator:
 
 def on_structured(validator: Validator) -> Validator:
     """
-    Wraps a validator function so that it can check the values of structured arrays.
+    Wrap a validator function so that it can check the values of structured arrays.
     This presumes that the validator can be applied to all elements of the structured
     array in the same way. That is: it will likely work for homogenous types but not
     heterogenous types.
@@ -353,7 +353,7 @@ class ResultFormat:
 
 def validate_result(rformat: ResultFormat, context: Context) -> Validator:
     """
-    Creates a validator for the given result format declaration. This is a shortcut
+    Create a validator for the given result format declaration. This is a shortcut
     for chaining `validate_shape` and `validate_dtype`.
 
     Assumes the values are not structured; if you wish to validate structured data

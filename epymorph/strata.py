@@ -9,7 +9,7 @@ META_STRATA = "meta"
 
 def gpm_strata(strata_name: str) -> str:
     """
-    Formats a strata (GPM) name to its internal format.
+    Format a strata (GPM) name to its internal format.
 
     Parameters
     ----------

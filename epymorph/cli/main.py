@@ -7,7 +7,7 @@ from epymorph.cli.cache import define_argparser as def_cache
 
 
 def define_argparser() -> ArgumentParser:
-    """Builds a parser for all supported CLI commands."""
+    """Build a parser for all supported CLI commands."""
     # Using argparse to configure available commands and arguments.
     cli_parser = ArgumentParser(
         prog="epymorph", description="EpiMoRPH spatial meta-population modeling."

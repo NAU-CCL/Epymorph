@@ -126,7 +126,7 @@ def dtype_str(dtype: AttributeType) -> str:
 
 def dtype_check(dtype: AttributeType, value: Any) -> bool:
     """
-    Checks that a singular Python value conforms to the given attribute data type.
+    Check that a singular Python value conforms to the given attribute data type.
     This is not intended to check numpy arrays, only scalars and tuples.
 
     Parameters

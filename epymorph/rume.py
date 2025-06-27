@@ -168,7 +168,7 @@ def combine_tau_steps(
     strata_tau_lengths: dict[str, Sequence[float]],
 ) -> CombineTauStepsResult:
     """
-    Combines multiple tau step schemes to calculate a unified scheme which is compatible
+    Combine multiple tau step schemes to calculate a unified scheme which is compatible
     with all of them while using the fewest possible number of tau steps.
 
     Parameters
@@ -233,7 +233,7 @@ def remap_taus(
     strata_mms: list[tuple[str, MovementModel]],
 ) -> OrderedDict[str, MovementModel]:
     """
-    Adjusts a set of movement models which may use different tau step schemes such that
+    Adjust a set of movement models which may use different tau step schemes such that
     they all use a unified tau step scheme which is compatible with all of them.
 
     This step is performed automatically when constructing a multi-strata RUME.
@@ -443,7 +443,14 @@ class RUME(ABC, Generic[GeoScopeT_co]):
 
     @abstractmethod
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
-        """Returns a function for formatting attribute/parameter names."""
+        """
+        Create function for formatting attribute/parameter names.
+
+        Returns
+        -------
+        :
+            The formatter function.
+        """
 
     def params_description(self) -> str:
         """Provide a description of all attributes required by the RUME."""
@@ -485,8 +492,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
     @staticmethod
     def symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
         """
-        Convenient function to retrieve the sympy symbols used to represent
-        simulation quantities.
+        Retrieve the sympy symbols used to represent simulation quantities.
 
         Parameters
         ----------
@@ -507,7 +513,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         max_bandwidth: int = 1000**2,  # default: 1 MB/s
     ) -> None:
         """
-        Prints a report estimating the data requirements of this RUME.
+        Print a report estimating the data requirements of this RUME.
 
         Includes data which must be downloaded and how much will be added to the file
         cache. Provides a projected download time based on the given assumed maximum
@@ -583,7 +589,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
         override_params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
     ) -> DataResolver:
         """
-        Evaluates the parameters of this RUME.
+        Evaluate the parameters of this RUME.
 
         Parameters
         ----------
@@ -614,7 +620,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
 
     def initialize(self, data: DataResolver, rng: np.random.Generator) -> SimArray:
         """
-        Evaluates the Initializer(s) for this RUME.
+        Evaluate the Initializer(s) for this RUME.
 
         Parameters
         ----------
@@ -717,7 +723,6 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
 
     @override
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
-        """Returns a function for formatting attribute/parameter names."""
         return lambda n: f"{n.module}::{n.id}"
 
 
@@ -792,7 +797,6 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
 
     @override
     def name_display_formatter(self) -> Callable[[AbsoluteName | NamePattern], str]:
-        """Returns a function for formatting attribute/parameter names."""
         return str
 
 

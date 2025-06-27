@@ -86,7 +86,7 @@ class Cohort:
 
     def merge_from(self, from_cohort: Self) -> None:
         """
-        Merges another cohort into this one, modifying in-place.
+        Merge another cohort into this one, modifying in-place.
 
         Parameters
         ----------

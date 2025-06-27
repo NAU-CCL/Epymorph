@@ -61,7 +61,7 @@ def default_rng(
     seed: int | SeedSequence | None = None,
 ) -> Callable[[], np.random.Generator]:
     """
-    Convenience constructor to create a factory function for a simulation's
+    Construct to create a factory function for a simulation's
     random number generator.
 
     Parameters
@@ -170,7 +170,7 @@ def simulation_clock(
     tau_step_lengths: list[float],
 ) -> Iterable[Tick]:
     """
-    Generates the sequence of ticks which makes up the simulation clock.
+    Generate the sequence of ticks which makes up the simulation clock.
 
     Parameters
     ----------
@@ -486,7 +486,7 @@ class Context(ABC):
 
 def validate_context_for_shape(context: Context, shape: DataShape) -> None:
     """
-    Checks that the elements of a context which are required to compute the given
+    Check that the elements of a context which are required to compute the given
     shape have been provided in the context. For example, if the shape contains an "N"
     axis, the context must include a scope or else there's no knowing how long that axis
     should be.
@@ -531,9 +531,7 @@ _TypeT = TypeVar("_TypeT")
 
 
 class SimulationFunctionClass(ABCMeta):
-    """
-    The metaclass for `SimulationFunction` classes; enforces proper implementation.
-    """
+    """`SimulationFunction` metaclass; enforces proper implementation."""
 
     def __new__(
         cls: Type[_TypeT],
@@ -679,7 +677,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         rng: np.random.Generator | None = None,
     ) -> Self:
         """
-        Constructs a clone of this instance which has access to the given context.
+        Construct a clone of this instance which has access to the given context.
 
         All elements of the context are optional, allowing users who wish to
         quickly evaluate a function in a one-off situation to provide only the
@@ -743,7 +741,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
 
     def with_context_internal(self, context: Context) -> Self:
         """
-        Constructs a clone of this instance which has access to the given context.
+        Construct a clone of this instance which has access to the given context.
 
         This method is intended for usage internal to epymorph's systems.
         Typical usage will use `with_context` instead.
@@ -977,11 +975,13 @@ class SimulationTickFunction(BaseSimulationFunction[ResultT]):
         Parameters
         ----------
         other :
-            the other function to defer to
+            The other function to defer to.
+        tick :
+            The simulation tick being evaluated.
         scope :
-            override the geo scope for evaluation; if None, use the same scope
+            Override the geo scope for evaluation; if None, use the same scope.
         time_frame :
-            override the time frame for evaluation; if None, use the same time frame
+            Override the time frame for evaluation; if None, use the same time frame.
 
         Returns
         -------

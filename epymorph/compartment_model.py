@@ -136,7 +136,7 @@ class CompartmentName:
     @classmethod
     def parse(cls, name: str) -> Self:
         """
-        Parses a string as a `CompartmentName`. If the name contains no underscores,
+        Parse a string as a `CompartmentName`. If the name contains no underscores,
         the entire name is the base name. If the name contains at least one underscore,
         the part before the first underscore is the base name and everything after is
         the subscript part. It is not possible to create a stratified name this way.
@@ -352,7 +352,7 @@ class EdgeDef:
 
     @property
     def tuple(self) -> tuple[str, str]:
-        """The edge in tuple form: `(from_name, to_name)`"""
+        """The edge in tuple form: `(from_name, to_name)`."""
         return str(self.compartment_from), str(self.compartment_to)
 
 
@@ -472,7 +472,7 @@ TransitionDef = EdgeDef | ForkDef
 
 def _as_events(trxs: Iterable[TransitionDef]) -> Iterator[EdgeDef]:
     """
-    Iterator for all unique events defined in the transition model.
+    Return an iterator for all unique events defined in the transition model.
     Each edge corresponds to a single event, even the edges that are part of a fork.
     The events are returned in a stable order (definition order) so that they can be
     indexed that way.
@@ -516,9 +516,7 @@ def _remap_transition(
     strata: str,
     symbol_mapping: dict[Symbol, Symbol],
 ) -> TransitionDef:
-    """
-    Replaces symbols used in the transition using substitution from `symbol_mapping`.
-    """
+    """Replace symbols in the transition using substitution from `symbol_mapping`."""
     match t:
         case EdgeDef():
             return _remap_edge(t, strata, symbol_mapping)
@@ -646,9 +644,7 @@ class BaseCompartmentModel(ABC):
 
     @property
     def quantities(self) -> Iterator[CompartmentDef | EdgeDef]:
-        """
-        All quantities from the model, compartments then edges, in definition order.
-        """
+        """All quantities in the model, compartments then edges, in definition order."""
         yield from self.compartments
         yield from self.events
 
@@ -721,7 +717,7 @@ class BaseCompartmentModel(ABC):
 
 def validate_compartment_model(model: BaseCompartmentModel) -> None:
     """
-    Validates an IPM definition.
+    Validate an IPM definition.
 
     Parameters
     ----------
@@ -821,9 +817,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
 
 
 class CompartmentModelClass(ABCMeta):
-    """
-    The metaclass for `CompartmentModel` classes; enforces proper implementation.
-    """
+    """`CompartmentModel` metaclass; enforces proper implementation."""
 
     def __new__(
         cls: Type["CompartmentModelClass"],
@@ -1259,12 +1253,14 @@ _N = TypeVar("_N", bound=CompartmentName | EdgeName)
 
 
 class QuantityGrouping(NamedTuple):
-    """Describes how to group simulation output quantities (events and compartments).
+    """
+    Describes how to group simulation output quantities (events and compartments).
     The default combines any quantity whose names match exactly. This is common in
     multistrata models where events from several strata impact one transition.
     You can also choose to group across strata and subscript differences.
     Setting `strata` or `subscript` to True means those elements of quantity names
-    (if they exist) are ignored for the purposes of matching."""
+    (if they exist) are ignored for the purposes of matching.
+    """
 
     strata: bool
     """True to combine quantities across strata."""
@@ -1280,7 +1276,7 @@ class QuantityGrouping(NamedTuple):
 
     def map(self, quantities: Sequence[Quantity]) -> QuantityGroupResult:
         """
-        Performs the quantity grouping.
+        Perform the quantity grouping.
 
         Parameters
         ----------
@@ -1384,7 +1380,7 @@ class QuantityStrategy:
 
     def disambiguate(self) -> OrderedDict[str, str]:
         """
-        Creates a name mapping to disambiguate IPM quantities that have
+        Create a name mapping to disambiguate IPM quantities that have
         the same name. This happens commonly in multistrata IPMs with
         meta edges where multiple other strata influence a transmission rate
         in a single strata. The returned mapping includes only the selected IPM
@@ -1517,7 +1513,7 @@ class QuantitySelection(QuantityStrategy):
         subscript: bool = False,
     ) -> "QuantityGroup":
         """
-        Groups quantities according to the given options.
+        Group quantities according to the given options.
 
         By default, any quantities that directly match each other will be combined.
         This generally only happens with events, where there may be multiple edges
@@ -1794,10 +1790,11 @@ class QuantitySelector:
 
         Specify no patterns to select all compartments.
         Pattern strings match against compartment names.
+
         Multiple patterns are combined as though by boolean-or.
         Pattern strings can use asterisk as a wildcard character
         to match any (non-empty) part of a name besides underscores.
-        For example, "I_\\*" would match events "I_abc" and "I_def".
+        For example, `"I_*"` would match events `"I_abc"` and `"I_def"`.
 
         Parameters
         ----------
@@ -1835,14 +1832,15 @@ class QuantitySelector:
         Specify no patterns to select all events.
         Pattern strings match against event names which combine the source and
         destination compartment names with a separator. e.g., the event
-        where individuals transition from "S" to "I" is called "S->I".
+        where individuals transition from `S` to `I` is called `S->I`.
         You must provide both a source and destination pattern, but you can
-        use "-", ">", or "->" as the separator.
+        use `-`, `>`, or `->` as the separator.
+
         Multiple patterns are combined as though by boolean-or.
         Pattern strings can use asterisk as a wildcard character
         to match any (non-empty) part of a name besides underscores.
-        For example, "S->\\*" would match events "S->A" and "S->B".
-        "S->I_\\*" would match "S->I_abc" and "S->I_def".
+        For example, `"S->*"` would match events `"S->A"` and `"S->B"`.
+        `"S->I_*"` would match `"S->I_abc"` and `"S->I_def"`.
 
         Parameters
         ----------

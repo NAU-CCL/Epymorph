@@ -1,3 +1,10 @@
+"""
+Produce graphical diagrams of compartmental disease models (IPMs).
+
+Usage of these features requires separate installation of a latex converter and
+graphviz.
+"""
+
 from abc import abstractmethod
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -57,7 +64,7 @@ def _dependency_issues() -> list[tuple[str, str]]:
 
 def check_dependencies() -> None:
     """
-    Checks if the external requirements for drawing diagrams are installed.
+    Check if the external requirements for drawing diagrams are installed.
 
     The results of this check are memorized so it can be called repeatedly
     without adding much overhead.
@@ -90,7 +97,7 @@ class EdgeDef(Protocol):
     @property
     @abstractmethod
     def tuple(self) -> tuple[str, str]:
-        """The edge in tuple form: `(from_name, to_name)`"""
+        """The edge in tuple form: `(from_name, to_name)`."""
 
 
 class CompartmentModel(Protocol):
@@ -105,7 +112,7 @@ class CompartmentModel(Protocol):
 @contextmanager
 def construct_digraph(ipm: CompartmentModel) -> Iterator[Digraph]:
     """
-    Constructs a graphviz object (`Digraph`) for the compartment model's diagram.
+    Construct a graphviz object (`Digraph`) for the compartment model's diagram.
 
     The `Digraph` instance is only valid within the managed context because we rely on
     temporary files to render latex expressions.
@@ -119,11 +126,11 @@ def construct_digraph(ipm: CompartmentModel) -> Iterator[Digraph]:
     check_dependencies()
 
     def expr_sum(exprs: Iterable[Expr]) -> Expr:
-        """Sums a bunch of expressions together."""
+        """Sum a bunch of expressions together."""
         return reduce(lambda a, b: a + b, exprs)
 
     def edges_group_sum(edges: Iterable[EdgeDef]) -> list[tuple[str, str, Expr]]:
-        """Computes the sum of rate expressions by unique (src,dst) pair."""
+        """Compute the sum of rate expressions by unique (src,dst) pair."""
         return [
             (src, dst, expr_sum(e.rate for e in group_edges))
             for (src, dst), group_edges in groupby(edges, key=lambda e: e.tuple)
