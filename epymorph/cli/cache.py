@@ -73,5 +73,6 @@ def handle_remove(path: str) -> int:
 
 
 def handle_dir() -> int:
+    """CLI command handler: print the path to the cache directory."""
     print(CACHE_PATH)
     return 0

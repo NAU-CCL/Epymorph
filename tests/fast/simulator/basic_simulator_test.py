@@ -15,7 +15,7 @@ from epymorph.data.mm.pei import Pei as PeiMM
 from epymorph.data_shape import Shapes
 from epymorph.data_type import SimDType
 from epymorph.error import (
-    IPMSimInvalidProbsError,
+    IPMSimInvalidForkError,
     IPMSimLessThanZeroError,
     IPMSimNaNError,
     MMSimError,
@@ -204,7 +204,7 @@ class SimulateTest(unittest.TestCase):
             sim.run(rng_factory=default_rng(42))
 
         err_msg = str(e.exception)
-        self.assertIn("Less than zero rate detected", err_msg)
+        self.assertIn("less than zero", err_msg)
         self.assertIn("immunity_duration: -100.0", err_msg)
 
     def test_divide_by_zero_err(self):
@@ -256,7 +256,7 @@ class SimulateTest(unittest.TestCase):
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
-        self.assertIn("NaN (not a number) rate detected", err_msg)
+        self.assertIn("transition rate was NaN", err_msg)
         self.assertIn("S: 0", err_msg)
         self.assertIn("I: 0", err_msg)
         self.assertIn("R: 0", err_msg)
@@ -281,11 +281,11 @@ class SimulateTest(unittest.TestCase):
         )
 
         sim = BasicSimulator(rume)
-        with self.assertRaises(IPMSimInvalidProbsError) as e:
+        with self.assertRaises(IPMSimInvalidForkError) as e:
             sim.run(rng_factory=default_rng(1))
 
         err_msg = str(e.exception)
-        self.assertIn("Invalid probabilities for fork definition detected.", err_msg)
+        self.assertIn("fork transition is invalid", err_msg)
         self.assertIn("hospitalization_prob: -0.2", err_msg)
         self.assertIn("hospitalization_duration: 15", err_msg)
         self.assertIn("I → (H,R): I*gamma", err_msg)

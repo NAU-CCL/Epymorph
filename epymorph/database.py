@@ -1,16 +1,17 @@
 """
-A Database in epymorph is a way to organize values with our namespace system
-of three hierarchical components, as in: "strata::module::attribute_id".
-This gives us a lot of flexibility when specifying data requirements and values
+A `Database` in epymorph organizes data attributes in a hierarchical namespace of three
+components, as in: "strata::module::attribute_id".
+
+The goal is to be as flexibile as possible for users specifying requirements and values
 which fulfill those requirements. For example, you can provide a value for
 "*::*::population" to indicate that every strata and every module should use the same
-value if they need a "population" attribute. Or you can provide "*::init::population"
+value if they require a "population" attribute. Or you can provide "*::init::population"
 to indicate that only initializers should use this value, and, presumably, another value
 is more appropriate for other modules like movement.
 
-Hierarchical Database instances are also included which provide the ability to "layer"
-data for a simulation -- if the outermost database has a matching value, that value is
-used, otherwise the search for a match proceeds to the inner layers (recursively).
+Specialized database instances provide the ability to "layer" data for a simulation --
+if the outermost database has a matching value, that value is used, otherwise the search
+for a match proceeds to the inner layers (recursively).
 """
 
 import dataclasses
@@ -80,31 +81,35 @@ class Match(NamedTuple, Generic[T]):
     """The result of a database query."""
 
     pattern: NamePattern
+    """The name pattern of the value that matched."""
     value: T
+    """The matched value."""
 
 
 class Database(Generic[T]):
     """
-    A simple database implementation which provides namespaced key/value pairs.
-    Namespaces are in the form "a::b::c", where "a" is the strata,
-    "b" is the module, and "c" is the attribute name.
-    Values are permitted to be assigned with wildcards (specified by asterisks),
-    so that key "*::b::c" matches queries for "a::b::c" as well as "z::b::c".
+    A dictionary of key/value pairs where keys obey epymorph's namespace system.
 
-    This is intended for tracking parameter values as given by the user,
-    in constrast to `DataResolver` which is for tracking fully-evaluated parameters.
+    Namespaces are in the form "a::b::c", where "a" is a strata, "b" is a module,
+    and "c" is an attribute name. Values can be assigned with wildcards (specified by
+    asterisks), so that key "*::b::c" matches queries for both "a::b::c" and "z::b::c".
+
+    See Also
+    --------
+    `Database` is mostly used to store raw-form parameter values declared by the user.
+    In constrast [epymorph.database.DataResolver][] stores fully-evaluated parameters
+    optimized for use by simulation logic.
+
+    Parameters
+    ----------
+    data :
+        The key/value pairs to store.
     """
 
     _data: dict[NamePattern, T]
+    """The data values."""
 
     def __init__(self, data: dict[NamePattern, T]):
-        """Constructor.
-
-        Parameters
-        ----------
-        data : dict[NamePattern, T]
-            the values in this database
-        """
         self._data = data
 
         # Check for key ambiguity:
@@ -123,18 +128,19 @@ class Database(Generic[T]):
             raise ValueError(msg)
 
     def query(self, key: str | AbsoluteName) -> Match[T] | None:
-        """Query this database for a key match.
+        """
+        Query this database for a key match.
 
         Parameters
         ----------
-        key : str | AbsoluteName
-            the name to find; if given as a string, we must be able to parse it as a
-            valid AbsoluteName
+        key :
+            The name to find. If given as a string, it is first parsed as an
+            `AbsoluteName`.
 
         Returns
         -------
-        Match[T] | None
-            the found value, if any, else None
+        :
+            The found value, if any, else `None`.
         """
         if not isinstance(key, AbsoluteName):
             key = AbsoluteName.parse(key)
@@ -144,29 +150,37 @@ class Database(Generic[T]):
         return None
 
     def to_dict(self) -> dict[NamePattern, T]:
-        """Return a copy of this database's data."""
+        """
+        Return the database's data as a dictionary.
+
+        Returns
+        -------
+        :
+            A copy of this database's data.
+        """
         return {**self._data}
 
 
 class DatabaseWithFallback(Database[T]):
     """
-    A specialization of Database which has a fallback Database.
-    If a match is not found in this DB's keys, the fallback is checked (recursively).
+    A specialization of `Database` which has its own key/value pairs as well as a
+    fallback `Database`.
+
+    If a match is not found in this database, the fallback is checked (recursively).
+
+    Parameters
+    ----------
+    data :
+        The highest priority values in the database.
+    fallback :
+        A database containing fallback values; if a match cannot be found
+        in `data`, this database will be checked.
     """
 
     _fallback: Database[T]
+    """The fallback."""
 
     def __init__(self, data: dict[NamePattern, T], fallback: Database[T]):
-        """Constructor.
-
-        Parameters
-        ----------
-        data : dict[NamePattern, T]
-            the highest priority values in the database
-        fallback : Database[T]
-            a database containing fallback values; if a match cannot be found
-            in `data`, this database will be checked
-        """
         super().__init__(data)
         self._fallback = fallback
 
@@ -200,25 +214,24 @@ class DatabaseWithFallback(Database[T]):
 
 class DatabaseWithStrataFallback(Database[T]):
     """
-    A specialization of Database which has a set of fallback Databases, one per strata.
-    For example, we might query this DB for "a::b::c". If we do not have a match in our
-    own key/values, but we do have a fallback DB for "a", we will query that fallback
-    (which could continue recursively).
+    A specialization of `Database` which has per-strata fallback databases.
+
+    For example consider querying this database for "a::b::c". If there is no match in
+    this database but there is a fallback for strata "a", the search proceeds to that
+    database (which could continue recursively).
+
+    Parameters
+    ----------
+    data :
+        The highest-priority values in the database.
+    children :
+        Fallback databases by strata.
     """
 
     _children: dict[str, Database[T]]
+    """The fallbacks by strata name."""
 
     def __init__(self, data: dict[NamePattern, T], children: dict[str, Database[T]]):
-        """Constructor.
-
-        Parameters
-        ----------
-        data : dict[NamePattern, T]
-            the highest-priority values in the database
-        children : dict[str, Database[T]]
-            fallback databases by strata; if a match can't be found in `data`,
-            the database for the matching strata (if any) will be checked
-        """
         super().__init__(data)
         self._children = children
 
@@ -262,8 +275,26 @@ def assert_can_adapt(
     dim: Dimensions,
     value: AttributeArray,
 ) -> None:
-    """Check that we can adapt the given `value` to the given type and shape,
-    given dimensional information. Raises AttributeException if not."""
+    """
+    Check that we can adapt the given `value` to the given type and shape,
+    given dimensional information.
+
+    Parameters
+    ----------
+    data_type :
+        The final data type to adapt to.
+    data_shape :
+        The final data shape to adapt to.
+    dim :
+        Simulation dimensions.
+    value :
+        The value to adapt.
+
+    Raises
+    ------
+    DataAttributeError
+        If not.
+    """
     if not np.can_cast(value, dtype_as_np(data_type)):
         raise DataAttributeError("Not a compatible type.")
     if not data_shape.matches(dim, value):
@@ -276,8 +307,31 @@ def adapt(
     dim: Dimensions,
     value: AttributeArray,
 ) -> AttributeArray:
-    """Adapt the given `value` to the given type and shape, given dimensional
-    information. Raises AttributeException if this fails."""
+    """
+    Adapt the given `value` to the given type and shape, given dimensional
+    information.
+
+    Parameters
+    ----------
+    data_type :
+        The final data type to adapt to.
+    data_shape :
+        The final data shape to adapt to.
+    dim :
+        Simulation dimensions.
+    value :
+        The value to adapt.
+
+    Returns
+    -------
+    :
+        The adapated array.
+
+    Raises
+    ------
+    DataAttributeError
+        If this fails.
+    """
     assert_can_adapt(data_type, data_shape, dim, value)
     try:
         typed = value.astype(
@@ -292,71 +346,74 @@ def adapt(
 
 
 class DataResolver:
-    """A sort of database for data attributes in the context of a simulation.
+    """
+    Stores evaluated data attributes for a simulation.
+
     Data (typically parameter values) are provided by the user as a collection
     of key-value pairs, with the values in several forms. These are evaluated
-    to turn them into our internal data representation which is most useful
-    for simulation execution (a numpy array, to be exact).
+    to turn them into our internal data representation which is optimized for
+    simulation execution.
 
-    While the keys can be described using NamePatterns, when they are resolved
-    they are tracked by their full AbsoluteName to facilitate lookups by the
-    systems that use them. It is possible that different AbsoluteNames actually
+    Users typically provide parameter values with keys in `NamePattern` form, but
+    during parameter resolution values are stored by `AbsoluteName` to facilitate
+    lookups by the systems that use them. It is possible that multiple `AbsoluteNames`
     resolve to the same value (which is done in a memory-efficient way).
 
-    Meanwhile the usage of values adds its own complexity. When a value is used
-    to fulfill the data requirements of a system, we want that value to be of
-    a known type and shape. If two requirements are fulfilled by the same value,
-    it it possible that the requirements will have different specifications for
-    type and shape. Rather than be over-strict, and enforce that this can never happen,
-    we allow this provided the given value can be successfully coerced to fit
-    both requirements independently. For example, a scalar integer value can be coerced
-    to both an N-shaped array of floats as well as a T-shaped array of integers.
-    DataResolver accomplishes this flexibility in an efficient way by storing
-    both the original values and all adapted values. If multiple requirements
-    specify the same type/shape adaptation for one value, the adaptation only needs
-    to happen once.
+    Data requirements also specify the expected type and shape of the data,
+    and `DataResolver` also manages the resulting complexity. Two requirements could be
+    fulfilled by the same value while having different type and shape specifications.
+    Instead of rejecting this as an error, epymorph allows this provided the given value
+    can be successfully coerced to fit both requirements independently. For example, a
+    scalar integer value can be coerced to fit requirements for an N-shaped array of
+    floats as well as a T-shaped array of integers. `DataResolver` accomplishes this
+    in an efficient way by storing both the original values and all adapted values.
+    If multiple requirements specify the same type/shape adaptation for one value,
+    the adaptation only needs to happen once.
 
-    DataResolver is partially mutable -- new values can be added but values cannot
+    `DataResolver` is partially mutable -- new values can be added but values cannot
     be overwritten or removed.
+
+    Parameters
+    ----------
+    dim :
+        The simulation dimensions; needed to perform shape adaptations.
+    values :
+        The values that should be in the resolver to begin with.
     """
 
     Key = tuple[AbsoluteName, AttributeType, DataShape]
+    """The type of the key used to track adapted values."""
 
     _dim: Dimensions
+    """Simulation dimensions."""
     _raw_values: dict[AbsoluteName, AttributeArray]
+    """Values in their 'input' form."""
     _adapted_values: dict[Key, AttributeArray]
+    """Values in their 'output' form, after adaptation."""
 
     def __init__(
         self,
         dim: Dimensions,
         values: dict[AbsoluteName, AttributeArray] | None = None,
     ):
-        """Constructs a resolver.
-
-        Parameters
-        ----------
-        dim: Dimensions
-            the critical dimensions of the context in which these values have
-            been evaluated; this is needed to perform shape adaptations
-        values : dict[AbsoluteName, AttributeArray], optional
-            a collection of values that should be in the resolver to begin with
-        """
         self._dim = dim
         self._raw_values = values or {}
         self._adapted_values = {}
 
     def has(self, name: AbsoluteName) -> bool:
-        """Tests whether or not a given name is in this resolver.
+        """
+        Test whether or not a given name is in this resolver.
 
         Parameters
         ----------
-        name : AbsoluteName
-            the name to test
+        name :
+            The name to test.
 
         Returns
         -------
-        bool
-            True if `name` is in this resolver"""
+        :
+            True if `name` is in this resolver.
+        """
         return name in self._raw_values
 
     @property
@@ -364,7 +421,9 @@ class DataResolver:
         """
         The mapping of raw values in the resolver, by absolute name.
 
-        **WARNING**: It is not safe to modify this mapping!
+        Warning:
+        -------
+        It is not safe to modify this mapping!
         """
         return self._raw_values
 
@@ -374,17 +433,17 @@ class DataResolver:
 
         Parameters
         ----------
-        name : str | NamePattern | AbsoluteName
-            The name of the value to retrieve. This can be an AbsoluteName,
-            a NamePattern, or a string. A string will be parsed as an
-            AbsoluteName if possible, and fall back to parsing it as a NamePattern.
+        name :
+            The name of the value to retrieve. This can be an `AbsoluteName`,
+            a `NamePattern`, or a string. A string will be parsed as an
+            `AbsoluteName` if possible, and fall back to parsing it as a `NamePattern`.
             In any case, the name must match exactly one value in order to
             return successfully.
 
         Returns
         -------
-        AttributeArray
-            The requested value.
+        :
+            The requested value, if found.
 
         Raises
         ------
@@ -421,19 +480,20 @@ class DataResolver:
         return self._raw_values[name]
 
     def add(self, name: AbsoluteName, value: AttributeArray) -> None:
-        """Adds a value to this resolver. You may not overwrite an existing name.
+        """
+        Add a value to this resolver. You may not overwrite an existing name.
 
         Parameters
         ----------
-        name : AbsoluteName
-            the name for the value
+        name :
+            The name for the value.
         value : AttributeArray
-            the value to add
+            The value to add.
 
         Raises
         ------
         ValueError
-            if `name` is already in this resolver
+            If `name` is already in this resolver.
         """
         if name in self._raw_values:
             err = (
@@ -444,25 +504,26 @@ class DataResolver:
         self._raw_values[name] = value
 
     def resolve(self, name: AbsoluteName, definition: AttributeDef) -> AttributeArray:
-        """Resolves a value known by `name` to fit the given requirement `definition`.
+        """
+        Resolve a value known by `name` to fit the given requirement `definition`.
 
         Parameters
         ----------
-        name : AbsoluteName
-            the name of the value to resolve
-        definition : AttributeDef
-            the definition of the requirement being fulfilled (which is needed because
-            it contains the type and shape information)
+        name :
+            The name of the value to resolve.
+        definition :
+            The definition of the requirement being fulfilled; this provides the
+            necessary type and shape information.
 
         Returns
         -------
-        AttributeArray
-            the resolved value, adapted if necessary
+        :
+            The resolved value in adapted form.
 
         Raises
         ------
-        AttributeException
-            if the resolution fails
+        DataAttributeError
+            If resolution of adaptation fails.
         """
         key = (name, definition.type, definition.shape)
         if key in self._adapted_values:
@@ -481,11 +542,12 @@ class DataResolver:
         tau_steps: int,
     ) -> Iterator[list[AttributeValue]]:
         """
-        Generates a series of values for the given requirements.
-        Each item produced by the generator is a sequence of scalar values,
-        one for each attribute (in the given order).
+        Generate an iterator on the series of values for the given requirements.
+        Each item produced by the generator is a sequence of scalar values, one for
+        each attribute (in the given order).
 
         The sequence of items is generated in simulation order --
+
         - day=0, tau step=0, node=0 => [beta, gamma, xi]
         - day=0, tau_step=0; node=1 => [beta, gamma, xi]
         - day=0, tau_step=1; node=0 => [beta, gamma, xi]
@@ -497,12 +559,18 @@ class DataResolver:
 
         Parameters
         ----------
-        requirements : Iterable[tuple[AbsoluteName, AttributeDef]]
+        requirements :
             The name-definition pairs for all of the attributes to include.
-        tau_steps : int
+        tau_steps :
             The number of tau steps per day; since T in a TxN array is simulation days,
             this simply repeats values such that all of a day's tau steps
             see the same value.
+
+        Returns
+        -------
+        :
+            An iterator by tau step where each value is the list of attribute values for
+            that step.
         """
 
         def as_txn(attr_name: AbsoluteName, attr_def: AttributeDef) -> AttributeDef:
@@ -539,20 +607,21 @@ class DataResolver:
     def to_dict(
         self, *, simplify_names: bool = False
     ) -> dict[AbsoluteName, AttributeArray] | dict[str, AttributeArray]:
-        """Extract a dictionary from this DataResolver of all of its
-        (non-adapted) keys and values.
+        """
+        Extract a dictionary from this resolver containing all of its raw (non-adapted)
+        key-value pairs.
 
         Parameters
         ----------
-        simplify_names : bool, default=False
-            by default, names are returned as `AbsoluteName` objects; if True,
-            return stringified names as a convenience
+        simplify_names :
+            True to return stringified names. By default, names are returned in
+            `AbsoluteName` form.
 
         Returns
         -------
-        dict[AbsoluteName, AttributeArray] | dict[str, AttributeArray]
-            the dictionary of all values in this resolver, with names
-            either simplified or not according to `simplify_names`
+        :
+            The dictionary of all values in this resolver, with names
+            either simplified or not according to `simplify_names`.
         """
         if simplify_names:
             return {str(k): v for k, v in self._raw_values.items()}
@@ -563,7 +632,9 @@ class Requirement(NamedTuple):
     """A RUME data requirement: a name and a definition."""
 
     name: AbsoluteName
+    """The requirement name."""
     definition: AttributeDef
+    """The requirement definition."""
 
     def __str__(self) -> str:
         properties = [dtype_str(self.definition.type), str(self.definition.shape)]
@@ -571,12 +642,13 @@ class Requirement(NamedTuple):
 
 
 class Resolution(ABC):
-    """What source was used to resolve a requirement in a RUME?"""
+    """Describes the source used to resolve a requirement in a RUME."""
 
     # NOTE: it is required that all Resolution instances be hashable!
     # NOTE: This should be treated as a sealed type.
 
     cacheable: bool
+    """True if this resolution can be cached."""
 
 
 @dataclass(frozen=True)
@@ -591,10 +663,20 @@ class MissingValue(Resolution):
 
 @dataclass(frozen=True)
 class ParameterValue(Resolution):
-    """Requirement was resolved by a RUME parameter."""
+    """
+    Requirement was resolved by a RUME parameter.
+
+    Parameters
+    ----------
+    cacheable :
+        True if this resolution can be cached.
+    pattern :
+        The name by which the value was resolved.
+    """
 
     cacheable: bool
     pattern: NamePattern
+    """The name by which the value was resolved."""
 
     def __str__(self) -> str:
         return f"parameter value '{self.pattern}'"
@@ -602,10 +684,18 @@ class ParameterValue(Resolution):
 
 @dataclass(frozen=True)
 class DefaultValue(Resolution):
-    """Requirement was resolved by an attribute default value."""
+    """
+    Requirement was resolved by an attribute default value.
+
+    Parameters
+    ----------
+    default_value :
+        The value that was resolved.
+    """
 
     cacheable: bool = field(init=False, default=True)
     default_value: AttributeValue
+    """The value that was resolved."""
 
     # NOTE: we need default_value here so that default resolutions
     # are only cached as one if they use the same value;
@@ -619,16 +709,36 @@ class DefaultValue(Resolution):
 
 @dataclass(frozen=True)
 class ResolutionTree:
-    """Just the resolution part of a requirements tree; children are the dependencies
-    of this resolution. If two values share the same resolution tree, and if the tree
-    is comprised entirely of pure functions and values, then the resolution result
-    would be the same."""
+    """
+    In resolving parameters, parameter values might have their own requirements.
+    This potentially forms a tree of requirements that must be resolved first in order
+    to resolve the root of the tree.
+
+    If two values share the same resolution tree, and if the tree is comprised entirely
+    of pure functions and constant values, then the resolution result would be the same.
+
+    Parameters
+    ----------
+    resolution :
+        The root node resolution.
+    children :
+        The resolution of the root's requirements (empty if it has no requirements).
+
+
+    See Also
+    --------
+    A resolution tree is a dual of the [epymorph.database.ReqTree][], but contains
+    only the resolution results and not any resolved values.
+    """
 
     resolution: Resolution
+    """The root node resolution."""
     children: "tuple[ResolutionTree, ...]"
+    """The resolution of the root's requirements (empty if it has no requirements)."""
 
     @property
     def is_tree_cacheable(self) -> bool:
+        """Is the entire tree cacheable? Only true if all resolutions are cacheable."""
         return (
             self.resolution.cacheable  #
             and all(x.is_tree_cacheable for x in self.children)
@@ -636,18 +746,34 @@ class ResolutionTree:
 
 
 class RecursiveValue(Protocol):
-    """A parameter value that itself may depend on other parameter values."""
+    """The interface for parameter values that may depend on other parameter values."""
 
     requirements: Sequence[AttributeDef]
     """Defines the data requirements for this value."""
     randomized: bool
-    """Should this value be re-evaluated every time it's referenced?
-    (Mostly useful for randomized results.)"""
+    """
+    Should this value be re-evaluated every time it's referenced?
+    Mostly useful for results that incorporate random values.
+    """
 
 
 @singledispatch
 def is_recursive_value(value: object) -> TypeGuard[RecursiveValue]:
-    """TypeGuard for RecursiveValues, implemented by single dispatch."""
+    """
+    Check if a value is recursive, as a type guard.
+
+    Implemented by single dispatch.
+
+    Parameters
+    ----------
+    value :
+        The value to check.
+
+    Returns
+    -------
+    :
+        True if the value can be recursive, as a type-guard.
+    """
     return False
 
 
@@ -657,16 +783,24 @@ V = TypeVar("V")
 
 @dataclass(frozen=True)
 class ReqTree(Generic[V]):
-    """A requirements tree describes how data requirements are resolved for a RUME.
+    """
+    A requirements tree describes how data requirements are resolved for a RUME.
+
     Models used in the RUME have a set of requirements, each of which may be fulfilled
     by RUME parameters or default values. RUME parameters may also have data
     requirements, and those requirements may have requirements, etc., hence the need
     to represent this as a tree structure. The top of a `ReqTree` is a `ReqRoot` and
     each requirement is a `ReqNode`. Each `ReqNode` tracks the attribute itself
-    (its `AbsoluteName` and `AttributeDef`) and whether it is fulfilled and if so how.
+    (its `AbsoluteName` and `AttributeDef`), whether it is fulfilled, and if so how.
+
+    Parameters
+    ----------
+    children :
+        The child nodes of this node.
     """
 
     children: "tuple[ReqNode, ...]"
+    """The child nodes of this node."""
 
     def __str__(self) -> str:
         # Built-in stringify is just to_string() with default args.
@@ -679,30 +813,50 @@ class ReqTree(Generic[V]):
         format_name: Callable[[AbsoluteName], str] = str,
         depth: int = 0,
     ) -> str:
-        """Convert this ReqTree to a string.
+        """
+        Convert this tree to a string.
 
         Parameters
         ----------
-        format_name : Callable[[AbsoluteName], str], default=str
+        format_name :
             A method to convert an absolute name into a string.
             This allows you to control how absolute names are rendered.
-        depth : int, default=0
-            The resolution "depth" of this node in the tree.
-            A requirement that itself is required by one other requirement
-            would have a depth of 1. Top-level requirements have a depth of 0.
+        depth :
+            The resolution "depth" of this node in the tree. Top-level requirements have
+            a depth of 0. A requirement that itself is required by one other requirement
+            would have a depth of 1.
+
+        Returns
+        -------
+        :
+            The stringified tree.
         """
         return "\n".join(
             [x.to_string(format_name=format_name, depth=depth) for x in self.children]
         )
 
     def traverse(self) -> "Iterable[ReqNode]":
-        """Perform a depth-first traversal of the nodes of this tree."""
+        """
+        Perform a depth-first traversal of the nodes of this tree.
+
+        Yields
+        ------
+        :
+            Each node in the tree in depth-first order.
+        """
         for x in self.children:
             yield from x.traverse()
         # NOTE: method overridden by ReqNode; yields children and then itself
 
     def missing(self) -> Iterable[Requirement]:
-        """Return missing requirements."""
+        """
+        Return the missing requirements from this tree.
+
+        Returns
+        -------
+        :
+            All requirements which were determined by resolution to be missing.
+        """
         return (
             Requirement(node.name, node.definition)
             for node in self.traverse()
@@ -716,7 +870,30 @@ class ReqTree(Generic[V]):
         ipm: BaseCompartmentModel | None,
         rng: np.random.Generator | None,
     ) -> DataResolver:
-        """Evaluate this tree. See: `evaluate_requirements()`."""
+        """
+        Evaluate this tree. Defers to `evaluate_requirements()`.
+
+        Parameters
+        ----------
+        scope :
+            The geographic scope information of this simulation context, if available.
+        time_frame :
+            The temporal scope information of this simulation context, if available.
+        ipm :
+            The disease model for this simulation context, if available.
+        rng :
+            The random number generator to use, if available.
+
+        Returns
+        -------
+        :
+            The resolver containing all evaluated parameters.
+
+        Raises
+        ------
+        DataAttributeError
+            If any attribute fails evaluation.
+        """
         return evaluate_requirements(self, scope, time_frame, ipm, rng)
 
     @staticmethod
@@ -724,23 +901,28 @@ class ReqTree(Generic[V]):
         requirements: Mapping[AbsoluteName, AttributeDef],
         params: Database[V],
     ) -> "ReqTree":
-        """Compute the requirements tree for the given set of requirements
-        and a database supplying values. Note that missing values do not
-        stop us from computing the tree -- these nodes will have `MissingValue`
-        as the resolution.
+        """
+        Compute the requirements tree for the given set of requirements and a database
+        supplying values. Note that missing values do not stop us from computing the
+        tree -- these nodes will have `MissingValue` as the resolution.
 
         Parameters
         ----------
-        requirements : Mapping[AbsoluteName, AttributeDef]
-            the top-level requirements of the tree
-        params : Database[V]
-            the database of values, where each value may be "recursive"
-            in the sense of having its own data requirements
+        requirements :
+            The top-level requirements of the tree.
+        params :
+            The database of values, where each value may be recursive in the sense of
+            having its own data requirements.
+
+        Returns
+        -------
+        :
+            The requirements tree.
 
         Raises
         ------
         DataAttributeError
-            If the tree cannot be evaluated, for instance, due to containing
+            If the tree cannot be evaluated, for instance, due to it containing
             circular dependencies.
         """
 
@@ -793,8 +975,23 @@ class ReqTree(Generic[V]):
 
 @dataclass(frozen=True)
 class ReqNode(ReqTree[V]):
-    """A non-root node of a requirements tree, identifying a requirement,
-    how (or if) it was resolved, and its value (if available)."""
+    """
+    A non-root node of a requirements tree, identifying a requirement, how (or if)
+    it was resolved, and its value (if available).
+
+    Parameters
+    ----------
+    children :
+        The dependencies of this node (if any).
+    name :
+        The name of this requirement.
+    definition :
+        The definition of this requirement.
+    resolution :
+        How this requirement was resolved (or not).
+    value :
+        The value for this requirement if available.
+    """
 
     children: "tuple[ReqNode, ...]"
     """The dependencies of this node (if any)."""
@@ -854,7 +1051,14 @@ class ReqNode(ReqTree[V]):
         yield self  # and then self
 
     def as_res_tree(self) -> ResolutionTree:
-        """Extracts the resolution tree from this requirements tree."""
+        """
+        Extract the resolution tree from this requirements tree.
+
+        Returns
+        -------
+        :
+            The resolution tree.
+        """
         return ResolutionTree(
             self.resolution,
             tuple(x.as_res_tree() for x in self.children),
@@ -871,38 +1075,46 @@ def evaluate_param(
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
-    """Evaluate a parameter, transforming acceptable input values (type: ParamValue) to
-    the form required internally by epymorph (AttributeArray). This handles different
-    types of parameters by single dispatch, so there should be a registered
-    implementation for every unique type. It is possible that the user is attempting to
-    evaluate parameters with a partial context (`scope`, `time_frame`, `ipm`, `rng`),
-    and so one or more of these may be missing. In that case, parameter evaluation
-    is expected to happen on a "best effort" basis -- if no parameter requires the
-    missing scope elements, parameter evaluation succeeds. Otherwise, this is expected
-    to raise an `AttributeException`.
+    """
+    Evaluate a parameter, transforming acceptable input values (type: `ParamValue`) to
+    the form required internally by epymorph (`AttributeArray`).
+
+    Different types of parameters are supported by single dispatch, so there should be a
+    registered implementation for every supported type of parameter.
+
+    It is possible that the user is attempting to evaluate parameters with a
+    partial context (`scope`, `time_frame`, `ipm`, `rng`), and so one or more of these
+    may be missing. In that case, parameter evaluation is expected to happen on a
+    "best effort" basis -- if no parameter accesses the missing scope elements,
+    parameter evaluation succeeds. Otherwise, it raises a `DataAttributeError`.
 
     Parameters
     ----------
-    value : object
-        the value being evaluated
-    name : AbsoluteName
-        the full name given to the value in the simulation context
-    data : DataResolver
-        a DataResolver instance which should contain values for all of the data
-        requirements needed by this value (only `RecursiveValues` have requirements)
-    scope : GeoScope, optional
-        the geographic scope information of this simulation context, if available
-    time_frame : TimeFrame, optional
-        the temporal scope information of this simulation context, if available
-    ipm : BaseCompartmentModel, optional
-        the disease model for this simulation context, if available
-    rng : np.random.Generator, optional
-        the random number generator to use, if available
+    value :
+        The value being evaluated.
+    name :
+        The full name given to the value in the simulation context.
+    data :
+        A resolved instance which should contain values for all of the data
+        requirements needed by this value (only `RecursiveValues` have requirements).
+    scope :
+        The geographic scope information of this simulation context, if available.
+    time_frame :
+        The temporal scope information of this simulation context, if available.
+    ipm :
+        The disease model for this simulation context, if available.
+    rng :
+        The random number generator to use, if available.
 
     Returns
     -------
-    AttributeArray
-        the evaluated value
+    :
+        The evaluated value.
+
+    Raises
+    ------
+    DataAttributeError
+        If parameter evaluation fails.
     """
     err = f"Parameter not a supported type (found: {type(value)})"
     raise DataAttributeError(err)
@@ -918,6 +1130,7 @@ def _(
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
+    # Evaluate numpy arrays.
     # numpy array: make a copy so we don't risk unexpected mutations
     return value.copy()
 
@@ -932,6 +1145,7 @@ def _(
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
+    # Evluate scalars.
     # scalar value or python collection: re-pack it as a numpy array
     return np.asarray(value, dtype=None)
 
@@ -946,6 +1160,7 @@ def _(
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> AttributeArray:
+    # Evaluate Python type instances.
     # forgot to instantiate? a common error worth checking for
     err = (
         "Parameter was given as a class instead of an instance. "
@@ -961,30 +1176,37 @@ def evaluate_requirements(
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
 ) -> DataResolver:
-    """Evaluate all parameters in `req`, using the given simulation context
-    (`scope`, `time_frame`, `ipm`, `rng`). You may attempt to evaluate parameters with
-    a partial context, so one or more of these may be missing. In that case, parameter
-    evaluation happens on a "best effort" basis -- if no parameter requires the missing
-    scope elements, parameter evaluation succeeds; otherwise raises an
-    `AttributeException`.
+    """
+    Evaluate all parameters in the tree, using the given simulation context
+    (`scope`, `time_frame`, `ipm`, `rng`).
+
+    You may attempt to evaluate parameters with a partial context, so one or more of
+    these may be missing. In that case, parameter evaluation happens on a "best effort"
+    basis -- if no parameter accesses the missing scope elements, parameter evaluation
+    succeeds; otherwise it will raise an `DataAttributeError`.
 
     Parameters
     ----------
-    req : ReqTree
-        the requirements tree
-    scope : GeoScope, optional
-        the geographic scope information of this simulation context, if available
-    time_frame : TimeFrame, optional
-        the temporal scope information of this simulation context, if available
-    ipm : BaseCompartmentModel, optional
-        the disease model for this simulation context, if available
-    rng : np.random.Generator, optional
-        the random number generator to use, if available
+    req :
+        The requirements tree.
+    scope :
+        The geographic scope information of this simulation context, if available.
+    time_frame :
+        The temporal scope information of this simulation context, if available.
+    ipm :
+        The disease model for this simulation context, if available.
+    rng :
+        The random number generator to use, if available.
 
     Returns
     -------
-    DataResolver
-        the resolver containing all evaluated parameters
+    :
+        The resolver containing all evaluated parameters.
+
+    Raises
+    ------
+    DataAttributeError
+        If any attribute fails evaluation.
     """
 
     # First make sure there are no missing values.
@@ -1044,7 +1266,7 @@ def evaluate_requirements(
 
             # If we have the necessary info, check that the raw value
             # can be successfully adapted to fulfill this requirement.
-            # Raise AttributeException if not.
+            # Raise DataAttributeError if not.
             try:
                 d = node.definition
                 assert_can_adapt(d.type, d.shape, dim, value)

@@ -1,6 +1,4 @@
-"""
-Tools for rendering geographic maps from epymorph simulation output data.
-"""
+"""Tools for rendering geographic maps from epymorph simulation output data."""
 
 from itertools import repeat
 from typing import Any, Callable, Iterable, cast
@@ -332,7 +330,7 @@ class MapRenderer:
         vmin: float | None = None,
     ) -> None:
         """
-        Renders a choropleth map using GeoPandas and matplotlib showing the given
+        Render a choropleth map using GeoPandas and matplotlib showing the given
         selections.
 
         Selections must be made carefully to produce a valid map: the geo
@@ -447,7 +445,7 @@ class MapRenderer:
         vmin: float | None = None,
     ) -> tuple[gpd.GeoDataFrame, ScalarMappable]:
         """
-        Draws a choropleth map onto the given matplotlib axes showing the given
+        Draw a choropleth map onto the given matplotlib axes showing the given
         selections. This is a variant of the method `choropleth()` that gives you
         more control over the rendering of a plot by letting you do most of the work
         with matplotlib's API. See that method for conditions that must be met to use

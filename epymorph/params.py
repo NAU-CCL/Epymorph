@@ -350,7 +350,7 @@ which are methods for using these names to obtain symbol references.
 
 def simulation_symbols(*symbols: ParamSymbol) -> tuple[Symbol, ...]:
     """
-    Convenient function to retrieve the symbols used to represent simulation quantities.
+    Retrieve the symbols used to represent simulation quantities.
 
     Parameters
     ----------

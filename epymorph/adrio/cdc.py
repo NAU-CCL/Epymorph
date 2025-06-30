@@ -1,3 +1,5 @@
+"""ADRIOs for access US Centers for Disease Control data."""
+
 import dataclasses
 import os
 from abc import abstractmethod
@@ -50,7 +52,7 @@ from epymorph.util import date_value_dtype
 
 def healthdata_api_key() -> str | None:
     """
-    Loads the Socrata API key to use for healthdata.gov,
+    Load the Socrata API key to use for healthdata.gov,
     as environment variable 'API_KEY__healthdata.gov'.
 
     Returns
@@ -63,7 +65,7 @@ def healthdata_api_key() -> str | None:
 
 def data_cdc_api_key() -> str | None:
     """
-    Loads the Socrata API key to use for data.cdc.gov,
+    Load the Socrata API key to use for data.cdc.gov,
     as environment variable 'API_KEY__data.cdc.gov'.
 
     Returns
@@ -93,6 +95,7 @@ class _HealthdataAnagCw7uMixin(FetchADRIO[DateValueType, np.int64]):
     A mixin implementing some of `FetchADRIO`'s API for ADRIOs which fetch
     data from healthdata.gov dataset anag-cw7u: a.k.a.
     "COVID-19 Reported Patient Impact and Hospital Capacity by Facility".
+
     https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u/about_data
     """
 
@@ -583,6 +586,7 @@ class _DataCDCAemtMg7gMixin(FetchADRIO[DateValueType, np.int64]):
     Reporting Period from August 1, 2020 to April 30, 2024, and for Data Reported
     Voluntarily Beginning May 1, 2024, National Healthcare Safety Network
     (NHSN) - ARCHIVED".
+
     https://data.cdc.gov/Public-Health-Surveillance/Weekly-United-States-Hospitalization-Metrics-by-Ju/aemt-mg7g/about_data
     """
 
@@ -1262,7 +1266,7 @@ class StateDeaths(FetchADRIO[DateValueType, np.int64]):
 
     @staticmethod
     def _time_range() -> DateRange:
-        """The time range over which values are available."""
+        """Compute the time range over which values are available."""
         # There's about a one week lag in the data.
         # On a Thursday they seem to post data up to the previous Saturday,
         # so this config handles that.
@@ -1425,6 +1429,7 @@ class _DataCDCMpgqJmmrMixin(FetchADRIO[DateValueType, ResultT]):
     data from cdc.gov dataset mpgq-jmmr: a.k.a.
     "Weekly Hospital Respiratory Data (HRD) Metrics by Jurisdiction,
     National Healthcare Safety Network (NHSN) (Preliminary)".
+
     https://data.cdc.gov/Public-Health-Surveillance/Weekly-Hospital-Respiratory-Data-HRD-Metrics-by-Ju/mpgq-jmmr/about_data
     """
 

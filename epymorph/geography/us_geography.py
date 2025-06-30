@@ -140,7 +140,7 @@ class CensusGranularity(ABC):
 
     def extract(self, geoid: str) -> str:
         """
-        Extracts this level of granularity's GEOID segment, if the given GEOID is of
+        Extract this level of granularity's GEOID segment, if the given GEOID is of
         this granularity or smaller.
 
         Parameters
@@ -166,7 +166,7 @@ class CensusGranularity(ABC):
 
     def truncate(self, geoid: str) -> str:
         """
-        Truncates the given GEOID to this level of granularity.
+        Truncate the given GEOID to this level of granularity.
         If the given GEOID is for a granularity larger than this level,
         the GEOID will be returned unchanged.
 
@@ -184,7 +184,7 @@ class CensusGranularity(ABC):
 
     def truncate_unique(self, geoids: Iterable[str]) -> Iterable[str]:
         """
-        Truncates an Iterable of GEOIDs to this level of granularity, returning only
+        Truncate an Iterable of GEOIDs to this level of granularity, returning only
         unique entries without changing the ordering of entries.
 
         Parameters
@@ -208,8 +208,12 @@ class CensusGranularity(ABC):
 
     def _decompose(self, geoid: str) -> re.Match[str]:
         """
-        Internal method to decompose a GEOID as a regex match.
-        Raises GeographyError if the match fails.
+        Decompose a GEOID as a regex match.
+
+        Raises
+        ------
+        GeographyError
+            If the match fails.
         """
         match = self._decompose_pattern.match(geoid)
         if match is None:
@@ -245,7 +249,8 @@ class CensusGranularity(ABC):
     def grouped(self, sorted_geoids: NDArray[np.str_]) -> dict[str, NDArray[np.str_]]:
         """
         Group a list of GEOIDs by this level of granularity.
-        WARNING: Requires that the GEOID array has been sorted!
+
+        Requires that the GEOID array has been sorted!
 
         Parameters
         ----------

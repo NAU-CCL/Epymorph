@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 import numpy as np
@@ -6,11 +6,16 @@ import pandas as pd
 import pytest
 
 from epymorph import initializer as init
+from epymorph.adrio.adrio import ADRIO, InspectResult
+from epymorph.adrio.validation import ResultFormat
+from epymorph.attribute import NamePattern
 from epymorph.data import ipm, mm
+from epymorph.data_shape import Shapes
 from epymorph.geography.us_census import StateScope
 from epymorph.rume import RUME, SingleStrataRUME
+from epymorph.simulation import Context
 from epymorph.time import TimeFrame
-from epymorph.tools.data import Output, munge
+from epymorph.tools.data import Output, memoize_rume, munge
 
 
 @pytest.fixture
@@ -117,3 +122,81 @@ def test_munge_errors(rume, output):
             quantity=wrong_ipm.select.compartments(),
         )
     assert "same CompartmentModel instance" in str(err.value)
+
+
+def test_memoize_rume(tmp_path, rume):
+    adrio_evaluated = 0
+
+    class TestADRIO(ADRIO[np.int64, np.int64]):
+        # An ADRIO that just returns the values it was given,
+        # and increments the evaluation counter.
+        def __init__(self, values):
+            self.values = values
+
+        @property
+        def result_format(self):
+            return ResultFormat(shape=Shapes.N, dtype=np.int64)
+
+        def validate_context(self, context: Context):
+            pass
+
+        def inspect(self):
+            return InspectResult(
+                adrio=self,
+                source=self.values,
+                result=self.values,
+                shape=Shapes.N,
+                dtype=np.int64,
+                issues={},
+            )
+
+        def evaluate(self):
+            nonlocal adrio_evaluated
+            adrio_evaluated += 1
+            return super().evaluate()
+
+    def rume_with(population):
+        pop_key = NamePattern.of("population")
+        adrio = TestADRIO(population)
+        return replace(rume, params={**rume.params, pop_key: adrio})
+
+    cache_path = tmp_path / "cache.npz"
+    pop = NamePattern.of("gpm:all::init::population")
+
+    # First attempt: should evaluate params and save
+    rume1 = rume_with(population=np.array([42, 84]))
+    cached1 = memoize_rume(cache_path, rume1)
+    assert cached1 is not rume1  # returns a clone
+    assert cache_path.exists()  # cache file exists
+    assert adrio_evaluated == 1  # ADRIO gets evaluated
+
+    adrio_evaluated = 0  # reset counter
+
+    # Second attempt:
+    # Should load from cache, not evaluate params.
+    # Even though ADRIO values are different this time,
+    # the resulting RUME should still use the cached values.
+    rume2 = rume_with(population=np.array([11, 22]))
+    cached2 = memoize_rume(cache_path, rume2)
+    assert adrio_evaluated == 0  # ADRIO not eval'd
+    assert pop in cached1.params
+    assert pop in cached2.params
+    np.testing.assert_array_equal(cached1.params[pop], np.array([42, 84]))
+    np.testing.assert_array_equal(cached2.params[pop], np.array([42, 84]))
+
+    adrio_evaluated = 0  # reset counter
+
+    # Third attempt: refresh should overwrite the cached values
+    rume3 = rume_with(population=np.array([88, 99]))
+    cached3 = memoize_rume(cache_path, rume3, refresh=True)
+    assert adrio_evaluated == 1  # ADRIO gets evaluated
+    assert pop in cached3.params
+    # ensure both the RUME and the cache file have the new values
+    np.testing.assert_array_equal(
+        cached3.params[pop],
+        np.array([88, 99]),
+    )
+    np.testing.assert_array_equal(
+        np.load(cache_path)["gpm:all::init::population"],
+        np.array([88, 99]),
+    )

@@ -1,6 +1,4 @@
-"""
-Tools for rendering tables from epymorph simulation output data.
-"""
+"""Tools for rendering tables from epymorph simulation output data."""
 
 import dataclasses
 from typing import Callable, Literal, Sequence, overload
@@ -31,7 +29,7 @@ FormatOption = Literal["dataframe", "string", "print"]
 
 
 def _to_sparklines(values):
-    """A Pandas aggregation function that produces a sparkline result."""
+    """Produce a sparkline result, as a Pandas aggregation function."""
     # NOTE: I tried using the same max value for each quantity;
     # in a way this improves comparison between locations, but means that
     # large locations "drown out" smaller locations, hiding the dynamics.
@@ -235,7 +233,7 @@ class TableRenderer:
         column_names: Sequence[str] | None = None,
     ) -> pd.DataFrame | str | None:
         """
-        Renders a table showing time-series quantiles for the given selections.
+        Render a table showing time-series quantiles for the given selections.
 
         Parameters
         ----------
@@ -336,7 +334,7 @@ class TableRenderer:
         result_format: FormatOption = "dataframe",
     ) -> pd.DataFrame | str | None:
         """
-        Renders a table showing minimum and maximum values over time for the given
+        Render a table showing minimum and maximum values over time for the given
         selections. This is equivalent to calling `quantiles()` with 0 and 1.
 
         Parameters
@@ -415,7 +413,7 @@ class TableRenderer:
         result_format: FormatOption = "dataframe",
     ) -> pd.DataFrame | str | None:
         """
-        Renders a table showing summed values over time for the given selections.
+        Render a table showing summed values over time for the given selections.
 
         Because it is not valid to sum compartment values over time -- this would be
         double-counting individuals in a way that has no physical meaning --
@@ -519,7 +517,7 @@ class TableRenderer:
         result_format: FormatOption = "dataframe",
     ) -> pd.DataFrame | str | None:
         """
-        Renders a table showing a rough time series bar chart for the given selections
+        Render a table showing a rough time series bar chart for the given selections
         using ASCII characters.
 
         It is of course limited by the fact that this is a

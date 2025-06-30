@@ -1,4 +1,4 @@
-"""epymorph initialization"""
+"""epymorph initialization."""
 
 from numpy import seterr
 

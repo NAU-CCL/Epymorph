@@ -1,5 +1,9 @@
 """
-Types for source data and attributes in epymorph.
+In order to assist with proper data type handling in epymorph, we adopt a set of
+conventions that somewhat narrow the possibilities for expressing simulation data
+attributes. This module describes those conventions and provides some utilities for
+working with them. The goal is to simplify and remove certain categories of errors,
+like numerical overflow when simulating reasonable numbers of individuals.
 """
 
 from datetime import date
@@ -17,25 +21,48 @@ from numpy.typing import NDArray
 # thankfully we had an infrastructure for this sort of thing already.
 
 ScalarType = type[int | float | str | date]
+"""Supported scalar value types."""
 StructType = tuple[tuple[str, ScalarType], ...]
+"""Supported structured types."""
 AttributeType = ScalarType | StructType
 """The allowed type declarations for epymorph attributes."""
 
 ScalarValue = int | float | str | date
+"""Supported scalar values."""
 StructValue = tuple[ScalarValue, ...]
+"""Supported structured values."""
 AttributeValue = ScalarValue | StructValue
-"""The allowed types for epymorph attribute values (specifically: default values)."""
+"""
+The allowed values types for epymorph attribute values
+(most notably used as attribute defaults).
+"""
 
 ScalarDType = np.int64 | np.float64 | np.str_ | np.datetime64
+"""Numpy equivalents to supported scalar values."""
 StructDType = np.void
+"""Numpy equivalents to supported structured values."""
 AttributeDType = ScalarDType | StructDType
-"""The subset of numpy dtypes for use in epymorph: these map 1:1 with AttributeType."""
+"""The allowed numpy dtypes for use in epymorph: these map 1:1 with `AttributeType`."""
 
 AttributeArray = NDArray[AttributeDType]
+"""A type describing all supported numpy array forms for attribute data."""
 
 
 def dtype_as_np(dtype: AttributeType) -> np.dtype:
-    """Return a python-style dtype as its numpy-equivalent."""
+    """
+    Convert a python-style dtype to its numpy-equivalent using epymorph typing
+    conventions.
+
+    Parameters
+    ----------
+    dtype :
+        The attribute type in Python form, e.g., `int`
+
+    Returns
+    -------
+    :
+        The numpy equivalent, e.g., `np.int64`
+    """
     if dtype is int:
         return np.dtype(np.int64)
     if dtype is float:
@@ -61,7 +88,19 @@ def dtype_as_np(dtype: AttributeType) -> np.dtype:
 
 
 def dtype_str(dtype: AttributeType) -> str:
-    """Return a human-readable description of the given dtype."""
+    """
+    Return a human-readable description of the given attribute data type.
+
+    Parameters
+    ----------
+    dtype :
+        The attribute type in Python form, e.g., `int`
+
+    Returns
+    -------
+    :
+        The friendly string representation of the type.
+    """
     if dtype is int:
         return "int"
     if dtype is float:
@@ -86,7 +125,22 @@ def dtype_str(dtype: AttributeType) -> str:
 
 
 def dtype_check(dtype: AttributeType, value: Any) -> bool:
-    """Checks that a value conforms to a given dtype. (Python types only.)"""
+    """
+    Check that a singular Python value conforms to the given attribute data type.
+    This is not intended to check numpy arrays, only scalars and tuples.
+
+    Parameters
+    ----------
+    dtype :
+        The attribute type in Python form, e.g., `int`
+    value :
+        A value to check.
+
+    Returns
+    -------
+    :
+        True if the values matches the dtype.
+    """
     if dtype in (int, float, str, date):
         return isinstance(value, dtype)
     if isinstance(dtype, tuple):
@@ -105,21 +159,23 @@ def dtype_check(dtype: AttributeType, value: Any) -> bool:
 
 
 CentroidType: AttributeType = (("longitude", float), ("latitude", float))
-"""Structured epymorph type declaration for long/lat coordinates."""
+"""Structured epymorph type declaration for longitude/latitude coordinates."""
 CentroidDType: np.dtype[np.void] = dtype_as_np(CentroidType)
 """
-The numpy equivalent of `CentroidType` (structured dtype for long/lat coordinates).
+The numpy equivalent of `CentroidType`
+(structured dtype for longitude/latitude coordinates).
 """
 
-# SimDType being centrally-located means we can change it reliably.
 SimDType = np.int64
 """
 This is the numpy datatype that should be used to represent internal simulation data.
 Where segments of the application maintain compartment and/or event counts,
 they should take pains to use this type at all times (if possible).
 """
+# NOTE: SimDType being centrally-located means we can change it reliably.
 
 SimArray = NDArray[SimDType]
+"""Type alias for a numpy array of `SimDType`."""
 
 __all__ = [
     "AttributeType",

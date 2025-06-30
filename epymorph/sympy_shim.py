@@ -7,8 +7,10 @@ import sympy as sy
 
 def to_symbol(name: str) -> sy.Symbol:
     """
-    Create a symbol from the given string. To be consistent with the typing given,
-    only include a single symbol. (But this is not checked.)
+    Create a symbol from the given string.
+
+    To be consistent with the typing given, only include a single symbol.
+    (But this is not checked.)
     """
     return cast(sy.Symbol, sy.symbols(name))
 

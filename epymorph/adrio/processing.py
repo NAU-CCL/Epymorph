@@ -82,7 +82,7 @@ class Fix(ABC, Generic[DataT]):
     @staticmethod
     def of_int64(fix: "FixLikeInt") -> "Fix[np.int64]":
         """
-        Convenience constructor for a `Fix` for `int64` data. The type of `Fix`
+        Construct for a `Fix` for `int64` data. The type of `Fix`
         returned depends on the type of argument provided.
 
         Parameters
@@ -114,7 +114,7 @@ class Fix(ABC, Generic[DataT]):
     @staticmethod
     def of_float64(fix: "FixLikeFloat") -> "Fix[np.float64]":
         """
-        Convenience constructor for a `Fix` for `float64` data. The type of `Fix`
+        Construct for a `Fix` for `float64` data. The type of `Fix`
         returned depends on the type of argument provided.
 
         Parameters
@@ -198,9 +198,10 @@ class FunctionFix(Fix[DataT]):
         with_function: Callable[[], DataT],
     ) -> pd.DataFrame:
         """
-        A static method that performs the work of a `FunctionFix`. This method can be
-        useful in creating other `Fix` instances, when their replacement value logic
-        can be expressed as a no-parameter function.
+        Apply a `FunctionFix` to a data frame.
+
+        This method can be useful in creating other `Fix` instances, when their
+        replacement value logic can be expressed as a no-parameter function.
 
         Parameters
         ----------
@@ -208,6 +209,8 @@ class FunctionFix(Fix[DataT]):
             The data to fix.
         replace :
             The value to replace.
+        columns :
+            The data columns to fix.
         with_function :
             The function used to generate replacement values.
 
@@ -256,7 +259,7 @@ class RandomFix(Fix[DataT]):
     @staticmethod
     def from_range(low: int, high: int) -> "RandomFix[np.int64]":
         """
-        Convenience constructor for a `RandomFix` which replaces values
+        Construct for a `RandomFix` which replaces values
         with values sampled uniformly from a discrete range of integers.
 
         Parameters
@@ -278,7 +281,7 @@ class RandomFix(Fix[DataT]):
     @staticmethod
     def from_range_float(low: float, high: float) -> "RandomFix[np.float64]":
         """
-        Convenience constructor for a `RandomFix` which replaces values
+        Construct for a `RandomFix` which replaces values
         with values sampled uniformly from a continuous range.
 
         Parameters
@@ -301,9 +304,7 @@ class RandomFix(Fix[DataT]):
 
 @dataclass(frozen=True)
 class DontFix(Fix[Any]):
-    """
-    A special `Fix` which does not fix values and simply returns the data as-is (no-op).
-    """
+    """A special `Fix` which simply returns the data as-is (no-op)."""
 
     @override
     def __call__(self, rng, replace, columns, data_df):
@@ -363,7 +364,7 @@ class Fill(ABC, Generic[DataT]):
     @staticmethod
     def of_int64(fill: "FillLikeInt") -> "Fill[np.int64]":
         """
-        Convenience constructor for a `Fill` for `int64` data. The type of `Fill`
+        Construct for a `Fill` for `int64` data. The type of `Fill`
         returned depends on the type of argument provided.
 
         Parameters
@@ -395,7 +396,7 @@ class Fill(ABC, Generic[DataT]):
     @staticmethod
     def of_float64(fill: "FillLikeFloat") -> "Fill[np.float64]":
         """
-        Convenience constructor for a `Fill` for `float64` data. The type of `Fill`
+        Construct for a `Fill` for `float64` data. The type of `Fill`
         returned depends on the type of argument provided.
 
         Parameters
@@ -483,9 +484,10 @@ class FunctionFill(Fill[DataT]):
         with_function: Callable[[], DataT],
     ) -> tuple[NDArray[DataT], NDArray[np.bool_] | None]:
         """
-        A static method that performs the work of a `FunctionFill`. This method can be
-        useful in creating other `Fill` instances, when their replacement value logic
-        can be expressed as a no-parameter function.
+        Apply a `FunctionFill` to numpy data.
+
+        This method can be useful in creating other `Fill` instances, when their
+        replacement value logic can be expressed as a no-parameter function.
 
         Parameters
         ----------
@@ -536,7 +538,7 @@ class RandomFill(Fill[DataT]):
     @staticmethod
     def from_range(low: int, high: int) -> "RandomFill[np.int64]":
         """
-        Convenience constructor for a `RandomFill` which replaces values
+        Construct for a `RandomFill` which replaces values
         with values sampled uniformly from a discrete range of integers.
 
         Parameters
@@ -558,7 +560,7 @@ class RandomFill(Fill[DataT]):
     @staticmethod
     def from_range_float(low: float, high: float) -> "RandomFill[np.float64]":
         """
-        Convenience constructor for a `RandomFill` which replaces values
+        Construct for a `RandomFill` which replaces values
         with values sampled uniformly from a continuous range.
 
         Parameters
@@ -613,8 +615,9 @@ def _add_issue(
     issue_mask: NDArray[np.bool_] | None,
 ) -> Mapping[str, NDArray[np.bool_]]:
     """
-    Utility function for adding an issue to a list of issues,
-    but only if the mask is not None and not "no mask" or all-False.
+    Add an issue to a list of issues.
+
+    But only if the mask is not `None` and not "no mask" or all-`False`.
     """
     if issue_mask is not None and issue_mask.any():
         return {**issues, issue_name: issue_mask}
@@ -622,9 +625,7 @@ def _add_issue(
 
 
 def _all_issues_mask(issues: Mapping[str, NDArray[np.bool_]]):
-    """
-    Utility function for computing the logical union of the masks of a set of issues.
-    """
+    """Compute the logical union of the masks of a set of issues."""
     return reduce(
         np.logical_or,
         [m for _, m in issues.items()],
@@ -684,7 +685,7 @@ class PipelineResult(Generic[DataT]):
         issue_mask: NDArray[np.bool_] | None,
     ) -> Self:
         """
-        Updates the result by adding a data issue.
+        Update the result by adding a data issue.
 
         Parameters
         ----------
@@ -710,7 +711,7 @@ class PipelineResult(Generic[DataT]):
         dates: NDArray[np.datetime64],
     ) -> "PipelineResult[DateValueType]":
         """
-        Converts the result to a date-value-tuple array.
+        Convert the result to a date-value-tuple array.
 
         Parameters
         ----------
@@ -741,7 +742,7 @@ class PipelineResult(Generic[DataT]):
         right_prefix: str,
     ) -> "PipelineResult[DataT]":
         """
-        Combines two `PipelineResults` by summing unmasked data values.
+        Combine two `PipelineResults` by summing unmasked data values.
         The result will include both lists of data issues by prefixing the issue names.
 
         Parameters
@@ -787,9 +788,7 @@ class PipelineResult(Generic[DataT]):
 
 
 class PivotAxis(NamedTuple):
-    """
-    Describes an axis on which a `DataFrame` will be pivoted to become a numpy array.
-    """
+    """Describes an axis on which to pivot a `DataFrame` to become a numpy array."""
 
     column: str
     """The name of the column in a `DataFrame`."""
@@ -932,7 +931,7 @@ class DataPipeline(Generic[DataT]):
             raise ValueError(err)
 
     def _and_then(self, f: _PipelineStep) -> Self:
-        """Returns a copy of this pipeline with a pipeline step appended."""
+        """Return a copy of this pipeline with a pipeline step appended."""
         return dataclasses.replace(self, pipeline_steps=[*self.pipeline_steps, f])
 
     def _process(self, data_df: pd.DataFrame) -> _PipelineState:

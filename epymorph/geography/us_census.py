@@ -75,7 +75,7 @@ class CensusScope(ABC, GeoScope):
         return self._node_ids
 
     def _compute_node_ids(self) -> NDArray[np.str_]:
-        """Internal method to compute the GEOIDs for the nodes in scope."""
+        """Compute the GEOIDs for the nodes in scope."""
         if self.granularity == self.includes_granularity:
             return np.array(self.includes, dtype=np.str_)
 
@@ -93,6 +93,8 @@ class CensusScope(ABC, GeoScope):
     @abstractmethod
     def raise_granularity(self) -> "CensusScope":
         """
+        Convert this scope to one that is one level higher in granularity.
+
         Returns
         -------
         :
@@ -111,6 +113,8 @@ class CensusScope(ABC, GeoScope):
     @abstractmethod
     def lower_granularity(self) -> "CensusScope":
         """
+        Convert this scope to one that is one level lower in granularity.
+
         Returns
         -------
         :
@@ -124,6 +128,8 @@ class CensusScope(ABC, GeoScope):
 
     def as_granularity(self, granularity: CensusGranularityName) -> "CensusScope":
         """
+        Convert this scope to the named granularity.
+
         Returns
         -------
         :
@@ -152,7 +158,7 @@ class CensusScope(ABC, GeoScope):
         year: int,
     ) -> "CensusScope":
         """
-        Creates a `CensusScope` instance of the named granularity,
+        Create a `CensusScope` instance of the named granularity,
         using nodes IDs of the same granularity. This is the same as
         `StateScope.in_states(...)` for example.
 
@@ -208,7 +214,7 @@ class _InMixin(CensusScope):
         includes: Sequence[str],
         year: int,
     ) -> Self:
-        """Utility classmethod for creating scopes."""
+        # Utility classmethod for creating scopes.
         g = tiger.get_summary_of(includes_granularity, year)
         return cls(
             includes_granularity=includes_granularity,  # type: ignore
@@ -383,6 +389,8 @@ class StateScope(_InStatesMixin, CensusScope):
 
     def is_all_states(self) -> bool:
         """
+        Check if this scope includes every support US state.
+
         Returns
         -------
         :
@@ -390,9 +398,11 @@ class StateScope(_InStatesMixin, CensusScope):
         """
         return np.array_equal(tiger.get_states(self.year).geoid, self.node_ids)
 
+    @override
     def raise_granularity(self) -> Never:
         raise GeographyError("No granularity higher than state.")
 
+    @override
     def lower_granularity(self) -> "CountyScope":
         return CountyScope(
             includes_granularity=self.includes_granularity,
@@ -468,6 +478,7 @@ class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
             year=year,
         )
 
+    @override
     def raise_granularity(self) -> StateScope:
         if self.includes_granularity == "county":
             return StateScope(
@@ -482,6 +493,7 @@ class CountyScope(_InStatesMixin, _InCountiesMixin, CensusScope):
             year=self.year,
         )
 
+    @override
     def lower_granularity(self) -> "TractScope":
         return TractScope(
             includes_granularity=self.includes_granularity,
@@ -728,7 +740,7 @@ class CountySelection(GeoSelection[CensusScope]):
 
     def group(self, grouping: Literal["state"] | GeoGrouping) -> GeoGroup[CensusScope]:
         """
-        Groups the geo series using the specified grouping.
+        Group the geo series using the specified grouping.
 
         Parameters
         ----------
@@ -762,7 +774,7 @@ class TractSelection(GeoSelection[CensusScope]):
         self, grouping: Literal["state", "county"] | GeoGrouping
     ) -> GeoGroup[CensusScope]:
         """
-        Groups the geo series using the specified grouping.
+        Group the geo series using the specified grouping.
 
         Parameters
         ----------
@@ -799,7 +811,7 @@ class BlockGroupSelection(GeoSelection[CensusScope]):
         self, grouping: Literal["state", "county", "tract"] | GeoGrouping
     ) -> GeoGroup[CensusScope]:
         """
-        Groups the geo series using the specified grouping.
+        Group the geo series using the specified grouping.
 
         Parameters
         ----------

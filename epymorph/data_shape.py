@@ -1,12 +1,11 @@
 """
-Utility classes to verify the shape of data as numpy arrays
-whose dimensions can be relative to the simulation context,
-and to adapt equivalent shapes.
+Expression of the shape of numpy data whose dimensions can be relative to a
+simulation context. Provides utilities to declare, check, and adapt data dimensionality.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from typing import ClassVar, Protocol, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,10 +16,15 @@ from epymorph.util import Matcher
 
 
 class Dimensions(Protocol):
-    """A class to store the lengths of dimensions which are supported by DataShapes.
-    It is possible to create Dimensions instances which contain a subset of the
-    available dimensions, for cases where the other dimensions aren't known and
-    aren't needed."""
+    """
+    Stores the lengths of simulation dimensions which are supported by `DataShapes`.
+
+    See Also
+    --------
+    Concrete implementations [epymorph.data_shape.CompleteDimensions][] and
+    [epymorph.data_shape.PartialDimensions][] exist to enable cases where
+    either all or only some of the dimensions are specified.
+    """
 
     @property
     @abstractmethod
@@ -50,14 +54,36 @@ class Dimensions(Protocol):
         C: int | None = None,
         E: int | None = None,
     ) -> "Dimensions":
+        """
+        Construct either a `CompleteDimensions` or `PartialDimensions` instance,
+        depending on whether or not the dimensions are fully specified.
+
+        Parameters
+        ----------
+        T :
+            The number of simulation days, if known.
+        N :
+            The number of geo nodes, if known.
+        C :
+            The number of compartments in the disease model, if known.
+        E :
+            The number of events in the disease model, if known.
+
+        Returns
+        -------
+        :
+            A new `Dimensions` instance (either complete or partial).
+        """
         if T is not None and N is not None and C is not None and E is not None:
             return CompleteDimensions(T=T, N=N, C=C, E=E)
         return PartialDimensions(T=T, N=N, C=C, E=E)
 
 
 class PartialDimensions(Dimensions):
-    """A Dimensions instance where some dimensions are unknown.
-    If code accesses an unknown dimension, a DimensionError is raised."""
+    """
+    A `Dimensions` implementation where some dimensions are unknown.
+    If code accesses an unspecified dimension, `DimensionError` is raised.
+    """
 
     _T: int | None
     _N: int | None
@@ -149,23 +175,73 @@ class CompleteDimensions(Dimensions):
 
 
 DataT = TypeVar("DataT", bound=np.generic)
+"""The dtype of a numpy array."""
 
 
 class DataShape(ABC):
-    """Description of a data attribute's shape relative to a simulation context."""
+    """Description of a data attribute's shape relative to the simulation context."""
 
     @abstractmethod
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
-        """Returns a tuple with the lengths of the dimensions in this shape.
-        If an axis is of indeterminate length, that axis is represented as -1."""
+        """
+        Return a tuple with the lengths of the dimensions in this shape.
+
+        Parameters
+        ----------
+        dim :
+            Information about the simulation context's dimensions.
+
+        Returns
+        -------
+        :
+            The absolute size of this shape in the given context. If an axis is of
+            indeterminate length, it is represented as -1.
+        """
 
     @abstractmethod
     def matches(self, dim: Dimensions, value: NDArray) -> bool:
-        """Does the given value match this shape expression?"""
+        """
+        Check if the given value matches this shape expression.
+
+        Parameters
+        ----------
+        dim :
+            Information about the simulation context's dimensions.
+        value :
+            The numpy array to check.
+
+        Returns
+        -------
+        :
+            True if the array's shape matches this shape description in the given
+            context.
+        """
 
     @abstractmethod
     def adapt(self, dim: Dimensions, value: NDArray[DataT]) -> NDArray[DataT]:
-        """Adapt the given value to this shape; raise ValueError if we can't."""
+        """
+        Adapt the given value to this shape.
+
+        Note that this shape adaptation is more permissive than standard numpy
+        broadcasting.
+
+        Parameters
+        ----------
+        dim :
+            Information about the simulation context's dimensions.
+        value :
+            The numpy array to reshape.
+
+        Returns
+        -------
+        :
+            The reshaped array (may be a view).
+
+        Raises
+        ------
+        ValueError
+            If the array cannot be adapted.
+        """
 
 
 @dataclass(frozen=True)
@@ -192,7 +268,7 @@ class Scalar(DataShape):
 
 @dataclass(frozen=True)
 class Time(DataShape):
-    """An array of at least size T (the number of simulation days)."""
+    """An array of at least size T: the number of simulation days."""
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -220,7 +296,7 @@ class Time(DataShape):
 
 @dataclass(frozen=True)
 class Node(DataShape):
-    """An array of size N (the number of simulation nodes)."""
+    """An array of size N: the number of simulation nodes."""
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -248,7 +324,7 @@ class Node(DataShape):
 
 @dataclass(frozen=True)
 class NodeAndNode(DataShape):
-    """An array of size NxN."""
+    """An array of size NxN: a square of the number of simulation nodes."""
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -278,7 +354,10 @@ class NodeAndNode(DataShape):
 
 @dataclass(frozen=True)
 class NodeAndCompartment(DataShape):
-    """An array of size NxC."""
+    """
+    An array of size NxC: the number of simulation nodes by the number of disease
+    compartments.
+    """
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -316,7 +395,10 @@ class NodeAndCompartment(DataShape):
 
 @dataclass(frozen=True)
 class TimeAndNode(DataShape):
-    """An array of size at-least-T by exactly-N."""
+    """
+    An array of size at-least-T by exactly-N: T is the number of simulation days
+    and N is the number of simulation nodes.
+    """
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -354,7 +436,7 @@ class TimeAndNode(DataShape):
 
 @dataclass(frozen=True)
 class NodeAndArbitrary(DataShape):
-    """An array of size exactly-N by any dimension."""
+    """An array of size exactly-N by any dimension: N is the number of geo nodes."""
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -378,7 +460,7 @@ class NodeAndArbitrary(DataShape):
 
 @dataclass(frozen=True)
 class ArbitraryAndNode(DataShape):
-    """An array of size any dimension by exactly-N."""
+    """An array of size any dimension by exactly-N: N is the number of geo nodes."""
 
     @override
     def to_tuple(self, dim: Dimensions) -> tuple[int, ...]:
@@ -402,30 +484,50 @@ class ArbitraryAndNode(DataShape):
 
 @dataclass(frozen=True)
 class Shapes:
-    """Static instances for all available shapes."""
+    """
+    Static instances for all available shapes.
 
-    # Data can be in any of these shapes, where:
-    # - Scalar is a single scalar value
-    # - T is the number of days
-    # - N is the number of nodes
-    # - C is the number of IPM compartments
-    # - A is any length (arbitrary; this dimension is effectively unchecked)
+    Data can be in any of these shapes, where:
+
+    - Scalar is a single scalar value
+    - T is the number of days
+    - N is the number of nodes
+    - C is the number of IPM compartments
+    - A is any length (arbitrary; this dimension is effectively unchecked)
+    """
 
     # Note: epymorph.simulation.validate_context_for_shape must be updated
     # when adding new axes designations.
 
-    Scalar = Scalar()
-    T = Time()
-    N = Node()
-    NxC = NodeAndCompartment()
-    NxN = NodeAndNode()
-    TxN = TimeAndNode()
-    NxA = NodeAndArbitrary()
-    AxN = ArbitraryAndNode()
+    Scalar: ClassVar = Scalar()
+    T: ClassVar = Time()
+    N: ClassVar = Node()
+    NxC: ClassVar = NodeAndCompartment()
+    NxN: ClassVar = NodeAndNode()
+    TxN: ClassVar = TimeAndNode()
+    NxA: ClassVar = NodeAndArbitrary()
+    AxN: ClassVar = ArbitraryAndNode()
 
 
 def parse_shape(shape: str) -> DataShape:
-    """Attempt to parse an AttributeShape from a string."""
+    """
+    Attempt to parse `DataShape` from a shape expression string.
+
+    Parameters
+    ----------
+    shape :
+        The shape expression string.
+
+    Returns
+    -------
+    :
+        The `DataShape` instance, if valid.
+
+    Raises
+    ------
+    ValueError
+        If the string is not a supported shape.
+    """
     match shape:
         case "Scalar":
             return Shapes.Scalar
@@ -448,7 +550,19 @@ def parse_shape(shape: str) -> DataShape:
 
 
 class DataShapeMatcher(Matcher[NDArray]):
-    """Matches an array as adaptable to `shape` under the given Dimensions (`dim`)."""
+    """
+    A `Matcher` which checks whether an array is adaptable to `shape` under the given
+    dimensions (`dim`).
+
+    Parameters
+    ----------
+    shape :
+        The data shape to match.
+    dim :
+        Information about the simulation context's dimensions.
+    exact :
+        If True, do not accept array adaptation, require that the array match exactly.
+    """
 
     _shape: DataShape
     _dim: Dimensions
@@ -459,10 +573,11 @@ class DataShapeMatcher(Matcher[NDArray]):
         self._dim = dim
         self._exact = exact
 
+    @override
     def expected(self) -> str:
-        """Describes what the expected value is."""
         return str(self._shape)
 
+    @override
     def __call__(self, value: NDArray) -> bool:
         if self._exact:
             # If making an exact match, convert the expected shape to a tuple

@@ -1,3 +1,5 @@
+"""ADRIOs for access US Census Bureau American Community Survey data."""
+
 import os
 import re
 from abc import abstractmethod
@@ -66,7 +68,7 @@ from epymorph.util import filter_unique, filter_with_mask
 
 def census_api_key() -> str | None:
     """
-    Loads the API key to use for census.gov,
+    Load the API key to use for census.gov,
     as environment variable 'API_KEY__census.gov'.
     If that's not found we fall back to 'CENSUS_API_KEY',
     as a legacy form.
@@ -105,7 +107,7 @@ class ACS5Client:
     @staticmethod
     def url(year: int) -> str:
         """
-        The base request URL for a given ACS5 year.
+        Get the base request URL for a given ACS5 year.
 
         Parameters
         ----------
@@ -123,7 +125,7 @@ class ACS5Client:
     @staticmethod
     def get_vars(year: int) -> dict[str, dict]:
         """
-        Loads (and caches) ACS5 variable metadata. This metadata is published by the
+        Load (and caches) ACS5 variable metadata. This metadata is published by the
         Census alongside the data for each year.
 
         Parameters
@@ -152,7 +154,7 @@ class ACS5Client:
     @staticmethod
     def get_group_vars(year: int, group: str) -> list[tuple[str, dict]]:
         """
-        Retrieves the variables metadata for a specific group of variables.
+        Retrieve the variables metadata for a specific group of variables.
         This is equivalent to calling `get_vars` and then filtering to the
         variables in the group.
 
@@ -203,7 +205,7 @@ class ACS5Client:
     @staticmethod
     def make_queries(scope: CensusScope) -> list[dict[str, str]]:
         """
-        Creates one or more Census API query predicates for the given scope.
+        Create one or more Census API query predicates for the given scope.
         These may involve the "for" and "in" request parameters.
         Depending on your scope and the limitations of the API, multiple queries
         may be required, especially when your scope represents a disjoint spatial
@@ -334,7 +336,7 @@ class ACS5Client:
         report_progress: Callable[[float], None] | None = None,
     ) -> pd.DataFrame:
         """
-        Requests `variables` from the Census API for the given `scope`.
+        Request `variables` from the Census API for the given `scope`.
 
         Parameters
         ----------
@@ -643,7 +645,7 @@ class AgeRange(NamedTuple):
 
     def contains(self, other: "AgeRange") -> bool:
         """
-        Is the `other` range fully contained in (or coincident with) this range?
+        Check if `other` range is fully contained in (or coincident with) this range.
 
         Parameters
         ----------
@@ -666,8 +668,9 @@ class AgeRange(NamedTuple):
     @staticmethod
     def parse(label: str) -> "AgeRange | None":
         """
-        Parse the age range of an ACS field label;
-        e.g.: `Estimate!!Total:!!Male:!!22 to 24 years`
+        Parse the age range of an ACS field label.
+
+        For example: `Estimate!!Total:!!Male:!!22 to 24 years`.
 
         Parameters
         ----------
@@ -813,7 +816,7 @@ class PopulationByAge(_ACS5Mixin, ADRIO[np.int64, np.int64]):
     @staticmethod
     def age_ranges(year: int) -> Sequence[AgeRange]:
         """
-        Lists the age ranges used by the ACS5 population by age table in definition
+        List the age ranges used by the ACS5 population by age table in definition
         order for the given year. Note that this does not correspond one-to-one with the
         values in the B01001 table -- this list omits "total" columns and duplicates.
 

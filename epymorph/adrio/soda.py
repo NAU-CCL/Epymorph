@@ -1,6 +1,9 @@
 """
 Methods for querying SODA APIs.
-See: [https://dev.socrata.com/](https://dev.socrata.com/)
+
+See Also
+--------
+The API documentation at [https://dev.socrata.com/](https://dev.socrata.com/).
 
 Examples
 --------
@@ -34,22 +37,22 @@ from typing_extensions import override
 
 
 def _parens(s: str) -> str:
-    """Formatting util: enclose in parens."""
+    """Formatting util: enclose in parens."""  # noqa: D401
     return f"({s})"
 
 
 def _col(s: str) -> str:
-    """Formatting util: SOQL column name."""
+    """Formatting util: SOQL column name."""  # noqa: D401
     return f"`{s}`"
 
 
 def _txt(s: str) -> str:
-    """Formatting util: SOQL text."""
+    """Formatting util: SOQL text."""  # noqa: D401
     return f"'{s}'"
 
 
 def _date(d: date) -> str:
-    """Formatting util: date as SOQL timestamp."""
+    """Formatting util: date as SOQL timestamp."""  # noqa: D401
     return f"'{d}T00:00:00'"
 
 
@@ -57,7 +60,7 @@ _T_co = TypeVar("_T_co", covariant=True)
 
 
 def _list(xs: Iterable[_T_co], to_string: Callable[[_T_co], str] = str) -> str:
-    """Formatting util: list of values."""
+    """Formatting util: list of values."""  # noqa: D401
     return ",".join([to_string(x) for x in xs])
 
 
@@ -66,7 +69,7 @@ ColumnType = Literal["str", "int", "nullable_int", "float", "date", "bool"]
 
 
 def _to_pandas_type(col_type: ColumnType) -> DTypeLike:
-    """The pandas type that corresponds to the SOQL column type."""
+    """Get the pandas type that corresponds to the SOQL column type."""
     match col_type:
         case "str":
             return np.str_
@@ -546,6 +549,8 @@ def query_csv_soql(
         The data resource.
     soql :
         The query string.
+    column_types :
+        The expected data types of the selected columns.
     limit :
         The maximum number of rows fetched per request. Changing this should not change
         the results, but may change the number of requests (and the clock time) it takes

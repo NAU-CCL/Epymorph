@@ -1,3 +1,5 @@
+"""Modeling time in epymorph."""
+
 # ruff: noqa: A005
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -346,7 +348,7 @@ class TimeFrame:
 
     def is_subset(self, other: "TimeFrame") -> bool:
         """
-        Is the given `TimeFrame` a subset of this one?
+        Check if the given `TimeFrame` is a subset of this one.
 
         Parameters
         ----------
@@ -362,7 +364,11 @@ class TimeFrame:
 
     @property
     def days(self) -> int:
-        """Alias for `duration_days`"""
+        """
+        The number of days included in the time frame.
+
+        Alias for `duration_days`.
+        """
         return self.duration_days
 
     def __iter__(self) -> Iterator[date]:
@@ -380,7 +386,7 @@ class TimeFrame:
 
     def to_numpy(self) -> NDArray[np.datetime64]:
         """
-        Returns a numpy array of the dates in this time frame.
+        Return a numpy array of the dates in this time frame.
 
         Returns
         -------
@@ -391,7 +397,7 @@ class TimeFrame:
 
     def to_date_range(self) -> DateRange:
         """
-        Returns a date range that corresponds to this time frame's
+        Return a date range that corresponds to this time frame's
         start and end date.
 
         Returns
@@ -406,11 +412,13 @@ class TimeFrame:
 
     @property
     def select(self) -> "TimeSelector":
-        """Create a time-axis strategy from this time frame.
+        """
+        Create a time-axis strategy from this time frame.
 
         In most cases, this will be used to process a simulation result
         and so you should use a selection on the time frame used in the
-        RUME that produced the result."""
+        RUME that produced the result.
+        """
         return TimeSelector(self)
 
 
@@ -446,7 +454,7 @@ class EpiWeek(NamedTuple):
 
 def epi_year_first_day(year: int) -> pd.Timestamp:
     """
-    Calculates the first day in an epi-year.
+    Calculate the first day in an epi-year.
 
     Parameters
     ----------
@@ -467,7 +475,7 @@ def epi_year_first_day(year: int) -> pd.Timestamp:
 
 def epi_week(check_date: date) -> EpiWeek:
     """
-    Calculates which epi week the given date belongs to.
+    Calculate which epi week the given date belongs to.
 
     Parameters
     ----------
@@ -584,7 +592,7 @@ class TimeGrouping(ABC, Generic[GroupKeyType]):
 class ByTick(TimeGrouping[np.int64]):
     """
     A kind of `TimeGrouping` to group by simulation tick.
-    (Effectively the same as no grouping.)
+    Effectively the same as no grouping.
     """
 
     group_format = "tick"
@@ -638,9 +646,7 @@ class ByWeek(TimeGrouping[np.datetime64]):
 
 
 class ByMonth(TimeGrouping[np.datetime64]):
-    """
-    A kind `TimeGrouping` to group by month, using the first day of the month.
-    """
+    """A kind `TimeGrouping` to group by month, using the first day of the month."""
 
     group_format = "date"
 
@@ -773,9 +779,12 @@ class TimeStrategy:
     @property
     @abstractmethod
     def group_format(self) -> Literal["date", "tick", "day", "other"]:
-        """What scale describes the result of the grouping?
+        """
+        The scale that describes the result of the grouping.
+
         Are the group keys dates? Simulation ticks? Simulation days?
-        Or some arbitrary other type?"""
+        Or some arbitrary other type?
+        """
 
     @property
     def date_bounds(self) -> tuple[date, date]:
@@ -789,7 +798,7 @@ class TimeStrategy:
 
     def to_time_frame(self) -> TimeFrame:
         """
-        Creates a `TimeFrame` that has the same bounds as this `TimeStrategy`.
+        Create a `TimeFrame` that has the same bounds as this `TimeStrategy`.
 
         NOTE: this does not mean the `TimeFrame` contains the same number of entries
         (group keys) as the result of applying this strategy -- groups can skip days
@@ -805,7 +814,7 @@ class TimeStrategy:
 
     def selection_ticks(self, taus: int) -> slice:
         """
-        Converts this into a slice for which ticks are selected (by index).
+        Convert this into a slice for which ticks are selected (by index).
 
         Parameters
         ----------
@@ -852,7 +861,7 @@ class _CanAggregate(TimeStrategy):
         events: AggMethod = "sum",
     ) -> "TimeAggregation":
         """
-        Aggregates the time series using the specified methods.
+        Aggregate the time series using the specified methods.
 
         Parameters
         ----------
@@ -917,7 +926,7 @@ class TimeSelection(_CanAggregate, TimeStrategy):
         grouping: Literal["day", "week", "epiweek", "month"] | TimeGrouping,
     ) -> "TimeGroup":
         """
-        Groups the time series using the specified grouping.
+        Group the time series using the specified grouping.
 
         Parameters
         ----------
@@ -1050,7 +1059,8 @@ class TimeSelector:
     """The original time frame."""
 
     def all(self, step: int | None = None) -> TimeSelection:
-        """Select the entirety of the time frame.
+        """
+        Select the entirety of the time frame.
 
         Parameters
         ----------

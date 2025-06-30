@@ -6,7 +6,7 @@ from epymorph.cli.main import define_argparser
 
 
 def main() -> None:
-    """The main entrypoint for epymorph."""
+    """Execute epymorph's CLI entrypoint."""
     args = define_argparser().parse_args()
     exit_code = args.handler(args)
     sys.exit(exit_code)

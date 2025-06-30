@@ -17,6 +17,14 @@ from platformdirs import user_cache_path
 
 
 def _cache_path() -> Path:
+    """
+    Get epymorph's cache directory.
+
+    Returns
+    -------
+    :
+        The path.
+    """
     if (path_var := getenv("EPYMORPH_CACHE_PATH")) is not None:
         # Load path from env var
         path = Path(path_var)
@@ -29,21 +37,34 @@ def _cache_path() -> Path:
 
 
 CACHE_PATH = _cache_path()
+"""The root directory for epymorph's cached files."""
 
 
 def module_cache_path(name: str) -> Path:
     """
-    When epymorph modules need to store files in the cache,
-    they should use a subdirectory tree within the application's
-    cache path. This tree should correspond to the module's path
-    within epymorph. e.g.: module epymorph.adrio.acs5 will store
-    files at $CACHE_PATH/adrio/acs5.
-    (The returned value is a relative path since the cache functions
-    require that.)
+    Return the cache directory to use for the given module.
 
-    Usage example:
+    When epymorph modules need to store files in the cache, they should use a
+    subdirectory within the application's cache path. The path should correspond to the
+    module's path within epymorph. e.g.: module `epymorph.adrio.acs5` will store files
+    in `$CACHE_PATH/adrio/acs5`.
 
-    `_TIGER_CACHE_PATH = module_cache_path(__name__)`
+    Parameters
+    ----------
+    name :
+        The name of the module, typically given as `__name__`.
+
+    Returns
+    -------
+    :
+        The cache directory to use, as a relative path since the cache functions
+        require that.
+
+    Examples
+    --------
+    >>> # if we're in module `epymorph.adrio.acs5`...
+    >>> module_cache_path(__name__)
+    PosixPath('adrio/acs5')
     """
     file_name = modules[name].__file__
     if file_name is None:
@@ -92,9 +113,16 @@ class CacheWarning(Warning):
 
 def save_file(to_path: str | PathLike[str], file: BytesIO) -> None:
     """
-    Save a single file. `to_path` can be absolute or relative; relative paths will be
-    resolved against the current working directory. Folders in the path which
-    do not exist will be created automatically.
+    Save a single file.
+
+    Parameters
+    ----------
+    to_path :
+        An absolute or relative path to store the file.
+        Relative paths will be resolved against the current working directory.
+        Folders in the path which do not exist will be created automatically.
+    file :
+        The file to store.
     """
     try:
         file_path = Path(to_path).resolve()
@@ -108,8 +136,22 @@ def save_file(to_path: str | PathLike[str], file: BytesIO) -> None:
 
 def load_file(from_path: str | PathLike[str]) -> BytesIO:
     """
-    Load a single file. An Exception is raised if the file cannot be loaded
-    for any reason. On success, returns the bytes of the file.
+    Load a single file.
+
+    Parameters
+    ----------
+    from_path :
+        The path to the file.
+
+    Returns
+    -------
+    :
+        The bytes of the file.
+
+    Raises
+    ------
+    FileReadError
+        If the file cannot be loaded for any reason.
     """
     try:
         file_path = Path(from_path).resolve()
@@ -129,13 +171,23 @@ def load_file(from_path: str | PathLike[str]) -> BytesIO:
 
 
 def save_bundle(
-    to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]
+    to_path: str | PathLike[str],
+    version: int,
+    files: dict[str, BytesIO],
 ) -> None:
     """
     Save a bundle of files in our tar format with an associated version number.
-    `to_path` can be absolute or relative; relative paths will be resolved
-    against the current working directory. Folders in the path which do not exist
-    will be created automatically.
+
+    Parameters
+    ----------
+    to_path :
+        An absolute or relative path to store the file.
+        Relative paths will be resolved against the current working directory.
+        Folders in the path which do not exist will be created automatically.
+    version :
+        The version number for the archive.
+    files :
+        The files to store, with a file name for each (its name within the archive).
     """
 
     if version <= 0:
@@ -182,13 +234,33 @@ def save_bundle(
 
 
 def load_bundle(
-    from_path: str | PathLike[str], version_at_least: int = -1
+    from_path: str | PathLike[str],
+    version_at_least: int = -1,
 ) -> dict[str, BytesIO]:
     """
     Load a bundle of files in our tar format, optionally enforcing a minimum version.
-    An Exception is raised if the file cannot be loaded for any reason, or
-    if its version is incorrect. On success, returns a dictionary
-    of the contained files, mapping the file name to the bytes of the file.
+
+    Parameters
+    ----------
+    from_path :
+        The path of the bundle.
+    version_at_least :
+        The minimally accepted version number to load. -1 to accept any version.
+
+    Returns
+    -------
+    :
+        A dictionary of the contained files, mapping the internal file names to the
+        bytes of the file.
+
+    Raises
+    ------
+    FileMissingError
+        If the file doesn't exist.
+    FileReadError
+        If the file cannot be read or is not valid.
+    FileVersionError
+        If there is an existing file but the version is below the minimum allowed.
     """
     try:
         tar_path = Path(from_path).resolve()
@@ -274,7 +346,12 @@ def _resolve_cache_path(path: str | PathLike[str]) -> Path:
 
 def check_file_in_cache(cache_path: Path) -> bool:
     """
-    Returns True if a file is currently in the cache.
+    Check if a file is currently in the cache.
+
+    Returns
+    -------
+    :
+        True if so.
     """
     return _resolve_cache_path(cache_path).exists()
 
@@ -282,7 +359,20 @@ def check_file_in_cache(cache_path: Path) -> bool:
 def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
     """
     Save a single file to the cache (overwriting the existing file, if any).
+
     This is a low-level building block.
+
+    Parameters
+    ----------
+    to_path :
+        A path to store the file, relative to the cache folder.
+    file :
+        The file bytes to store.
+
+    Raises
+    ------
+    FileWriteError
+        If the file cannot be saved for any reason.
     """
     try:
         save_file(_resolve_cache_path(to_path), file)
@@ -293,7 +383,18 @@ def save_file_to_cache(to_path: str | PathLike[str], file: BytesIO) -> None:
 def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
     """
     Load a single file from the cache.
+
     This is a low-level building block.
+
+    Parameters
+    ----------
+    from_path :
+        The path to the file, relative to the cache folder.
+
+    Returns
+    -------
+    :
+        The file bytes.
     """
     try:
         return load_file(_resolve_cache_path(from_path))
@@ -303,10 +404,26 @@ def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
 
 def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
     """
-    Attempts to load a file from the cache. If it doesn't exist, uses the provided
-    fetch method to load the file, then attempts to save the file to the cache for
-    next time. (This is a higher-level but still generic building block.)
-    Any exceptions raised by `fetch` will not be caught in this method.
+    Attempt to load a file from the cache.
+
+    If the file isn't already in the cache, the provided `fetch` method is used to load
+    the file and then it is cached for next time. Any exceptions raised by `fetch` will
+    not be caught in this method. If the file was successfully loaded but failed to save
+    to the cache, a warning is raised.
+
+    This is a higher-level but still fairly generic building block.
+
+    Parameters
+    ----------
+    cache_path :
+        The path to the file, relative to the cache folder.
+    fetch :
+        The function to load the file if it's not in the cache.
+
+    Returns
+    -------
+    :
+        The file bytes.
     """
     try:
         # Try to load from cache.
@@ -329,9 +446,26 @@ def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
 
 def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
     """
-    Attempts to load a file from the cache. If it doesn't exist, fetches
-    the file contents from the given URL, then attempts to save the file to the cache
-    for next time.
+    Attempt to load a file from the cache.
+
+    If the file isn't already in the cache, the provided `url` is used to load
+    the file and then it is cached for next time. Any exceptions raised by `fetch` will
+    not be caught in this method. If the file was successfully loaded but failed to save
+    to the cache, a warning is raised. URLs must use the http or https protocol.
+
+    This is a higher-level but still fairly generic building block.
+
+    Parameters
+    ----------
+    url :
+        The url to locate the file if it's not in the cache.
+    cache_path :
+        The path to the file, relative to the cache folder.
+
+    Returns
+    -------
+    :
+        The file bytes.
     """
 
     def fetch_url():
@@ -350,27 +484,47 @@ def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
 
 
 def save_bundle_to_cache(
-    to_path: str | PathLike[str], version: int, files: dict[str, BytesIO]
+    to_path: str | PathLike[str],
+    version: int,
+    files: dict[str, BytesIO],
 ) -> None:
     """
     Save a tar bundle of files to the cache (overwriting the existing file, if any).
-    The tar includes the sha256 checksums of every content file,
-    and a version file indicating which application version was
-    responsible for writing the file (thus allowing the application
-    to decide if a cached file is still valid when reading it).
+
+    The tar includes the sha256 checksums of every content file, and a version file
+    indicating which application version was responsible for writing the file (thus
+    allowing the application to decide if a cached file is still valid when reading it).
+
+    Parameters
+    ----------
+    to_path :
+        The path to store the bundle, relative to the cache folder.
+    version :
+        The version number for the archive.
+    files :
+        The files to store, with a file name for each (its name within the archive).
     """
     save_bundle(_resolve_cache_path(to_path), version, files)
 
 
 def load_bundle_from_cache(
-    from_path: str | PathLike[str], version_at_least: int = -1
+    from_path: str | PathLike[str],
+    version_at_least: int = -1,
 ) -> dict[str, BytesIO]:
     """
-    Load a tar bundle of files from the cache. `from_path` must be a relative path.
-    `version_at_least` optionally specifies a version number that must be met or beat
-    by the cached file in order for the file to be considered valid. If the cached file
-    was written against a version less than this, it will be considered a cache miss
-    (raises CacheMiss).
+    Load a tar bundle of files from the cache.
+
+    Parameters
+    ----------
+    from_path :
+        The path of the bundle, relative to the cache folder.
+    version_at_least :
+        The minimally accepted version number to load. -1 to accept any version.
+
+    Raises
+    ------
+    CacheMissError
+        If the bundle cannot be loaded.
     """
     try:
         return load_bundle(_resolve_cache_path(from_path), version_at_least)
@@ -383,12 +537,24 @@ def load_bundle_from_cache(
 ####################
 
 
-# https://en.wikipedia.org/wiki/Metric_prefix
 _suffixes = ("B", "kiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
+"""https://en.wikipedia.org/wiki/Metric_prefix"""
 
 
 def format_file_size(size: int) -> str:
-    """Format a file size given in bytes in 1024-based-unit representation."""
+    """
+    Format a file size given in bytes in 1024-based-unit representation.
+
+    Parameters
+    ----------
+    size :
+        The size in bytes.
+
+    Returns
+    -------
+    :
+        The file size in human-readable format.
+    """
     if size < 0:
         raise ValueError("size cannot be less than zero.")
     if size < 1024:
@@ -425,7 +591,7 @@ FileTree = Directory | File
 
 
 def cache_inventory() -> Directory:
-    """Lists the contents of epymorph's cache as a FileTree."""
+    """List the contents of epymorph's cache as a FileTree."""
 
     def recurse(directory: Path) -> Directory:
         children = []
@@ -453,9 +619,20 @@ def cache_remove_confirmation(
     path: str | PathLike[str],
 ) -> tuple[Path, Callable[[], None]]:
     """
-    Creates a function which removes a directory or file from the cache.
+    Create a function which removes a directory or file from the cache.
+
     Also returns the resolved path to the thing that will be removed;
     this allows the application to confirm the removal.
+
+    Parameters
+    ----------
+    path :
+        The path to the file, relative to the cache folder.
+
+    Returns
+    -------
+    :
+        A tuple of the absolute file path and a function to remove it.
     """
     try:
         # This makes sure we don't delete things outside of the cache path.
@@ -490,7 +667,14 @@ def cache_remove_confirmation(
 
 
 def cache_remove(path: str | PathLike[str]) -> None:
-    """Removes a directory or file from the cache."""
+    """
+    Remove a directory or file from the cache.
+
+    Parameters
+    ----------
+    path :
+        The path to remove.
+    """
     # This is the "no confirmation" version of `cache_remove_confirmation`
     _, confirm_remove = cache_remove_confirmation(path)
     confirm_remove()

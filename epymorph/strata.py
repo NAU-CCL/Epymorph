@@ -8,5 +8,17 @@ META_STRATA = "meta"
 
 
 def gpm_strata(strata_name: str) -> str:
-    """The strata name for a GPM in a multistrata RUME."""
+    """
+    Format a strata (GPM) name to its internal format.
+
+    Parameters
+    ----------
+    strata_name :
+        The human-readable strata name.
+
+    Returns
+    -------
+    :
+        The internal format of the strata's name.
+    """
     return f"gpm:{strata_name}"

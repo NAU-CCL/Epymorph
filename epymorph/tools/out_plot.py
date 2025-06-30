@@ -1,6 +1,4 @@
-"""
-Tools for rendering graphs from epymorph simulation output data.
-"""
+"""Tools for rendering graphs from epymorph simulation output data."""
 
 from datetime import timedelta
 from itertools import cycle
@@ -86,10 +84,12 @@ class PlotRenderer:
         Literal["tick", "date", "day", "other"],  # what format can we actually do?
         Callable[[pd.Series], pd.Series],  # converts time axis into format
     ]:
-        """Figures out time-axis formatting for plots. This is basically a
+        """
+        Figures out time-axis formatting for plots. This is basically a
         best-effort negotiation depending on the time format we have after
         applying time selection/aggregation (if any) and the time format
-        requested."""
+        requested.
+        """
 
         tau_step_lengths = self.output.rume.tau_step_lengths
         num_tau_steps = self.output.rume.num_tau_steps
@@ -165,7 +165,7 @@ class PlotRenderer:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Renders a line plot using matplotlib showing the given selections.
+        Render a line plot using matplotlib showing the given selections.
 
         The plot will be immediately rendered by this function by calling `plt.show()`.
         This is intended as a quick plotting method to cover most casual use-cases.
@@ -415,9 +415,7 @@ class PlotRenderer:
 
 
 class PlotRendererMixin(Output):
-    """
-    Mixin class that adds a convenient method for rendering plots from an output.
-    """
+    """Mixin class that adds a convenient method for rendering plots from an output."""
 
     @property
     def plot(self) -> PlotRenderer:

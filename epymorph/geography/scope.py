@@ -1,3 +1,14 @@
+"""
+The geographic scope of a simulation describes the locations which are included in the
+model. Each location is a discrete place. While interactions between locations may be
+described by model data or arise from the movements of individuals, the geo scope itself
+is agnostic to these dynamics.
+
+`GeoScope` is generic, modeling geography in a very abstract way. Specialized classes
+exist to describe geographic systems that model real world geography, e.g., the system
+of delineations defined by the US Census Bureau.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import singledispatch
@@ -24,7 +35,7 @@ class GeoScope(Protocol):
 
     def index_of(self, node_id: str) -> int:
         """
-        Returns the index of a given node by its ID string.
+        Return the index of a given node by its ID string.
 
         Parameters
         ----------
@@ -59,7 +70,8 @@ class GeoScope(Protocol):
     def labels(self) -> NDArray[np.str_]:
         """
         The best text label for each node.
-        (This uses `labels_option` if available and falls back to `node_ids`.)
+
+        This uses `labels_option` if available and falls back to `node_ids`.
         """
         if (labels := self.labels_option) is not None:
             return labels
@@ -164,7 +176,7 @@ class GeoStrategy(ABC, Generic[GeoScopeT_co]):
 @singledispatch
 def strategy_to_scope(scope: GeoScopeT, strategy: GeoStrategy[GeoScopeT]) -> GeoScope:
     """
-    Converts a `GeoStrategy` instance to the `GeoScope` that would result from
+    Convert a `GeoStrategy` instance to the `GeoScope` that would result from
     applying the strategy.
 
     Warning
@@ -348,7 +360,8 @@ class GeoGroup(_CanGeoAggregate[GeoScopeT_co], GeoStrategy[GeoScopeT_co]):
 
 @dataclass(frozen=True)
 class GeoAggregation(GeoStrategy[GeoScopeT_co]):
-    """Describes a group-and-aggregate operation on a geo scope,
+    """
+    Describes a group-and-aggregate operation on a geo scope,
     with an optional sub-selection.
 
     Typically you will create one of these by calling methods on a `GeoSelection`

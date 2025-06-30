@@ -1,18 +1,23 @@
-"""
-A common exception framework for epymorph.
-"""
+"""Common epymorph exceptions."""
 
 from contextlib import contextmanager
-from textwrap import dedent
-
-from typing_extensions import deprecated
 
 
 class ExternalDependencyError(Exception):
-    """Exception when a native program is required but not found."""
+    """
+    Exception when epymorph requires a native program (or programs) to perform an
+    application function but the program is not found.
+
+    Parameters
+    ----------
+    msg :
+        The exception message.
+    missing :
+        The list of external programs which are missing.
+    """
 
     missing: list[str]
-    """Which programs are missing?"""
+    """The list of external programs which are missing."""
 
     def __init__(self, msg: str, missing: list[str]):
         super().__init__(msg)
@@ -36,7 +41,7 @@ class ValidationError(Exception):
 
 
 class DataAttributeError(ValidationError):
-    """Exception handling data attributes."""
+    """Exception encountered handling a data attribute."""
 
 
 class DataAttributeErrorGroup(ExceptionGroup, DataAttributeError):  # noqa: N818
@@ -50,11 +55,6 @@ class MissingContextError(Exception):
     """
 
 
-@deprecated("Prefer using something in the ADRIOError hierarchy.")
-class DataResourceError(Exception):
-    """Exception during resource loading from ADRIOs."""
-
-
 class IPMValidationError(ValidationError):
     """Exception for invalid IPM."""
 
@@ -64,7 +64,7 @@ class MMValidationError(ValidationError):
 
 
 class InitValidationError(ValidationError):
-    """Exception for invalid Init."""
+    """Exception for invalid Initializer."""
 
 
 class SimValidationError(ValidationError):
@@ -91,20 +91,13 @@ class IPMSimError(SimulationError):
     """Exception during IPM processing."""
 
 
-class IPMSimWithFieldsError(IPMSimError):
+class _WithFieldsMixin:
     """
-    Exception during IPM processing where it is appropriate to show specific
-    fields within the simulation.
-    To create a new error with fields, create a subclass of this and set the
-    displayed error message along with the fields to print.
-    See 'IpmSimNaNException' for an example.
+    A mixin class for exceptions that include diagnostic information about
+    the simulation step being processed.
     """
 
     display_fields: list[tuple[str, dict]]
-
-    def __init__(self, message: str, display_fields: list[tuple[str, dict]]):
-        super().__init__(message)
-        self.display_fields = display_fields
 
     def __str__(self):
         msg = super().__str__()
@@ -117,50 +110,48 @@ class IPMSimWithFieldsError(IPMSimError):
         return f"{msg}\n{fields}"
 
 
-class IPMSimNaNError(IPMSimWithFieldsError):
-    """Exception for handling NaN (not a number) rate values"""
+class IPMSimNaNError(_WithFieldsMixin, IPMSimError):
+    """Exception raised when an IPM transition rate is NaN."""
+
+    def __init__(self, display_fields: list[tuple[str, dict]]):
+        msg = [
+            "An IPM transition rate was NaN (not a number).",
+            "This is often the result of a divide by zero error.",
+            "When constructing an IPM, ensure that no edge transitions can result in "
+            "division by zero.",
+            "This commonly occurs when defining an edge that is divided by "
+            "a population total, since populations in nodes can be zero.",
+            "Possible fixes include wrapping the divisor with a 'Max' expression so as "
+            "to guarantee it is never less than 1. Commonly in this situation, the "
+            "numerator must be 0, making the divisor's actual value irrelevant.",
+        ]
+        super().__init__("\n".join(msg))
+        self.display_fields = display_fields
+
+
+class IPMSimLessThanZeroError(_WithFieldsMixin, IPMSimError):
+    """Exception raised when an IPM transition rate is less than zero."""
+
+    def __init__(self, display_fields: list[tuple[str, dict]]):
+        msg = [
+            "An IPM transition rate was less than zero.",
+            "When providing IPM parameters ensure that this will not result in a "
+            "negative rate.",
+        ]
+        super().__init__("\n".join(msg))
+        self.display_fields = display_fields
+
+
+class IPMSimInvalidForkError(_WithFieldsMixin, IPMSimError):
+    """Exception raised when an IPM fork transition's probabilities are invalid."""
 
     def __init__(self, display_fields: list[tuple[str, dict]]):
         msg = (
-            "NaN (not a number) rate detected. This is often the result of a "
-            "divide by zero error.\n"
-            "When constructing the IPM, ensure that no edge transitions can "
-            "result in division by zero\n"
-            "This commonly occurs when defining an S->I edge that is "
-            "(some rate / sum of the compartments)\n"
-            "To fix this, change the edge to define the S->I edge as "
-            "(some rate / Max(1/sum of the the compartments))\n"
-            "See examples of this in the provided example ipm definitions "
-            "in the data/ipms folder."
+            "An IPM fork transition is invalid. The computed probabilities for the "
+            "fork must always be non-negative and sum to 1."
         )
-        msg = dedent(msg)
-        super().__init__(msg, display_fields)
-
-
-class IPMSimLessThanZeroError(IPMSimWithFieldsError):
-    """Exception for handling less than 0 rate values"""
-
-    def __init__(self, display_fields: list[tuple[str, dict]]):
-        msg = (
-            "Less than zero rate detected. When providing or defining ipm parameters, "
-            "ensure that they will not result in a negative rate.\n"
-            "Note: this can often happen unintentionally if a function is given "
-            "as a parameter."
-        )
-        msg = dedent(msg)
-        super().__init__(msg, display_fields)
-
-
-class IPMSimInvalidProbsError(IPMSimWithFieldsError):
-    """Exception for handling invalid probability values"""
-
-    def __init__(self, display_fields: list[tuple[str, dict]]):
-        msg = """
-              Invalid probabilities for fork definition detected. Probabilities for a
-              given tick should always be nonnegative and sum to 1
-              """
-        msg = dedent(msg)
-        super().__init__(msg, display_fields)
+        super().__init__(msg)
+        self.display_fields = display_fields
 
 
 class MMSimError(SimulationError):
@@ -174,18 +165,29 @@ def error_gate(
     *reraises: type[Exception],
 ):
     """
-    Provide nice error messaging linked to a phase of the simulation.
-    `description` should describe the phase in gerund form.
+    Begin a context that standardizes errors linked to a particular simulation phase.
+    Wrap the phase in an error gate and all exceptions raised within will be normalized.
+
     If an exception of type `exception_type` is caught, it will be re-raised as-is.
     If an exception is caught from the list of exception types in `reraises`,
     the exception will be stringified and re-raised as `exception_type`.
-    All other exceptions will be labeled "unknown errors" with the given description.
+    All other exceptions will be labeled as "unknown errors".
+
+    Parameters
+    ----------
+    description :
+        Describe the phase in gerund form, e.g., "executing the IPM".
+    exception_type :
+        The best exception type for this phase.
+    reraises :
+        Additional exception types which will be stringified and raised as an
+        `exception_type`.
     """
     try:
         yield
     except exception_type as e:
         raise e
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         if any(isinstance(e, r) for r in reraises):
             raise exception_type(str(e)) from e
 

@@ -1,3 +1,9 @@
+"""
+`MMExecutor` is part of the internal workings of `BasicSimulator`, implementing the
+logic for processing the movement phase of the simulation. Most users will not use this
+module directly.
+"""
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -30,7 +36,27 @@ def calculate_travelers(
     Calculate the number of travelers resulting from this movement clause for this tick.
     This evaluates the requested number movers, modulates that based on the available
     movers, then selects exactly which individuals (by compartment) should move.
-    Returns an (N,N,C) array; from-source-to-destination-by-compartment.
+
+    Parameters
+    ----------
+    clause_name :
+        The movement clause to process.
+    clause_mobility :
+        The mask describing which compartments are subject to movement.
+    requested_movers :
+        The movers requested by the clause, an (N,N) array.
+    available_movers :
+        The number of eligible movers in each location, an (N,C) array.
+    tick :
+        The tick to process.
+    rng :
+        The source of randomness.
+
+    Returns
+    -------
+    :
+        The effecitve movement, as an (N,N,C) array;
+        "from source to destination, by compartment".
     """
     # Extract number of nodes and cohorts from the provided array.
     (N, C) = available_movers.shape
@@ -91,16 +117,28 @@ _events = EventBus()
 
 
 class MovementExecutor:
-    """Movement model execution specifically for multi-strata simulations."""
+    """
+    The standard implementation of movement execution.
+
+    rume :
+        The RUME.
+    world :
+        The world state.
+    data_resolver :
+        The evaluated data attributes of the simulation.
+    rng :
+        The simulation RNG.
+    """
 
     _rume: RUME
-    """the RUME"""
+    """The RUME."""
     _world: World
-    """the world state"""
+    """The world state."""
     _rng: np.random.Generator
-    """the simulation RNG"""
+    """The simulation RNG."""
 
     _clauses: list[tuple[str, MovementClause]]
+    """Movement clauses with context applied."""
 
     def __init__(
         self,
@@ -130,7 +168,14 @@ class MovementExecutor:
                 self._clauses.append((strata, c))
 
     def apply(self, tick: Tick) -> None:
-        """Applies movement for this tick, mutating the world state."""
+        """
+        Apply movement for this tick, mutating the world state.
+
+        Parameters
+        ----------
+        tick :
+            The tick to process.
+        """
 
         _events.on_movement_start.publish(
             OnMovementStart(tick.sim_index, tick.day, tick.step)
