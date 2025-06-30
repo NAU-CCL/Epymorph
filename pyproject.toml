@@ -63,6 +63,8 @@ dev = [
   "pytest>=8.3.4",
   "pytest-cov>=6.0.0",
   "vcrpy>=7.0.0",
+  # Build
+  "setuptools-scm>=8.1.0",
   # Documentation
   "mkdocs>=1.6.1",
   "mkdocs-material>=9.6.12",
@@ -86,7 +88,7 @@ addopts = [
 ]
 
 [build-system]
-requires = ["setuptools>=74.0.0", "setuptools_scm>=8.1.0"]
+requires = ["setuptools>=74.0.0", "setuptools-scm>=8.1.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
