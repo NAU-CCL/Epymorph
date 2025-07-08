@@ -30,7 +30,7 @@ from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.geography.us_tiger import get_counties, get_states
 from epymorph.simulation import Context, validate_context_for_shape
 from epymorph.time import DateRange
-from epymorph.util import identity
+from epymorph.util import DateValueType, date_value_dtype, identity, to_date_value_array
 
 GeoKeyType = Literal["state_abbrev", "county_state", "geoid"]
 """
@@ -361,6 +361,172 @@ class CSVFileTxN(_CSVMixin, ADRIO[np.generic, np.generic]):
                 self.result_format.shape.to_tuple(context.dim)
             ),
             validate_dtype(self.dtype),
+        )
+
+
+class CSVFileAxN(_CSVMixin, ADRIO[DateValueType, np.generic]):
+    """
+    Loads an AxN-shaped array of data from a user-provided CSV file where A is an
+    arbitrary time axis labeled by date. The array is a structured array of date-value
+    pairs. Missing data in the csv file is represented with a masked array.
+
+    Parameters
+    ----------
+    file_path :
+        The path to the CSV file containing data.
+    dtype :
+        The data type of values in the data column.
+    key_col :
+        Numerical index of the column containing information to identify geographies.
+    key_type :
+        The type of geographic identifier in the key column.
+    time_col :
+        The numerical index of the column containing time information.
+    data_col :
+        Numerical index of the column containing the data of interest.
+    skiprows :
+        Number of header rows in the file to be skipped.
+    """
+
+    file_path: Path
+    """The path to the CSV file containing data."""
+    dtype: np.dtype
+    """The data type of values in the data column."""
+    key_col: int
+    """Numerical index of the column containing information to identify geographies."""
+    key_type: GeoKeyType
+    """The type of geographic identifier in the key column."""
+    time_col: int
+    """The numerical index of the column containing time information."""
+    data_col: int
+    """Numerical index of the column containing the data of interest."""
+    skiprows: int | None
+    """Number of header rows in the file to be skipped."""
+
+    def __init__(
+        self,
+        *,
+        file_path: str | Path,
+        dtype: np.dtype | type[np.generic],
+        key_col: int,
+        key_type: GeoKeyType,
+        time_col: int,
+        data_col: int,
+        skiprows: int | None = None,
+    ):
+        if len({key_col, data_col, time_col}) != 3:
+            err = "Key, data, and time columns must all be unique."
+            raise ValueError(err)
+
+        self.file_path = file_path if isinstance(file_path, Path) else Path(file_path)
+        self.dtype = dtype if isinstance(dtype, np.dtype) else np.dtype(dtype)
+        self.key_col = key_col
+        self.data_col = data_col
+        self.key_type = key_type
+        self.skiprows = skiprows
+        self.time_col = time_col
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.AxN, dtype=date_value_dtype(self.dtype))
+
+    @override
+    def inspect(self) -> InspectResult:
+        self.validate_context(self.context)
+
+        self.date_range = self.context.time_frame.to_date_range()
+
+        if not self.file_path.is_file():
+            err = f"File {self.file_path} not found or not a file."
+            raise ADRIOProcessingError(self, self.context, err)
+
+        columns = [self.key_col, self.time_col, self.data_col]
+        kwarg_options = {}
+        if self.skiprows is not None:
+            kwarg_options["skiprows"] = self.skiprows
+        csv_df = read_csv(
+            self.file_path,
+            header=None,
+            dtype={self.key_col: str},
+            parse_dates=[self.time_col],
+            usecols=columns,
+            **kwarg_options,
+        )
+
+        work_df = csv_df[columns]
+        work_df.columns = ["key", "time", "data"]
+        work_df = self.parse_geo_key(work_df, ["key"])
+        work_df = work_df.sort_values(by=["time", "key"])
+        # Filter to requested geo
+        work_df = work_df[work_df["key"].isin(self.scope.node_ids)]
+        # Filter to specified date range
+        # TODO: this should probably just use context time_frame...
+        if self.date_range is not None:
+            start_date = to_datetime(self.date_range.start_date)
+            end_date = to_datetime(self.date_range.end_date)
+            work_df = work_df[
+                (work_df["time"] >= start_date) & (work_df["time"] <= end_date)
+            ]
+
+        nodes_in_data = np.sort(work_df["key"].unique())
+        if (
+            work_df.duplicated(subset=["key", "time"]).any()  # check duplicate keys
+            or not np.array_equal(nodes_in_data, self.scope.node_ids)  # check nodes
+        ):
+            err = (
+                "Either required geographies are missing from the CSV file "
+                "or there are some duplicate key/values."
+            )
+            raise ADRIOProcessingError(self, self.context, err)
+
+        result_np = work_df.pivot_table(
+            index="time",
+            columns="key",
+            values="data",
+            fill_value=0,
+            aggfunc="first",  # Other aggfunc's may change the dtype. # type: ignore
+            dropna=False,
+        )
+        missing = work_df.assign(data=work_df["data"].isna()).pivot_table(
+            index="time",
+            columns="key",
+            values="data",
+            aggfunc="first",  # type: ignore
+        )
+
+        if np.any(np.isnan(result_np)):
+            err = (
+                "Some data are missing from the CSV file; "
+                "not all pairs of date/location are present."
+            )
+            raise ADRIOProcessingError(self, self.context, err)
+
+        result_np = to_date_value_array(
+            result_np.index.to_numpy(), result_np.to_numpy(dtype=self.dtype)
+        )
+
+        self.validate_result(self.context, result_np)
+        return InspectResult(
+            adrio=self,
+            source=csv_df,
+            result=np.ma.masked_array(data=result_np, mask=missing),
+            dtype=self.result_format.dtype.type,
+            shape=self.result_format.shape,
+            issues={},
+        )
+
+    @override
+    def validate_result(self, context: Context, result: NDArray[np.generic]) -> None:
+        adrio_validate_pipe(
+            self,
+            context,
+            result,
+            validate_numpy(),
+            validate_shape_unchecked_arbitrary(
+                self.result_format.shape.to_tuple(context.dim)
+            ),
+            validate_dtype(self.result_format.dtype),
         )
 
 
