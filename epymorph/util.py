@@ -178,12 +178,14 @@ def are_unique(xs: Iterable[T]) -> bool:
 @overload
 def are_instances(xs: list[Any], of_type: type[T]) -> TypeGuard[list[T]]: ...
 @overload
-def are_instances(xs: tuple[Any], of_type: type[T]) -> TypeGuard[tuple[T]]: ...
+def are_instances(
+    xs: tuple[Any, ...], of_type: type[T]
+) -> TypeGuard[tuple[T, ...]]: ...
 
 
 def are_instances(
-    xs: list[Any] | tuple[Any], of_type: type[T]
-) -> TypeGuard[list[T] | tuple[T]]:
+    xs: list[Any] | tuple[Any, ...], of_type: type[T]
+) -> TypeGuard[list[T] | tuple[T, ...]]:
     """
     TypeGuards a collection to check that all items are
     instances of the given type (`of_type`).

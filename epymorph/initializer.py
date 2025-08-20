@@ -17,9 +17,7 @@ from epymorph.attribute import AttributeDef
 from epymorph.data_shape import DataShape, DataShapeMatcher, Shapes
 from epymorph.data_type import SimArray, SimDType
 from epymorph.error import InitError
-from epymorph.simulation import (
-    SimulationFunction,
-)
+from epymorph.simulation import SimulationFunction
 from epymorph.util import Matcher, NumpyTypeError, check_ndarray, dtype_name, match
 
 

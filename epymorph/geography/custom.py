@@ -1,7 +1,7 @@
 """Implements a generic geo scope capable of representing arbitrary geographies."""
 
 from dataclasses import dataclass
-from typing import Never
+from typing import Any, Never
 
 import numpy as np
 from numpy.typing import NDArray
@@ -51,6 +51,16 @@ class CustomScope(GeoScope):
     def geography(self) -> Never:
         """Automatic geography is not supported for custom scopes."""
         raise GeographyError("Geography is not possible for CustomScopes.")
+
+    @override
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, CustomScope):
+            return False
+        return np.array_equal(self._nodes, other._nodes)
+
+    @override
+    def __hash__(self) -> int:
+        return hash(self._nodes.tobytes())
 
 
 @dataclass(frozen=True)
