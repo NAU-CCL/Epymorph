@@ -1103,7 +1103,7 @@ class CombinedCompartmentModel(BaseCompartmentModel):
 
     _strata: Sequence[tuple[str, CompartmentModel]]
     _meta_requirements: Sequence[AttributeDef]
-    _meta_edges: MetaEdgeBuilder
+    _meta_edges: Sequence[TransitionDef]
     _symbols: MultiStrataModelSymbols
     _transitions: Sequence[TransitionDef]
     _events: Sequence[EdgeDef]
@@ -1117,7 +1117,6 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     ):
         self._strata = strata
         self._meta_requirements = meta_requirements
-        self._meta_edges = meta_edges
 
         self.compartments = [
             comp.with_strata(strata_name)
@@ -1176,13 +1175,14 @@ class CombinedCompartmentModel(BaseCompartmentModel):
                     ).with_strata(strata)
                     return dataclasses.replace(x, name=name)
 
+        self._meta_edges = [fix_edge_names(x) for x in meta_edges(symbols)]
         self._transitions = [
             *(
                 _remap_transition(trx, strata, mapping)
                 for (strata, ipm), mapping in zip(self._strata, strata_mapping)
                 for trx in ipm.transitions
             ),
-            *(fix_edge_names(x) for x in self._meta_edges(symbols)),
+            *self._meta_edges,
         ]
         self._events = list(_as_events(self._transitions))
         self._requirements_dict = OrderedDict(
@@ -1228,6 +1228,14 @@ class CombinedCompartmentModel(BaseCompartmentModel):
     @override
     def is_multistrata(self) -> bool:
         return True
+
+    @property
+    def meta_requirements(self) -> Sequence[AttributeDef]:
+        return self._meta_requirements
+
+    @property
+    def meta_edges(self) -> Sequence[TransitionDef]:
+        return self._meta_edges
 
 
 #####################################################

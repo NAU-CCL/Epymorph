@@ -1036,3 +1036,46 @@ def string_builder(
     yield s
     if closer is not None:
         s.line(closer)
+
+
+class SaveParams:
+    """
+    Wraps the subclass initializer to save the parameters used to construct instances.
+
+    `__init_subclass__` is used to pull this off. Property `init_params` is available
+    to retrieve the instance's saved parameters. Be aware that init params which are
+    mutable may change at any time. This utility does NOT make copies of the values.
+    """
+
+    _ARGS_KEY = "__epymorph.util.SaveParams__init_args__"
+    _KWARGS_KEY = "__epymorph.util.SaveParams__init_kwargs__"
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        orig_init = getattr(cls, "__init__")
+
+        @wraps(orig_init)
+        def wrapper_init(self, *init_args, **init_kwargs):
+            # only save for the lowest class in the hierarchy (first in exec order)
+            if not hasattr(self, SaveParams._ARGS_KEY):
+                setattr(self, SaveParams._ARGS_KEY, init_args)
+                setattr(self, SaveParams._KWARGS_KEY, init_kwargs)
+            orig_init(self, *init_args, **init_kwargs)
+
+        # using setattr gets type checking to ignore that we've monkeyed with __init__
+        setattr(cls, "__init__", wrapper_init)
+
+        super().__init_subclass__(**kwargs)
+
+    @property
+    def init_params(self) -> tuple[tuple[Any], dict[str, Any]]:
+        """
+        Retrieve the parameter values used to initialize this instance.
+
+        Returns
+        -------
+        :
+            A tuple containing the initialization (args, kwargs).
+        """
+        args = getattr(self, SaveParams._ARGS_KEY)
+        kwargs = getattr(self, SaveParams._KWARGS_KEY)
+        return (args, kwargs)

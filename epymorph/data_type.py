@@ -6,8 +6,9 @@ working with them. The goal is to simplify and remove certain categories of erro
 like numerical overflow when simulating reasonable numbers of individuals.
 """
 
+import re
 from datetime import date
-from typing import Any
+from typing import Any, Never
 
 import numpy as np
 from numpy.typing import NDArray
@@ -101,14 +102,9 @@ def dtype_str(dtype: AttributeType) -> str:
     :
         The friendly string representation of the type.
     """
-    if dtype is int:
-        return "int"
-    if dtype is float:
-        return "float"
-    if dtype is str:
-        return "str"
-    if dtype is date:
-        return "date"
+    if dtype in _scalar_to_string:
+        return _scalar_to_string[dtype]
+
     if isinstance(dtype, tuple):
         fields = list(dtype)
         if len(fields) == 0:
@@ -122,6 +118,80 @@ def dtype_str(dtype: AttributeType) -> str:
         except (TypeError, ValueError):
             raise ValueError(f"Unsupported dtype: {dtype}") from None
     raise ValueError(f"Unsupported dtype: {dtype}")
+
+
+_scalar_to_string: dict[ScalarType, str] = {
+    int: "int",
+    float: "float",
+    str: "str",
+    date: "date",
+}
+
+_string_to_scalar: dict[str, ScalarType] = {v: k for k, v in _scalar_to_string.items()}
+
+_struct_type_s11n_regex = re.compile(
+    r"^\(\('([^']+)',([^)]+)\)(?:,\('([^']+)',([^)]+)\))*\)$"
+)
+"""
+Regex for parsing the serialized format of a struct type.
+e.g., `(('field1',int),('field2',float))`
+"""
+
+
+def dtype_serialize(obj: AttributeType) -> str:
+    """TODO"""
+
+    def fail() -> Never:
+        err = f"Unsupported type: {obj}"
+        raise ValueError(err)
+
+    if obj in _scalar_to_string:
+        return _scalar_to_string[obj]
+    if not isinstance(obj, tuple):
+        fail()
+
+    if len(obj) == 0:
+        fail()
+    if not all(isinstance(n, str) for n, _ in obj):
+        fail()
+
+    def ser_scalar(scalar: ScalarType) -> str:
+        if scalar in _scalar_to_string:
+            return _scalar_to_string[scalar]
+        fail()
+
+    fields = [
+        f"('{field_name}',{ser_scalar(field_dtype)})" for field_name, field_dtype in obj
+    ]
+    return f"({','.join(fields)})"
+
+
+def dtype_deserialize(string: str) -> AttributeType:
+    """TODO"""
+
+    def fail() -> Never:
+        err = f"Unsupported type: {string}"
+        raise ValueError(err)
+
+    if string in _string_to_scalar:
+        return _string_to_scalar[string]
+
+    def deser_scalar(scalar: str) -> ScalarType:
+        if scalar in _string_to_scalar:
+            return _string_to_scalar[scalar]
+        fail()
+
+    if m := _struct_type_s11n_regex.match(string):
+        groups = m.groups()
+        if len(groups) == 0:
+            fail()
+
+        return tuple(
+            (field_name, deser_scalar(field_dtype))
+            for field_name, field_dtype in zip(groups[0::2], groups[1::2])
+        )
+
+    fail()
 
 
 def dtype_check(dtype: AttributeType, value: Any) -> bool:

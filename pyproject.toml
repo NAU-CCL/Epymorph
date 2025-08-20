@@ -51,6 +51,7 @@ dependencies = [
   "humanize~=4.10.0",
   "sparklines~=0.5.0",
   "scipy~=1.14.1",
+  "pydantic~=2.11.7",
 ]
 
 [dependency-groups]

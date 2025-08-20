@@ -52,7 +52,7 @@ from epymorph.database import (
 from epymorph.error import MissingContextError
 from epymorph.geography.scope import GeoScope
 from epymorph.time import TimeFrame
-from epymorph.util import are_instances, are_unique
+from epymorph.util import SaveParams, are_instances, are_unique
 
 
 def default_rng(
@@ -558,7 +558,7 @@ DeferFunctionT = TypeVar("DeferFunctionT", bound="BaseSimulationFunction")
 """The type of a `SimulationFunction` during deference."""
 
 
-class BaseSimulationFunction(ABC, Generic[ResultT]):
+class BaseSimulationFunction(ABC, Generic[ResultT], SaveParams):
     """
     A function which runs in the context of a simulation to produce a value
     (as a numpy array).
