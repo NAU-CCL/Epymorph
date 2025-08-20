@@ -12,9 +12,9 @@ up moving if there are not enough to satisfy the request.
 """
 
 import re
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from math import isclose
-from typing import Any, Literal, Sequence, Type, TypeVar, cast
+from typing import Literal, Sequence, cast
 
 from numpy.typing import NDArray
 from typing_extensions import override
@@ -23,7 +23,6 @@ from epymorph.attribute import AttributeDef
 from epymorph.data_type import SimDType
 from epymorph.simulation import (
     NEVER,
-    SimulationFunctionClass,
     SimulationTickFunction,
     Tick,
     TickDelta,
@@ -130,61 +129,42 @@ class DayIs(MovementPredicate):
 ##################
 
 
-_TypeT = TypeVar("_TypeT")
+def _check_movement_clause(cls: "type[MovementClause]") -> None:
+    """Enforces some standards on MovementClause classes."""
+    name = cls.__name__
+
+    # Check predicate.
+    predicate = getattr(cls, "predicate", None)
+    if predicate is None or not isinstance(predicate, MovementPredicate):
+        err = (
+            f"Invalid predicate in {name}: please specify a MovementPredicate instance."
+        )
+        raise TypeError(err)
+
+    # Check leaves.
+    leaves = getattr(cls, "leaves", None)
+    if leaves is None or not isinstance(leaves, TickIndex):
+        err = f"Invalid leaves in {name}: please specify a TickIndex instance."
+        raise TypeError(err)
+    if leaves.step < 0:
+        err = f"Invalid leaves in {name}: step indices cannot be less than zero."
+        raise TypeError(err)
+
+    # Check returns.
+    returns = getattr(cls, "returns", None)
+    if returns is None or not isinstance(returns, TickDelta):
+        err = f"Invalid returns in {name}: please specify a TickDelta instance."
+        raise TypeError(err)
+    if returns != NEVER:
+        if returns.step < 0:
+            err = f"Invalid returns in {name}: step indices cannot be less than zero."
+            raise TypeError(err)
+        if returns.days < 0:
+            err = f"Invalid returns in {name}: days cannot be less than zero."
+            raise TypeError(err)
 
 
-class MovementClauseClass(SimulationFunctionClass):
-    """The metaclass for `MovementClause` classes; enforces proper implementation."""
-
-    def __new__(
-        cls: Type[_TypeT],
-        name: str,
-        bases: tuple[type, ...],
-        dct: dict[str, Any],
-    ) -> _TypeT:
-        # Skip these checks for classes we want to treat as abstract:
-        if dct.get("_abstract_simfunc", False):
-            return super().__new__(cls, name, bases, dct)
-
-        # Check predicate.
-        predicate = dct.get("predicate")
-        if predicate is None or not isinstance(predicate, MovementPredicate):
-            raise TypeError(
-                f"Invalid predicate in {name}: "
-                "please specify a MovementPredicate instance."
-            )
-        # Check leaves.
-        leaves = dct.get("leaves")
-        if leaves is None or not isinstance(leaves, TickIndex):
-            raise TypeError(
-                f"Invalid leaves in {name}: please specify a TickIndex instance."
-            )
-        if leaves.step < 0:
-            raise TypeError(
-                f"Invalid leaves in {name}: step indices cannot be less than zero."
-            )
-        # Check returns.
-        returns = dct.get("returns")
-        if returns is None or not isinstance(returns, TickDelta):
-            raise TypeError(
-                f"Invalid returns in {name}: please specify a TickDelta instance."
-            )
-        if returns != NEVER:
-            if returns.step < 0:
-                raise TypeError(
-                    f"Invalid returns in {name}: step indices cannot be less than zero."
-                )
-            if returns.days < 0:
-                raise TypeError(
-                    f"Invalid returns in {name}: days cannot be less than zero."
-                )
-
-        return super().__new__(cls, name, bases, dct)
-
-
-class MovementClause(
-    SimulationTickFunction[NDArray[SimDType]], ABC, metaclass=MovementClauseClass
-):
+class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC):
     """
     A movement clause is basically a function which calculates _how many_ individuals
     should move between all of the geo nodes.
@@ -198,7 +178,9 @@ class MovementClause(
     (for example, stay for two days and then return at the end of the day).
     """
 
-    _abstract_simfunc = True  # marking this abstract skips metaclass validation
+    def __init_subclass__(cls, **kwargs) -> None:
+        _check_movement_clause(cls)
+        return super().__init_subclass__(**kwargs)
 
     # in addition to requirements (from super), movement clauses must also specify:
 
@@ -257,74 +239,63 @@ class MovementClause(
 #################
 
 
-class MovementModelClass(ABCMeta):
-    """The metaclass for `MovementModel` classes; enforces proper implementation."""
+def _check_movement_model(cls: "type[MovementModel]") -> None:
+    """Enforces some standards on MovementModel classes."""
+    name = cls.__name__
 
-    def __new__(
-        cls: Type[_TypeT],
-        name: str,
-        bases: tuple[type, ...],
-        dct: dict[str, Any],
-    ) -> _TypeT:
-        # Skip these checks for known base classes:
-        if name in ("MovementModel",):
-            return super().__new__(cls, name, bases, dct)
+    # Check tau steps.
+    steps = getattr(cls, "steps", None)
+    if steps is None or not isinstance(steps, (list, tuple)):
+        err = f"Invalid steps in {name}: please specify as a list or tuple."
+        raise TypeError(err)
+    if not are_instances(steps, float):
+        err = f"Invalid steps in {name}: must be floating point numbers."
+        raise TypeError(err)
+    if len(steps) == 0:
+        err = f"Invalid steps in {name}: please specify at least one tau step length."
+        raise TypeError(err)
+    if not isclose(sum(steps), 1.0, abs_tol=1e-6):
+        err = f"Invalid steps in {name}: steps must sum to 1."
+        raise TypeError(err)
+    if any(x <= 0 for x in steps):
+        err = f"Invalid steps in {name}: steps must all be greater than 0."
+        raise TypeError(err)
 
-        # Check tau steps.
-        steps = dct.get("steps")
-        if steps is None or not isinstance(steps, (list, tuple)):
-            raise TypeError(
-                f"Invalid steps in {name}: please specify as a list or tuple."
-            )
-        if not are_instances(steps, float):
-            raise TypeError(f"Invalid steps in {name}: must be floating point numbers.")
-        if len(steps) == 0:
-            raise TypeError(
-                f"Invalid steps in {name}: please specify at least one tau step length."
-            )
-        if not isclose(sum(steps), 1.0, abs_tol=1e-6):
-            raise TypeError(f"Invalid steps in {name}: steps must sum to 1.")
-        if any(x <= 0 for x in steps):
-            raise TypeError(
-                f"Invalid steps in {name}: steps must all be greater than 0."
-            )
-        dct["steps"] = tuple(steps)
+    setattr(cls, "steps", tuple(steps))
 
-        # Check clauses.
-        clauses = dct.get("clauses")
-        if clauses is None or not isinstance(clauses, (list, tuple)):
-            raise TypeError(
-                f"Invalid clauses in {name}: please specify as a list or tuple."
+    # Check clauses.
+    clauses = getattr(cls, "clauses", None)
+    if clauses is None or not isinstance(clauses, (list, tuple)):
+        err = f"Invalid clauses in {name}: please specify as a list or tuple."
+        raise TypeError(err)
+    if not are_instances(clauses, MovementClause):
+        err = f"Invalid clauses in {name}: must be instances of MovementClause."
+        raise TypeError(err)
+    if len(clauses) == 0:
+        err = f"Invalid clauses in {name}: please specify at least one clause."
+        raise TypeError(err)
+    for c in cast(Sequence[MovementClause], clauses):
+        # Check that clause steps are valid.
+        num_steps = len(steps)
+        if c.leaves.step >= num_steps:
+            err = (
+                f"Invalid clauses in {name}: {c.__class__.__name__} "
+                f"uses a leave step ({c.leaves.step}) "
+                f"which is not a valid index. (steps: {steps})"
             )
-        if not are_instances(clauses, MovementClause):
-            raise TypeError(
-                f"Invalid clauses in {name}: must be instances of MovementClause."
+            raise TypeError(err)
+        if c.returns.step >= num_steps:
+            err = (
+                f"Invalid clauses in {name}: {c.__class__.__name__} "
+                f"uses a return step ({c.returns.step}) "
+                f"which is not a valid index. (steps: {steps})"
             )
-        if len(clauses) == 0:
-            raise TypeError(
-                f"Invalid clauses in {name}: please specify at least one clause."
-            )
-        for c in cast(Sequence[MovementClause], clauses):
-            # Check that clause steps are valid.
-            num_steps = len(steps)
-            if c.leaves.step >= num_steps:
-                raise TypeError(
-                    f"Invalid clauses in {name}: {c.__class__.__name__} "
-                    f"uses a leave step ({c.leaves.step}) "
-                    f"which is not a valid index. (steps: {steps})"
-                )
-            if c.returns.step >= num_steps:
-                raise TypeError(
-                    f"Invalid clauses in {name}: {c.__class__.__name__} "
-                    f"uses a return step ({c.returns.step}) "
-                    f"which is not a valid index. (steps: {steps})"
-                )
-        dct["clauses"] = tuple(clauses)
+            raise TypeError(err)
 
-        return super().__new__(cls, name, bases, dct)
+    setattr(cls, "clauses", tuple(clauses))
 
 
-class MovementModel(ABC, metaclass=MovementModelClass):
+class MovementModel(ABC):
     """
     A `MovementModel` (MM) describes a pattern of geospatial movement for
     individuals in the model.
@@ -335,6 +306,10 @@ class MovementModel(ABC, metaclass=MovementModelClass):
     To create a custom MM, you will write an implementation of this class
     and of any required clause classes.
     """
+
+    def __init_subclass__(cls) -> None:
+        _check_movement_model(cls)
+        return super().__init_subclass__()
 
     steps: Sequence[float]
     """The length and order of tau steps."""

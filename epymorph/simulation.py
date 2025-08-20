@@ -2,7 +2,7 @@
 
 import functools
 import re
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from copy import deepcopy
 from datetime import date, timedelta
 from typing import (
@@ -15,7 +15,6 @@ from typing import (
     Never,
     Self,
     Sequence,
-    Type,
     TypeGuard,
     TypeVar,
     Union,
@@ -23,7 +22,6 @@ from typing import (
 )
 
 import numpy as np
-from jsonpickle.util import is_picklable
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
 from sympy import Expr
@@ -527,75 +525,28 @@ def validate_context_for_shape(context: Context, shape: DataShape) -> None:
 
 _EMPTY_CONTEXT = Context.of(NAME_PLACEHOLDER)
 
-_TypeT = TypeVar("_TypeT")
 
+def _check_simfunc_requirements(cls: "type[BaseSimulationFunction]") -> None:
+    """Enforces some standards on classes which have requirements."""
+    name = cls.__name__
+    reqs = getattr(cls, "requirements", None)
 
-class SimulationFunctionClass(ABCMeta):
-    """`SimulationFunction` metaclass; enforces proper implementation."""
+    # The user may specify requirements as a property,
+    # in which case we can't validate much about the implementation.
+    if reqs is not None and not isinstance(reqs, property):
+        # But if it's a static value, check types:
+        if not isinstance(reqs, (list, tuple)):
+            err = f"Invalid requirements in {name}: please specify as a list or tuple."
+            raise TypeError(err)
+        if not are_instances(reqs, AttributeDef):
+            err = f"Invalid requirements in {name}: must be instances of AttributeDef."
+            raise TypeError(err)
+        if not are_unique(r.name for r in reqs):
+            err = f"Invalid requirements in {name}: requirement names must be unique."
+            raise TypeError(err)
 
-    def __new__(
-        cls: Type[_TypeT],
-        name: str,
-        bases: tuple[type, ...],
-        dct: dict[str, Any],
-    ) -> _TypeT:
-        # Check requirements if this class overrides it.
-        # (Otherwise class will inherit from parent.)
-        if (reqs := dct.get("requirements")) is not None:
-            # The user may specify requirements as a property, in which case we
-            # can't validate much about the implementation.
-            if not isinstance(reqs, property):
-                # But if it's a static value, check types:
-                if not isinstance(reqs, (list, tuple)):
-                    raise TypeError(
-                        f"Invalid requirements in {name}: "
-                        "please specify as a list or tuple."
-                    )
-                if not are_instances(reqs, AttributeDef):
-                    raise TypeError(
-                        f"Invalid requirements in {name}: "
-                        "must be instances of AttributeDef."
-                    )
-                if not are_unique(r.name for r in reqs):
-                    raise TypeError(
-                        f"Invalid requirements in {name}: "
-                        "requirement names must be unique."
-                    )
-                # Make requirements list immutable
-                dct["requirements"] = tuple(reqs)
-
-        # Check serializable
-        if not is_picklable(name, cls):
-            raise TypeError(
-                f"Invalid simulation function {name}: "
-                "classes must be serializable (using jsonpickle)."
-            )
-
-        # NOTE: is_picklable() is misleading here; it does not guarantee that instances
-        # of a class are picklable, nor (if you called it against an instance) that all
-        # of the instance's attributes are picklable. jsonpickle simply ignores
-        # unpicklable fields, decoding objects into attribute swiss cheese.
-        # It will be more effective to check that all of the attributes of an object
-        # are picklable before we try to serialize it...
-        # Thus I don't think we can guarantee picklability at class definition time.
-        # Something like:
-        #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]  # noqa: ERA001
-        # Why worry? Lambda functions are probably the most likely problem;
-        # they're not picklable by default.
-        # But a simple workaround is to use a def function and,
-        # if needed, partial function application.
-
-        if (orig_evaluate := dct.get("evaluate")) is not None:
-
-            @functools.wraps(orig_evaluate)
-            def evaluate(self, *args, **kwargs):
-                result = orig_evaluate(self, *args, **kwargs)
-                self.validate(result)
-                return result
-
-            dct["evaluate"] = evaluate
-
-        return super().__new__(cls, name, bases, dct)
+        # Make requirements list immutable
+        setattr(cls, "requirements", tuple(reqs))
 
 
 ResultT = TypeVar("ResultT")
@@ -607,7 +558,7 @@ DeferFunctionT = TypeVar("DeferFunctionT", bound="BaseSimulationFunction")
 """The type of a `SimulationFunction` during deference."""
 
 
-class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunctionClass):
+class BaseSimulationFunction(ABC, Generic[ResultT]):
     """
     A function which runs in the context of a simulation to produce a value
     (as a numpy array).
@@ -632,6 +583,24 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     # `SimulationTickFunction` evaluates using the current tick, while
     # `SimulationFunction` does not require any parameters.
 
+    def __init_subclass__(cls, **kwargs) -> None:
+        _check_simfunc_requirements(cls)
+
+        # If `validate` method is defined:
+        # validate the return result of `evaluate` before returning.
+        orig_evaluate = getattr(cls, "evaluate", None)
+        if orig_evaluate is not None:
+
+            @functools.wraps(orig_evaluate)
+            def evaluate(self, *args, **kwargs):
+                result = orig_evaluate(self, *args, **kwargs)
+                self.validate(result)
+                return result
+
+            setattr(cls, "evaluate", evaluate)
+
+        super().__init_subclass__(**kwargs)
+
     requirements: Sequence[AttributeDef] | property = ()
     """
     The attribute definitions describing the data requirements for this function.
@@ -641,10 +610,12 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     """
 
     randomized: bool = False
-    """Should this function be re-evaluated every time it's referenced in a RUME?
+    """
+    Should this function be re-evaluated every time it's referenced in a RUME?
     (Mostly useful for randomized results.) If False, even a function that utilizes
     the context RNG will only be computed once, resulting in a single random value
-    that is shared by all references during evaluation."""
+    that is shared by all references during evaluation.
+    """
 
     _ctx: Context = _EMPTY_CONTEXT
 
