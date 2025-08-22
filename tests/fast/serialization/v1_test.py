@@ -12,12 +12,13 @@ from epymorph.kit import init, ipm, mm
 from epymorph.util import SaveParams
 
 
-def _test_serialization(model_obj, ser_obj, *, model_equality=None, **kwargs):
+def _test_serialization(model_obj, ser_obj, *, model_equality=None, **context_kwargs):
     """Test `serialize` and `deserialize` for a matched pair of objects."""
     if model_equality is None:
         model_equality = lambda a, b: a == b  # noqa: E731
-    assert s.serialize(model_obj, **kwargs) == ser_obj
-    assert model_equality(s.deserialize(ser_obj, **kwargs), model_obj)
+    ctx = s.Context(**context_kwargs)
+    assert s.serialize(model_obj, ctx) == ser_obj
+    assert model_equality(s.deserialize(ser_obj, ctx), model_obj)
 
 
 def symbol_dict(symbol_names: str) -> dict[str, sympy.Symbol]:
@@ -245,8 +246,8 @@ class Foo1:
 
 def test_dynamic_class_no_args():
     a = Foo1()
-    b = s.DynamicClass._serialize(a)
-    c = s.DynamicClass._deserialize(b)
+    b = s.DynamicClass._serialize(a, s.Context())
+    c = s.DynamicClass._deserialize(b, s.Context())
 
     expected = s.DynamicClass(classpath=f"{__name__}.Foo1", args=[], kwargs={})
     assert b == expected
@@ -264,8 +265,8 @@ class Foo2(SaveParams):
 
 def test_dynamic_class_with_args():
     a = Foo2(42, b="b_value")
-    b = s.DynamicClass._serialize(a)
-    c = s.DynamicClass._deserialize(b)
+    b = s.DynamicClass._serialize(a, s.Context())
+    c = s.DynamicClass._deserialize(b, s.Context())
 
     expected = s.DynamicClass(
         classpath=f"{__name__}.Foo2",

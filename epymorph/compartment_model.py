@@ -613,6 +613,17 @@ class ModelSymbols:
         """
         return [self._rsymbols[n] for n in names]
 
+    def to_dict(self) -> dict[str, Symbol]:
+        """
+        Export all symbols to a dictionary.
+
+        Returns
+        -------
+        :
+            A dictionary of symbol names to sympy symbol objects.
+        """
+        return {**self._csymbols, **self._rsymbols}
+
 
 class BaseCompartmentModel(ABC):
     """
