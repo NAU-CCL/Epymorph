@@ -1,4 +1,5 @@
 import importlib
+import importlib.metadata
 from collections import OrderedDict
 from datetime import date
 from functools import singledispatch
@@ -472,3 +473,141 @@ def _(obj: MultiStrataRUME, **kwargs) -> model.MultiStrataRUME:
             for k, v in obj.params.items()
         },
     )
+
+
+RUME = SingleStrataRUME | MultiStrataRUME
+
+
+class SidecarFileWriter:
+    files: dict[str, Any]
+
+    def __init__(self):
+        self.files = {}
+
+    def write_npz(self, filename: str, source: object, data_attrs: list[str]) -> str:
+        if filename in self.files:
+            err = f"Unable to write npz file: file '{filename}' already exists"
+            raise ValueError(err)
+
+        data = {}
+        for attr in data_attrs:
+            if (value := getattr(source, attr, None)) is None:
+                err = (
+                    "Unable to write npz file: source object is missing attribute "
+                    f"'{attr}'"
+                )
+                raise ValueError(err)
+            if not isinstance(value, np.ndarray):
+                err = (
+                    f"Unable to write npz file: attribute '{attr}' is not a numpy array"
+                )
+                raise ValueError(err)
+            data[attr] = value
+
+        self.files[filename] = data
+        return filename
+
+    def save(self) -> None:
+        pass
+
+
+class SidecarFileReader:
+    files: dict[str, Any]
+
+    def __init__(self, files: dict[str, Any]):
+        self.files = files
+
+    @classmethod
+    def load(cls) -> Self:
+        return cls({})
+
+    def read_npz(self, filename: str, data_attrs: list[str]) -> dict[str, np.ndarray]:
+        if filename not in self.files:
+            err = f"Unable to read npz file: file '{filename}' missing"
+            raise ValueError(err)
+
+        file_data = self.files[filename]
+        if not isinstance(file_data, dict):
+            err = f"Unable to read npz file: file '{filename}' is not npz format"
+            raise ValueError(err)
+
+        # TODO: type-check keys and values?
+
+        data = {k: v for k, v in file_data.items() if k in data_attrs}
+        if any((attr := x) not in data for x in data_attrs):
+            err = (
+                "Unable to read npz file: "
+                f"file '{filename}' is missing attribute '{attr}'"
+            )
+            raise ValueError(err)
+
+        return data
+
+
+class Output(BaseModel):
+    rume: RUME
+    data_file: str
+
+
+@to_serializable.register
+def _(obj: model.Output, sidecar_files: SidecarFileWriter, **kwargs) -> Output:
+    return Output(
+        rume=to_serializable(obj.rume, sidecar_files=sidecar_files, **kwargs),
+        data_file=sidecar_files.write_npz(
+            "output.npz",
+            obj,
+            data_attrs=[
+                "initial",
+                "visit_compartments",
+                "visit_events",
+                "home_compartments",
+                "home_events",
+            ],
+        ),
+    )
+
+
+@from_serializable.register
+def _(obj: Output, sidecar_files: SidecarFileReader, **kwargs) -> model.Output:
+    output_kwargs = sidecar_files.read_npz(
+        "output.npz",
+        data_attrs=[
+            "initial",
+            "visit_compartments",
+            "visit_events",
+            "home_compartments",
+            "home_events",
+        ],
+    )
+    return model.Output(
+        rume=from_serializable(obj.rume, sidecar_files=sidecar_files, **kwargs),
+        **output_kwargs,  # type: ignore
+    )
+
+
+###########################
+# Serialization Envelopes #
+###########################
+
+
+class Envelope(BaseModel):
+    serialization_version: Literal[1] = Field(default=1, init=False)
+    epymorph_version: str = Field(
+        default_factory=lambda: importlib.metadata.version("epymorph"),
+        init=False,
+    )
+
+
+class SingleStrataRUMEEnvelope(Envelope):
+    payload_type: Literal["SingleStrataRUME"]
+    payload: SingleStrataRUME
+
+
+class MultiStrataRUMEEnvelope(Envelope):
+    payload_type: Literal["MultiStrataRUME"]
+    payload: MultiStrataRUME
+
+
+class OutputEnvelope(Envelope):
+    payload_type: Literal["Output"]
+    payload: Output

@@ -34,6 +34,7 @@ from epymorph.geography.us_census import (
 )
 from epymorph.rume import GPM, MultiStrataRUME, SingleStrataRUME, remap_taus
 from epymorph.simulation import BaseSimulationFunction
+from epymorph.simulator.basic.output import Output
 from epymorph.time import TimeFrame
 
 __all__ = [
@@ -70,4 +71,5 @@ __all__ = [
     "TractScope",
     "BlockGroupScope",
     "BaseSimulationFunction",
+    "Output",
 ]
