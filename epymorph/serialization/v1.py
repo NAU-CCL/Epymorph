@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal, Self, TypeVar, get_origin
 import numpy as np
 import sympy
 from pydantic import BaseModel, Discriminator, Field
+from typing_extensions import TypeAliasType
 
 import epymorph.serialization.model as model
 from epymorph.compartment_model import MultiStrataModelSymbols
@@ -152,14 +153,32 @@ def serializes(model_type: type[ModelT]):
     return serializes_decorator
 
 
+NestedListInt = TypeAliasType(
+    "NestedListInt",
+    list[int] | list["NestedListInt"],
+)
+
+NestedListFloat = TypeAliasType(
+    "NestedListFloat",
+    list[float] | list["NestedListFloat"],
+)
+
+NestedListStr = TypeAliasType(
+    "NestedListStr",
+    list[str] | list["NestedListStr"],
+)
+
+
 class NDArray(BaseModel):
     kind: Literal["NDArray"] = Field(default="NDArray", init=False)
     dtype: str
-    values: list[str] | list[int] | list[float]
+    values: NestedListStr | NestedListInt | NestedListFloat
 
 
 @to_serializable.register
 def _(obj: np.ndarray, ctx: Context) -> NDArray:
+    # TODO: should we panic if any of the arrays contain 64-bit numbers?
+    # These cannot be easily parsed from JSON on the javascript side.
     if np.issubdtype(obj.dtype, np.str_):
         return NDArray(dtype="string", values=obj.tolist())
     if np.issubdtype(obj.dtype, np.integer):
@@ -535,112 +554,36 @@ def _(obj: MultiStrataRUME, ctx: Context) -> model.MultiStrataRUME:
 RUME = SingleStrataRUME | MultiStrataRUME
 
 
-class SidecarFileWriter:
-    files: dict[str, Any]
-
-    def __init__(self):
-        self.files = {}
-
-    def write_npz(self, filename: str, source: object, data_attrs: list[str]) -> str:
-        if filename in self.files:
-            err = f"Unable to write npz file: file '{filename}' already exists"
-            raise ValueError(err)
-
-        data = {}
-        for attr in data_attrs:
-            if (value := getattr(source, attr, None)) is None:
-                err = (
-                    "Unable to write npz file: source object is missing attribute "
-                    f"'{attr}'"
-                )
-                raise ValueError(err)
-            if not isinstance(value, np.ndarray):
-                err = (
-                    f"Unable to write npz file: attribute '{attr}' is not a numpy array"
-                )
-                raise ValueError(err)
-            data[attr] = value
-
-        self.files[filename] = data
-        return filename
-
-    def save(self) -> None:
-        pass
-
-
-class SidecarFileReader:
-    files: dict[str, Any]
-
-    def __init__(self, files: dict[str, Any]):
-        self.files = files
-
-    @classmethod
-    def load(cls) -> Self:
-        return cls({})
-
-    def read_npz(self, filename: str, data_attrs: list[str]) -> dict[str, np.ndarray]:
-        if filename not in self.files:
-            err = f"Unable to read npz file: file '{filename}' missing"
-            raise ValueError(err)
-
-        file_data = self.files[filename]
-        if not isinstance(file_data, dict):
-            err = f"Unable to read npz file: file '{filename}' is not npz format"
-            raise ValueError(err)
-
-        # TODO: type-check keys and values?
-
-        data = {k: v for k, v in file_data.items() if k in data_attrs}
-        if any((attr := x) not in data for x in data_attrs):
-            err = (
-                "Unable to read npz file: "
-                f"file '{filename}' is missing attribute '{attr}'"
-            )
-            raise ValueError(err)
-
-        return data
-
-
 class Output(BaseModel):
     rume: RUME
-    data_file: str
+    initial: NDArray
+    visit_compartments: NDArray
+    visit_events: NDArray
+    home_compartments: NDArray
+    home_events: NDArray
 
 
 @to_serializable.register
 def _(obj: model.Output, ctx: Context) -> Output:
-    sidecar_files = ctx.get("sidecar_files", SidecarFileWriter)
     return Output(
         rume=to_serializable(obj.rume, ctx),
-        data_file=sidecar_files.write_npz(
-            "output.npz",
-            obj,
-            data_attrs=[
-                "initial",
-                "visit_compartments",
-                "visit_events",
-                "home_compartments",
-                "home_events",
-            ],
-        ),
+        initial=to_serializable(obj.initial, ctx),
+        visit_compartments=to_serializable(obj.visit_compartments, ctx),
+        visit_events=to_serializable(obj.visit_events, ctx),
+        home_compartments=to_serializable(obj.home_compartments, ctx),
+        home_events=to_serializable(obj.home_events, ctx),
     )
 
 
 @from_serializable.register
 def _(obj: Output, ctx: Context) -> model.Output:
-    sidecar_files = ctx.get("sidecar_files", SidecarFileReader)
-    output_kwargs = sidecar_files.read_npz(
-        "output.npz",
-        data_attrs=[
-            "initial",
-            "visit_compartments",
-            "visit_events",
-            "home_compartments",
-            "home_events",
-        ],
-    )
     return model.Output(
         rume=from_serializable(obj.rume, ctx),
-        **output_kwargs,  # type: ignore
+        initial=from_serializable(obj.initial, ctx),
+        visit_compartments=from_serializable(obj.visit_compartments, ctx),
+        visit_events=from_serializable(obj.visit_events, ctx),
+        home_compartments=from_serializable(obj.home_compartments, ctx),
+        home_events=from_serializable(obj.home_events, ctx),
     )
 
 
