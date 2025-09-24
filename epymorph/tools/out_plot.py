@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from itertools import cycle
+from pathlib import Path
 from typing import Callable, Literal, OrderedDict
 
 import matplotlib.pyplot as plt
@@ -162,12 +163,14 @@ class PlotRenderer:
         ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
+        to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
         Render a line plot using matplotlib showing the given selections.
 
-        The plot will be immediately rendered by this function by calling `plt.show()`.
+        The plot will either be immediately rendered by this function by calling
+        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
         This is intended as a quick plotting method to cover most casual use-cases.
         If you want more control over how the plot is drawn, see method `line_plt()`.
 
@@ -212,6 +215,8 @@ class PlotRenderer:
             may be ignored.
         title :
             A title to draw on the plot.
+        to_file :
+            Specify a path to save the plot to a file instead of calling `plt.show()`.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -229,20 +234,9 @@ class PlotRenderer:
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
-
-        # Adjust figsize to make room for an outside legend, if needed
-        # By default, the layout engine would "steal" area from the plot
-        # to render the legend outside. Instead we'll widen the figure.
-        def_figsize = plt.rcParams["figure.figsize"]
-        if legend == "outside":
-            legend_width = 1.28  # width chosen because it seems to look nice
-            fig_width, fig_height = def_figsize
-            figsize = (fig_width + legend_width, fig_height)
-        else:
-            figsize = def_figsize
-
         try:
-            _, ax = plt.subplots(layout="constrained", figsize=figsize)
+            _, ax = plt.subplots(layout="constrained")
+
             lines = self.line_plt(
                 ax,
                 geo,
@@ -254,9 +248,6 @@ class PlotRenderer:
                 time_format=time_format,
                 transform=transform,
             )
-            # Make sure the plot does not grow if we widened the figure.
-            x, y, w, h = ax.get_position(original=True).bounds
-            ax.set_position((x, y, w * def_figsize[0] / figsize[0], h))
 
             # Y-axis
             plt.ylabel("count")
@@ -291,7 +282,12 @@ class PlotRenderer:
 
             if title is not None:
                 plt.title(title)
-            plt.show()
+
+            if to_file is None:
+                plt.show()
+            else:
+                path = Path(to_file)
+                plt.savefig(path)
         except:
             plt.close()
             raise
