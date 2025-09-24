@@ -33,7 +33,7 @@ def strtobool(value: str) -> bool:
 
     Raises
     ------
-    InvalidBooleanError :
+    InvalidBooleanError
         If the string is not an accepted boolean value format.
     """
     value = value.strip().lower()
@@ -134,7 +134,7 @@ def declare_setting(
 
     Raises
     ------
-    ValueError :
+    ValueError
         If a setting of the same name has been previously declared.
     """
     for x in SETTINGS:
