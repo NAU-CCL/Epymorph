@@ -1,5 +1,6 @@
 # ruff: noqa: PT009,PT027,N806
 import unittest
+import warnings
 from typing import Sequence
 
 from sympy import Max
@@ -248,6 +249,7 @@ class CompartmentModelTest(unittest.TestCase):
                     compartment("S", tags=["test_tag"]),
                     compartment("I"),
                     compartment("R"),
+                    # Q is defined, but not used anywhere
                     compartment("Q"),
                 ]
                 requirements = [
@@ -266,31 +268,33 @@ class CompartmentModelTest(unittest.TestCase):
         self.assertIn("extra compartments: q", str(w.warning).lower())
 
     def test_create_09(self):
-        # with warnings.catch_warnings(action="error"):
         # This is a valid IPM.
         # Don't raise warnings or errors.
-        class TwoSpeciesIPM(CompartmentModel):
-            compartments = [
-                compartment("S"),
-                compartment("I"),
-                compartment("R"),
-                compartment("X"),  # X is not an unused compartment!
-            ]
+        with warnings.catch_warnings(action="error"):
 
-            requirements = [
-                AttributeDef("beta", float, Shapes.N),
-                AttributeDef("gamma", float, Shapes.N),
-            ]
-
-            def edges(self, symbols):
-                S, I, R, X = symbols.all_compartments
-                beta, gamma = symbols.all_requirements
-                return [
-                    # infection of S is proportional to the number of X
-                    # but there is no edge for X
-                    edge(S, I, rate=beta * S * X),
-                    edge(I, R, rate=gamma * I),
+            class TwoSpeciesIPM(CompartmentModel):
+                compartments = [
+                    compartment("S"),
+                    compartment("I"),
+                    compartment("R"),
+                    # X has no trxs itself, but it is used in a trx expr
+                    compartment("X"),
                 ]
+
+                requirements = [
+                    AttributeDef("beta", float, Shapes.N),
+                    AttributeDef("gamma", float, Shapes.N),
+                ]
+
+                def edges(self, symbols):
+                    S, I, R, X = symbols.all_compartments
+                    beta, gamma = symbols.all_requirements
+                    return [
+                        # infection of S is proportional to the number of X
+                        # but there is no edge for X
+                        edge(S, I, rate=beta * S * X),
+                        edge(I, R, rate=gamma * I),
+                    ]
 
     def test_compartment_name(self):
         # Test for compartment names that include spaces.
