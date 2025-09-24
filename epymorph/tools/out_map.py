@@ -1,6 +1,7 @@
 """Tools for rendering geographic maps from epymorph simulation output data."""
 
 from itertools import repeat
+from pathlib import Path
 from typing import Any, Callable, Iterable, cast
 
 import geopandas as gpd
@@ -325,6 +326,7 @@ class MapRenderer:
         proj: CRS | str | None = None,
         text_label: bool | str | NodeLabelRenderer = False,
         title: str | None = None,
+        to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
         vmax: float | None = None,
         vmin: float | None = None,
@@ -341,7 +343,8 @@ class MapRenderer:
         selections to verify it during rendering, and invalid selections will result
         in an raised exception.
 
-        The plot will be immediately rendered by this function by calling `plt.show()`.
+        The plot will either be immediately rendered by this function by calling
+        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
         This is intended as a quick plotting method to cover most casual use-cases.
         If you want more control over how the plot is drawn, see method
         `choropleth_plt()`.
@@ -371,6 +374,8 @@ class MapRenderer:
             to use that.
         title :
             A title to draw on the plot.
+        to_file :
+            Specify a path to save the plot to a file instead of calling `plt.show()`.
         transform :
             Allows you to specify an arbitrary transform function on the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -425,7 +430,11 @@ class MapRenderer:
             if title is not None:
                 plt.title(title)
 
-            plt.show()
+            if to_file is None:
+                plt.show()
+            else:
+                path = Path(to_file)
+                plt.savefig(path)
         except:
             plt.close()
             raise
