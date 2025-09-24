@@ -748,7 +748,15 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
         )
         raise IPMValidationError(err)
 
-    # Extract the set of compartments used by transitions.
+    # All symbols used in rate expressions, including compartments.
+    rate_symbols = set(
+        symbol
+        for e in model.events
+        for symbol in e.rate.free_symbols
+        if isinstance(symbol, Symbol)
+    )
+
+    # Compartments used as either a 'from' or a 'to' in a transition.
     trx_comps = set(
         compartment
         for e in model.events
@@ -757,14 +765,12 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
         if compartment not in exogenous_states
     )
 
+    # All symbols used anywhere in transitions (from + to + rate expr)
+    trx_symbols = rate_symbols.union(trx_comps)
+
     # Extract the set of requirements used by transition rate expressions
     # by taking all used symbols and subtracting compartment symbols.
-    trx_reqs = set(
-        symbol
-        for e in model.events
-        for symbol in e.rate.free_symbols
-        if isinstance(symbol, Symbol)
-    ).difference(trx_comps)
+    trx_reqs = rate_symbols.difference(model.symbols.all_compartments)
 
     # transition compartments minus declared compartments should be empty
     missing_comps = trx_comps.difference(model.symbols.all_compartments)
@@ -779,7 +785,7 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
     # declared compartments minus used compartments is ideally empty,
     # otherwise raise a warning
     if not suppress_warnings:
-        extra_comps = set(model.symbols.all_compartments).difference(trx_comps)
+        extra_comps = set(model.symbols.all_compartments).difference(trx_symbols)
         if len(extra_comps) > 0:
             msg = (
                 f"Possible issue in {name}: "
