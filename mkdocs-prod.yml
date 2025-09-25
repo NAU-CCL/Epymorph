@@ -1,6 +1,0 @@
-# The mkdocs configuration for epymorph's API documentation (in production).
-# Note we inherit most of the config from mkdocs.yml
-
-INHERIT: mkdocs.yml
-
-site_url: https://docs.www.epimorph.org/api

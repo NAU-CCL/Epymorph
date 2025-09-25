@@ -104,14 +104,27 @@ jobs:
       - name: Build project
         run: uv build
 
+      - name: Get epymorph version
+        run: |
+          version="$(uv run python -m setuptools_scm)"
+          echo "EPYMORPH_VERSION=$version" >> $GITHUB_ENV
+
+      - name: Build and package docs
+        run: |
+          version="$EPYMORPH_VERSION"
+          uv run mkdocs build --site-dir "./site/${version}"
+          mkdir -p dist
+          tar -czf "./dist/epymorph-docs-${version}.tar.gz" -C site "${version}"
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          version="$(uv run python -m setuptools_scm)"
+          version="$EPYMORPH_VERSION"
           wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
           source_file="./dist/epymorph-${version}.tar.gz"
-          gh release create "v${version}" --generate-notes $wheel_file $source_file
+          docs_file="./dist/epymorph-docs-${version}.tar.gz"
+          gh release create "v${version}" --generate-notes $wheel_file $source_file $docs_file
 
       - name: Create PyPI Release
         run: uv publish
