@@ -128,7 +128,7 @@ class IPMExecutor:
         The RUME.
     world :
         The world state.
-    data_resolver :
+    data :
         The evaluated data attributes of the simulation.
     rng :
         The simulation RNG.
