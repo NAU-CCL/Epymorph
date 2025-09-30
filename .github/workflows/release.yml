@@ -127,4 +127,4 @@ jobs:
           gh release create "v${version}" --generate-notes $wheel_file $source_file $docs_file
 
       - name: Create PyPI Release
-        run: uv publish
+        run: uv publish dist/epymorph-*-py3-none-any.whl dist/epymorph-*.tar.gz
