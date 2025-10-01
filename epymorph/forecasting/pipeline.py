@@ -270,13 +270,6 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
             day_right = day_idx + time_frame.days
             step_right = step_idx + time_frame.days * rume.num_tau_steps
 
-            # if not observations.strict_labels:
-            #     print("Got here!")
-
-            # observation_df = observations.source.loc[
-            #     observations.source["time"] == labels[i_observation]
-            # ].drop("time", axis=1)
-
             # TODO # self._get_current_observation(...)
             time_key = observations_df.keys()[0]
             geo_key = observations_df.keys()[1]
@@ -355,6 +348,7 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
                     observation_df.drop([geo_key], axis=1).to_numpy(),
                     prediction.to_numpy(),
                 )
+
                 log_weights[j_realization] = np.sum(node_log_likelihoods)
                 log_weights_by_node[j_realization, ...] = node_log_likelihoods[
                     :, 0
@@ -411,7 +405,7 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
 
             #     resampling_indices[:, i_observation] = resampled_idx[:, 0]
 
-            # Hard code no localization
+            # Hard code localization
             for i_node in range(N):
                 weights = self._normalize_log_weights(log_weights_by_node[..., i_node])
                 orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
