@@ -733,6 +733,9 @@ class CensusGrouping(GeoGrouping):
 class StateSelection(GeoSelection[CensusScope]):
     """A geo selection on a `StateScope`."""
 
+    def group(self, grouping: GeoGrouping):
+        return GeoGroup(self.scope, self.selection, grouping)
+
 
 @dataclass(frozen=True)
 class CountySelection(GeoSelection[CensusScope]):
