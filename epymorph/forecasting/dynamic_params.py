@@ -67,7 +67,7 @@ class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
 
     def evaluate_from_initial(self, initial):
         result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
-        previous = self.initial
+        previous = initial
 
         mean = self.mean
         mean = Shapes.TxN.adapt(self.dim, np.array(mean))
@@ -85,6 +85,37 @@ class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
                 A[i_day, ...] * previous
                 - M[i_day, ...]
                 + C[i_day, ...] * self.rng.standard_normal(size=self.scope.nodes)
+            )
+            result[i_day, ...] = current
+            previous = current
+        return result
+
+
+class Static(ParamFunctionDynamics[np.float64]):
+    def __init__(self, initial=None):
+        self.initial = initial
+
+    def evaluate_from_initial(self, initial):
+        result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
+        result[...] = initial
+        return result
+
+
+class BrownianMotion(ParamFunctionDynamics[np.float64]):
+    requirements = ()
+
+    def __init__(self, initial=None, voliatility=0.1):
+        self.initial = initial
+        self.voliatility = voliatility
+
+    def evaluate_from_initial(self, initial):
+        result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
+        previous = self.initial
+        voliatility = self.voliatility
+        voliatility = Shapes.TxN.adapt(self.dim, np.array(voliatility))
+        for i_day in range(self.time_frame.days):
+            current = previous + voliatility[i_day, ...] * self.rng.normal(
+                size=self.scope.nodes
             )
             result[i_day, ...] = current
             previous = current

@@ -19,49 +19,64 @@ from epymorph.time import Dim, TimeFrame
 from epymorph.tools.data import munge
 
 
-class MultiRealizationSimulator: ...
+@dataclass(frozen=True)
+class UnknownParam:
+    prior: NDArray | Prior
+    dynamics: ParamFunctionDynamics
 
 
-class MultiRealizationConfig: ...
+class PipelineSimulator:
+    rume: RUME
+    num_realizations: int
+    unknown_params: Mapping[NamePattern, UnknownParam]
 
 
-class FromRUME(MultiRealizationConfig):
+class PipelineOutput:
+    simulator: PipelineSimulator
+    final_compartment_values: NDArray
+    final_param_values: Mapping[NamePattern, NDArray]
+    compartments: NDArray | None
+    events: NDArray | None
+    initial: NDArray | None
+
+
+class ParticleFilterOutput(PipelineOutput): ...
+
+
+class ModelLink(SimpleNamespace): ...
+
+
+class PipelineConfig:
+    rume: RUME
+    num_realizations: int
+    initial_values: NDArray | None
+    unknown_params: Mapping[NamePattern, UnknownParam]
+
+
+class FromRUME(PipelineConfig):
     def __init__(
         self,
         rume,
         num_realizations,
         initial_values=None,
-        param_values=None,
-        unknown_params=None,
+        unknown_params={},
     ):
         self.rume = rume
         self.num_realizations = num_realizations
         self.initial_values = initial_values
-        self.param_values = param_values
         self.unknown_params = unknown_params
 
-    def configure(self):
-        return dict(
-            rume=self.rume,
-            num_realizations=self.num_realizations,
-            initial_values=self.initial_values,
-            param_values=self.param_values,
-            unknown_params=self.unknown_params,
-        )
 
-
-class FromOutput(MultiRealizationConfig):
-    def __init__(self, output, override_dynamics={}):
+class FromOutput(PipelineConfig):
+    def __init__(self, output: PipelineOutput, extend_duration, override_dynamics={}):
         override_dynamics = {NamePattern.of(k): v for k, v in override_dynamics.items()}
         new_time_frame = TimeFrame.of(
-            start_date=output.rume.time_frame.start_date
-            + datetime.timedelta(days=output.duration),
-            duration_days=output.rume.time_frame.duration_days - output.duration,
+            start_date=output.rume.time_frame.end_date + datetime.timedelta(1),
+            duration_days=extend_duration,
         )
         self.rume = replace(output.rume, time_frame=new_time_frame)
         self.num_realizations = output.num_realizations
         self.initial_values = output.final_compartment_values
-        self.param_values = None
         self.unknown_params = {
             k: UnknownParam(prior=output.final_param_values[k], dynamics=v.dynamics)
             for k, v in output.unknown_params.items()
@@ -71,15 +86,6 @@ class FromOutput(MultiRealizationConfig):
             self.unknown_params[name] = UnknownParam(
                 prior=self.unknown_params[name].prior, dynamics=v
             )
-
-    def configure(self):
-        return dict(
-            rume=self.rume,
-            num_realizations=self.num_realizations,
-            initial_values=self.initial_values,
-            param_values=self.param_values,
-            unknown_params=self.unknown_params,
-        )
 
 
 class Observations:
@@ -104,35 +110,37 @@ class Observations:
 #         ...
 
 
-@dataclass(frozen=True)
-class UnknownParam:
-    prior: NDArray | Prior
-    dynamics: ParamFunctionDynamics
-
-
-class ParticleFilterSimulator(MultiRealizationSimulator):
+class ParticleFilterSimulator(PipelineSimulator):
     rume: RUME
     num_realizations: int
     unknown_params: Mapping[NamePattern, UnknownParam]
     initial_compartment_values: NDArray | Sequence[NDArray | Initializer] | None
 
     def __init__(
-        self, config, duration, observations, local_blocks=None, observation_mask=None
+        self,
+        config: PipelineConfig,
+        observations,
+        local_blocks=None,
+        observation_mask=None,
+        save_trajectories=True,
     ):
         self.config = config
-        self.duration = duration
         self.observations = observations
         self.local_blocks = local_blocks
         self.observation_mask = observation_mask
+        self.save_trajectories = save_trajectories
 
     def run(self, rng):
         return self._run_particle_filter(
-            **self.config.configure(),
+            self.config.rume,
+            self.config.num_realizations,
+            self.config.initial_values,
+            self.config.unknown_params,
             observations=self.observations,
-            duration=self.duration,
             local_blocks=self.local_blocks,
             observation_mask=self.observation_mask,
             rng=rng,
+            save_trajectories=self.save_trajectories,
         )
 
     def _run_particle_filter(
@@ -140,13 +148,12 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
         rume,
         num_realizations,
         initial_values,
-        param_values,
         unknown_params,
-        duration,
         observations,
         local_blocks,
         observation_mask,
         rng,
+        save_trajectories=True,
     ):
         """
 
@@ -174,16 +181,15 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
         :
             The forecast output.
         """
-        assert param_values is None
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
-        original_rume = rume
-        sim_time_frame = TimeFrame.of(
-            original_rume.time_frame.start_date, duration_days=duration
-        )
-        rume = dataclasses.replace(
-            original_rume,
-            time_frame=sim_time_frame,
-        )
+        # original_rume = rume
+        # sim_time_frame = TimeFrame.of(
+        #     original_rume.time_frame.start_date, duration_days=duration
+        # )
+        # rume = dataclasses.replace(
+        #     original_rume,
+        #     time_frame=sim_time_frame,
+        # )
 
         # TODO # rume = self._cache_adrios(...)
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
@@ -209,14 +215,20 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
         C = rume.ipm.num_compartments
         E = rume.ipm.num_events
 
-        # Allocate return values.
-        initial = np.zeros(shape=(R, N, C), dtype=np.int64)
-        compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
-        events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
-        estimated_params = {
-            k: np.zeros(shape=(R, T, N), dtype=np.float64)
-            for k in unknown_params.keys()
-        }
+        initial = None
+        compartments = None
+        events = None
+        estimated_params = None
+
+        if save_trajectories:
+            # Allocate return values.
+            initial = np.zeros(shape=(R, N, C), dtype=np.int64)
+            compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+            events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+            estimated_params = {
+                k: np.zeros(shape=(R, T, N), dtype=np.float64)
+                for k in unknown_params.keys()
+            }
 
         # Initialize the initial compartment and parameter values.
         current_compartment_values, current_param_values = (
@@ -224,7 +236,8 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
                 rume, unknown_params, num_realizations, initial_values, rng
             )
         )
-        initial = current_compartment_values
+        if save_trajectories:
+            initial = current_compartment_values
 
         # Determine the number of observations and their associated time frames.
         time_frames, labels = self._observation_time_frames(
@@ -361,18 +374,20 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
                 else:
                     block_weights[:, j_realization] = np.sum(node_log_likelihoods)
 
-                compartments[j_realization, step_idx:step_right, ...] = (
-                    out_temp.compartments
-                )
-                events[j_realization, step_idx:step_right, ...] = out_temp.events
-                current_compartment_values[j_realization, ...] = out_temp.compartments[
-                    -1, ...
-                ]
+                if save_trajectories:
+                    compartments[j_realization, step_idx:step_right, ...] = (
+                        out_temp.compartments
+                    )
+                    events[j_realization, step_idx:step_right, ...] = out_temp.events
+                    current_compartment_values[j_realization, ...] = (
+                        out_temp.compartments[-1, ...]
+                    )
 
                 for k in unknown_params.keys():
-                    estimated_params[k][j_realization, day_idx:day_right, ...] = (
-                        data.get_raw(k)
-                    )
+                    if save_trajectories:
+                        estimated_params[k][j_realization, day_idx:day_right, ...] = (
+                            data.get_raw(k)
+                        )
                     current_param_values[k][j_realization, ...] = data.get_raw(k)[
                         -1, ...
                     ]
@@ -450,9 +465,9 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
         #     ]
 
         return SimpleNamespace(
-            rume=original_rume,
-            sim_rume=rume,
-            duration=duration,
+            rume=rume,
+            # sim_rume=rume,
+            # duration=duration,
             initial=initial,
             compartments=compartments,
             events=events,
@@ -654,15 +669,18 @@ class ParticleFilterSimulator(MultiRealizationSimulator):
 
 
 class ForecastSimulator(ParticleFilterSimulator):
-    def __init__(self, config, duration):
+    def __init__(self, config, save_trajectories=True):
         self.config = config
-        self.duration = duration
+        self.save_trajectories = save_trajectories
 
     def run(self, rng):
         return self._run_forecast(
-            **self.config.configure(),
-            duration=self.duration,
+            rume=self.config.rume,
+            num_realizations=self.config.num_realizations,
+            initial_values=self.config.initial_values,
+            unknown_params=self.config.unknown_params,
             rng=rng,
+            save_trajectories=self.save_trajectories,
         )
 
     def _run_forecast(
@@ -670,10 +688,9 @@ class ForecastSimulator(ParticleFilterSimulator):
         rume,
         num_realizations,
         initial_values,
-        param_values,
         unknown_params,
-        duration,
         rng,
+        save_trajectories=True,
     ):
         """
 
@@ -701,16 +718,15 @@ class ForecastSimulator(ParticleFilterSimulator):
         :
             The forecast output.
         """
-        assert param_values is None
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
-        original_rume = rume
-        sim_time_frame = TimeFrame.of(
-            original_rume.time_frame.start_date, duration_days=duration
-        )
-        rume = dataclasses.replace(
-            original_rume,
-            time_frame=sim_time_frame,
-        )
+        # original_rume = rume
+        # sim_time_frame = TimeFrame.of(
+        #     original_rume.time_frame.start_date, duration_days=duration
+        # )
+        # rume = dataclasses.replace(
+        #     original_rume,
+        #     time_frame=sim_time_frame,
+        # )
 
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
         new_params = {}
@@ -736,13 +752,19 @@ class ForecastSimulator(ParticleFilterSimulator):
         E = rume.ipm.num_events
 
         # Allocate return values.
-        initial = np.zeros(shape=(R, N, C), dtype=np.int64)
-        compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
-        events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
-        estimated_params = {
-            k: np.zeros(shape=(R, T, N), dtype=np.float64)
-            for k in unknown_params.keys()
-        }
+        initial = None
+        compartments = None
+        events = None
+        estimated_params = None
+
+        if save_trajectories:
+            initial = np.zeros(shape=(R, N, C), dtype=np.int64)
+            compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+            events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+            estimated_params = {
+                k: np.zeros(shape=(R, T, N), dtype=np.float64)
+                for k in unknown_params.keys()
+            }
 
         # Initialize the initial compartment and parameter values.
         current_compartment_values, current_param_values = (
@@ -759,27 +781,30 @@ class ForecastSimulator(ParticleFilterSimulator):
                 unknown_params,
                 current_param_values,
                 current_compartment_values,
-                sim_time_frame,
+                rume.time_frame,
                 rng,
             )
 
             sim = BasicSimulator(rume_temp)
             out_temp = sim.run(rng_factory=lambda: rng)
 
-            compartments[j_realization, ...] = out_temp.compartments
-            events[j_realization, ...] = out_temp.events
             current_compartment_values[j_realization, ...] = out_temp.compartments[
                 -1, ...
             ]
 
             for k in unknown_params.keys():
-                estimated_params[k][j_realization, ...] = data.get_raw(k)
                 current_param_values[k][j_realization, ...] = data.get_raw(k)[-1, ...]
 
+            if save_trajectories:
+                compartments[j_realization, ...] = out_temp.compartments
+                events[j_realization, ...] = out_temp.events
+
+                for k in unknown_params.keys():
+                    estimated_params[k][j_realization, ...] = data.get_raw(k)
+
         return SimpleNamespace(
-            rume=original_rume,
+            rume=rume,
             sim_rume=rume,
-            duration=duration,
             initial=initial,
             compartments=compartments,
             events=events,
@@ -789,18 +814,3 @@ class ForecastSimulator(ParticleFilterSimulator):
             final_compartment_values=current_compartment_values,
             final_param_values=current_param_values,
         )
-
-
-class MultiRealizationOutput:
-    simulator: MultiRealizationSimulator
-    final_compartment_values: NDArray
-    final_parameter_values: Sequence[NDArray]
-    compartments: NDArray | None
-    events: NDArray | None
-    initial: NDArray | None
-
-
-class ParticleFilterOutput(MultiRealizationOutput): ...
-
-
-class ModelLink(SimpleNamespace): ...
