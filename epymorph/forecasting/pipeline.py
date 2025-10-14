@@ -103,6 +103,13 @@ class Observations:
             if isinstance(inspect.source, pd.DataFrame):
                 return inspect.source
 
+    def _get_observations_numpy_array(self, context):
+        if isinstance(self.source, np.ndarray):
+            return self.source
+        elif isinstance(self.source, ADRIO):
+            inspect = self.source.with_context_internal(context).inspect()
+            return inspect.values
+
 
 # class ParticleFilterSimulation(MultiRealizationSimulation):
 #     @staticmethod
@@ -270,6 +277,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             rng=np.random.default_rng(0),
         )
         observations_df = observations._get_observations_dataframe(context)
+        observations_array = observations._get_observations_numpy_array(context)
 
         observed_values = []
         predicted_values = []
@@ -296,6 +304,11 @@ class ParticleFilterSimulator(PipelineSimulator):
                     (observations_df[time_key] >= start)
                     & (observations_df[time_key] <= end)
                 ].drop(time_key, axis=1)
+                observation_array = observations_array[
+                    (observations_array["date"][:, 0] >= start)
+                    & (observations_array["date"][:, 0] <= end),
+                    :,
+                ]
             else:
                 observation_df = observations_df.loc[
                     observations_df[time_key] == labels[i_observation]
@@ -353,19 +366,25 @@ class ParticleFilterSimulator(PipelineSimulator):
                 )
 
                 prediction = predicted_df.drop(["geo", "time"], axis=1)
+
                 current_predictions.append(prediction.to_numpy())
                 # current_predictions.append(predicted_df)
 
                 # TODO # block_log_weights[j_realization, :] = self._compute_block_log_weights(...)
+                # node_log_likelihoods = observations.likelihood.compute_log(
+                #     observation_df.drop([geo_key], axis=1).to_numpy(),
+                #     prediction.to_numpy(),
+                # )
                 node_log_likelihoods = observations.likelihood.compute_log(
-                    observation_df.drop([geo_key], axis=1).to_numpy(),
-                    prediction.to_numpy(),
+                    observation_array["value"][0, :],
+                    prediction.to_numpy()[:, 0],
                 )
 
                 log_weights[j_realization] = np.sum(node_log_likelihoods)
-                log_weights_by_node[j_realization, ...] = node_log_likelihoods[
-                    :, 0
-                ]  # TODO
+                # log_weights_by_node[j_realization, ...] = node_log_likelihoods[
+                #     :, 0
+                # ]  # TODO
+                log_weights_by_node[j_realization, ...] = node_log_likelihoods
                 if observation_mask is not None:
                     for i_block in range(len(block_ids)):
                         block_weights[i_block, j_realization] = np.sum(

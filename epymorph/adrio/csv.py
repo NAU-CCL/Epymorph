@@ -385,8 +385,6 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
         Numerical index of the column containing the data of interest.
     skiprows :
         Number of header rows in the file to be skipped.
-    date_range :
-        The time period encompassed by data in the file.
     """
 
     file_path: Path
@@ -403,8 +401,8 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
     """Numerical index of the column containing the data of interest."""
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
-    date_range: DateRange | None
-    """The time period encompassed by data in the file."""
+    # date_range: DateRange | None
+    # """The time period encompassed by data in the file."""
 
     def __init__(
         self,
@@ -416,7 +414,7 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
         time_col: int,
         data_col: int,
         skiprows: int | None = None,
-        date_range: DateRange | None = None,
+        # date_range: DateRange | None = None,
     ):
         if len({key_col, data_col, time_col}) != 3:
             err = "Key, data, and time columns must all be unique."
@@ -428,7 +426,7 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
         self.data_col = data_col
         self.key_type = key_type
         self.skiprows = skiprows
-        self.date_range = date_range
+        # self.date_range = date_range
         self.time_col = time_col
 
     @property
@@ -439,6 +437,8 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
     @override
     def inspect(self) -> InspectResult:
         self.validate_context(self.context)
+
+        self.date_range = self.context.time_frame.to_date_range()
 
         if not self.file_path.is_file():
             err = f"File {self.file_path} not found or not a file."
