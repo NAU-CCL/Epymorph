@@ -25,8 +25,16 @@ class UnknownParam:
     dynamics: ParamFunctionDynamics
 
 
+class PipelineConfig:
+    rume: RUME
+    num_realizations: int
+    initial_values: NDArray | None
+    unknown_params: Mapping[NamePattern, UnknownParam]
+
+
 class PipelineSimulator:
     rume: RUME
+    config: PipelineConfig
     num_realizations: int
     unknown_params: Mapping[NamePattern, UnknownParam]
 
@@ -39,18 +47,50 @@ class PipelineOutput:
     events: NDArray | None
     initial: NDArray | None
 
+    def __init__(
+        self,
+        simulator,
+        final_compartment_values,
+        final_param_values,
+        compartments,
+        events,
+        initial,
+    ):
+        self.simulator = simulator
+        self.final_compartment_values = final_compartment_values
+        self.final_param_values = final_param_values
+        self.compartments = compartments
+        self.events = events
+        self.initial = initial
 
-class ParticleFilterOutput(PipelineOutput): ...
+    def to_npz(self, file):
+        param_names = np.array([str(k) for k in self.final_param_values.keys()])
+        np.savez(
+            file,
+            final_compartment_values=self.final_compartment_values,
+            param_names=param_names,
+            **{str(k): v for k, v in self.final_param_values.items()},
+        )
 
 
-class ModelLink(SimpleNamespace): ...
-
-
-class PipelineConfig:
-    rume: RUME
-    num_realizations: int
-    initial_values: NDArray | None
-    unknown_params: Mapping[NamePattern, UnknownParam]
+class ParticleFilterOutput(PipelineOutput):
+    def __init__(
+        self,
+        simulator,
+        final_compartment_values: NDArray,
+        final_param_values: Mapping[NamePattern, NDArray],
+        compartments: NDArray | None,
+        events: NDArray | None,
+        initial: NDArray | None,
+        posterior_values,
+    ):
+        self.simulator = simulator
+        self.final_compartment_values = final_compartment_values
+        self.final_param_values = final_param_values
+        self.compartments = compartments
+        self.events = events
+        self.initial = initial
+        self.posterior_values = posterior_values
 
 
 class FromRUME(PipelineConfig):
@@ -64,28 +104,64 @@ class FromRUME(PipelineConfig):
         self.rume = rume
         self.num_realizations = num_realizations
         self.initial_values = initial_values
-        self.unknown_params = unknown_params
+        self.unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
 
 
 class FromOutput(PipelineConfig):
     def __init__(self, output: PipelineOutput, extend_duration, override_dynamics={}):
         override_dynamics = {NamePattern.of(k): v for k, v in override_dynamics.items()}
         new_time_frame = TimeFrame.of(
-            start_date=output.rume.time_frame.end_date + datetime.timedelta(1),
+            start_date=output.simulator.config.rume.time_frame.end_date
+            + datetime.timedelta(1),
             duration_days=extend_duration,
         )
-        self.rume = replace(output.rume, time_frame=new_time_frame)
-        self.num_realizations = output.num_realizations
+        self.rume = replace(output.simulator.config.rume, time_frame=new_time_frame)
+        self.num_realizations = output.simulator.config.num_realizations
         self.initial_values = output.final_compartment_values
         self.unknown_params = {
             k: UnknownParam(prior=output.final_param_values[k], dynamics=v.dynamics)
-            for k, v in output.unknown_params.items()
+            for k, v in output.simulator.config.unknown_params.items()
         }
         for k, v in override_dynamics.items():
             name = NamePattern.of(k)
             self.unknown_params[name] = UnknownParam(
                 prior=self.unknown_params[name].prior, dynamics=v
             )
+
+
+class FromNPZ(PipelineConfig):
+    def __init__(
+        self, file, rume, unknown_params, extend_duration, override_dynamics={}
+    ):
+        data = np.load(file)
+        final_compartment_values = data["final_compartment_values"]
+        final_param_values = {
+            NamePattern.of(name): data[name] for name in data["param_names"]
+        }
+        data.close()
+
+        num_realizations = final_compartment_values.shape[0]
+
+        override_dynamics = {NamePattern.of(k): v for k, v in override_dynamics.items()}
+        new_time_frame = TimeFrame.of(
+            start_date=rume.time_frame.end_date + datetime.timedelta(1),
+            duration_days=extend_duration,
+        )
+        self.rume = replace(rume, time_frame=new_time_frame)
+        self.num_realizations = num_realizations
+        self.initial_values = final_compartment_values
+        self.unknown_params = {
+            k: UnknownParam(prior=final_param_values[k], dynamics=v.dynamics)
+            for k, v in unknown_params.items()
+        }
+        for k, v in override_dynamics.items():
+            name = NamePattern.of(k)
+            self.unknown_params[name] = UnknownParam(
+                prior=self.unknown_params[name].prior, dynamics=v
+            )
+
+
+class ModelLink(SimpleNamespace): ...
 
 
 class Observations:
@@ -138,7 +214,7 @@ class ParticleFilterSimulator(PipelineSimulator):
         self.save_trajectories = save_trajectories
 
     def run(self, rng):
-        return self._run_particle_filter(
+        output = self._run_particle_filter(
             self.config.rume,
             self.config.num_realizations,
             self.config.initial_values,
@@ -148,6 +224,15 @@ class ParticleFilterSimulator(PipelineSimulator):
             observation_mask=self.observation_mask,
             rng=rng,
             save_trajectories=self.save_trajectories,
+        )
+        return ParticleFilterOutput(
+            simulator=self,
+            final_compartment_values=output.final_compartment_values,
+            final_param_values=output.final_param_values,
+            compartments=output.compartments,
+            events=output.events,
+            initial=output.initial,
+            posterior_values=output.posterior_values,
         )
 
     def _run_particle_filter(
@@ -693,13 +778,21 @@ class ForecastSimulator(ParticleFilterSimulator):
         self.save_trajectories = save_trajectories
 
     def run(self, rng):
-        return self._run_forecast(
+        output = self._run_forecast(
             rume=self.config.rume,
             num_realizations=self.config.num_realizations,
             initial_values=self.config.initial_values,
             unknown_params=self.config.unknown_params,
             rng=rng,
             save_trajectories=self.save_trajectories,
+        )
+        return PipelineOutput(
+            simulator=self,
+            final_compartment_values=output.final_compartment_values,
+            final_param_values=output.final_param_values,
+            compartments=output.compartments,
+            events=output.events,
+            initial=output.initial,
         )
 
     def _run_forecast(
