@@ -2,7 +2,7 @@ import dataclasses
 import datetime
 from dataclasses import dataclass, replace
 from types import SimpleNamespace
-from typing import Mapping, Sequence
+from typing import Mapping
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from epymorph.adrio.adrio import ADRIO
 from epymorph.attribute import NamePattern
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
-from epymorph.initializer import Explicit, Initializer
+from epymorph.initializer import Explicit
 from epymorph.rume import RUME
 from epymorph.simulation import Context
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
@@ -25,45 +25,65 @@ class UnknownParam:
     dynamics: ParamFunctionDynamics
 
 
-class PipelineConfig:
-    rume: RUME
-    num_realizations: int
-    initial_values: NDArray | None
-    unknown_params: Mapping[NamePattern, UnknownParam]
-
-
-class PipelineSimulator:
-    rume: RUME
-    config: PipelineConfig
-    num_realizations: int
-    unknown_params: Mapping[NamePattern, UnknownParam]
-
-
+@dataclass(frozen=True)
 class PipelineOutput:
-    simulator: PipelineSimulator
+    """
+    The output of a `PipelineSimulator` run. This includes the minimum information
+    needed to initialize another `PipelineSimulator`, most frequently using the
+    `FromOutput` config. Due to the inherently high memory usage of multi-dimensional
+    arrays, many attributes are optional.
+    """
+
+    simulator: "PipelineSimulator"
+    """
+    The simulator used to generate the output. It contains information like the RUME,
+    the (prior) unknown parameters,  the number of realizations, and how the
+    compartments were initialized.
+    """
+
     final_compartment_values: NDArray
+    """
+    An array of shape (R, N, C) where R is the number of realizations, N is the number
+    of nodes, and C is the number of compartments. Each realization is an array of
+    compartment values suitable for intializing another simulation. The precise
+    interpretation of the array depends on the simulator used to produce the output.
+    """
+
     final_param_values: Mapping[NamePattern, NDArray]
+    """
+    A dictionary where the keys are unknown parameters and the values are of arrays of
+    shape (R, N) where R is the number of realizations and N is the number of nodes.
+    Each realization of a parameter is an array of parameter values suitable for
+    intializing another simulation. The precise interpretation of the array depends on
+    the simulator used to produce the output.
+    """
+
     compartments: NDArray | None
     events: NDArray | None
     initial: NDArray | None
 
-    def __init__(
-        self,
-        simulator,
-        final_compartment_values,
-        final_param_values,
-        compartments,
-        events,
-        initial,
-    ):
-        self.simulator = simulator
-        self.final_compartment_values = final_compartment_values
-        self.final_param_values = final_param_values
-        self.compartments = compartments
-        self.events = events
-        self.initial = initial
+    @property
+    def rume(self):
+        return self.simulator.rume
+
+    @property
+    def unknown_params(self):
+        return self.simulator.unknown_params
+
+    @property
+    def num_realizations(self):
+        return self.simulator.num_realizations
+
+    @property
+    def initial_values(self):
+        return self.simulator.initial_values
 
     def to_npz(self, file):
+        """
+        Saves the compartment and parameter values as numpy arrays in a .npz file. Note
+        that other information, such as the RUME and the parameter dynamics, are not
+        stored and will need to be provided separately upon loading.
+        """
         param_names = np.array([str(k) for k in self.final_param_values.keys()])
         np.savez(
             file,
@@ -73,24 +93,23 @@ class PipelineOutput:
         )
 
 
+class PipelineConfig:
+    rume: RUME
+    num_realizations: int
+    initial_values: NDArray | None
+    unknown_params: Mapping[NamePattern, UnknownParam]
+
+
+class PipelineSimulator:
+    rume: RUME
+    num_realizations: int
+    initial_values: NDArray | None
+    unknown_params: Mapping[NamePattern, UnknownParam]
+
+
+@dataclass(frozen=True)
 class ParticleFilterOutput(PipelineOutput):
-    def __init__(
-        self,
-        simulator,
-        final_compartment_values: NDArray,
-        final_param_values: Mapping[NamePattern, NDArray],
-        compartments: NDArray | None,
-        events: NDArray | None,
-        initial: NDArray | None,
-        posterior_values,
-    ):
-        self.simulator = simulator
-        self.final_compartment_values = final_compartment_values
-        self.final_param_values = final_param_values
-        self.compartments = compartments
-        self.events = events
-        self.initial = initial
-        self.posterior_values = posterior_values
+    posterior_values: NDArray | None
 
 
 class FromRUME(PipelineConfig):
@@ -111,16 +130,15 @@ class FromOutput(PipelineConfig):
     def __init__(self, output: PipelineOutput, extend_duration, override_dynamics={}):
         override_dynamics = {NamePattern.of(k): v for k, v in override_dynamics.items()}
         new_time_frame = TimeFrame.of(
-            start_date=output.simulator.config.rume.time_frame.end_date
-            + datetime.timedelta(1),
+            start_date=output.rume.time_frame.end_date + datetime.timedelta(1),
             duration_days=extend_duration,
         )
-        self.rume = replace(output.simulator.config.rume, time_frame=new_time_frame)
-        self.num_realizations = output.simulator.config.num_realizations
+        self.rume = replace(output.rume, time_frame=new_time_frame)
+        self.num_realizations = output.num_realizations
         self.initial_values = output.final_compartment_values
         self.unknown_params = {
             k: UnknownParam(prior=output.final_param_values[k], dynamics=v.dynamics)
-            for k, v in output.simulator.config.unknown_params.items()
+            for k, v in output.unknown_params.items()
         }
         for k, v in override_dynamics.items():
             name = NamePattern.of(k)
@@ -187,18 +205,7 @@ class Observations:
             return inspect.values
 
 
-# class ParticleFilterSimulation(MultiRealizationSimulation):
-#     @staticmethod
-#     def _run_particle_filter():
-#         ...
-
-
 class ParticleFilterSimulator(PipelineSimulator):
-    rume: RUME
-    num_realizations: int
-    unknown_params: Mapping[NamePattern, UnknownParam]
-    initial_compartment_values: NDArray | Sequence[NDArray | Initializer] | None
-
     def __init__(
         self,
         config: PipelineConfig,
@@ -207,7 +214,10 @@ class ParticleFilterSimulator(PipelineSimulator):
         observation_mask=None,
         save_trajectories=True,
     ):
-        self.config = config
+        self.rume = config.rume
+        self.num_realizations = config.num_realizations
+        self.unknown_params = config.unknown_params
+        self.initial_values = config.initial_values
         self.observations = observations
         self.local_blocks = local_blocks
         self.observation_mask = observation_mask
@@ -215,10 +225,10 @@ class ParticleFilterSimulator(PipelineSimulator):
 
     def run(self, rng):
         output = self._run_particle_filter(
-            self.config.rume,
-            self.config.num_realizations,
-            self.config.initial_values,
-            self.config.unknown_params,
+            self.rume,
+            self.num_realizations,
+            self.initial_values,
+            self.unknown_params,
             observations=self.observations,
             local_blocks=self.local_blocks,
             observation_mask=self.observation_mask,
@@ -760,12 +770,12 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampled_idx.append(j)
         return np.array(resampled_idx)
 
-    def _calculate_prediction():
+    def _calculate_prediction(self):
         """
         Computes the predicted observation.
         """
 
-    def _calculate_block_log_likelihoods():
+    def _calculate_block_log_likelihoods(self):
         """
         Computes the likelihood of the observation given the predicted values for each
         localization block.
@@ -774,15 +784,18 @@ class ParticleFilterSimulator(PipelineSimulator):
 
 class ForecastSimulator(ParticleFilterSimulator):
     def __init__(self, config, save_trajectories=True):
-        self.config = config
+        self.rume = config.rume
+        self.num_realizations = config.num_realizations
+        self.unknown_params = config.unknown_params
+        self.initial_values = config.initial_values
         self.save_trajectories = save_trajectories
 
-    def run(self, rng):
+    def run(self, rng) -> PipelineOutput:
         output = self._run_forecast(
-            rume=self.config.rume,
-            num_realizations=self.config.num_realizations,
-            initial_values=self.config.initial_values,
-            unknown_params=self.config.unknown_params,
+            rume=self.rume,
+            num_realizations=self.num_realizations,
+            initial_values=self.initial_values,
+            unknown_params=self.unknown_params,
             rng=rng,
             save_trajectories=self.save_trajectories,
         )
