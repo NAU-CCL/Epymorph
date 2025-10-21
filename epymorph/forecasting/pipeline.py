@@ -210,8 +210,6 @@ class ParticleFilterSimulator(PipelineSimulator):
         self,
         config: PipelineConfig,
         observations,
-        local_blocks=None,
-        observation_mask=None,
         save_trajectories=True,
     ):
         self.rume = config.rume
@@ -219,8 +217,6 @@ class ParticleFilterSimulator(PipelineSimulator):
         self.unknown_params = config.unknown_params
         self.initial_values = config.initial_values
         self.observations = observations
-        self.local_blocks = local_blocks
-        self.observation_mask = observation_mask
         self.save_trajectories = save_trajectories
 
     def run(self, rng):
@@ -230,8 +226,6 @@ class ParticleFilterSimulator(PipelineSimulator):
             self.initial_values,
             self.unknown_params,
             observations=self.observations,
-            local_blocks=self.local_blocks,
-            observation_mask=self.observation_mask,
             rng=rng,
             save_trajectories=self.save_trajectories,
         )
@@ -252,8 +246,6 @@ class ParticleFilterSimulator(PipelineSimulator):
         initial_values,
         unknown_params,
         observations,
-        local_blocks,
-        observation_mask,
         rng,
         save_trajectories=True,
     ):
@@ -284,14 +276,6 @@ class ParticleFilterSimulator(PipelineSimulator):
             The forecast output.
         """
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
-        # original_rume = rume
-        # sim_time_frame = TimeFrame.of(
-        #     original_rume.time_frame.start_date, duration_days=duration
-        # )
-        # rume = dataclasses.replace(
-        #     original_rume,
-        #     time_frame=sim_time_frame,
-        # )
 
         # TODO # rume = self._cache_adrios(...)
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
@@ -349,22 +333,6 @@ class ParticleFilterSimulator(PipelineSimulator):
         resampling_days = np.zeros(shape=(len(time_frames),), dtype=np.int32)
         resampling_steps = np.zeros(shape=(len(time_frames),), dtype=np.int32)
 
-        # Determine the local blocks
-        if local_blocks is not None:
-            block_ids = np.unique(local_blocks.grouping.map(rume.scope.node_ids))
-        else:
-            block_ids = np.array(["all"])
-
-        block_mask = []
-        if local_blocks is not None:
-            for i_block in range(len(block_ids)):
-                block_mask.append(
-                    local_blocks.grouping.map(rume.scope.node_ids) == block_ids[i_block]
-                )
-        else:
-            block_mask = np.ones(rume.scope.nodes, dtype=bool)
-        block_mask = np.array(block_mask)
-
         context = Context.of(
             scope=rume.scope,
             time_frame=rume.time_frame,
@@ -411,7 +379,6 @@ class ParticleFilterSimulator(PipelineSimulator):
             observation_df = observation_df.sort_values(geo_key)
 
             observed_values.append(observation_df.drop([geo_key], axis=1).to_numpy())
-            # observed_values.append(observation_df)
 
             print(  # noqa: T201
                 (
@@ -421,14 +388,8 @@ class ParticleFilterSimulator(PipelineSimulator):
                 )
             )
 
-            block_weights = np.zeros(
-                (len(block_ids), num_realizations), dtype=np.float64
-            )
-            # for i_block in range(len(block_ids)):
-
             current_predictions = []
             weights = np.zeros(num_realizations, dtype=np.float64)
-            log_weights = np.zeros(num_realizations, dtype=np.float64)
             log_weights_by_node = np.zeros(
                 (num_realizations, N), dtype=np.float64
             )  # TODO
@@ -446,7 +407,6 @@ class ParticleFilterSimulator(PipelineSimulator):
                 sim = BasicSimulator(rume_temp)
                 out_temp = sim.run(rng_factory=lambda: rng)
 
-                # TODO # prediction = self._calculate_prediction(...)
                 temp_time_agg = out_temp.rume.time_frame.select.all().agg()
                 new_time_agg = dataclasses.replace(
                     temp_time_agg,
@@ -463,30 +423,13 @@ class ParticleFilterSimulator(PipelineSimulator):
                 prediction = predicted_df.drop(["geo", "time"], axis=1)
 
                 current_predictions.append(prediction.to_numpy())
-                # current_predictions.append(predicted_df)
 
-                # TODO # block_log_weights[j_realization, :] = self._compute_block_log_weights(...)
-                # node_log_likelihoods = observations.likelihood.compute_log(
-                #     observation_df.drop([geo_key], axis=1).to_numpy(),
-                #     prediction.to_numpy(),
-                # )
                 node_log_likelihoods = observations.likelihood.compute_log(
                     observation_array["value"][0, :],
                     prediction.to_numpy()[:, 0],
                 )
 
-                log_weights[j_realization] = np.sum(node_log_likelihoods)
-                # log_weights_by_node[j_realization, ...] = node_log_likelihoods[
-                #     :, 0
-                # ]  # TODO
                 log_weights_by_node[j_realization, ...] = node_log_likelihoods
-                if observation_mask is not None:
-                    for i_block in range(len(block_ids)):
-                        block_weights[i_block, j_realization] = np.sum(
-                            node_log_likelihoods[observation_mask[i_block, ...], ...]
-                        )
-                else:
-                    block_weights[:, j_realization] = np.sum(node_log_likelihoods)
 
                 if save_trajectories:
                     compartments[j_realization, step_idx:step_right, ...] = (
@@ -510,39 +453,11 @@ class ParticleFilterSimulator(PipelineSimulator):
 
             posterior_value = predicted_values[-1].copy()
 
-            # predicted_values.append(current_predictions)
-
-            # for i_block in range(len(block_ids)):
-            #     weights = self._normalize_log_weights(block_weights[i_block, ...])
-
-            #     # Needed because of numpy advanced indexing quirks.
-            #     orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
-
-            #     resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
-
-            #     current_compartment_values[orig_idx, block_mask[i_block, ...], ...] = (
-            #         current_compartment_values[
-            #             resampled_idx, block_mask[i_block, ...], ...
-            #         ]
-            #     )
-            #     for k in current_param_values.keys():
-            #         current_param_values[k][orig_idx, block_mask[i_block, ...], ...] = (
-            #             current_param_values[k][
-            #                 resampled_idx, block_mask[i_block, ...], ...
-            #             ]
-            #         )
-
-            #     resampling_indices[:, i_observation] = resampled_idx[:, 0]
-
             # Hard code localization
             for i_node in range(N):
                 weights = self._normalize_log_weights(log_weights_by_node[..., i_node])
                 orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
                 resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
-                # resampled_idx = self._multinomial_resampling(weights, rng)[
-                #     :, np.newaxis
-                # ]
-
                 current_compartment_values[orig_idx, i_node, ...] = (
                     current_compartment_values[resampled_idx, i_node, ...]
                 )
@@ -558,14 +473,6 @@ class ParticleFilterSimulator(PipelineSimulator):
                 resampling_indices[:, i_observation, i_node] = resampled_idx[:, 0]
 
             posterior_values.append(posterior_value)
-            # weights = self._normalize_log_weights(log_weights)
-
-            # # resampled_idx = self._multinomial_resampling(weights, rng)
-            # resampled_idx = self._systematic_resampling(weights, rng)
-
-            # current_compartment_values = current_compartment_values[resampled_idx, ...]
-            # for k in current_param_values.keys():
-            #     current_param_values[k] = current_param_values[k][resampled_idx, ...]
 
             resampling_steps[i_observation] = step_right
             resampling_days[i_observation] = day_right
@@ -573,15 +480,8 @@ class ParticleFilterSimulator(PipelineSimulator):
             day_idx = day_right
             step_idx = step_right
 
-        # for k in estimated_params.keys():
-        #     estimated_params[k][:, -1, ...] = estimated_params[k][
-        #         resampling_indices[:, -1], -1, ...
-        #     ]
-
         return SimpleNamespace(
             rume=rume,
-            # sim_rume=rume,
-            # duration=duration,
             initial=initial,
             compartments=compartments,
             events=events,
@@ -596,8 +496,6 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampling_indices=resampling_indices,
             resampling_days=resampling_days,
             resampling_steps=resampling_steps,
-            # predicted_values=predicted_values,
-            # observed_values=observed_values,
         )
 
     def _initialize_augmented_state_space(
@@ -770,17 +668,6 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampled_idx.append(j)
         return np.array(resampled_idx)
 
-    def _calculate_prediction(self):
-        """
-        Computes the predicted observation.
-        """
-
-    def _calculate_block_log_likelihoods(self):
-        """
-        Computes the likelihood of the observation given the predicted values for each
-        localization block.
-        """
-
 
 class ForecastSimulator(ParticleFilterSimulator):
     def __init__(self, config, save_trajectories=True):
@@ -844,15 +731,6 @@ class ForecastSimulator(ParticleFilterSimulator):
             The forecast output.
         """
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
-        # original_rume = rume
-        # sim_time_frame = TimeFrame.of(
-        #     original_rume.time_frame.start_date, duration_days=duration
-        # )
-        # rume = dataclasses.replace(
-        #     original_rume,
-        #     time_frame=sim_time_frame,
-        # )
-
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
         new_params = {}
         for name, param in rume.params.items():
