@@ -10,12 +10,15 @@ from numpy.typing import NDArray
 
 from epymorph.adrio.adrio import ADRIO
 from epymorph.attribute import NamePattern
+from epymorph.compartment_model import QuantityStrategy
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
+from epymorph.forecasting.likelihood import Likelihood
+from epymorph.geography.scope import GeoStrategy
 from epymorph.initializer import Explicit
 from epymorph.rume import RUME
 from epymorph.simulation import Context
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
-from epymorph.time import Dim, TimeFrame
+from epymorph.time import Dim, TimeFrame, TimeStrategy
 from epymorph.tools.data import munge
 
 
@@ -179,15 +182,24 @@ class FromNPZ(PipelineConfig):
             )
 
 
-class ModelLink(SimpleNamespace): ...
+@dataclass(frozen=True)
+class ModelLink:
+    """
+    Contains the information needed to subselect, group, and aggregate model output in
+    order to compare it to observed data.
+    """
+
+    geo: GeoStrategy
+    time: TimeStrategy
+    quantity: QuantityStrategy
 
 
+@dataclass(frozen=True)
 class Observations:
-    def __init__(self, source, model_link, likelihood, strict_labels=False):
-        self.source = source
-        self.model_link = model_link
-        self.likelihood = likelihood
-        self.strict_labels = strict_labels
+    source: ADRIO
+    model_link: ModelLink
+    likelihood: Likelihood
+    strict_labels: bool = False
 
     def _get_observations_dataframe(self, context):
         if isinstance(self.source, pd.DataFrame):
@@ -209,7 +221,7 @@ class ParticleFilterSimulator(PipelineSimulator):
     def __init__(
         self,
         config: PipelineConfig,
-        observations,
+        observations: Observations,
         save_trajectories=True,
     ):
         self.rume = config.rume
