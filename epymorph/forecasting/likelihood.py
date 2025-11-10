@@ -41,7 +41,7 @@ class Poisson(Likelihood):
         expected value is zero.
     """
 
-    jitter: float
+    jitter: float = 0.0001
     shift: int = 0
     scale: float = 1.0
 

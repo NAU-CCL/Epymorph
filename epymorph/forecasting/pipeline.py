@@ -1,5 +1,6 @@
 import dataclasses
 import datetime
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from types import SimpleNamespace
 from typing import Mapping
@@ -108,6 +109,12 @@ class PipelineSimulator:
     num_realizations: int
     initial_values: NDArray | None
     unknown_params: Mapping[NamePattern, UnknownParam]
+
+    @abstractmethod
+    def run(self, rng: np.random.Generator) -> PipelineOutput:
+        """
+        Run the simulation.
+        """
 
 
 @dataclass(frozen=True)
@@ -351,7 +358,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             ipm=rume.ipm,
             rng=np.random.default_rng(0),
         )
-        observations_df = observations._get_observations_dataframe(context)
+        # observations_df = observations._get_observations_dataframe(context)
         observations_array = observations._get_observations_numpy_array(context)
 
         observed_values = []
@@ -367,30 +374,16 @@ class ParticleFilterSimulator(PipelineSimulator):
             step_right = step_idx + time_frame.days * rume.num_tau_steps
 
             # TODO # self._get_current_observation(...)
-            time_key = observations_df.keys()[0]
-            geo_key = observations_df.keys()[1]
+            # time_key = observations_df.keys()[0]
+            # geo_key = observations_df.keys()[1]
 
-            if not observations.strict_labels and np.issubdtype(
-                observations_df.dtypes[time_key], np.datetime64().dtype
-            ):
-                start = np.datetime64(time_frame.start_date.isoformat())
-                end = np.datetime64(time_frame.end_date.isoformat())
-                observation_df = observations_df.loc[
-                    (observations_df[time_key] >= start)
-                    & (observations_df[time_key] <= end)
-                ].drop(time_key, axis=1)
-                observation_array = observations_array[
-                    (observations_array["date"][:, 0] >= start)
-                    & (observations_array["date"][:, 0] <= end),
-                    :,
-                ]
-            else:
-                observation_df = observations_df.loc[
-                    observations_df[time_key] == labels[i_observation]
-                ].drop(time_key, axis=1)
-            observation_df = observation_df.sort_values(geo_key)
-
-            observed_values.append(observation_df.drop([geo_key], axis=1).to_numpy())
+            start = np.datetime64(time_frame.start_date.isoformat())
+            end = np.datetime64(time_frame.end_date.isoformat())
+            observation_array = observations_array[
+                (observations_array["date"][:, 0] >= start)
+                & (observations_array["date"][:, 0] <= end),
+                :,
+            ]
 
             print(  # noqa: T201
                 (
@@ -436,10 +429,13 @@ class ParticleFilterSimulator(PipelineSimulator):
 
                 current_predictions.append(prediction.to_numpy())
 
-                node_log_likelihoods = observations.likelihood.compute_log(
-                    observation_array["value"][0, :],
-                    prediction.to_numpy()[:, 0],
-                )
+                if observation_array.size > 0:
+                    node_log_likelihoods = observations.likelihood.compute_log(
+                        observation_array["value"][0, :],
+                        prediction.to_numpy()[:, 0],
+                    )
+                else:
+                    node_log_likelihoods = np.zeros(N)
 
                 log_weights_by_node[j_realization, ...] = node_log_likelihoods
 
@@ -467,7 +463,16 @@ class ParticleFilterSimulator(PipelineSimulator):
 
             # Hard code localization
             for i_node in range(N):
-                weights = self._normalize_log_weights(log_weights_by_node[..., i_node])
+                if (
+                    observation_array.size > 0
+                    and np.ma.is_masked(observation_array["value"])
+                    and observation_array.mask["value"][0, i_node]
+                ):
+                    weights = 1 / num_realizations * np.ones((num_realizations,))
+                else:
+                    weights = self._normalize_log_weights(
+                        log_weights_by_node[..., i_node]
+                    )
                 orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
                 resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
                 current_compartment_values[orig_idx, i_node, ...] = (
@@ -509,6 +514,265 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampling_days=resampling_days,
             resampling_steps=resampling_steps,
         )
+
+    # def _run_particle_filter(
+    #     self,
+    #     rume,
+    #     num_realizations,
+    #     initial_values,
+    #     unknown_params,
+    #     observations,
+    #     rng,
+    #     save_trajectories=True,
+    # ):
+    #     """
+
+    #     Parameters
+    #     ----------
+    #     rume :
+    #         The RUME.
+    #     num_realizations :
+    #         The number of realizations.
+    #     initial_values :
+    #         The initial compartment values across each realization. The first dimension
+    #         is the realization dimension.
+    #     param_values :
+    #         The parameter values. Overrides values which appear in unknown_params.
+    #     unknown_params :
+    #         The estimated parameter values.
+    #     duration :
+    #         The duration of the forecast.
+    #     observations:
+    #         The observations.
+    #     rng :
+    #         The random number generator.
+    #     Returns
+    #     -------
+    #     :
+    #         The forecast output.
+    #     """
+    #     unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
+
+    #     # TODO # rume = self._cache_adrios(...)
+    #     context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+    #     new_params = {}
+    #     for name, param in rume.params.items():
+    #         if isinstance(param, ADRIO):
+    #             new_params[name] = param.with_context_internal(context).evaluate()
+    #         else:
+    #             new_params[name] = param
+
+    #     rume = dataclasses.replace(
+    #         rume,
+    #         params=new_params,
+    #     )
+
+    #     # Dimension of the system.
+    #     days = rume.time_frame.days
+    #     taus = rume.num_tau_steps
+    #     R = num_realizations
+    #     T = days
+    #     S = days * taus
+    #     N = rume.scope.nodes
+    #     C = rume.ipm.num_compartments
+    #     E = rume.ipm.num_events
+
+    #     initial = None
+    #     compartments = None
+    #     events = None
+    #     estimated_params = None
+
+    #     if save_trajectories:
+    #         # Allocate return values.
+    #         initial = np.zeros(shape=(R, N, C), dtype=np.int64)
+    #         compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+    #         events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+    #         estimated_params = {
+    #             k: np.zeros(shape=(R, T, N), dtype=np.float64)
+    #             for k in unknown_params.keys()
+    #         }
+
+    #     # Initialize the initial compartment and parameter values.
+    #     current_compartment_values, current_param_values = (
+    #         self._initialize_augmented_state_space(
+    #             rume, unknown_params, num_realizations, initial_values, rng
+    #         )
+    #     )
+    #     if save_trajectories:
+    #         initial = current_compartment_values
+
+    #     # Determine the number of observations and their associated time frames.
+    #     time_frames, labels = self._observation_time_frames(
+    #         rume, observations.model_link.time
+    #     )
+    #     resampling_indices = np.zeros(shape=(R, len(time_frames), N), dtype=np.int32)
+    #     resampling_days = np.zeros(shape=(len(time_frames),), dtype=np.int32)
+    #     resampling_steps = np.zeros(shape=(len(time_frames),), dtype=np.int32)
+
+    #     context = Context.of(
+    #         scope=rume.scope,
+    #         time_frame=rume.time_frame,
+    #         ipm=rume.ipm,
+    #         rng=np.random.default_rng(0),
+    #     )
+    #     observations_df = observations._get_observations_dataframe(context)
+    #     observations_array = observations._get_observations_numpy_array(context)
+
+    #     observed_values = []
+    #     predicted_values = []
+    #     posterior_values = []
+
+    #     day_idx = 0
+    #     step_idx = 0
+    #     for i_observation in range(len(time_frames)):
+    #         time_frame = time_frames[i_observation]
+
+    #         day_right = day_idx + time_frame.days
+    #         step_right = step_idx + time_frame.days * rume.num_tau_steps
+
+    #         # TODO # self._get_current_observation(...)
+    #         time_key = observations_df.keys()[0]
+    #         geo_key = observations_df.keys()[1]
+
+    #         if not observations.strict_labels and np.issubdtype(
+    #             observations_df.dtypes[time_key], np.datetime64().dtype
+    #         ):
+    #             start = np.datetime64(time_frame.start_date.isoformat())
+    #             end = np.datetime64(time_frame.end_date.isoformat())
+    #             observation_df = observations_df.loc[
+    #                 (observations_df[time_key] >= start)
+    #                 & (observations_df[time_key] <= end)
+    #             ].drop(time_key, axis=1)
+    #             observation_array = observations_array[
+    #                 (observations_array["date"][:, 0] >= start)
+    #                 & (observations_array["date"][:, 0] <= end),
+    #                 :,
+    #             ]
+    #         else:
+    #             observation_df = observations_df.loc[
+    #                 observations_df[time_key] == labels[i_observation]
+    #             ].drop(time_key, axis=1)
+    #         observation_df = observation_df.sort_values(geo_key)
+
+    #         observed_values.append(observation_df.drop([geo_key], axis=1).to_numpy())
+
+    #         print(  # noqa: T201
+    #             (
+    #                 f"Observation: {i_observation}, "
+    #                 f"Label: {labels[i_observation]}, "
+    #                 f"Time Frame: {time_frame}"
+    #             )
+    #         )
+
+    #         current_predictions = []
+    #         weights = np.zeros(num_realizations, dtype=np.float64)
+    #         log_weights_by_node = np.zeros(
+    #             (num_realizations, N), dtype=np.float64
+    #         )  # TODO
+    #         for j_realization in range(num_realizations):
+    #             rume_temp, data = self._create_sim_rume(
+    #                 rume,
+    #                 j_realization,
+    #                 unknown_params,
+    #                 current_param_values,
+    #                 current_compartment_values,
+    #                 time_frame,
+    #                 rng,
+    #             )
+
+    #             sim = BasicSimulator(rume_temp)
+    #             out_temp = sim.run(rng_factory=lambda: rng)
+
+    #             temp_time_agg = out_temp.rume.time_frame.select.all().agg()
+    #             new_time_agg = dataclasses.replace(
+    #                 temp_time_agg,
+    #                 aggregation=observations.model_link.time.aggregation,
+    #             )
+
+    #             predicted_df = munge(
+    #                 out_temp,
+    #                 geo=observations.model_link.geo,
+    #                 time=new_time_agg,
+    #                 quantity=observations.model_link.quantity,
+    #             )
+
+    #             prediction = predicted_df.drop(["geo", "time"], axis=1)
+
+    #             current_predictions.append(prediction.to_numpy())
+
+    #             node_log_likelihoods = observations.likelihood.compute_log(
+    #                 observation_array["value"][0, :],
+    #                 prediction.to_numpy()[:, 0],
+    #             )
+
+    #             log_weights_by_node[j_realization, ...] = node_log_likelihoods
+
+    #             if save_trajectories:
+    #                 compartments[j_realization, step_idx:step_right, ...] = (
+    #                     out_temp.compartments
+    #                 )
+    #                 events[j_realization, step_idx:step_right, ...] = out_temp.events
+    #                 current_compartment_values[j_realization, ...] = (
+    #                     out_temp.compartments[-1, ...]
+    #                 )
+
+    #             for k in unknown_params.keys():
+    #                 if save_trajectories:
+    #                     estimated_params[k][j_realization, day_idx:day_right, ...] = (
+    #                         data.get_raw(k)
+    #                     )
+    #                 current_param_values[k][j_realization, ...] = data.get_raw(k)[
+    #                     -1, ...
+    #                 ]
+
+    #         predicted_values.append(np.array(current_predictions))
+
+    #         posterior_value = predicted_values[-1].copy()
+
+    #         # Hard code localization
+    #         for i_node in range(N):
+    #             weights = self._normalize_log_weights(log_weights_by_node[..., i_node])
+    #             orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
+    #             resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
+    #             current_compartment_values[orig_idx, i_node, ...] = (
+    #                 current_compartment_values[resampled_idx, i_node, ...]
+    #             )
+    #             for k in current_param_values.keys():
+    #                 current_param_values[k][orig_idx, i_node] = current_param_values[k][
+    #                     resampled_idx, i_node
+    #                 ]
+
+    #             posterior_value[orig_idx, i_node, ...] = posterior_value[
+    #                 resampled_idx, i_node, ...
+    #             ]
+
+    #             resampling_indices[:, i_observation, i_node] = resampled_idx[:, 0]
+
+    #         posterior_values.append(posterior_value)
+
+    #         resampling_steps[i_observation] = step_right
+    #         resampling_days[i_observation] = day_right
+
+    #         day_idx = day_right
+    #         step_idx = step_right
+
+    #     return SimpleNamespace(
+    #         rume=rume,
+    #         initial=initial,
+    #         compartments=compartments,
+    #         events=events,
+    #         num_realizations=num_realizations,
+    #         estimated_params=estimated_params,
+    #         unknown_params=unknown_params,
+    #         final_compartment_values=current_compartment_values,
+    #         final_param_values=current_param_values,
+    #         predicted_values=np.array(predicted_values),
+    #         posterior_values=np.array(posterior_values),
+    #         observed_values=np.array(observed_values),
+    #         resampling_indices=resampling_indices,
+    #         resampling_days=resampling_days,
+    #         resampling_steps=resampling_steps,
+    #     )
 
     def _initialize_augmented_state_space(
         self, rume, unknown_params, num_realizations, initial_values, rng
