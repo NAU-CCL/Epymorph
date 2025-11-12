@@ -482,16 +482,18 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
                 "or there are some duplicate key/values."
             )
             raise ADRIOProcessingError(self, self.context, err)
-        if work_df["data"].isna().any():
-            err = "Data for required geographies missing from CSV file."
-            raise ADRIOProcessingError(self, self.context, err)
 
         result_np = work_df.pivot_table(
             index="time",
             columns="key",
             values="data",
-            fill_value=None,
+            fill_value=0,
+            aggfunc="first",  # Other aggfunc's may change the dtype.
         )
+        missing = work_df.assign(data=work_df["data"].isna()).pivot_table(
+            index="time", columns="key", values="data", aggfunc="first"
+        )
+
         if np.any(np.isnan(result_np)):
             err = (
                 "Some data are missing from the CSV file; "
@@ -507,7 +509,7 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
         return InspectResult(
             adrio=self,
             source=csv_df,
-            result=result_np,
+            result=np.ma.masked_array(data=result_np, mask=missing),
             dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
             issues={},
