@@ -532,7 +532,6 @@ class LabeledLocations(SeededInfection):
         )
         return self.defer(sub)
 
-
 class RandomLocations(SeededInfection):
     """
     Seed an infection in a number of randomly selected locations.
@@ -593,6 +592,75 @@ class RandomLocations(SeededInfection):
         sub = IndexedLocations(
             selection=selection,
             seed_size=self.seed_size,
+            initial_compartment=self.initial_compartment,
+            infection_compartment=self.infection_compartment,
+        )
+        return self.defer(sub)
+
+
+class RandomLocationsAndRandomSeed(SeededInfection):
+    """
+    Seed an random number of infected in a number of randomly selected locations.
+
+    Requires "population" as a data attribute.
+
+    Parameters
+    ----------
+    num_locations :
+        The number of locations to choose.
+    seed_max :
+        The maximum number of individuals to infect in each location.
+    initial_compartment :
+        Which compartment (by index or name) is "not infected", where most individuals
+        start out.
+    infection_compartment :
+        Which compartment (by index or name) will be seeded as the initial infection.
+    """
+
+    requirements = (_POPULATION_ATTR,)
+
+    num_locations: int
+    """The number of locations to choose (randomly)."""
+    seed_max: int
+    """The maximum number of individuals to infect, drawn uniformly on [0,seed_max].
+    This is done per node, and thus the total initial infected is random."""
+
+    def __init__(
+        self,
+        num_locations: int,
+        seed_max: int,
+        initial_compartment: int | str = SeededInfection.DEFAULT_INITIAL,
+        infection_compartment: int | str = SeededInfection.DEFAULT_INFECTION,
+    ):
+        super().__init__(initial_compartment, infection_compartment)
+        self.num_locations = num_locations
+        self.seed_max = seed_max
+
+    @override
+    def evaluate(self) -> SimArray:
+        """
+        Evaluate the initializer in the current context.
+
+        Returns
+        -------
+        :
+            The initial populations for each node and IPM compartment.
+        """
+        N = self.scope.nodes
+        if not 0 < self.num_locations <= N:
+            err = (
+                "Initializer argument 'num_locations' must be "
+                f"a value from 1 up to the number of locations ({N})."
+            )
+            raise InitError(err)
+
+        indices = np.arange(N, dtype=np.intp)
+        selection = self.rng.choice(indices, self.num_locations)
+        seed_size = self.rng.integers(low = 0, high = self.seed_max+1,size = self.num_locations)
+
+        sub = IndexedLocations(
+            selection=selection,
+            seed_size=seed_size,
             initial_compartment=self.initial_compartment,
             infection_compartment=self.infection_compartment,
         )

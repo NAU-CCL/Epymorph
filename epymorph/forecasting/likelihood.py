@@ -77,46 +77,28 @@ class Poisson(Likelihood):
             expected * self.scale + self.jitter + self.shift,
         )
 
-
 @dataclass(frozen=True)
 class NegativeBinomial(Likelihood):
     """
-    Encapsulatees the Poisson likelihood function for observational data. The expected
-    value of the observation is used as the parameter for the Poisson distribution. The
+    Encapsulatees the Negative Binomial likelihood function for observational data. The expected
+    value of the observation is used as the parameter for the Negative Binomial distribution. The
     observed values must be nonnegative integers.
 
     Attributes
     ----------
-    jitter : float
-        A small number added to the expected value to avoid the degenerate case when the
-        expected value is zero.
+    r : int
+        The overdispersion parameter of the Negative Binomial distribution. As r->inf 
+        NB -> Poisson
     """
 
-    variance: float
-    jitter: float = 0.0001
+    r : int
 
     def compute(self, observed, expected):
-        """
-        Computes the Poisson likelihood.
-
-        Parameters
-        ----------
-        observed : int
-            The observational data.
-        expected : int
-            The data predicted by the model.
-        """
-        # return poisson.pmf(observed, expected + self.jitter)
-        mean = expected + self.jitter
-        return nbinom.pmf(
-            observed,
-            n=mean**2 / (self.variance - mean),
-            p=mean / self.variance,
-        )
+        pass
 
     def compute_log(self, observed, expected):
         """
-        Computes the Poisson likelihood.
+        Computes the Negative Binomial likelihood.
 
         Parameters
         ----------
@@ -125,14 +107,11 @@ class NegativeBinomial(Likelihood):
         expected : int
             The data predicted by the model.
         """
-        # return poisson.logpmf(observed, expected + self.jitter)
-        mean = expected + self.jitter
         return nbinom.logpmf(
             observed,
-            n=mean**2 / (self.variance - mean),
-            p=mean / self.variance,
+            n=self.r,
+            p=1/(1+expected/self.r),
         )
-
 
 @dataclass(frozen=True)
 class Gaussian(Likelihood):

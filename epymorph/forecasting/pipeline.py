@@ -120,6 +120,7 @@ class PipelineSimulator:
 @dataclass(frozen=True)
 class ParticleFilterOutput(PipelineOutput):
     posterior_values: NDArray | None
+    estimated_params: NDArray | None
 
 
 class FromRUME(PipelineConfig):
@@ -256,6 +257,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             events=output.events,
             initial=output.initial,
             posterior_values=output.posterior_values,
+            estimated_params = output.estimated_params
         )
 
     def _run_particle_filter(
@@ -389,7 +391,7 @@ class ParticleFilterSimulator(PipelineSimulator):
                 (
                     f"Observation: {i_observation}, "
                     f"Label: {labels[i_observation]}, "
-                    f"Time Frame: {time_frame}"
+                    f"Time Frame: {time_frame}, "
                 )
             )
 
@@ -413,6 +415,7 @@ class ParticleFilterSimulator(PipelineSimulator):
                 out_temp = sim.run(rng_factory=lambda: rng)
 
                 temp_time_agg = out_temp.rume.time_frame.select.all().agg()
+
                 new_time_agg = dataclasses.replace(
                     temp_time_agg,
                     aggregation=observations.model_link.time.aggregation,
@@ -804,9 +807,12 @@ class ParticleFilterSimulator(PipelineSimulator):
                     params_temp[k] = current_param_values[k][i_realization, ...]
                 rume_temp = dataclasses.replace(rume, params=params_temp)
                 data = rume_temp.evaluate_params(rng=rng)
-                current_compartment_values[i_realization, ...] = rume.initialize(
+
+                initializer = rume.initialize(
                     data=data, rng=rng
                 )
+
+                current_compartment_values[i_realization, ...] = initializer
         return current_compartment_values, current_param_values
 
     def _create_sim_rume(
