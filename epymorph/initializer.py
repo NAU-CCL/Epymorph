@@ -609,7 +609,7 @@ class RandomLocationsAndRandomSeed(SeededInfection):
     num_locations :
         The number of locations to choose.
     seed_max :
-        The maximum number of individuals to infect in each location.
+        The maximum number of individuals to infect.
     initial_compartment :
         Which compartment (by index or name) is "not infected", where most individuals
         start out.
@@ -622,8 +622,7 @@ class RandomLocationsAndRandomSeed(SeededInfection):
     num_locations: int
     """The number of locations to choose (randomly)."""
     seed_max: int
-    """The maximum number of individuals to infect, drawn uniformly on [0,seed_max].
-    This is done per node, and thus the total initial infected is random."""
+    """The maximum number of individuals to infect, drawn uniformly on [0,seed_max]."""
 
     def __init__(
         self,
@@ -656,7 +655,7 @@ class RandomLocationsAndRandomSeed(SeededInfection):
 
         indices = np.arange(N, dtype=np.intp)
         selection = self.rng.choice(indices, self.num_locations)
-        seed_size = self.rng.integers(low = 0, high = self.seed_max+1,size = self.num_locations)
+        seed_size = self.rng.integers(low = 0, high = self.seed_max+1)
 
         sub = IndexedLocations(
             selection=selection,
