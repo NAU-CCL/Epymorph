@@ -482,9 +482,9 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
                 "or there are some duplicate key/values."
             )
             raise ADRIOProcessingError(self, self.context, err)
-        if work_df["data"].isna().any():
-            err = "Data for required geographies missing from CSV file."
-            raise ADRIOProcessingError(self, self.context, err)
+        # if work_df["data"].isna().any():
+        #     err = "Data for required geographies missing from CSV file."
+        #     raise ADRIOProcessingError(self, self.context, err)
 
         result_np = work_df.pivot_table(
             index="time",
@@ -492,12 +492,12 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
             values="data",
             fill_value=None,
         )
-        if np.any(np.isnan(result_np)):
-            err = (
-                "Some data are missing from the CSV file; "
-                "not all pairs of date/location are present."
-            )
-            raise ADRIOProcessingError(self, self.context, err)
+        # if np.any(np.isnan(result_np)):
+        #     err = (
+        #         "Some data are missing from the CSV file; "
+        #         "not all pairs of date/location are present."
+        #     )
+        #     raise ADRIOProcessingError(self, self.context, err)
 
         result_np = to_date_value_array(
             result_np.index.to_numpy(), result_np.to_numpy(dtype=self.dtype)
