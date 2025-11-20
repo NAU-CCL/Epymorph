@@ -299,13 +299,18 @@ class ParticleFilterSimulator(PipelineSimulator):
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
 
         # TODO # rume = self._cache_adrios(...)
-        context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
-        new_params = {}
-        for name, param in rume.params.items():
-            if isinstance(param, ADRIO):
-                new_params[name] = param.with_context_internal(context).evaluate()
-            else:
-                new_params[name] = param
+        # context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+        # new_params = {}
+        # for name, param in rume.params.items():
+        #     if isinstance(param, ADRIO):
+        #         new_params[name] = param.with_context_internal(context).evaluate()
+        #     else:
+        #         new_params[name] = param
+
+        new_params_resolver = rume.evaluate_params(rng=rng)
+        new_params = {
+            k.to_pattern(): v for k, v in new_params_resolver.to_dict().items()
+        }
 
         rume = dataclasses.replace(
             rume,

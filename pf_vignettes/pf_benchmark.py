@@ -82,7 +82,7 @@ csvadrio = csv.CSVFileAxN(
     skiprows=1,
 )
 
-num_realizations = 100
+num_realizations = 10
 
 pf_scope = CountyScope.in_counties(
     ["King, WA", "Whatcom, WA", "Pierce, WA", "Snohomish, WA"], year=2015
