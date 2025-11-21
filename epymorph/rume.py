@@ -260,23 +260,13 @@ def remap_taus(
     )
 
 
-def as_rume_params(
+def _as_rume_params(
     params: CovariantMapping[str | NamePattern, ParamValue],
 ) -> dict[NamePattern, ParamValue]:
     """
     Convert the user-friendly form of param value maps (keys are NamePattern or str)
     into the more strict internal form (keys are NamePattern).
-
-    Parameters
-    ----------
-    params :
-        The parameters map to convert.
-
-    Returns
-    -------
-    :
-        The converted params map. Returns the same instance if it's already in
-        internal form.
+    Returns the same instance if it's already in internal form.
     """
     if all(isinstance(k, NamePattern) for k in params.keys()):
         return params  # type: ignore
@@ -559,7 +549,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
             Database({NamePattern.parse("label"): self.scope.labels}),
         ]
         if override_params:
-            params = [Database(as_rume_params(override_params)), *params]
+            params = [Database(_as_rume_params(override_params)), *params]
         return ReqTree.of(self.requirements, params)
 
     def evaluate_params(
@@ -693,7 +683,7 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
             scope=scope,
             time_frame=time_frame,
-            params=as_rume_params(params),
+            params=_as_rume_params(params),
         )
 
     @override
@@ -767,7 +757,7 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
             mms=remap_taus([(gpm.name, gpm.mm) for gpm in strata]),
             scope=scope,
             time_frame=time_frame,
-            params=as_rume_params(params),
+            params=_as_rume_params(params),
         )
 
     @override

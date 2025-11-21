@@ -815,8 +815,7 @@ class ReqTree(Generic[V]):
         requirements :
             The top-level requirements of the tree.
         params :
-            The database of values, where each value may be recursive in the sense of
-            having its own data requirements.
+            The database of values, or a sequence of databases in priority order.
 
         Returns
         -------
