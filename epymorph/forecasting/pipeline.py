@@ -537,7 +537,7 @@ class ParticleFilterSimulator(PipelineSimulator):
 
         current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
         if initial_values is not None:
-            current_compartment_values = initial_values
+            current_compartment_values = initial_values.copy()
         else:
             params_temp = {**rume.params}
             for i_realization in range(num_realizations):
