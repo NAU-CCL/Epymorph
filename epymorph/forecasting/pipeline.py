@@ -120,6 +120,7 @@ class PipelineSimulator:
 @dataclass(frozen=True)
 class ParticleFilterOutput(PipelineOutput):
     posterior_values: NDArray | None
+    effective_sample_size: NDArray | None
 
 
 class FromRUME(PipelineConfig):
@@ -256,6 +257,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             events=output.events,
             initial=output.initial,
             posterior_values=output.posterior_values,
+            effective_sample_size=output.effective_sample_size,
         )
 
     def _run_particle_filter(
@@ -351,6 +353,7 @@ class ParticleFilterSimulator(PipelineSimulator):
         resampling_indices = np.zeros(shape=(R, len(time_frames), N), dtype=np.int32)
         resampling_days = np.zeros(shape=(len(time_frames),), dtype=np.int32)
         resampling_steps = np.zeros(shape=(len(time_frames),), dtype=np.int32)
+        effective_sample_size = np.zeros(shape=(len(time_frames), N), dtype=np.float64)
 
         context = Context.of(
             scope=rume.scope,
@@ -488,6 +491,7 @@ class ParticleFilterSimulator(PipelineSimulator):
                 ]
 
                 resampling_indices[:, i_observation, i_node] = resampled_idx[:, 0]
+                effective_sample_size[i_observation, i_node] = 1 / np.sum(weights**2)
 
             posterior_values.append(posterior_value)
 
@@ -513,6 +517,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampling_indices=resampling_indices,
             resampling_days=resampling_days,
             resampling_steps=resampling_steps,
+            effective_sample_size=effective_sample_size,
         )
 
     def _initialize_augmented_state_space(
@@ -686,7 +691,7 @@ class ParticleFilterSimulator(PipelineSimulator):
         return np.array(resampled_idx)
 
 
-class ForecastSimulator(ParticleFilterSimulator):
+class ForecastSimulator(PipelineSimulator):
     def __init__(self, config, save_trajectories=True):
         self.rume = config.rume
         self.num_realizations = config.num_realizations
@@ -711,6 +716,83 @@ class ForecastSimulator(ParticleFilterSimulator):
             events=output.events,
             initial=output.initial,
         )
+
+    def _initialize_augmented_state_space(
+        self, rume, unknown_params, num_realizations, initial_values, rng
+    ):
+        R = num_realizations
+        N = rume.scope.nodes
+        C = rume.ipm.num_compartments
+        current_param_values = {
+            k: np.zeros(shape=(R, N), dtype=np.float64) for k in unknown_params.keys()
+        }
+        for i_realization in range(num_realizations):
+            for k in current_param_values.keys():
+                if isinstance(unknown_params[k].prior, Prior):
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior.sample(size=(N,), rng=rng)
+                else:
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior[i_realization, ...]
+
+        current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
+        if initial_values is not None:
+            current_compartment_values = initial_values.copy()
+        else:
+            params_temp = {**rume.params}
+            for i_realization in range(num_realizations):
+                for k in unknown_params.keys():
+                    params_temp[k] = current_param_values[k][i_realization, ...]
+                rume_temp = dataclasses.replace(rume, params=params_temp)
+                data = rume_temp.evaluate_params(rng=rng)
+                current_compartment_values[i_realization, ...] = rume.initialize(
+                    data=data, rng=rng
+                )
+        return current_compartment_values, current_param_values
+
+    def _create_sim_rume(
+        self,
+        rume,
+        realization_index,
+        unknown_params,
+        current_param_values,
+        current_compartment_values,
+        override_time_frame,
+        rng,
+    ):
+        # Add unknown params to the RUME
+        params_temp = {**rume.params}
+        for k in unknown_params.keys():
+            params_temp[k] = unknown_params[k].dynamics.with_initial(
+                current_param_values[k][realization_index, ...]
+            )
+        rume_temp = dataclasses.replace(
+            rume, params=params_temp, time_frame=override_time_frame
+        )
+
+        # Evaluate the params.
+        data = rume_temp.evaluate_params(rng=rng)
+        rume_temp = dataclasses.replace(
+            rume_temp,
+            params={k.to_pattern(): v for k, v in data.to_dict().items()},
+        )
+
+        # Add the compartment values.
+        strata_temp = [
+            dataclasses.replace(
+                stratum,
+                init=Explicit(
+                    initials=current_compartment_values[realization_index, ...][
+                        ..., rume.compartment_mask[stratum.name]
+                    ]
+                ),
+            )
+            for stratum in rume.strata
+        ]
+        rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
+        return rume_temp, data
 
     def _run_forecast(
         self,
