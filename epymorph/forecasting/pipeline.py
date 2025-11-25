@@ -447,9 +447,9 @@ class ParticleFilterSimulator(PipelineSimulator):
                         out_temp.compartments
                     )
                     events[j_realization, step_idx:step_right, ...] = out_temp.events
-                    current_compartment_values[j_realization, ...] = (
-                        out_temp.compartments[-1, ...]
-                    )
+                current_compartment_values[j_realization, ...] = out_temp.compartments[
+                    -1, ...
+                ]
 
                 for k in unknown_params.keys():
                     if save_trajectories:
@@ -463,6 +463,8 @@ class ParticleFilterSimulator(PipelineSimulator):
             predicted_values.append(np.array(current_predictions))
 
             posterior_value = predicted_values[-1].copy()
+
+            prior_compartment_values = current_compartment_values.copy()
 
             # Hard code localization
             for i_node in range(N):
@@ -478,8 +480,11 @@ class ParticleFilterSimulator(PipelineSimulator):
                     )
                 orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
                 resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
+                # current_compartment_values[orig_idx, i_node, ...] = (
+                #     current_compartment_values[resampled_idx, i_node, ...]
+                # )
                 current_compartment_values[orig_idx, i_node, ...] = (
-                    current_compartment_values[resampled_idx, i_node, ...]
+                    prior_compartment_values[resampled_idx, i_node, ...]
                 )
                 for k in current_param_values.keys():
                     current_param_values[k][orig_idx, i_node] = current_param_values[k][
