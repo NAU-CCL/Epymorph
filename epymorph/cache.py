@@ -3,7 +3,7 @@
 from hashlib import sha256
 from io import BytesIO
 from math import log
-from os import PathLike, getenv
+from os import PathLike
 from pathlib import Path
 from shutil import rmtree
 from sys import modules
@@ -15,28 +15,47 @@ from warnings import warn
 import requests
 from platformdirs import user_cache_path
 
+from epymorph.settings import declare_setting, env_flag, env_path, env_path_list
 
-def _cache_path() -> Path:
-    """
-    Get epymorph's cache directory.
+EPYMORPH_CACHE_PATH = declare_setting(
+    name="EPYMORPH_CACHE_PATH",
+    description=(
+        "Optional path to use as the location to store cached files. "
+        "By default, epymorph uses a path which is appropriate to your OS."
+    ),
+    getter=lambda: env_path(
+        name="EPYMORPH_CACHE_PATH",
+        default_value=user_cache_path(appname="epymorph"),
+        ensure_exists=True,
+    ),
+)
+"""An environment variable for epymorph's cache path."""
 
-    Returns
-    -------
-    :
-        The path.
-    """
-    if (path_var := getenv("EPYMORPH_CACHE_PATH")) is not None:
-        # Load path from env var
-        path = Path(path_var)
-    else:
-        # fall back to platform-specific default path
-        path = user_cache_path(appname="epymorph")
-    # ensure cache directory exists
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+EPYMORPH_CACHE_DISABLED = declare_setting(
+    name="EPYMORPH_CACHE_DISABLED",
+    description=(
+        "An optional boolean value; true to disable all cache interactions. "
+        "Default is false."
+    ),
+    getter=lambda: env_flag("EPYMORPH_CACHE_DISABLED", False),
+)
+"""An environment variable to entirely disable caching."""
+
+EPYMORPH_CACHE_DISABLED_PATHS = declare_setting(
+    name="EPYMORPH_CACHE_DISABLED_PATHS",
+    description=(
+        "An optional list of paths (separated by semicolons); "
+        "when attempting to load or save a file using the cache, "
+        "epymorph will check if the cache path starts with one of "
+        "these paths, and if so, interactions with the cache will be "
+        "skipped entirely."
+    ),
+    getter=lambda: env_path_list("EPYMORPH_CACHE_DISABLED_PATHS"),
+)
+"""An environment variable for paths which should have caching disabled."""
 
 
-CACHE_PATH = _cache_path()
+CACHE_PATH = EPYMORPH_CACHE_PATH.get()
 """The root directory for epymorph's cached files."""
 
 
@@ -398,7 +417,11 @@ def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
     """
     try:
         return load_file(_resolve_cache_path(from_path))
+    except FileMissingError:
+        # missing file is a normal cache miss; no extra context needed
+        raise CacheMissError() from None
     except FileError as e:
+        # any other file error is abnormal and extra context will help debug
         raise CacheMissError() from e
 
 
@@ -425,23 +448,34 @@ def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
     :
         The file bytes.
     """
-    try:
+    cache_disabled = EPYMORPH_CACHE_DISABLED.get() or any(
+        cache_path.is_relative_to(p)  # is the file's cache path in a disabled path?
+        for p in EPYMORPH_CACHE_DISABLED_PATHS.get()
+    )
+
+    if not cache_disabled:
         # Try to load from cache.
-        return load_file_from_cache(cache_path)
-    except CacheMissError:
-        # On cache miss, fetch file contents.
-        file = fetch()
+        try:
+            return load_file_from_cache(cache_path)
+        except CacheMissError:
+            # passing through the exception context means the cache miss
+            # doesn't clutter up the exception stack if fetching the file
+            # from source fails.
+            pass
+
+    # On cache miss, fetch file contents.
+    file = fetch()
+
+    if not cache_disabled:
         # And attempt to save the file to the cache for next time.
         try:
             save_file_to_cache(cache_path, file)
         except FileWriteError as e:
-            # Failure to save to the cache is not worth stopping the program:
-            # raise a warning.
-            warn(
-                f"Unable to save file to the cache ({cache_path}). Cause:\n{e}",
-                CacheWarning,
-            )
-        return file
+            # Failure to save to the cache is not worth stopping the program.
+            wrn = f"Unable to save file to the cache ({cache_path}). Cause:\n{e}"
+            warn(wrn, CacheWarning)
+
+    return file
 
 
 def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
