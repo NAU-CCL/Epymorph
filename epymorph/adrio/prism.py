@@ -1,4 +1,8 @@
-"""ADRIOs that access PRISM files for climate data."""
+"""
+ADRIOs that access PRISM files for climate data.
+
+https://prism.oregonstate.edu/
+"""
 
 from abc import abstractmethod
 from datetime import date, timedelta
@@ -7,7 +11,6 @@ from typing import Iterable, Literal, NamedTuple, Protocol
 
 import numpy as np
 import rasterio.io as rio
-from dateutil.relativedelta import relativedelta
 from numpy.typing import NDArray
 from typing_extensions import override
 
@@ -29,7 +32,6 @@ from epymorph.data_usage import AvailableDataEstimate, DataEstimate
 from epymorph.geography.us_census import CensusScope
 from epymorph.geography.us_geography import STATE
 from epymorph.simulation import Context
-from epymorph.time import TimeFrame
 
 _PRISM_CACHE_PATH = module_cache_path(__name__)
 
@@ -40,38 +42,29 @@ VPDType = Literal["Minimum", "Maximum"]
 """A daily vapor pressure deficit measurement provided in the PRISM data."""
 
 
-class _PrismFile(NamedTuple):
+class PrismFile(NamedTuple):
+    """All necessary info for a single day's PRISM file."""
+
+    attribute: str
+    """The PRISM attribute the file pertains to."""
     url: str
+    """The URL to request the file (a zip file)."""
     bil_name: str
+    """The name of the bil data file inside the zip."""
     cache_path: Path
+    """The path at which to cache the zip."""
 
-
-def _prism_files(time_frame: TimeFrame, attribute: str) -> list[_PrismFile]:
-    """Compute the complete list of PRISM files needed."""
-    latest_date = date.today() - timedelta(days=1)
-    six_months_ago = date.today() + relativedelta(months=-6)
-    last_completed_month = six_months_ago.replace(day=1) - timedelta(days=1)
-
-    files = []
-    for file_date in time_frame:
-        if file_date.year == latest_date.year and file_date.month == latest_date.month:
-            stability = "early"
-        elif file_date > last_completed_month:
-            # if it is before the last finished month
-            stability = "provisional"
-        else:
-            # if it is older than 6 completed months
-            stability = "stable"
-
-        name = f"PRISM_{attribute}_{stability}_4kmD2_{file_date.strftime('%Y%m%d')}_bil"
-        files.append(
-            _PrismFile(
-                url=f"https://ftp.prism.oregonstate.edu/daily/{attribute}/{file_date.year}/{name}.zip",
-                bil_name=f"{name}.bil",
-                cache_path=_PRISM_CACHE_PATH / f"{name}.zip",
-            )
+    @staticmethod
+    def for_date(file_date: date, attr: str) -> "PrismFile":
+        # Documentation: https://prism.oregonstate.edu/documents/PRISM_downloads_web_service.pdf
+        fdate = file_date.strftime("%Y%m%d")
+        name = f"prism_{attr}_us_25m_{fdate}"
+        return PrismFile(
+            attribute=attr,
+            url=f"https://services.nacse.org/prism/data/get/us/4km/{attr}/{fdate}?format=bil",
+            bil_name=f"{name}.bil",
+            cache_path=_PRISM_CACHE_PATH / f"{name}.zip",
         )
-    return files
 
 
 class _Sampler(Protocol):
@@ -144,9 +137,11 @@ class _PrismADRIOMixin(ADRIO[np.float64, np.float64]):
         time_frame = self.time_frame
         attribute = self._attribute_name
 
-        files = _prism_files(time_frame, attribute)
+        files = [PrismFile.for_date(d, attribute) for d in time_frame]
         total_files = len(files)
-        missing_files = sum(1 for _, _, path in files if not check_file_in_cache(path))
+        missing_files = sum(
+            1 for _, _, _, path in files if not check_file_in_cache(path)
+        )
 
         est_file_size = self._file_size
         total = total_files * est_file_size
@@ -161,8 +156,8 @@ class _PrismADRIOMixin(ADRIO[np.float64, np.float64]):
             max_bandwidth=None,
         )
 
-    def _fetch_all(self, files: Iterable[_PrismFile]) -> Iterable[rio.DatasetReader]:
-        for url, bil_name, cache_path in files:
+    def _fetch_all(self, files: Iterable[PrismFile]) -> Iterable[rio.DatasetReader]:
+        for _, url, bil_name, cache_path in files:
             try:
                 file = load_or_fetch_url(url, cache_path)
                 with rio.ZipMemoryFile(file) as zip_contents:
@@ -178,7 +173,7 @@ class _PrismADRIOMixin(ADRIO[np.float64, np.float64]):
 
         centroids = self.data(self._CENTROID)
         attribute = self._attribute_name
-        files = _prism_files(self.time_frame, attribute)
+        files = [PrismFile.for_date(d, attribute) for d in self.time_frame]
 
         sampler = _CentroidSampler()
 
