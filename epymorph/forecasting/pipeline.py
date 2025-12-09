@@ -63,8 +63,40 @@ class PipelineOutput:
     """
 
     compartments: NDArray | None
+    """
+    An optional array of shape (R, S, N, C) where R is the number of realizations, S is
+    the number of tau steps, N is the number of nodes, and C is the number of
+    compartments. The interpretation of this output depends on the simulator
+    which produced it. For example, each realization could represent a full trajectory
+    of the model. Alternatively it could represent a sampled estimate of the compartment
+    values with no guarantees of the temporal structure.
+
+    For memory efficiency, this array is optional, and is typically indicated by the
+    `save_trajectories` flag in the corresponding simulator.
+    """
+
     events: NDArray | None
+    """
+    An optional array of shape (R, S, N, E) where R is the number of realizations, S is
+    the number of tau steps, N is the number of nodes, and E is the number of
+    events. The interpretation of this output depends on the simulator
+    which produced it. For example, each realization could represent a full trajectory
+    of the model. Alternatively it could represent a sampled estimate of the compartment
+    values with no guarantees of the temporal structure.
+
+    For memory efficiency, this array is optional, and is typically indicated by the
+    `save_trajectories` flag in the corresponding simulator.
+    """
+
     initial: NDArray | None
+    """
+    An optional array of shape (R, N, C) where R is the number of realizations, N is the
+    number of nodes, and C is the number of compartments. The interpretation of this
+    output depends on the simulator which produced it.
+
+    For memory efficiency, this array is optional, and is typically indicated by the
+    `save_trajectories` flag in the corresponding simulator.
+    """
 
     @property
     def rume(self):
@@ -337,14 +369,17 @@ class ParticleFilterSimulator(PipelineSimulator):
                 for k in unknown_params.keys()
             }
 
-        # Initialize the initial compartment and parameter values.
+        # Initialize the initial compartment and parameter values. Note, the values
+        # within current_compartment_values will be modified in place!
         current_compartment_values, current_param_values = (
             self._initialize_augmented_state_space(
                 rume, unknown_params, num_realizations, initial_values, rng
             )
         )
         if save_trajectories:
-            initial = current_compartment_values
+            # The values of current_compartment_values are modified in-place, so we need
+            #  a copy.
+            initial = current_compartment_values.copy()
 
         # Determine the number of observations and their associated time frames.
         time_frames, labels = self._observation_time_frames(
@@ -442,17 +477,19 @@ class ParticleFilterSimulator(PipelineSimulator):
 
                 log_weights_by_node[j_realization, ...] = node_log_likelihoods
 
-                if save_trajectories:
-                    compartments[j_realization, step_idx:step_right, ...] = (
-                        out_temp.compartments
-                    )
-                    events[j_realization, step_idx:step_right, ...] = out_temp.events
                 current_compartment_values[j_realization, ...] = out_temp.compartments[
                     -1, ...
                 ]
 
+                if compartments is not None:
+                    compartments[j_realization, step_idx:step_right, ...] = (
+                        out_temp.compartments
+                    )
+                if events is not None:
+                    events[j_realization, step_idx:step_right, ...] = out_temp.events
+
                 for k in unknown_params.keys():
-                    if save_trajectories:
+                    if estimated_params is not None:
                         estimated_params[k][j_realization, day_idx:day_right, ...] = (
                             data.get_raw(k)
                         )
@@ -621,6 +658,10 @@ class ParticleFilterSimulator(PipelineSimulator):
         # Calculating the normalized weights from the unnormalized log weights is
         # essentiallty calculating the soft max of the of the log weights, so we
         # borrow a number of techniques here.
+
+        # Shifting the log weights is equivalent to multiplying the non-log weights by a
+        # constant. This helps avoid underflow issues in the non-log weights without
+        # affecting the final normalized output.
         shifted_log_weights = log_weights - np.max(log_weights, keepdims=True)
         underflow_lower_bound = -(10**2)
         clipped_log_weights = np.clip(
@@ -903,11 +944,14 @@ class ForecastSimulator(PipelineSimulator):
                 current_param_values[k][j_realization, ...] = data.get_raw(k)[-1, ...]
 
             if save_trajectories:
-                compartments[j_realization, ...] = out_temp.compartments
-                events[j_realization, ...] = out_temp.events
+                if compartments is not None:
+                    compartments[j_realization, ...] = out_temp.compartments
+                if events is not None:
+                    events[j_realization, ...] = out_temp.events
 
                 for k in unknown_params.keys():
-                    estimated_params[k][j_realization, ...] = data.get_raw(k)
+                    if estimated_params is not None:
+                        estimated_params[k][j_realization, ...] = data.get_raw(k)
 
         return SimpleNamespace(
             rume=rume,
