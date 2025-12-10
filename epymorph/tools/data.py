@@ -129,10 +129,12 @@ def munge(
 
     # Apply selections first so that aggregations operate on less data.
     time_mask = np.repeat(mask(S, time.selection_ticks(taus)), N)
+
     geo_mask = np.tile(geo.selection, S)
 
     # columns are: ["tick", "date", "node", *quantities]
     columns = np.concatenate(([True, True, True], quantity.selection))
+
     data_df = output.dataframe.loc[time_mask & geo_mask].loc[:, columns]
     data_df = data_df.set_axis(["tick", "date", "geo", *data_df.columns[3:]], axis=1)
 
@@ -176,6 +178,7 @@ def munge(
 
         group_defs, group_indices = quantity.grouping.map(quantity.selected)
         group_names = [g.name.full for g in group_defs]
+
         data_df = pd.DataFrame(
             {
                 "tick": data_df["tick"],

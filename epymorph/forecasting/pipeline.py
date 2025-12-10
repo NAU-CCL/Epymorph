@@ -65,6 +65,7 @@ class PipelineOutput:
     compartments: NDArray | None
     events: NDArray | None
     initial: NDArray | None
+    estimated_params: NDArray | None
 
     @property
     def rume(self):
@@ -81,6 +82,7 @@ class PipelineOutput:
     @property
     def initial_values(self):
         return self.simulator.initial_values
+
 
     def to_npz(self, file):
         """
@@ -299,18 +301,18 @@ class ParticleFilterSimulator(PipelineSimulator):
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
 
         # TODO # rume = self._cache_adrios(...)
-        # context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
-        # new_params = {}
-        # for name, param in rume.params.items():
-        #     if isinstance(param, ADRIO):
-        #         new_params[name] = param.with_context_internal(context).evaluate()
-        #     else:
-        #         new_params[name] = param
+        context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+        new_params = {}
+        for name, param in rume.params.items():
+            if isinstance(param, ADRIO):
+                new_params[name] = param.with_context_internal(context).evaluate()
+            else:
+                new_params[name] = param
 
-        new_params_resolver = rume.evaluate_params(rng=rng)
-        new_params = {
-            k.to_pattern(): v for k, v in new_params_resolver.to_dict().items()
-        }
+        # new_params_resolver = rume.evaluate_params(rng=rng)
+        # new_params = {
+        #     k.to_pattern(): v for k, v in new_params_resolver.to_dict().items()
+        # }
 
         rume = dataclasses.replace(
             rume,
@@ -978,6 +980,7 @@ class ForecastSimulator(ParticleFilterSimulator):
             final_compartment_values=output.final_compartment_values,
             final_param_values=output.final_param_values,
             compartments=output.compartments,
+            estimated_params = output.estimated_params,
             events=output.events,
             initial=output.initial,
         )
