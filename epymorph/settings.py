@@ -3,6 +3,7 @@ The module to organize epymorph's configuration settings and related functionali
 """
 
 import os
+from pathlib import Path
 from typing import Callable, Generic, NamedTuple, TypeVar, overload
 from warnings import warn
 
@@ -85,6 +86,91 @@ def env_flag(name: str, default_value: bool | None = None) -> bool | None:
             "Prefer 'true' for True and 'false' for False."
         )
         return default_value
+
+
+@overload
+def env_path(
+    name: str,
+    default_value: Path,
+    *,
+    ensure_exists: bool = False,
+) -> Path: ...
+
+
+@overload
+def env_path(
+    name: str,
+    default_value: None = None,
+    *,
+    ensure_exists: bool = False,
+) -> Path | None: ...
+
+
+def env_path(
+    name: str,
+    default_value: Path | None = None,
+    *,
+    ensure_exists: bool = False,
+) -> Path | None:
+    """
+    Load an environment variable assuming it represents a Path.
+
+    Parameters
+    ----------
+    name :
+        The name of the environment variable to load.
+    default_value :
+        A default value to use in case the variable is not present or can't be
+        interpreted as a Path.
+    ensure_exists :
+        True to attempt to create the Path (as a directory) if it doesn't already exist.
+
+    Returns
+    -------
+    :
+        If the named variable is present and if the value can be interpreted
+        as a Path, return the Path. Else return `default_value`.
+    """
+    value = os.getenv(name)
+    if value is None:
+        path = default_value
+    else:
+        try:
+            path = Path(value)
+        except TypeError:
+            path = default_value
+
+    if path is not None and ensure_exists:
+        path.mkdir(parents=True, exist_ok=True)
+
+    return path
+
+
+def env_path_list(name: str) -> list[Path]:
+    """
+    Load an environment variable assuming it represents a semicolon-separated list of
+    Paths.
+
+    Note: empty string paths will be ignored, since these are likely to be mistakes.
+
+    Parameters
+    ----------
+    name :
+        The name of the environment variable to load.
+
+    Returns
+    -------
+    :
+        If the named variable is present and if the value can be interpreted
+        as a list of Paths, return the Paths. Else return an empty list.
+    """
+    value = os.getenv(name)
+    if value is None:
+        return []
+    try:
+        return [Path(x.strip()) for x in value.split(";") if x.strip() != ""]
+    except TypeError:
+        return []
 
 
 ValueT = TypeVar("ValueT")
