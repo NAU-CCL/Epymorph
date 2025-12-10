@@ -35,7 +35,6 @@ def _eval_context(additional_data: dict[str, NDArray] | None = None):
     scope = CustomScope(list("ABCDE"))
     name = AbsoluteName("gpm:all", "init", "init")
     params = {
-        "label": scope.node_ids,
         "population": _POP,
         "foosball_championships": np.array([2, 4, 1, 9, 6]),
         **(additional_data or {}),
@@ -369,6 +368,27 @@ class TestLabeledInitializer(unittest.TestCase):
                 labels=np.array(["A", "B", "Z"]),
                 seed_size=100,
             ).with_context(*_eval_context()).evaluate()
+
+    def test_labeled_locations_explicit_labels(self):
+        ctx = _eval_context(
+            {
+                "label": np.array(["A1", "B2", "C3", "D4", "E5"]),
+            }
+        )
+        out = (
+            init.LabeledLocations(
+                labels=np.array(["B2", "D4"]),
+                seed_size=100,
+            )
+            .with_context(*ctx)
+            .evaluate()
+        )
+        # Make sure only the selected locations get infected.
+        actual = out[:, 1] > 0
+        expected = np.array([False, True, False, True, False])
+        np.testing.assert_array_equal(actual, expected)
+        # And check for 100 infected in total.
+        self.assertEqual(out[:, 1].sum(), 100)
 
 
 class TestSingleLocationInitializer(unittest.TestCase):

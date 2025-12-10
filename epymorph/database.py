@@ -65,7 +65,6 @@ from epymorph.util import (
     ANSIColor,
     ANSIStyle,
     ansi_stylize,
-    filter_unique,
 )
 
 ############
@@ -110,22 +109,15 @@ class Database(Generic[T]):
     """The data values."""
 
     def __init__(self, data: dict[NamePattern, T]):
-        self._data = data
-
         # Check for key ambiguity:
-        conflicts = filter_unique(
-            [
-                key
-                for key, _ in self._data.items()
-                for other, _ in self._data.items()
-                if key != other and key.match(other)
-            ]
-        )
-
+        conflicts = NamePattern.conflicts(data.keys())
         if len(conflicts) > 0:
-            conflicts = ", ".join(map(str, conflicts))
-            msg = f"Keys in data source are ambiguous; conflicts:\n{conflicts}"
+            msg = (
+                "Keys in data source are ambiguous; conflicts:\n"
+                f"{', '.join(map(str, conflicts))}"
+            )
             raise ValueError(msg)
+        self._data = data
 
     def query(self, key: str | AbsoluteName) -> Match[T] | None:
         """
@@ -149,119 +141,31 @@ class Database(Generic[T]):
                 return Match(pattern, value)
         return None
 
-    def to_dict(self) -> dict[NamePattern, T]:
+    @staticmethod
+    def query_all(
+        dbs: "Sequence[Database[T]]",
+        key: str | AbsoluteName,
+    ) -> Match[T] | None:
         """
-        Return the database's data as a dictionary.
+        Performs a search through a set of databases given in priority order.
+
+        Parameters
+        ----------
+        dbs :
+            The databases to search.
+        key :
+            The name to find. If given as a string, it is first parsed as an
+            `AbsoluteName`.
 
         Returns
         -------
         :
-            A copy of this database's data.
+            The first match, or `None` if the key is not present in any database.
         """
-        return {**self._data}
-
-
-class DatabaseWithFallback(Database[T]):
-    """
-    A specialization of `Database` which has its own key/value pairs as well as a
-    fallback `Database`.
-
-    If a match is not found in this database, the fallback is checked (recursively).
-
-    Parameters
-    ----------
-    data :
-        The highest priority values in the database.
-    fallback :
-        A database containing fallback values; if a match cannot be found
-        in `data`, this database will be checked.
-    """
-
-    _fallback: Database[T]
-    """The fallback."""
-
-    def __init__(self, data: dict[NamePattern, T], fallback: Database[T]):
-        super().__init__(data)
-        self._fallback = fallback
-
-    @override
-    def query(self, key: str | AbsoluteName) -> Match[T] | None:
-        if not isinstance(key, AbsoluteName):
-            key = AbsoluteName.parse(key)
-        # First check "our" data:
-        matched = super().query(key)
-        # Otherwise check fallback data:
-        if matched is None:
-            matched = self._fallback.query(key)
-        return matched
-
-    @override
-    def to_dict(self) -> dict[NamePattern, T]:
-        def is_overridden(fb_key: NamePattern) -> bool:
-            for override_key in self._data.keys():
-                if override_key.match(fb_key):
-                    return True
-            return False
-
-        results = {
-            fb_key: fb_value
-            for fb_key, fb_value in self._fallback.to_dict().items()
-            if not is_overridden(fb_key)
-        }
-        results.update(self._data)
-        return results
-
-
-class DatabaseWithStrataFallback(Database[T]):
-    """
-    A specialization of `Database` which has per-strata fallback databases.
-
-    For example consider querying this database for "a::b::c". If there is no match in
-    this database but there is a fallback for strata "a", the search proceeds to that
-    database (which could continue recursively).
-
-    Parameters
-    ----------
-    data :
-        The highest-priority values in the database.
-    children :
-        Fallback databases by strata.
-    """
-
-    _children: dict[str, Database[T]]
-    """The fallbacks by strata name."""
-
-    def __init__(self, data: dict[NamePattern, T], children: dict[str, Database[T]]):
-        super().__init__(data)
-        self._children = children
-
-    @override
-    def query(self, key: str | AbsoluteName) -> Match[T] | None:
-        if not isinstance(key, AbsoluteName):
-            key = AbsoluteName.parse(key)
-        # First check "our" data:
-        matched = super().query(key)
-        # Otherwise check strata fallback for match:
-        if matched is None and (db := self._children.get(key.strata)) is not None:
-            matched = db.query(key)
-        return matched
-
-    @override
-    def to_dict(self) -> dict[NamePattern, T]:
-        def is_overridden(fb_key: NamePattern) -> bool:
-            for override_key in self._data.keys():
-                if override_key.match(fb_key):
-                    return True
-            return False
-
-        results = {
-            fb_key: fb_value
-            for strata_db in self._children.values()
-            for fb_key, fb_value in strata_db.to_dict().items()
-            if not is_overridden(fb_key)
-        }
-        results.update(self._data)
-        return results
+        for db in dbs:
+            if (match := db.query(key)) is not None:
+                return match
+        return None
 
 
 ############
@@ -899,7 +803,7 @@ class ReqTree(Generic[V]):
     @staticmethod
     def of(
         requirements: Mapping[AbsoluteName, AttributeDef],
-        params: Database[V],
+        params: Database[V] | Sequence[Database[V]],
     ) -> "ReqTree":
         """
         Compute the requirements tree for the given set of requirements and a database
@@ -911,8 +815,7 @@ class ReqTree(Generic[V]):
         requirements :
             The top-level requirements of the tree.
         params :
-            The database of values, where each value may be recursive in the sense of
-            having its own data requirements.
+            The database of values, or a sequence of databases in priority order.
 
         Returns
         -------
@@ -925,6 +828,8 @@ class ReqTree(Generic[V]):
             If the tree cannot be evaluated, for instance, due to it containing
             circular dependencies.
         """
+        if isinstance(params, Database):
+            params = [params]
 
         def recurse(
             name: AbsoluteName,
@@ -935,7 +840,7 @@ class ReqTree(Generic[V]):
                 err = f"Circular dependency in evaluation of parameter {name}"
                 raise DataAttributeError(err)
 
-            if (val_match := params.query(name)) is not None:
+            if (val_match := Database.query_all(params, name)) is not None:
                 # User provided a parameter value to use.
                 pattern, value = val_match
                 if is_recursive_value(value):

@@ -19,14 +19,7 @@ from epymorph.attribute import (
     NamePattern,
 )
 from epymorph.data_shape import Dimensions, Shapes
-from epymorph.database import (
-    Database,
-    DatabaseWithFallback,
-    DatabaseWithStrataFallback,
-    DataResolver,
-    Match,
-    ReqTree,
-)
+from epymorph.database import Database, DataResolver, Match, ReqTree
 from epymorph.error import DataAttributeError, DataAttributeErrorGroup
 from epymorph.geography.scope import GeoScope
 from epymorph.params import ParamFunction, ParamFunctionTimeAndNode
@@ -381,9 +374,17 @@ class DatabaseTest(_DatabaseTestCase):
         self.assertIn("ambiguous", str(e.exception))
 
 
-class DatabaseWithFallbackTest(_DatabaseTestCase):
+class DatabaseQueryAllTest(_DatabaseTestCase):
     def test_basic_usage(self):
-        fallback = Database[int](
+        primary = Database[int](
+            {
+                NamePattern("gpm:1", "ipm", "beta"): 11,
+                NamePattern("gpm:2", "*", "beta"): 44,
+                NamePattern("gpm:3", "*", "*"): 55,
+            }
+        )
+
+        secondary = Database[int](
             {
                 NamePattern("gpm:1", "ipm", "beta"): 1,
                 NamePattern("*", "ipm", "delta"): 2,
@@ -393,74 +394,20 @@ class DatabaseWithFallbackTest(_DatabaseTestCase):
             }
         )
 
-        db = DatabaseWithFallback(
-            {
-                NamePattern("gpm:1", "ipm", "beta"): 11,
-                NamePattern("gpm:2", "*", "beta"): 44,
-                NamePattern("gpm:3", "*", "*"): 55,
-            },
-            fallback,
-        )
+        db = [primary, secondary]
 
-        self.assert_match(11, db.query("gpm:1::ipm::beta"))
-        self.assert_match(44, db.query("gpm:2::ipm::beta"))
+        self.assert_match(11, Database.query_all(db, "gpm:1::ipm::beta"))
+        self.assert_match(44, Database.query_all(db, "gpm:2::ipm::beta"))
 
-        self.assert_match(55, db.query("gpm:3::ipm::beta"))
-        self.assert_match(55, db.query("gpm:3::init::alpha"))
-        self.assert_match(55, db.query("gpm:3::foo::bar"))
+        self.assert_match(55, Database.query_all(db, "gpm:3::ipm::beta"))
+        self.assert_match(55, Database.query_all(db, "gpm:3::init::alpha"))
+        self.assert_match(55, Database.query_all(db, "gpm:3::foo::bar"))
 
-        self.assert_match(2, db.query("gpm:1::ipm::delta"))
-        self.assert_match(2, db.query("gpm:2::ipm::delta"))
-        self.assert_match(55, db.query("gpm:3::ipm::delta"))
+        self.assert_match(2, Database.query_all(db, "gpm:1::ipm::delta"))
+        self.assert_match(2, Database.query_all(db, "gpm:2::ipm::delta"))
+        self.assert_match(55, Database.query_all(db, "gpm:3::ipm::delta"))
 
-        self.assertIsNone(db.query("gpm:1::init::alpha"))
-
-
-class DatabaseWithStrataFallbackTest(_DatabaseTestCase):
-    def test_basic_usage(self):
-        strata1 = Database[int](
-            {
-                NamePattern("gpm:1", "ipm", "beta"): 1,
-                NamePattern("gpm:1", "ipm", "delta"): 2,
-            }
-        )
-
-        strata2 = Database[int](
-            {
-                NamePattern("gpm:2", "ipm", "beta"): 3,
-                NamePattern("gpm:2", "ipm", "delta"): 4,
-            }
-        )
-
-        strata3 = Database[int](
-            {
-                NamePattern("gpm:3", "ipm", "beta"): 5,
-                NamePattern("gpm:3", "ipm", "delta"): 6,
-            }
-        )
-
-        db = DatabaseWithStrataFallback(
-            {
-                NamePattern("gpm:1", "ipm", "beta"): 11,
-                NamePattern("gpm:2", "ipm", "beta"): 33,
-                NamePattern("gpm:3", "*", "*"): 55,
-            },
-            {
-                "gpm:1": strata1,
-                "gpm:2": strata2,
-                "gpm:3": strata3,
-            },
-        )
-
-        self.assert_match(11, db.query("gpm:1::ipm::beta"))
-        self.assert_match(33, db.query("gpm:2::ipm::beta"))
-        self.assert_match(55, db.query("gpm:3::ipm::beta"))
-
-        self.assert_match(2, db.query("gpm:1::ipm::delta"))
-        self.assert_match(4, db.query("gpm:2::ipm::delta"))
-        self.assert_match(55, db.query("gpm:3::ipm::delta"))
-
-        self.assertIsNone(db.query("gpm1::init::population"))
+        self.assertIsNone(Database.query_all(db, "gpm:1::init::alpha"))
 
 
 AD = AttributeDef
