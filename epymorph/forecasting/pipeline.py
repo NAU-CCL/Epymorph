@@ -114,20 +114,6 @@ class PipelineOutput:
     def initial_values(self):
         return self.simulator.initial_values
 
-    def to_npz(self, file):
-        """
-        Saves the compartment and parameter values as numpy arrays in a .npz file. Note
-        that other information, such as the RUME and the parameter dynamics, are not
-        stored and will need to be provided separately upon loading.
-        """
-        param_names = np.array([str(k) for k in self.final_param_values.keys()])
-        np.savez(
-            file,
-            final_compartment_values=self.final_compartment_values,
-            param_names=param_names,
-            **{str(k): v for k, v in self.final_param_values.items()},
-        )
-
 
 class PipelineConfig:
     rume: RUME
@@ -182,38 +168,6 @@ class FromOutput(PipelineConfig):
         self.unknown_params = {
             k: UnknownParam(prior=output.final_param_values[k], dynamics=v.dynamics)
             for k, v in output.unknown_params.items()
-        }
-        for k, v in override_dynamics.items():
-            name = NamePattern.of(k)
-            self.unknown_params[name] = UnknownParam(
-                prior=self.unknown_params[name].prior, dynamics=v
-            )
-
-
-class FromNPZ(PipelineConfig):
-    def __init__(
-        self, file, rume, unknown_params, extend_duration, override_dynamics={}
-    ):
-        data = np.load(file)
-        final_compartment_values = data["final_compartment_values"]
-        final_param_values = {
-            NamePattern.of(name): data[name] for name in data["param_names"]
-        }
-        data.close()
-
-        num_realizations = final_compartment_values.shape[0]
-
-        override_dynamics = {NamePattern.of(k): v for k, v in override_dynamics.items()}
-        new_time_frame = TimeFrame.of(
-            start_date=rume.time_frame.end_date + datetime.timedelta(1),
-            duration_days=extend_duration,
-        )
-        self.rume = replace(rume, time_frame=new_time_frame)
-        self.num_realizations = num_realizations
-        self.initial_values = final_compartment_values
-        self.unknown_params = {
-            k: UnknownParam(prior=final_param_values[k], dynamics=v.dynamics)
-            for k, v in unknown_params.items()
         }
         for k, v in override_dynamics.items():
             name = NamePattern.of(k)
