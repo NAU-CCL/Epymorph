@@ -116,17 +116,62 @@ class PipelineOutput:
 
 
 class PipelineConfig:
+    """
+    Contains the basic information needed to initialize a PipelineSimulator in order to
+    facilitate running a pipeline. Some simulators may require additional information.
+    """
+
     rume: RUME
+    """
+    The RUME used by the simulator.
+    """
+
     num_realizations: int
+    """
+    The number of realizations of the simulator.
+    """
+
     initial_values: NDArray | None
+    """
+    The optional array of initial compartment values of the simulator. It has shape
+    (R, N, C) where R is the number of realizations, N is the number of nodes,
+    and C is the number of compartments.
+    """
+
     unknown_params: Mapping[NamePattern, UnknownParam]
+    """
+    The dictionary of unknown paramters of the simulator.
+    """
 
 
 class PipelineSimulator:
+    """
+    A base class for multi-realization simulations.
+    """
+
     rume: RUME
+    """
+    The RUME containing the IPM, MM, scope, time_frame, and the fixed params for each
+    realization.
+    """
+
     num_realizations: int
+    """
+    The number of realzations.
+    """
+
     initial_values: NDArray | None
+    """
+    An optional array of initial compartment values of shape (R, N, C) where R is the
+    number of realizations, N is the number of nodes, and C is the number of
+    compartments. If not specified, the initializer contained in the RUME will be used
+    to generate a single initial condition which will be used for all realizations.
+    """
+
     unknown_params: Mapping[NamePattern, UnknownParam]
+    """
+    An array of unknown parameters which will vary across realizations.
+    """
 
     @abstractmethod
     def run(self, rng: np.random.Generator) -> PipelineOutput:
@@ -137,8 +182,24 @@ class PipelineSimulator:
 
 @dataclass(frozen=True)
 class ParticleFilterOutput(PipelineOutput):
+    """
+    Output object for the particle filter which contains additional output and
+    diagnostic information.
+    """
+
     posterior_values: NDArray | None
+    """
+    The posterior estimate of the observed data. The first dimension of the array is the
+    number of realizations, the second dimension is the number of observations. The
+    remaining dimensions depend on the shape of the observed data. These values are
+    constructed from resampling the observed data in the same way the compartment and
+    parameter values are resampled.
+    """
+
     effective_sample_size: NDArray | None
+    """
+    The effective sample size for each observation and each node.
+    """
 
 
 class FromRUME(PipelineConfig):
