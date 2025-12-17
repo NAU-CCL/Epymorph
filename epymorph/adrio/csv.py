@@ -489,6 +489,7 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
             values="data",
             fill_value=0,
             aggfunc="first",  # Other aggfunc's may change the dtype.
+            dropna=False,
         )
         missing = work_df.assign(data=work_df["data"].isna()).pivot_table(
             index="time", columns="key", values="data", aggfunc="first"
