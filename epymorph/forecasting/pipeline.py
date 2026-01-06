@@ -22,6 +22,8 @@ from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import Dim, TimeFrame, TimeStrategy
 from epymorph.tools.data import munge
 
+from tqdm import tqdm
+
 
 @dataclass(frozen=True)
 class UnknownParam:
@@ -376,136 +378,138 @@ class ParticleFilterSimulator(PipelineSimulator):
 
         day_idx = 0
         step_idx = 0
-        for i_observation in range(len(time_frames)):
-            time_frame = time_frames[i_observation]
 
-            day_right = day_idx + time_frame.days
-            step_right = step_idx + time_frame.days * rume.num_tau_steps
+        with tqdm(total=len(time_frames), bar_format="{postfix[1]} | {desc}: {percentage:.2f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+          postfix=["", ""]) as t:
+            for i_observation in range(len(time_frames)):
+                time_frame = time_frames[i_observation]
 
-            # TODO # self._get_current_observation(...)
-            # time_key = observations_df.keys()[0]
-            # geo_key = observations_df.keys()[1]
+                day_right = day_idx + time_frame.days
+                step_right = step_idx + time_frame.days * rume.num_tau_steps
 
-            start = np.datetime64(time_frame.start_date.isoformat())
-            end = np.datetime64(time_frame.end_date.isoformat())
-            observation_array = observations_array[
-                (observations_array["date"][:, 0] >= start)
-                & (observations_array["date"][:, 0] <= end),
-                :,
-            ]
+                # TODO # self._get_current_observation(...)
+                # time_key = observations_df.keys()[0]
+                # geo_key = observations_df.keys()[1]
 
-            print(  # noqa: T201
-                (
-                    f"Observation: {i_observation}, "
-                    f"Label: {labels[i_observation]}, "
-                    f"Time Frame: {time_frame}, "
-                )
-            )
-
-            current_predictions = []
-            weights = np.zeros(num_realizations, dtype=np.float64)
-            log_weights_by_node = np.zeros(
-                (num_realizations, N), dtype=np.float64
-            )  # TODO
-            for j_realization in range(num_realizations):
-                rume_temp, data = self._create_sim_rume(
-                    rume,
-                    j_realization,
-                    unknown_params,
-                    current_param_values,
-                    current_compartment_values,
-                    time_frame,
-                    rng,
-                )
-
-                sim = BasicSimulator(rume_temp)
-                out_temp = sim.run(rng_factory=lambda: rng)
-
-                temp_time_agg = out_temp.rume.time_frame.select.all().agg()
-
-                new_time_agg = dataclasses.replace(
-                    temp_time_agg,
-                    aggregation=observations.model_link.time.aggregation,
-                )
-
-                predicted_df = munge(
-                    out_temp,
-                    geo=observations.model_link.geo,
-                    time=new_time_agg,
-                    quantity=observations.model_link.quantity,
-                )
-
-                prediction = predicted_df.drop(["geo", "time"], axis=1)
-
-                current_predictions.append(prediction.to_numpy())
-
-                if observation_array.size > 0:
-                    node_log_likelihoods = observations.likelihood.compute_log(
-                        observation_array["value"][0, :],
-                        prediction.to_numpy()[:, 0],
-                    )
-                else:
-                    node_log_likelihoods = np.zeros(N)
-
-                log_weights_by_node[j_realization, ...] = node_log_likelihoods
-
-                if save_trajectories:
-                    compartments[j_realization, step_idx:step_right, ...] = (
-                        out_temp.compartments
-                    )
-                    events[j_realization, step_idx:step_right, ...] = out_temp.events
-                    current_compartment_values[j_realization, ...] = (
-                        out_temp.compartments[-1, ...]
-                    )
-
-                for k in unknown_params.keys():
-                    if save_trajectories:
-                        estimated_params[k][j_realization, day_idx:day_right, ...] = (
-                            data.get_raw(k)
-                        )
-                    current_param_values[k][j_realization, ...] = data.get_raw(k)[
-                        -1, ...
-                    ]
-
-            predicted_values.append(np.array(current_predictions))
-
-            posterior_value = predicted_values[-1].copy()
-
-            # Hard code localization
-            for i_node in range(N):
-                if (
-                    observation_array.size > 0
-                    and np.ma.is_masked(observation_array["value"])
-                    and observation_array.mask["value"][0, i_node]
-                ):
-                    weights = 1 / num_realizations * np.ones((num_realizations,))
-                else:
-                    weights = self._normalize_log_weights(
-                        log_weights_by_node[..., i_node]
-                    )
-                orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
-                resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
-                current_compartment_values[orig_idx, i_node, ...] = (
-                    current_compartment_values[resampled_idx, i_node, ...]
-                )
-                for k in current_param_values.keys():
-                    current_param_values[k][orig_idx, i_node] = current_param_values[k][
-                        resampled_idx, i_node
-                    ]
-
-                posterior_value[orig_idx, i_node, ...] = posterior_value[
-                    resampled_idx, i_node, ...
+                start = np.datetime64(time_frame.start_date.isoformat())
+                end = np.datetime64(time_frame.end_date.isoformat())
+                observation_array = observations_array[
+                    (observations_array["date"][:, 0] >= start)
+                    & (observations_array["date"][:, 0] <= end),
+                    :,
                 ]
 
-                resampling_indices[:, i_observation, i_node] = resampled_idx[:, 0]
+                t.postfix[1] = (
+                    f"Observation: {i_observation} | "
+                    f"Label {labels[i_observation]} | "
+                    f"Time Frame {time_frame}"
+                )
+                t.update()
 
-            posterior_values.append(posterior_value)
+                current_predictions = []
+                weights = np.zeros(num_realizations, dtype=np.float64)
+                log_weights_by_node = np.zeros(
+                    (num_realizations, N), dtype=np.float64
+                )  # TODO
+                for j_realization in range(num_realizations):
+                    rume_temp, data = self._create_sim_rume(
+                        rume,
+                        j_realization,
+                        unknown_params,
+                        current_param_values,
+                        current_compartment_values,
+                        time_frame,
+                        rng,
+                    )
 
-            resampling_steps[i_observation] = step_right
-            resampling_days[i_observation] = day_right
+                    sim = BasicSimulator(rume_temp)
+                    out_temp = sim.run(rng_factory=lambda: rng)
 
-            day_idx = day_right
-            step_idx = step_right
+                    temp_time_agg = out_temp.rume.time_frame.select.all().agg()
+
+                    new_time_agg = dataclasses.replace(
+                        temp_time_agg,
+                        aggregation=observations.model_link.time.aggregation,
+                    )
+
+                    predicted_df = munge(
+                        out_temp,
+                        geo=observations.model_link.geo,
+                        time=new_time_agg,
+                        quantity=observations.model_link.quantity,
+                    )
+
+                    prediction = predicted_df.drop(["geo", "time"], axis=1)
+
+                    current_predictions.append(prediction.to_numpy())
+
+                    if observation_array.size > 0:
+                        node_log_likelihoods = observations.likelihood.compute_log(
+                            observation_array["value"][0, :],
+                            prediction.to_numpy()[:, 0],
+                        )
+                    else:
+                        node_log_likelihoods = np.zeros(N)
+
+                    log_weights_by_node[j_realization, ...] = node_log_likelihoods
+
+                    if save_trajectories:
+                        compartments[j_realization, step_idx:step_right, ...] = (
+                            out_temp.compartments
+                        )
+                        events[j_realization, step_idx:step_right, ...] = out_temp.events
+                        current_compartment_values[j_realization, ...] = (
+                            out_temp.compartments[-1, ...]
+                        )
+
+                    for k in unknown_params.keys():
+                        if save_trajectories:
+                            estimated_params[k][j_realization, day_idx:day_right, ...] = (
+                                data.get_raw(k)
+                            )
+                        current_param_values[k][j_realization, ...] = data.get_raw(k)[
+                            -1, ...
+                        ]
+
+                predicted_values.append(np.array(current_predictions))
+
+                posterior_value = predicted_values[-1].copy()
+
+                # Hard code localization
+                for i_node in range(N):
+                    if (
+                        observation_array.size > 0
+                        and np.ma.is_masked(observation_array["value"])
+                        and observation_array.mask["value"][0, i_node]
+                    ):
+                        weights = 1 / num_realizations * np.ones((num_realizations,))
+                    else:
+                        weights = self._normalize_log_weights(
+                            log_weights_by_node[..., i_node]
+                        )
+                    orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
+                    resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
+                    current_compartment_values[orig_idx, i_node, ...] = (
+                        current_compartment_values[resampled_idx, i_node, ...]
+                    )
+                    for k in current_param_values.keys():
+                        current_param_values[k][orig_idx, i_node] = current_param_values[k][
+                            resampled_idx, i_node
+                        ]
+
+                    posterior_value[orig_idx, i_node, ...] = posterior_value[
+                        resampled_idx, i_node, ...
+                    ]
+
+                    resampling_indices[:, i_observation, i_node] = resampled_idx[:, 0]
+
+                posterior_values.append(posterior_value)
+
+                resampling_steps[i_observation] = step_right
+                resampling_days[i_observation] = day_right
+
+                day_idx = day_right
+                step_idx = step_right
 
         return SimpleNamespace(
             rume=rume,
