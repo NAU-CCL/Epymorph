@@ -200,7 +200,7 @@ class InfluenzaStateHospitalizationDaily(
     The data loaded will be matched to the simulation time frame. The result is a 2D matrix
     where the first axis represents reporting days during the time frame and the
     second axis is geo scope nodes. Values are tuples of date and the integer number of
-    reported data. 
+    reported data.
 
     Parameters
     ----------
@@ -233,8 +233,7 @@ class InfluenzaStateHospitalizationDaily(
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
         if not ((column == "admissions") or (column == "hospitalizations")):
-            raise ValueError("Invalid value for column. " \
-            "Supported values are admissions and hospitalizations.")
+            raise ValueError("Invalid value for column. Supported values are admissions and hospitalizations.")
         
         self._column_name = column
 
