@@ -149,7 +149,7 @@ class _HealthdataG62hSyehMixin(FetchADRIO[DateValueType, np.int64]):
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="g62h-syeh")
     """The Socrata API endpoint."""
 
-    _TIME_RANGE = DateRange(iso8601("2020-01-01"), iso8601("2024-04-03"), step=1)
+    _TIME_RANGE = DateRange(iso8601("2020-1-01"), iso8601("2024-04-03"), step=1)
     """The time range over which values are available."""
 
     _REDACTED_VALUE = np.int64(-999999)
@@ -183,6 +183,7 @@ class _HealthdataG62hSyehMixin(FetchADRIO[DateValueType, np.int64]):
             validate_dtype(self.result_format.dtype),
             on_date_values(validate_values_in_range(0, None)),
         )
+
 
 @adrio_cache
 class InfluenzaStateHospitalizationDaily(
