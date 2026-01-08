@@ -199,14 +199,23 @@ class InfluenzaStateHospitalizationDaily(
     The data loaded will be matched to the simulation time frame. The result is a 2D matrix
     where the first axis represents reporting days during the time frame and the
     second axis is geo scope nodes. Values are tuples of date and the integer number of
-    reported hospitalizations. 
+    reported data. 
+
+    Parameters
+    ----------
+    column :
+        Which column to fetch data from. 
+        Supported columns are 'previous_day_admission_influenza_confirmed' and 'total_patients_hospitalized_confirmed_influenza'.
+        To select these columns set this parameter to 'admissions' and 'hospitalizations' respectively. 
+
+    fix_missing :
+        The method to use to fix missing values.
 
     See Also
     --------
     [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/g62h-syeh/about_data).
     """  # noqa: E501
 
-    _fix_redacted: Fix[np.int64]
     _fix_missing: Fill[np.int64]
     _ADMISSIONS = "previous_day_admission_influenza_confirmed"
     _HOSPITALIZATIONS = "total_patients_hospitalized_confirmed_influenza"
@@ -215,14 +224,9 @@ class InfluenzaStateHospitalizationDaily(
     def __init__(
         self,
         *,
-        fix_redacted: FixLikeInt = False,
         fix_missing: FillLikeInt = False,
         column: str
     ):
-        try:
-            self._fix_redacted = Fix.of_int64(fix_redacted)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_redacted`")
         try:
             self._fix_missing = Fill.of_int64(fix_missing)
         except ValueError:
@@ -291,11 +295,6 @@ class InfluenzaStateHospitalizationDaily(
                 ndims=2,
                 dtype=self.result_format.dtype["value"].type,
                 rng=context,
-            )
-            .strip_sentinel(
-                "redacted",
-                self._REDACTED_VALUE,
-                self._fix_redacted,
             )
             .finalize(self._fix_missing)
         )
