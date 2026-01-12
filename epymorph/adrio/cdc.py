@@ -149,7 +149,7 @@ class _HealthdataG62hSyehMixin(FetchADRIO[DateValueType, np.int64]):
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="g62h-syeh")
     """The Socrata API endpoint."""
 
-    _TIME_RANGE = DateRange(iso8601("2020-01-01"), iso8601("2024-04-27"), step=1)
+    _TIME_RANGE = DateRange(iso8601("2021-10-21"), iso8601("2024-04-27"), step=1)
     """The time range over which values are available."""
 
     @property
@@ -186,11 +186,12 @@ class InfluenzaStateHospitalizationDaily(
     """
     Loads influenza hospitalization data from HealthData.gov's
     "COVID-19 Reported Patient Impact and Hospital Capacity by State Timeseries(RAW)"
-    dataset. The data were reported by healthcare facilities on a daily basis and aggregated to the state level,
-    starting 2020-1-01 and ending 2024-04-3, although the data is not complete
-    over this entire range, nor over the entire United States.
+    dataset. The data were reported by healthcare facilities on a daily basis and aggregated to the state level.
+    As states trickled into the dataset over the course of 2020 and 2021 we are currently restricting the ADRIO
+    to the time range between 2021-10-21 and the last day of mandatory reporting 2024-04-27. There should be no
+    redacted data or NaNs in this dataset between these dates.
 
-    This ADRIO supports geo scopes at US State granularity in 2019.
+    This ADRIO supports geo scopes at US State granularity.
     The data loaded will be matched to the simulation time frame. The result is a 2D matrix
     where the first axis represents reporting days during the time frame and the
     second axis is geo scope nodes. Values are tuples of date and the integer number of
@@ -203,15 +204,12 @@ class InfluenzaStateHospitalizationDaily(
         Supported columns are 'previous_day_admission_influenza_confirmed' and 'total_patients_hospitalized_confirmed_influenza'.
         To select these columns set this parameter to 'admissions' and 'hospitalizations' respectively.
 
-    fix_missing :
-        The method to use to fix missing values.
-
     See Also
     --------
     [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/g62h-syeh/about_data).
     """  # noqa: E501
 
-    _fix_missing: Fill[np.int64]
+    _fix_missing = Fill.of_int64(False)
     _ADMISSIONS = "previous_day_admission_influenza_confirmed"
     _HOSPITALIZATIONS = "total_patients_hospitalized_confirmed_influenza"
     _column_name: Literal["admissions","hospitalizations"]
@@ -219,13 +217,8 @@ class InfluenzaStateHospitalizationDaily(
     def __init__(
         self,
         *,
-        fix_missing: FillLikeInt = False,
         column: str
     ):
-        try:
-            self._fix_missing = Fill.of_int64(fix_missing)
-        except ValueError:
-            raise ValueError("Invalid value for `fix_missing`")
         if column not in ("admissions","hospitalizations"):
             raise ValueError(("Invalid value for column. Supported values are "
             "admissions and hospitalizations."))
@@ -288,8 +281,7 @@ class InfluenzaStateHospitalizationDaily(
                 ndims=2,
                 dtype=self.result_format.dtype["value"].type,
                 rng=context,
-            )
-            .finalize(self._fix_missing)
+            ).finalize(self._fix_missing)
         )
         return pipeline(data_df).to_date_value(time_series)
 
