@@ -149,11 +149,8 @@ class _HealthdataG62hSyehMixin(FetchADRIO[DateValueType, np.int64]):
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="g62h-syeh")
     """The Socrata API endpoint."""
 
-    _TIME_RANGE = DateRange(iso8601("2020-01-01"), iso8601("2024-04-03"), step=1)
+    _TIME_RANGE = DateRange(iso8601("2020-01-01"), iso8601("2024-04-27"), step=1)
     """The time range over which values are available."""
-
-    _REDACTED_VALUE = np.int64(-999999)
-    """The value of redacted reports: between 1 and 3 cases."""
 
     @property
     @override
@@ -164,9 +161,6 @@ class _HealthdataG62hSyehMixin(FetchADRIO[DateValueType, np.int64]):
     def validate_context(self, context: Context):
         if not isinstance(context.scope, StateScope):
             err = "US State geo scope required."
-            raise ADRIOContextError(self, context, err)
-        if context.scope.year != 2019:
-            err = "This data supports 2019 Census geography only."
             raise ADRIOContextError(self, context, err)
         validate_time_frame(self, context, self._TIME_RANGE)
 
@@ -220,7 +214,7 @@ class InfluenzaStateHospitalizationDaily(
     _fix_missing: Fill[np.int64]
     _ADMISSIONS = "previous_day_admission_influenza_confirmed"
     _HOSPITALIZATIONS = "total_patients_hospitalized_confirmed_influenza"
-    _column_name: str
+    _column_name: Literal["admissions","hospitalizations"]
 
     def __init__(
         self,
@@ -232,7 +226,7 @@ class InfluenzaStateHospitalizationDaily(
             self._fix_missing = Fill.of_int64(fix_missing)
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
-        if not ((column == "admissions") or (column == "hospitalizations")):
+        if column not in ("admissions","hospitalizations"):
             raise ValueError(("Invalid value for column. Supported values are "
             "admissions and hospitalizations."))
         self._column_name = column
