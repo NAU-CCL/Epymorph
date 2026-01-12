@@ -205,9 +205,9 @@ class InfluenzaStateHospitalizationDaily(
     Parameters
     ----------
     column :
-        Which column to fetch data from. 
+        Which column to fetch data from.
         Supported columns are 'previous_day_admission_influenza_confirmed' and 'total_patients_hospitalized_confirmed_influenza'.
-        To select these columns set this parameter to 'admissions' and 'hospitalizations' respectively. 
+        To select these columns set this parameter to 'admissions' and 'hospitalizations' respectively.
 
     fix_missing :
         The method to use to fix missing values.
@@ -233,8 +233,8 @@ class InfluenzaStateHospitalizationDaily(
         except ValueError:
             raise ValueError("Invalid value for `fix_missing`")
         if not ((column == "admissions") or (column == "hospitalizations")):
-            raise ValueError("Invalid value for column. Supported values are admissions and hospitalizations.")
-        
+            raise ValueError(("Invalid value for column. Supported values are "
+            "admissions and hospitalizations."))
         self._column_name = column
 
     @override
@@ -245,10 +245,9 @@ class InfluenzaStateHospitalizationDaily(
                 values = [q.Select(self._ADMISSIONS, "int", as_name="value")]
             case "hospitalizations":
                 values = [q.Select(self._HOSPITALIZATIONS, "int", as_name="value")]
-            case x: 
+            case x:
                 raise ValueError(f"Unsupported `column_name`: {x}")
 
-            
         query = q.Query(
             select=(
                 q.Select("date", "date", as_name="date"),
