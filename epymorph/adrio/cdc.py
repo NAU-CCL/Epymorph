@@ -238,7 +238,8 @@ class InfluenzaStateHospitalizationDaily(
             case "admissions":
                 values = [q.Select(self._ADMISSIONS, "nullable_int", as_name="value")]
             case "hospitalizations":
-                values = [q.Select(self._HOSPITALIZATIONS, "nullable_int", as_name="value")]
+                values = [q.Select(self._HOSPITALIZATIONS, "nullable_int",
+                                   as_name="value")]
             case x:
                 raise ValueError(f"Unsupported `column_name`: {x}")
 
