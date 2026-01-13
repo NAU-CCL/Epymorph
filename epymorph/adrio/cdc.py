@@ -187,8 +187,8 @@ class InfluenzaStateHospitalizationDaily(
     Loads influenza hospitalization data from HealthData.gov's
     "COVID-19 Reported Patient Impact and Hospital Capacity by State Timeseries(RAW)"
     dataset. The data were reported by healthcare facilities on a daily basis and aggregated to the state level
-    by the CDC. This ADRIO is restricted to the date range 2020-10-21 and 2024-04-27 which is the last day of
-    reporting for this dataset.
+    by the CDC. This ADRIO is restricted to the date range 2020-01-01 and 2024-04-27 which is the last day of
+    reporting for this dataset. Note that before the date 2020-10-21 there was highly inconsistent reporting.
 
     This ADRIO supports geo scopes at US State granularity.
     The data loaded will be matched to the simulation time frame. The result is a 2D matrix
@@ -202,6 +202,9 @@ class InfluenzaStateHospitalizationDaily(
         Which column to fetch data from.
         Supported columns are 'previous_day_admission_influenza_confirmed' and 'total_patients_hospitalized_confirmed_influenza'.
         To select these columns set this parameter to 'admissions' and 'hospitalizations' respectively.
+
+    fix_missing :
+        The method to use to fix missing values.
 
     See Also
     --------
@@ -233,9 +236,9 @@ class InfluenzaStateHospitalizationDaily(
 
         match self._column_name:
             case "admissions":
-                values = [q.Select(self._ADMISSIONS, "int", as_name="value")]
+                values = [q.Select(self._ADMISSIONS, "nullable_int", as_name="value")]
             case "hospitalizations":
-                values = [q.Select(self._HOSPITALIZATIONS, "int", as_name="value")]
+                values = [q.Select(self._HOSPITALIZATIONS, "nullable_int", as_name="value")]
             case x:
                 raise ValueError(f"Unsupported `column_name`: {x}")
 
@@ -288,6 +291,7 @@ class InfluenzaStateHospitalizationDaily(
             ).finalize(self._fix_missing)
         )
         return pipeline(data_df).to_date_value(time_series)
+
 
 @adrio_cache
 class COVIDFacilityHospitalization(
