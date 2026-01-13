@@ -149,7 +149,7 @@ class _HealthdataG62hSyehMixin(FetchADRIO[DateValueType, np.int64]):
     _RESOURCE = q.SocrataResource(domain="healthdata.gov", id="g62h-syeh")
     """The Socrata API endpoint."""
 
-    _TIME_RANGE = DateRange(iso8601("2021-10-21"), iso8601("2024-04-27"), step=1)
+    _TIME_RANGE = DateRange(iso8601("2020-10-21"), iso8601("2024-04-27"), step=1)
     """The time range over which values are available."""
 
     @property
@@ -186,10 +186,9 @@ class InfluenzaStateHospitalizationDaily(
     """
     Loads influenza hospitalization data from HealthData.gov's
     "COVID-19 Reported Patient Impact and Hospital Capacity by State Timeseries(RAW)"
-    dataset. The data were reported by healthcare facilities on a daily basis and aggregated to the state level.
-    As states trickled into the dataset over the course of 2020 and 2021 we are currently restricting the ADRIO
-    to the time range between 2021-10-21 and the last day of mandatory reporting 2024-04-27. There should be no
-    redacted data or NaNs in this dataset between these dates.
+    dataset. The data were reported by healthcare facilities on a daily basis and aggregated to the state level
+    by the CDC. This ADRIO is restricted to the date range 2020-10-21 and 2024-04-27 which is the last day of
+    reporting for this dataset.
 
     This ADRIO supports geo scopes at US State granularity.
     The data loaded will be matched to the simulation time frame. The result is a 2D matrix
@@ -209,7 +208,7 @@ class InfluenzaStateHospitalizationDaily(
     [The dataset documentation](https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/g62h-syeh/about_data).
     """  # noqa: E501
 
-    _fix_missing = Fill.of_int64(False)
+    _fix_missing: Fill[np.int64]
     _ADMISSIONS = "previous_day_admission_influenza_confirmed"
     _HOSPITALIZATIONS = "total_patients_hospitalized_confirmed_influenza"
     _column_name: Literal["admissions","hospitalizations"]
@@ -217,12 +216,17 @@ class InfluenzaStateHospitalizationDaily(
     def __init__(
         self,
         *,
-        column: str
+        column: Literal["admissions","hospitalizations"],
+        fix_missing: FillLikeInt = False
     ):
         if column not in ("admissions","hospitalizations"):
             raise ValueError(("Invalid value for column. Supported values are "
             "admissions and hospitalizations."))
         self._column_name = column
+        try:
+            self._fix_missing = Fill.of_int64(fix_missing)
+        except ValueError:
+            raise ValueError("Invalid value for `fix_missing`")
 
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
