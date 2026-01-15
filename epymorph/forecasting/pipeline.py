@@ -999,7 +999,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     f"Observation: {i_observation}, "
                     f"Label: {labels[i_observation]}, "
                     f"Time Frame: {time_frame}"
-                )
+                ),end = "\r"
             )
 
             current_predictions = []
@@ -1056,7 +1056,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
 
             posterior_value = predicted_values[-1].copy()
 
-            ###Kalman Update Step###
+        ###Kalman Update Step###
 
             ##State matrix construction
             R_obs = self.observations.likelihood.variance * np.eye(N)
@@ -1099,36 +1099,13 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     i_param_block = int(N + i_param * N)
 
                     current_param_values[k][i_member, ...] = member_post[state_size + i_param * N:state_size+i_param_block]
-
-
-            # ##Covariance matrices 
-            # pred_obs_cov_inv = np.linalg.pinv(pred_observations.T @ pred_observations)        
-            # cross_cov = ensemble.T @ pred_observations
-
-            # K = cross_cov @ pred_obs_cov_inv
-
-            # residuals = rng.poisson(pred_observations) - observation_array["value"][0, :]
-
-            # #Update Ensemble Members
-            # for i_member in range(num_realizations):
-            #     member = ensemble[i_member,:] + K @ residuals[i_member,:].T
-            #     current_compartment_values[i_member,...] = member[:state_size].reshape((N,C))
-            #     current_compartment_values[i_member,...] = np.rint(np.clip(current_compartment_values[i_member,...],
-            #                                                                 a_min = 0., a_max = None))
-
-            #     for i_param,k in enumerate(current_param_values.keys()): 
-            #         i_param_block = int(N + i_param * N)
-
-            #         current_param_values[k][i_member, ...] = member[state_size + i_param * N:state_size+i_param_block]
-
             ###End Kalman Update###
 
             posterior_values.append(posterior_value)
 
             day_idx = day_right
             step_idx = step_right
-
-            
+           
         return SimpleNamespace(
             rume=rume,
             initial=initial,
@@ -1221,34 +1198,6 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
         return rume_temp, data
 
-    def _normalize_log_weights(self, log_weights):
-        """
-        Calculate the normalized particle weights from the un-normalized natural
-        logarithm of the weights. This method uses multiple techniques to mitigate
-        underflow issues caused by large population sizes and multi-node systems.
-
-        Parameters
-        ----------
-        log_weights :
-            The natural logarithm of the weights.
-
-        Returns
-        -------
-        :
-            The normalized (non-log) weights.
-        """
-        # Calculating the normalized weights from the unnormalized log weights is
-        # essentiallty calculating the soft max of the of the log weights, so we
-        # borrow a number of techniques here.
-        shifted_log_weights = log_weights - np.max(log_weights, keepdims=True)
-        underflow_lower_bound = -(10**2)
-        clipped_log_weights = np.clip(
-            shifted_log_weights, a_min=underflow_lower_bound, a_max=None
-        )
-        weights = np.exp(clipped_log_weights)
-        weights = weights / np.sum(weights, keepdims=True)
-        return weights
-
     def _observation_time_frames(self, rume, time_agg):
         """
         Find the sub time frames which correspond to each observation.
@@ -1290,26 +1239,3 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         time_frames.append(TimeFrame.range(start_date=start_date, end_date=end_date))
 
         return time_frames, values
-
-    def _multinomial_resampling(self, weights, rng):
-        num_realizations = len(weights)
-        resampled_idx = rng.choice(
-            np.arange(num_realizations),
-            size=num_realizations,
-            replace=True,
-            p=weights,
-        )
-
-        resampled_idx = np.sort(resampled_idx)
-        return resampled_idx
-
-    def _systematic_resampling(self, weights, rng):
-        num_realizations = len(weights)
-        c = np.cumsum(weights)
-        u = rng.uniform(0, 1)
-        resampled_idx = []
-        for i_realization in range(num_realizations):
-            u_i = (u + i_realization) / num_realizations
-            j = np.where(c >= u_i)[0][0]
-            resampled_idx.append(j)
-        return np.array(resampled_idx)
