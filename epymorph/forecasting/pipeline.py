@@ -1077,6 +1077,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
 
             #Stochastic noise to match KF equations statistically
             perturbed_observations = np.full((num_realizations,len(observation_array["value"][0, :])),observation_array["value"][0, :]).astype(np.float64)
+            
             noise = rng.normal(0.,scale = np.sqrt(self.observations.likelihood.variance),size = perturbed_observations.shape)
             perturbed_observations += noise
 
