@@ -858,6 +858,11 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         self.observations = observations
         self.save_trajectories = save_trajectories
 
+    def ensure_col(self,arr): 
+        if arr.ndim == 1: 
+            return arr[...,np.newaxis]
+        return arr
+
     def run(self, rng):
         t0 = perf_counter()
         output = self._run_ensemble_kalman_filter(
@@ -1017,13 +1022,16 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         N = self.rume.scope.nodes
         C = self.rume.ipm.num_compartments
 
-        for i_node in range(N): 
+        r_obs = np.array([[0.]])
+        if isinstance(self.observations.likelihood,Gaussian):
             r_obs = np.array([[self.observations.likelihood.variance]])
+
+        for i_node in range(N): 
             node_ensemble = compartment_values[:,i_node].reshape(self.num_realizations,-1)
             for k in param_values.keys(): 
                 node_ensemble = np.concatenate((node_ensemble,param_values[k][:,i_node,np.newaxis]),axis = -1)
 
-            node_pred_observations = pred_observations[:,i_node]
+            node_pred_observations = self.ensure_col(pred_observations)[:,i_node]
 
             ###Compute useful statistics and matrices
             mean = np.mean(node_ensemble,axis = 0)
@@ -1041,8 +1049,8 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                                               *real_observations[i_node].shape),
                                              real_observations[i_node]).astype(np.float64)
 
-            noise = rng.normal(0.,scale = np.sqrt(self.observations.likelihood.variance),size = node_perturbed_observations.shape)
-            node_perturbed_observations += noise
+            node_perturbed_observations = self.observations.likelihood.sample(rng,node_perturbed_observations)
+
 
             ###Update loop
             for i_member in range(self.num_realizations): 
@@ -1183,8 +1191,8 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         """
 
         ###Enforcement of Gaussian Likelihood 
-        if not isinstance(self.observations.likelihood,Gaussian): 
-            raise ValueError("Likelihood must be Gaussian for the EnKF.")
+        # if not isinstance(self.observations.likelihood,Gaussian): 
+        #     raise ValueError("Likelihood must be Gaussian for the EnKF.")
 
         ###Convert unknown_params to NamePattern type
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
