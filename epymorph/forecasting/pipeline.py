@@ -3,10 +3,9 @@ import datetime
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from types import SimpleNamespace
-from typing import Mapping
+from typing import List, Mapping, Self
 
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
 
 from epymorph.adrio.adrio import ADRIO
@@ -62,59 +61,60 @@ class PipelineOutput:
     the simulator used to produce the output.
     """
 
-    compartments: NDArray | None
+    compartments: NDArray
     """
-    An optional array of shape (R, S, N, C) where R is the number of realizations, S is
+    An array of shape (R, S, N, C) where R is the number of realizations, S is
     the number of tau steps, N is the number of nodes, and C is the number of
     compartments. The interpretation of this output depends on the simulator
     which produced it. For example, each realization could represent a full trajectory
     of the model. Alternatively it could represent a sampled estimate of the compartment
     values with no guarantees of the temporal structure.
-
-    For memory efficiency, this array is optional, and is typically indicated by the
-    `save_trajectories` flag in the corresponding simulator.
     """
 
-    events: NDArray | None
+    events: NDArray
     """
-    An optional array of shape (R, S, N, E) where R is the number of realizations, S is
+    An array of shape (R, S, N, E) where R is the number of realizations, S is
     the number of tau steps, N is the number of nodes, and E is the number of
     events. The interpretation of this output depends on the simulator
     which produced it. For example, each realization could represent a full trajectory
     of the model. Alternatively it could represent a sampled estimate of the compartment
     values with no guarantees of the temporal structure.
-
-    For memory efficiency, this array is optional, and is typically indicated by the
-    `save_trajectories` flag in the corresponding simulator.
     """
 
-    initial: NDArray | None
+    initial: NDArray
     """
-    An optional array of shape (R, N, C) where R is the number of realizations, N is the
+    An array of shape (R, N, C) where R is the number of realizations, N is the
     number of nodes, and C is the number of compartments. The interpretation of this
     output depends on the simulator which produced it.
+    """
 
-    For memory efficiency, this array is optional, and is typically indicated by the
-    `save_trajectories` flag in the corresponding simulator.
+    estimated_params: Mapping[NamePattern, NDArray]
+    """
+    A dictionary where the keys are unknown parameters and the values are
+    arrays of shape (R, T, N) where R is the number of realizations, T is the number of
+    days and N is the number of nodes. Each realization of a parameter is an array of
+    parameter values suitable for intializing another simulation. The precise
+    interpretation of the array depends on the simulator used to produce the output.
     """
 
     @property
-    def rume(self):
+    def rume(self) -> RUME:
         return self.simulator.rume
 
     @property
-    def unknown_params(self):
+    def unknown_params(self) -> Mapping[NamePattern, UnknownParam]:
         return self.simulator.unknown_params
 
     @property
-    def num_realizations(self):
+    def num_realizations(self) -> int:
         return self.simulator.num_realizations
 
     @property
-    def initial_values(self):
+    def initial_values(self) -> NDArray:
         return self.simulator.initial_values
 
 
+@dataclass(frozen=True)
 class PipelineConfig:
     """
     Contains the basic information needed to initialize a PipelineSimulator in order to
@@ -143,6 +143,49 @@ class PipelineConfig:
     The dictionary of unknown paramters of the simulator.
     """
 
+    @classmethod
+    def from_rume(
+        cls,
+        rume,
+        num_realizations,
+        initial_values=None,
+        unknown_params={},
+    ):
+        return cls(
+            rume=rume,
+            num_realizations=num_realizations,
+            initial_values=initial_values,
+            unknown_params={NamePattern.of(k): v for k, v in unknown_params.items()},
+        )
+
+    @classmethod
+    def from_output(
+        cls, output: PipelineOutput, extend_duration: int, override_dynamics={}
+    ) -> Self:
+        new_time_frame = TimeFrame.of(
+            start_date=output.rume.time_frame.end_date + datetime.timedelta(1),
+            duration_days=extend_duration,
+        )
+        rume = replace(output.rume, time_frame=new_time_frame)
+        num_realizations = output.num_realizations
+        initial_values = output.final_compartment_values
+        unknown_params = {
+            k: UnknownParam(prior=output.final_param_values[k], dynamics=v.dynamics)
+            for k, v in output.unknown_params.items()
+        }
+        override_dynamics = {NamePattern.of(k): v for k, v in override_dynamics.items()}
+        for k, v in override_dynamics.items():
+            name = NamePattern.of(k)
+            unknown_params[name] = UnknownParam(
+                prior=unknown_params[name].prior, dynamics=v
+            )
+        return cls(
+            rume=rume,
+            num_realizations=num_realizations,
+            initial_values=initial_values,
+            unknown_params=unknown_params,
+        )
+
 
 class PipelineSimulator:
     """
@@ -160,7 +203,7 @@ class PipelineSimulator:
     The number of realzations.
     """
 
-    initial_values: NDArray | None
+    initial_values: NDArray
     """
     An optional array of initial compartment values of shape (R, N, C) where R is the
     number of realizations, N is the number of nodes, and C is the number of
@@ -178,6 +221,143 @@ class PipelineSimulator:
         """
         Run the simulation.
         """
+
+
+def _initialize_augmented_state_space(
+    rume, unknown_params, num_realizations, initial_values, rng
+):
+    R = num_realizations  # noqa: N806
+    N = rume.scope.nodes
+    C = rume.ipm.num_compartments
+    current_param_values = {
+        k: np.zeros(shape=(R, N), dtype=np.float64) for k in unknown_params.keys()
+    }
+    for i_realization in range(num_realizations):
+        for k in current_param_values.keys():
+            if isinstance(unknown_params[k].prior, Prior):
+                current_param_values[k][i_realization, ...] = unknown_params[
+                    k
+                ].prior.sample(size=(N,), rng=rng)
+            else:
+                current_param_values[k][i_realization, ...] = unknown_params[k].prior[
+                    i_realization, ...
+                ]
+
+    current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
+    if initial_values is not None:
+        current_compartment_values = initial_values.copy()
+    else:
+        params_temp = {**rume.params}
+        for i_realization in range(num_realizations):
+            for k in unknown_params.keys():
+                params_temp[k] = current_param_values[k][i_realization, ...]
+            rume_temp = dataclasses.replace(rume, params=params_temp)
+            data = rume_temp.evaluate_params(rng=rng)
+            current_compartment_values[i_realization, ...] = rume.initialize(
+                data=data, rng=rng
+            )
+    return current_compartment_values, current_param_values
+
+
+@dataclass(frozen=True)
+class _SimulateRealizationsResult:
+    compartments: NDArray
+    events: NDArray
+    estimated_params: Mapping[NamePattern, NDArray]
+    predictions: List[NDArray]
+
+
+def _simulate_realizations(
+    rume_template: RUME,
+    override_time_frame: TimeFrame,
+    num_realizations: int,
+    initial_values: NDArray,
+    unknown_params: Mapping[NamePattern, UnknownParam],
+    param_values: Mapping[NamePattern, NDArray],
+    geo: GeoStrategy,
+    time: TimeStrategy,
+    quantity: QuantityStrategy,
+    rng: np.random.Generator,
+) -> _SimulateRealizationsResult:
+    days = override_time_frame.days
+    taus = rume_template.num_tau_steps
+    R = num_realizations  # noqa: N806
+    T = days
+    S = days * taus
+    N = rume_template.scope.nodes
+    C = rume_template.ipm.num_compartments
+    E = rume_template.ipm.num_events
+
+    compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+    events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+    estimated_params = {
+        k: np.zeros(shape=(R, T, N), dtype=np.float64) for k in unknown_params.keys()
+    }
+
+    current_predictions = []
+    for i_realization in range(num_realizations):
+        params_temp = {**rume_template.params}
+        for name in unknown_params.keys():
+            params_temp[name] = unknown_params[name].dynamics.with_initial(
+                param_values[name][i_realization, ...]
+            )
+        rume_temp = dataclasses.replace(
+            rume_template, params=params_temp, time_frame=override_time_frame
+        )
+
+        # Evaluate the params.
+        data = rume_temp.evaluate_params(rng=rng)
+        rume_temp = dataclasses.replace(
+            rume_temp,
+            params={k.to_pattern(): v for k, v in data.to_dict().items()},
+        )
+
+        # Add the compartment values.
+        strata_temp = [
+            dataclasses.replace(
+                stratum,
+                init=Explicit(
+                    initials=initial_values[i_realization, ...][
+                        ..., rume_template.compartment_mask[stratum.name]
+                    ]
+                ),
+            )
+            for stratum in rume_template.strata
+        ]
+        rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
+
+        sim = BasicSimulator(rume_temp)
+        out_temp = sim.run(rng_factory=lambda: rng)
+
+        temp_time_agg = out_temp.rume.time_frame.select.all().agg()
+        new_time_agg = dataclasses.replace(
+            temp_time_agg,
+            aggregation=time.aggregation,
+        )
+
+        predicted_df = munge(
+            out_temp,
+            geo=geo,
+            time=new_time_agg,
+            quantity=quantity,
+        )
+
+        prediction = predicted_df.drop(["geo", "time"], axis=1)
+
+        current_predictions.append(prediction.to_numpy())
+
+        compartments[i_realization, ...] = out_temp.compartments
+        events[i_realization, ...] = out_temp.events
+
+        for k in unknown_params.keys():
+            estimated_params[k][i_realization, ...] = data.get_raw(k)
+
+    return _SimulateRealizationsResult(
+        compartments=compartments,
+        events=events,
+        estimated_params=estimated_params,
+        predictions=current_predictions,
+    )
 
 
 @dataclass(frozen=True)
@@ -202,41 +382,6 @@ class ParticleFilterOutput(PipelineOutput):
     """
 
 
-class FromRUME(PipelineConfig):
-    def __init__(
-        self,
-        rume,
-        num_realizations,
-        initial_values=None,
-        unknown_params={},
-    ):
-        self.rume = rume
-        self.num_realizations = num_realizations
-        self.initial_values = initial_values
-        self.unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
-
-
-class FromOutput(PipelineConfig):
-    def __init__(self, output: PipelineOutput, extend_duration, override_dynamics={}):
-        override_dynamics = {NamePattern.of(k): v for k, v in override_dynamics.items()}
-        new_time_frame = TimeFrame.of(
-            start_date=output.rume.time_frame.end_date + datetime.timedelta(1),
-            duration_days=extend_duration,
-        )
-        self.rume = replace(output.rume, time_frame=new_time_frame)
-        self.num_realizations = output.num_realizations
-        self.initial_values = output.final_compartment_values
-        self.unknown_params = {
-            k: UnknownParam(prior=output.final_param_values[k], dynamics=v.dynamics)
-            for k, v in output.unknown_params.items()
-        }
-        for k, v in override_dynamics.items():
-            name = NamePattern.of(k)
-            self.unknown_params[name] = UnknownParam(
-                prior=self.unknown_params[name].prior, dynamics=v
-            )
-
-
 @dataclass(frozen=True)
 class ModelLink:
     """
@@ -256,14 +401,6 @@ class Observations:
     likelihood: Likelihood
     strict_labels: bool = False
 
-    def _get_observations_dataframe(self, context):
-        if isinstance(self.source, pd.DataFrame):
-            return self.source
-        elif isinstance(self.source, ADRIO):
-            inspect = self.source.with_context_internal(context).inspect()
-            if isinstance(inspect.source, pd.DataFrame):
-                return inspect.source
-
     def _get_observations_numpy_array(self, context):
         if isinstance(self.source, np.ndarray):
             return self.source
@@ -277,24 +414,21 @@ class ParticleFilterSimulator(PipelineSimulator):
         self,
         config: PipelineConfig,
         observations: Observations,
-        save_trajectories=True,
     ):
         self.rume = config.rume
         self.num_realizations = config.num_realizations
         self.unknown_params = config.unknown_params
         self.initial_values = config.initial_values
         self.observations = observations
-        self.save_trajectories = save_trajectories
 
     def run(self, rng):
         output = self._run_particle_filter(
-            self.rume,
-            self.num_realizations,
-            self.initial_values,
-            self.unknown_params,
+            rume=self.rume,
+            num_realizations=self.num_realizations,
+            initial_values=self.initial_values,
+            unknown_params=self.unknown_params,
             observations=self.observations,
             rng=rng,
-            save_trajectories=self.save_trajectories,
         )
         return ParticleFilterOutput(
             simulator=self,
@@ -305,6 +439,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             initial=output.initial,
             posterior_values=output.posterior_values,
             effective_sample_size=output.effective_sample_size,
+            estimated_params=output.estimated_params,
         )
 
     def _run_particle_filter(
@@ -315,7 +450,6 @@ class ParticleFilterSimulator(PipelineSimulator):
         unknown_params,
         observations,
         rng,
-        save_trajectories=True,
     ):
         """
 
@@ -345,7 +479,6 @@ class ParticleFilterSimulator(PipelineSimulator):
         """
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
 
-        # TODO # rume = self._cache_adrios(...)
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
         new_params = {}
         for name, param in rume.params.items():
@@ -369,32 +502,24 @@ class ParticleFilterSimulator(PipelineSimulator):
         C = rume.ipm.num_compartments
         E = rume.ipm.num_events
 
-        initial = None
-        compartments = None
-        events = None
-        estimated_params = None
-
-        if save_trajectories:
-            # Allocate return values.
-            initial = np.zeros(shape=(R, N, C), dtype=np.int64)
-            compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
-            events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
-            estimated_params = {
-                k: np.zeros(shape=(R, T, N), dtype=np.float64)
-                for k in unknown_params.keys()
-            }
+        # Allocate return values.
+        initial = np.zeros(shape=(R, N, C), dtype=np.int64)
+        compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+        events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+        estimated_params = {
+            k: np.zeros(shape=(R, T, N), dtype=np.float64)
+            for k in unknown_params.keys()
+        }
 
         # Initialize the initial compartment and parameter values. Note, the values
         # within current_compartment_values will be modified in place!
         current_compartment_values, current_param_values = (
-            self._initialize_augmented_state_space(
+            _initialize_augmented_state_space(
                 rume, unknown_params, num_realizations, initial_values, rng
             )
         )
-        if save_trajectories:
-            # The values of current_compartment_values are modified in-place, so we need
-            #  a copy.
-            initial = current_compartment_values.copy()
+
+        initial = current_compartment_values.copy()
 
         # Determine the number of observations and their associated time frames.
         time_frames, labels = self._observation_time_frames(
@@ -411,7 +536,6 @@ class ParticleFilterSimulator(PipelineSimulator):
             ipm=rume.ipm,
             rng=np.random.default_rng(0),
         )
-        # observations_df = observations._get_observations_dataframe(context)
         observations_array = observations._get_observations_numpy_array(context)
 
         observed_values = []
@@ -446,71 +570,45 @@ class ParticleFilterSimulator(PipelineSimulator):
                 )
             )
 
-            current_predictions = []
+            # current_predictions = []
+
+            result = _simulate_realizations(
+                rume_template=rume,
+                override_time_frame=time_frame,
+                num_realizations=num_realizations,
+                initial_values=current_compartment_values,
+                unknown_params=unknown_params,
+                param_values=current_param_values,
+                geo=observations.model_link.geo,
+                time=observations.model_link.time,
+                quantity=observations.model_link.quantity,
+                rng=rng,
+            )
+
+            current_compartment_values = result.compartments[:, -1, ...]
+            current_predictions = result.predictions
+
+            compartments[:, step_idx:step_right, ...] = result.compartments
+            events[:, step_idx:step_right, ...] = result.events
+
+            for k in unknown_params.keys():
+                estimated_params[k][:, day_idx:day_right, ...] = (
+                    result.estimated_params[k]
+                )
+                current_param_values[k] = result.estimated_params[k][:, -1, ...].copy()
+
             weights = np.zeros(num_realizations, dtype=np.float64)
-            log_weights_by_node = np.zeros(
-                (num_realizations, N), dtype=np.float64
-            )  # TODO
+            log_weights_by_node = np.zeros((num_realizations, N), dtype=np.float64)
             for j_realization in range(num_realizations):
-                rume_temp, data = self._create_sim_rume(
-                    rume,
-                    j_realization,
-                    unknown_params,
-                    current_param_values,
-                    current_compartment_values,
-                    time_frame,
-                    rng,
-                )
-
-                sim = BasicSimulator(rume_temp)
-                out_temp = sim.run(rng_factory=lambda: rng)
-
-                temp_time_agg = out_temp.rume.time_frame.select.all().agg()
-                new_time_agg = dataclasses.replace(
-                    temp_time_agg,
-                    aggregation=observations.model_link.time.aggregation,
-                )
-
-                predicted_df = munge(
-                    out_temp,
-                    geo=observations.model_link.geo,
-                    time=new_time_agg,
-                    quantity=observations.model_link.quantity,
-                )
-
-                prediction = predicted_df.drop(["geo", "time"], axis=1)
-
-                current_predictions.append(prediction.to_numpy())
-
                 if observation_array.size > 0:
                     node_log_likelihoods = observations.likelihood.compute_log(
                         observation_array["value"][0, :],
-                        prediction.to_numpy()[:, 0],
+                        current_predictions[j_realization][:, 0],
                     )
                 else:
                     node_log_likelihoods = np.zeros(N)
 
                 log_weights_by_node[j_realization, ...] = node_log_likelihoods
-
-                current_compartment_values[j_realization, ...] = out_temp.compartments[
-                    -1, ...
-                ]
-
-                if compartments is not None:
-                    compartments[j_realization, step_idx:step_right, ...] = (
-                        out_temp.compartments
-                    )
-                if events is not None:
-                    events[j_realization, step_idx:step_right, ...] = out_temp.events
-
-                for k in unknown_params.keys():
-                    if estimated_params is not None:
-                        estimated_params[k][j_realization, day_idx:day_right, ...] = (
-                            data.get_raw(k)
-                        )
-                    current_param_values[k][j_realization, ...] = data.get_raw(k)[
-                        -1, ...
-                    ]
 
             predicted_values.append(np.array(current_predictions))
 
@@ -532,9 +630,6 @@ class ParticleFilterSimulator(PipelineSimulator):
                     )
                 orig_idx = np.arange(0, num_realizations)[:, np.newaxis]
                 resampled_idx = self._systematic_resampling(weights, rng)[:, np.newaxis]
-                # current_compartment_values[orig_idx, i_node, ...] = (
-                #     current_compartment_values[resampled_idx, i_node, ...]
-                # )
                 current_compartment_values[orig_idx, i_node, ...] = (
                     prior_compartment_values[resampled_idx, i_node, ...]
                 )
@@ -576,83 +671,6 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampling_steps=resampling_steps,
             effective_sample_size=effective_sample_size,
         )
-
-    def _initialize_augmented_state_space(
-        self, rume, unknown_params, num_realizations, initial_values, rng
-    ):
-        R = num_realizations
-        N = rume.scope.nodes
-        C = rume.ipm.num_compartments
-        current_param_values = {
-            k: np.zeros(shape=(R, N), dtype=np.float64) for k in unknown_params.keys()
-        }
-        for i_realization in range(num_realizations):
-            for k in current_param_values.keys():
-                if isinstance(unknown_params[k].prior, Prior):
-                    current_param_values[k][i_realization, ...] = unknown_params[
-                        k
-                    ].prior.sample(size=(N,), rng=rng)
-                else:
-                    current_param_values[k][i_realization, ...] = unknown_params[
-                        k
-                    ].prior[i_realization, ...]
-
-        current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
-        if initial_values is not None:
-            current_compartment_values = initial_values.copy()
-        else:
-            params_temp = {**rume.params}
-            for i_realization in range(num_realizations):
-                for k in unknown_params.keys():
-                    params_temp[k] = current_param_values[k][i_realization, ...]
-                rume_temp = dataclasses.replace(rume, params=params_temp)
-                data = rume_temp.evaluate_params(rng=rng)
-                current_compartment_values[i_realization, ...] = rume.initialize(
-                    data=data, rng=rng
-                )
-        return current_compartment_values, current_param_values
-
-    def _create_sim_rume(
-        self,
-        rume,
-        realization_index,
-        unknown_params,
-        current_param_values,
-        current_compartment_values,
-        override_time_frame,
-        rng,
-    ):
-        # Add unknown params to the RUME
-        params_temp = {**rume.params}
-        for k in unknown_params.keys():
-            params_temp[k] = unknown_params[k].dynamics.with_initial(
-                current_param_values[k][realization_index, ...]
-            )
-        rume_temp = dataclasses.replace(
-            rume, params=params_temp, time_frame=override_time_frame
-        )
-
-        # Evaluate the params.
-        data = rume_temp.evaluate_params(rng=rng)
-        rume_temp = dataclasses.replace(
-            rume_temp,
-            params={k.to_pattern(): v for k, v in data.to_dict().items()},
-        )
-
-        # Add the compartment values.
-        strata_temp = [
-            dataclasses.replace(
-                stratum,
-                init=Explicit(
-                    initials=current_compartment_values[realization_index, ...][
-                        ..., rume.compartment_mask[stratum.name]
-                    ]
-                ),
-            )
-            for stratum in rume.strata
-        ]
-        rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
-        return rume_temp, data
 
     def _normalize_log_weights(self, log_weights):
         """
@@ -753,143 +771,18 @@ class ParticleFilterSimulator(PipelineSimulator):
 
 
 class ForecastSimulator(PipelineSimulator):
-    def __init__(self, config, save_trajectories=True):
+    def __init__(self, config):
         self.rume = config.rume
         self.num_realizations = config.num_realizations
         self.unknown_params = config.unknown_params
         self.initial_values = config.initial_values
-        self.save_trajectories = save_trajectories
 
     def run(self, rng) -> PipelineOutput:
-        output = self._run_forecast(
-            rume=self.rume,
-            num_realizations=self.num_realizations,
-            initial_values=self.initial_values,
-            unknown_params=self.unknown_params,
-            rng=rng,
-            save_trajectories=self.save_trajectories,
-        )
-        return PipelineOutput(
-            simulator=self,
-            final_compartment_values=output.final_compartment_values,
-            final_param_values=output.final_param_values,
-            compartments=output.compartments,
-            events=output.events,
-            initial=output.initial,
-        )
-
-    def _initialize_augmented_state_space(
-        self, rume, unknown_params, num_realizations, initial_values, rng
-    ):
-        R = num_realizations
-        N = rume.scope.nodes
-        C = rume.ipm.num_compartments
-        current_param_values = {
-            k: np.zeros(shape=(R, N), dtype=np.float64) for k in unknown_params.keys()
-        }
-        for i_realization in range(num_realizations):
-            for k in current_param_values.keys():
-                if isinstance(unknown_params[k].prior, Prior):
-                    current_param_values[k][i_realization, ...] = unknown_params[
-                        k
-                    ].prior.sample(size=(N,), rng=rng)
-                else:
-                    current_param_values[k][i_realization, ...] = unknown_params[
-                        k
-                    ].prior[i_realization, ...]
-
-        current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
-        if initial_values is not None:
-            current_compartment_values = initial_values.copy()
-        else:
-            params_temp = {**rume.params}
-            for i_realization in range(num_realizations):
-                for k in unknown_params.keys():
-                    params_temp[k] = current_param_values[k][i_realization, ...]
-                rume_temp = dataclasses.replace(rume, params=params_temp)
-                data = rume_temp.evaluate_params(rng=rng)
-                current_compartment_values[i_realization, ...] = rume.initialize(
-                    data=data, rng=rng
-                )
-        return current_compartment_values, current_param_values
-
-    def _create_sim_rume(
-        self,
-        rume,
-        realization_index,
-        unknown_params,
-        current_param_values,
-        current_compartment_values,
-        override_time_frame,
-        rng,
-    ):
-        # Add unknown params to the RUME
-        params_temp = {**rume.params}
-        for k in unknown_params.keys():
-            params_temp[k] = unknown_params[k].dynamics.with_initial(
-                current_param_values[k][realization_index, ...]
-            )
-        rume_temp = dataclasses.replace(
-            rume, params=params_temp, time_frame=override_time_frame
-        )
-
-        # Evaluate the params.
-        data = rume_temp.evaluate_params(rng=rng)
-        rume_temp = dataclasses.replace(
-            rume_temp,
-            params={k.to_pattern(): v for k, v in data.to_dict().items()},
-        )
-
-        # Add the compartment values.
-        strata_temp = [
-            dataclasses.replace(
-                stratum,
-                init=Explicit(
-                    initials=current_compartment_values[realization_index, ...][
-                        ..., rume.compartment_mask[stratum.name]
-                    ]
-                ),
-            )
-            for stratum in rume.strata
-        ]
-        rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
-        return rume_temp, data
-
-    def _run_forecast(
-        self,
-        rume,
-        num_realizations,
-        initial_values,
-        unknown_params,
-        rng,
-        save_trajectories=True,
-    ):
-        """
-
-        Parameters
-        ----------
-        rume :
-            The RUME.
-        num_realizations :
-            The number of realizations.
-        initial_values :
-            The initial compartment values across each realization. The first dimension
-            is the realization dimension.
-        param_values :
-            The parameter values. Overrides values which appear in unknown_params.
-        unknown_params :
-            The estimated parameter values.
-        duration :
-            The duration of the forecast.
-        observations:
-            The observations.
-        rng :
-            The random number generator.
-        Returns
-        -------
-        :
-            The forecast output.
-        """
+        rume = self.rume
+        num_realizations = self.num_realizations
+        initial_values = self.initial_values
+        unknown_params = self.unknown_params
+        rng = rng
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
         new_params = {}
@@ -904,79 +797,35 @@ class ForecastSimulator(PipelineSimulator):
             params=new_params,
         )
 
-        # Dimension of the system.
-        days = rume.time_frame.days
-        taus = rume.num_tau_steps
-        R = num_realizations
-        T = days
-        S = days * taus
-        N = rume.scope.nodes
-        C = rume.ipm.num_compartments
-        E = rume.ipm.num_events
-
-        # Allocate return values.
-        initial = None
-        compartments = None
-        events = None
-        estimated_params = None
-
-        if save_trajectories:
-            initial = np.zeros(shape=(R, N, C), dtype=np.int64)
-            compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
-            events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
-            estimated_params = {
-                k: np.zeros(shape=(R, T, N), dtype=np.float64)
-                for k in unknown_params.keys()
-            }
-
         # Initialize the initial compartment and parameter values.
         current_compartment_values, current_param_values = (
-            self._initialize_augmented_state_space(
+            _initialize_augmented_state_space(
                 rume, unknown_params, num_realizations, initial_values, rng
             )
         )
         initial = current_compartment_values
 
-        for j_realization in range(num_realizations):
-            rume_temp, data = self._create_sim_rume(
-                rume,
-                j_realization,
-                unknown_params,
-                current_param_values,
-                current_compartment_values,
-                rume.time_frame,
-                rng,
-            )
-
-            sim = BasicSimulator(rume_temp)
-            out_temp = sim.run(rng_factory=lambda: rng)
-
-            current_compartment_values[j_realization, ...] = out_temp.compartments[
-                -1, ...
-            ]
-
-            for k in unknown_params.keys():
-                current_param_values[k][j_realization, ...] = data.get_raw(k)[-1, ...]
-
-            if save_trajectories:
-                if compartments is not None:
-                    compartments[j_realization, ...] = out_temp.compartments
-                if events is not None:
-                    events[j_realization, ...] = out_temp.events
-
-                for k in unknown_params.keys():
-                    if estimated_params is not None:
-                        estimated_params[k][j_realization, ...] = data.get_raw(k)
-
-        return SimpleNamespace(
-            rume=rume,
-            sim_rume=rume,
-            initial=initial,
-            compartments=compartments,
-            events=events,
+        result = _simulate_realizations(
+            rume_template=rume,
+            override_time_frame=rume.time_frame,
             num_realizations=num_realizations,
-            estimated_params=estimated_params,
+            initial_values=current_compartment_values,
             unknown_params=unknown_params,
-            final_compartment_values=current_compartment_values,
-            final_param_values=current_param_values,
+            param_values=current_param_values,
+            geo=rume.scope.select.all(),
+            time=rume.time_frame.select.all(),
+            quantity=rume.ipm.select.all(),
+            rng=rng,
+        )
+
+        return PipelineOutput(
+            simulator=self,
+            final_compartment_values=result.compartments[:, -1, ...],
+            final_param_values={
+                k: result.estimated_params[k][:, -1, ...] for k in unknown_params.keys()
+            },
+            compartments=result.compartments,
+            events=result.events,
+            initial=initial,
+            estimated_params=result.estimated_params,
         )
