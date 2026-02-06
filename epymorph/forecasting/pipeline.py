@@ -7,13 +7,14 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
+import multiprocessing
 from numpy.typing import NDArray
 
 from epymorph.adrio.adrio import ADRIO
 from epymorph.attribute import NamePattern
 from epymorph.compartment_model import QuantityStrategy, compartment
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
-from epymorph.forecasting.likelihood import Likelihood,Gaussian
+from epymorph.forecasting.likelihood import AdaptiveGaussian, Likelihood,Gaussian
 from epymorph.geography.scope import GeoStrategy
 from epymorph.initializer import Explicit
 from epymorph.parameter_fitting.utils import observations
@@ -24,6 +25,9 @@ from epymorph.time import Dim, TimeFrame, TimeStrategy
 from epymorph.tools.data import munge
 
 from time import perf_counter
+
+###Holds the rng for each process
+_worker_rng = None
 
 @dataclass(frozen=True)
 class UnknownParam:
@@ -123,6 +127,7 @@ class PipelineSimulator:
 class ParticleFilterOutput(PipelineOutput):
     posterior_values: NDArray | None
     estimated_params: NDArray | None
+    pop_avgs: NDArray | None = None
 
 
 class FromRUME(PipelineConfig):
@@ -225,7 +230,6 @@ class Observations:
         elif isinstance(self.source, ADRIO):
             inspect = self.source.with_context_internal(context).inspect()
             return inspect.values
-
 
 class ParticleFilterSimulator(PipelineSimulator):
     def __init__(
@@ -695,7 +699,156 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampled_idx.append(j)
         return np.array(resampled_idx)
 
-class ForecastSimulator(ParticleFilterSimulator):
+# class ForecastSimulator(ParticleFilterSimulator):
+#     def __init__(self, config, save_trajectories=True):
+#         self.rume = config.rume
+#         self.num_realizations = config.num_realizations
+#         self.unknown_params = config.unknown_params
+#         self.initial_values = config.initial_values
+#         self.save_trajectories = save_trajectories
+
+#     def run(self, rng) -> PipelineOutput:
+#         output = self._run_forecast(
+#             rume=self.rume,
+#             num_realizations=self.num_realizations,
+#             initial_values=self.initial_values,
+#             unknown_params=self.unknown_params,
+#             rng=rng,
+#             save_trajectories=self.save_trajectories,
+#         )
+#         return PipelineOutput(
+#             simulator=self,
+#             final_compartment_values=output.final_compartment_values,
+#             final_param_values=output.final_param_values,
+#             compartments=output.compartments,
+#             events=output.events,
+#             initial=output.initial,
+#         )
+
+#     def _run_forecast(
+#         self,
+#         rume,
+#         num_realizations,
+#         initial_values,
+#         unknown_params,
+#         rng,
+#         save_trajectories=True,
+#     ):
+#         """
+
+#         Parameters
+#         ----------
+#         rume :
+#             The RUME.
+#         num_realizations :
+#             The number of realizations.
+#         initial_values :
+#             The initial compartment values across each realization. The first dimension
+#             is the realization dimension.
+#         param_values :
+#             The parameter values. Overrides values which appear in unknown_params.
+#         unknown_params :
+#             The estimated parameter values.
+#         duration :
+#             The duration of the forecast.
+#         observations:
+#             The observations.
+#         rng :
+#             The random number generator.
+#         Returns
+#         -------
+#         :
+#             The forecast output.
+#         """
+#         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
+#         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+#         new_params = {}
+#         for name, param in rume.params.items():
+#             if isinstance(param, ADRIO):
+#                 new_params[name] = param.with_context_internal(context).evaluate()
+#             else:
+#                 new_params[name] = param
+
+#         rume = dataclasses.replace(
+#             rume,
+#             params=new_params,
+#         )
+
+#         # Dimension of the system.
+#         days = rume.time_frame.days
+#         taus = rume.num_tau_steps
+#         R = num_realizations
+#         T = days
+#         S = days * taus
+#         N = rume.scope.nodes
+#         C = rume.ipm.num_compartments
+#         E = rume.ipm.num_events
+
+#         # Allocate return values.
+#         initial = None
+#         compartments = None
+#         events = None
+#         estimated_params = None
+
+#         if save_trajectories:
+#             initial = np.zeros(shape=(R, N, C), dtype=np.int64)
+#             compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+#             events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+#             estimated_params = {
+#                 k: np.zeros(shape=(R, T, N), dtype=np.float64)
+#                 for k in unknown_params.keys()
+#             }
+
+#         # Initialize the initial compartment and parameter values.
+#         current_compartment_values, current_param_values = (
+#             self._initialize_augmented_state_space(
+#                 rume, unknown_params, num_realizations, initial_values, rng
+#             )
+#         )
+#         initial = current_compartment_values
+
+#         for j_realization in range(num_realizations):
+#             rume_temp, data = self._create_sim_rume(
+#                 rume,
+#                 j_realization,
+#                 unknown_params,
+#                 current_param_values,
+#                 current_compartment_values,
+#                 rume.time_frame,
+#                 rng,
+#             )
+
+#             sim = BasicSimulator(rume_temp)
+#             out_temp = sim.run(rng_factory=lambda: rng)
+
+#             current_compartment_values[j_realization, ...] = out_temp.compartments[
+#                 -1, ...
+#             ]
+
+#             for k in unknown_params.keys():
+#                 current_param_values[k][j_realization, ...] = data.get_raw(k)[-1, ...]
+
+#             if save_trajectories:
+#                 compartments[j_realization, ...] = out_temp.compartments
+#                 events[j_realization, ...] = out_temp.events
+
+#                 for k in unknown_params.keys():
+#                     estimated_params[k][j_realization, ...] = data.get_raw(k)
+
+#         return SimpleNamespace(
+#             rume=rume,
+#             sim_rume=rume,
+#             initial=initial,
+#             compartments=compartments,
+#             events=events,
+#             num_realizations=num_realizations,
+#             estimated_params=estimated_params,
+#             unknown_params=unknown_params,
+#             final_compartment_values=current_compartment_values,
+#             final_param_values=current_param_values,
+#         )
+
+class ForecastSimulator(PipelineSimulator):
     def __init__(self, config, save_trajectories=True):
         self.rume = config.rume
         self.num_realizations = config.num_realizations
@@ -720,6 +873,83 @@ class ForecastSimulator(ParticleFilterSimulator):
             events=output.events,
             initial=output.initial,
         )
+
+    def _initialize_augmented_state_space(
+        self, rume, unknown_params, num_realizations, initial_values, rng
+    ):
+        R = num_realizations
+        N = rume.scope.nodes
+        C = rume.ipm.num_compartments
+        current_param_values = {
+            k: np.zeros(shape=(R, N), dtype=np.float64) for k in unknown_params.keys()
+        }
+        for i_realization in range(num_realizations):
+            for k in current_param_values.keys():
+                if isinstance(unknown_params[k].prior, Prior):
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior.sample(size=(N,), rng=rng)
+                else:
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior[i_realization, ...]
+
+        current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
+        if initial_values is not None:
+            current_compartment_values = initial_values.copy()
+        else:
+            params_temp = {**rume.params}
+            for i_realization in range(num_realizations):
+                for k in unknown_params.keys():
+                    params_temp[k] = current_param_values[k][i_realization, ...]
+                rume_temp = dataclasses.replace(rume, params=params_temp)
+                data = rume_temp.evaluate_params(rng=rng)
+                current_compartment_values[i_realization, ...] = rume.initialize(
+                    data=data, rng=rng
+                )
+        return current_compartment_values, current_param_values
+
+    def _create_sim_rume(
+        self,
+        rume,
+        realization_index,
+        unknown_params,
+        current_param_values,
+        current_compartment_values,
+        override_time_frame,
+        rng,
+    ):
+        # Add unknown params to the RUME
+        params_temp = {**rume.params}
+        for k in unknown_params.keys():
+            params_temp[k] = unknown_params[k].dynamics.with_initial(
+                current_param_values[k][realization_index, ...]
+            )
+        rume_temp = dataclasses.replace(
+            rume, params=params_temp, time_frame=override_time_frame
+        )
+
+        # Evaluate the params.
+        data = rume_temp.evaluate_params(rng=rng)
+        rume_temp = dataclasses.replace(
+            rume_temp,
+            params={k.to_pattern(): v for k, v in data.to_dict().items()},
+        )
+
+        # Add the compartment values.
+        strata_temp = [
+            dataclasses.replace(
+                stratum,
+                init=Explicit(
+                    initials=current_compartment_values[realization_index, ...][
+                        ..., rume.compartment_mask[stratum.name]
+                    ]
+                ),
+            )
+            for stratum in rume.strata
+        ]
+        rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
+        return rume_temp, data
 
     def _run_forecast(
         self,
@@ -825,11 +1055,14 @@ class ForecastSimulator(ParticleFilterSimulator):
                 current_param_values[k][j_realization, ...] = data.get_raw(k)[-1, ...]
 
             if save_trajectories:
-                compartments[j_realization, ...] = out_temp.compartments
-                events[j_realization, ...] = out_temp.events
+                if compartments is not None:
+                    compartments[j_realization, ...] = out_temp.compartments
+                if events is not None:
+                    events[j_realization, ...] = out_temp.events
 
                 for k in unknown_params.keys():
-                    estimated_params[k][j_realization, ...] = data.get_raw(k)
+                    if estimated_params is not None:
+                        estimated_params[k][j_realization, ...] = data.get_raw(k)
 
         return SimpleNamespace(
             rume=rume,
@@ -845,6 +1078,632 @@ class ForecastSimulator(ParticleFilterSimulator):
         )
 
 class EnsembleKalmanFilterSimulator(PipelineSimulator):
+    def __init__(
+        self,
+        config: PipelineConfig,
+        observations: Observations,
+        save_trajectories=True,
+    ):
+        self.rume = config.rume
+        self.num_realizations = config.num_realizations
+        self.unknown_params = config.unknown_params
+        self.initial_values = config.initial_values
+        self.observations = observations
+        self.save_trajectories = save_trajectories
+
+    def ensure_col(self,arr): 
+        if arr.ndim == 1: 
+            return arr[...,np.newaxis]
+        return arr
+
+    def run(self, rng):
+        t0 = perf_counter()
+        output = self._run_ensemble_kalman_filter(
+            self.rume,
+            self.num_realizations,
+            self.initial_values,
+            self.unknown_params,
+            observations=self.observations,
+            rng=rng,
+            save_trajectories=self.save_trajectories,
+        )
+        t1 = perf_counter()
+        print(f"\nRuntime with {self.num_realizations} members and {self.rume.scope.nodes} Nodes is {np.round(t1-t0,2)} seconds.")
+
+        return ParticleFilterOutput(
+            simulator=self,
+            final_compartment_values=output.final_compartment_values,
+            final_param_values=output.final_param_values,
+            compartments=output.compartments,
+            events=output.events,
+            initial=output.initial,
+            posterior_values=output.posterior_values,
+            estimated_params=output.estimated_params,
+            pop_avgs = output.pop_avgs
+        )
+
+    def simulation(self,
+                    rume,observations,
+                    num_realizations,
+                    unknown_params,
+                    current_param_values,
+                    current_compartment_values,
+                    time_frame,
+                    rng):
+
+        """
+
+        Parameters
+        ----------
+        rume :
+            The RUME.
+        num_realizations :
+            The number of realizations.
+        unknown_params :
+            The estimated parameter names and values.
+        observations:
+            The observations object, encompassing the model link and aggregator.
+        time_frame :
+            The TimeFrame corresponding to the current data point
+        current_param_values : 
+            The current values of the unknown parameters, used for the 
+            forward model. 
+        current_compartment_values : 
+            The initial condition corresponding to each realization. 
+        rng :
+            The random number generator.
+        Returns
+        -------
+        :
+            The simulation output up to the next data point for each realization.
+        """
+
+        ###Array initialization
+        compartment_update = np.zeros((num_realizations,
+                                       rume.num_tau_steps * time_frame.duration_days,
+                                       rume.scope.nodes,rume.ipm.num_compartments),
+                                       dtype = np.float64)
+
+        events_update = np.zeros((num_realizations,
+                                       rume.num_tau_steps * time_frame.duration_days,
+                                       rume.scope.nodes,rume.ipm.num_events),
+                                       dtype = np.float64)
+
+        params_update = {
+                k: np.zeros(shape=(num_realizations, time_frame.duration_days, rume.scope.nodes), 
+                            dtype=np.float64)
+                for k in unknown_params.keys()
+            }
+
+        ### Loop over the realizations, run the forward model for each
+        current_predictions = []
+        for j_realization in range(num_realizations):
+            rume_temp, data = self._create_sim_rume(
+                        rume,
+                        j_realization,
+                        unknown_params,
+                        current_param_values,
+                        current_compartment_values,
+                        time_frame,
+                        rng
+                    )
+
+            sim = BasicSimulator(rume_temp)
+            out_temp = sim.run(rng_factory=lambda: rng)
+
+            temp_time_agg = out_temp.rume.time_frame.select.all().agg()
+            new_time_agg = dataclasses.replace(
+                temp_time_agg,
+                aggregation=observations.model_link.time.aggregation,
+            )
+
+            ### Apply our aggregators so we get the predicted observation
+            predicted_df = munge(
+                out_temp,
+                geo=observations.model_link.geo,
+                time=new_time_agg,
+                quantity=observations.model_link.quantity,
+            )
+
+            prediction = predicted_df.drop(["geo", "time"], axis=1).to_numpy()
+            current_predictions.append(prediction)
+
+            ###Update the compartments,events and parameters
+            compartment_update[j_realization,...] = out_temp.compartments
+            events_update[j_realization,...] = out_temp.events
+
+            for k in unknown_params.keys():
+                params_update[k][j_realization,...] = data.get_raw(k)
+
+
+        return current_predictions,compartment_update,events_update,params_update 
+
+    def update(self,
+               current_compartment_values,
+               current_param_values,
+               pred_observations,
+               real_observations,
+               rng): 
+
+        """
+
+        Parameters
+        ----------
+        current_compartment_values : 
+            The current values of the compartments, the leading index is num_realizations.
+        current_param_values : 
+            The current values of the parameters, a dictionary where keys are parameter names
+            and the values are arrays with leading axis of num_realizations. 
+        pred_observations :
+            The predicted observations corresponding to each realization, a numpy array 
+            with leading axis num_realizations. 
+        real_observations: 
+            The actual observation data, currently one observation for each node. 
+        rng :
+            The random number generator.
+        Returns
+        -------
+        :
+            The forecast output.
+        """
+
+        #Copy current_compartment_values and 
+        #current_param_values to ensure they are never edited
+
+        compartment_values = current_compartment_values.copy()
+        param_values = {k: v.copy() for k, v in current_param_values.items()}
+
+        N = self.rume.scope.nodes
+        C = self.rume.ipm.num_compartments
+
+        r_obs = np.array([[self.observations.likelihood.variance]])
+
+        for i_node in range(N): 
+            node_ensemble = compartment_values[:,i_node,:]
+            for k in param_values.keys(): 
+                node_ensemble = np.concatenate((node_ensemble,param_values[k][:,i_node,np.newaxis]),axis = -1)
+
+            node_pred_observations = self.ensure_col(pred_observations)[:,i_node]
+
+            ###Compute useful statistics and matrices
+            mean = np.mean(node_ensemble,axis = 0)
+            state_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (node_ensemble - mean)
+
+            obs_mean = np.mean(node_pred_observations,axis = 0)
+            obs_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (node_pred_observations - obs_mean)
+
+            S_inv = np.linalg.pinv(obs_perturbation_matrix.T @ obs_perturbation_matrix + r_obs)
+            cross_cov = state_perturbation_matrix.T @ obs_perturbation_matrix
+            cross_cov = cross_cov[...,np.newaxis]
+
+            ###Stochastic noise to match KF equations statistically
+            node_perturbed_observations = np.full((self.num_realizations,
+                                              *real_observations[i_node].shape),
+                                             real_observations[i_node]).astype(np.float64)
+
+            node_perturbed_observations = self.observations.likelihood.sample(rng,node_perturbed_observations)
+
+
+            ###Update loop
+            for i_member in range(self.num_realizations): 
+
+                innovation = node_perturbed_observations[i_member] - node_pred_observations[i_member]
+                innovation = innovation[...,np.newaxis]
+
+                alpha = S_inv @ innovation
+
+                member_post = node_ensemble[i_member,:] + cross_cov @ alpha
+                compartment_values[i_member,i_node,:] = np.rint(np.clip(member_post[:C],a_min = 0.,a_max = None))
+
+                for i_param,k in enumerate(param_values.keys()): 
+                    param_values[k][i_member,i_node] = member_post[C+i_param]
+
+        return compartment_values,param_values
+
+    # def update(self,
+    #            current_compartment_values,
+    #            current_param_values,
+    #            pred_observations,
+    #            real_observations,
+    #            rng): 
+
+    #     """
+
+    #     Parameters
+    #     ----------
+    #     current_compartment_values : 
+    #         The current values of the compartments, the leading index is num_realizations.
+    #     current_param_values : 
+    #         The current values of the parameters, a dictionary where keys are parameter names
+    #         and the values are arrays with leading axis of num_realizations. 
+    #     pred_observations :
+    #         The predicted observations corresponding to each realization, a numpy array 
+    #         with leading axis num_realizations. 
+    #     real_observations: 
+    #         The actual observation data, currently one observation for each node. 
+    #     rng :
+    #         The random number generator.
+    #     Returns
+    #     -------
+    #     :
+    #         The forecast output.
+    #     """
+
+    #     #Copy current_compartment_values and 
+    #     #current_param_values to ensure they are never edited
+
+    #     compartment_values = current_compartment_values.copy()
+    #     param_values = {k: v.copy() for k, v in current_param_values.items()}
+
+    #     N = self.rume.scope.nodes
+    #     C = self.rume.ipm.num_compartments
+    #     state_size = N * C
+
+    #     ##State matrix construction
+    #     r_obs = self.observations.likelihood.variance * np.eye(N)
+    #     ensemble = compartment_values.reshape(self.num_realizations,-1)
+    #     for k in param_values.keys(): 
+    #         ensemble = np.concatenate((ensemble,param_values[k]),axis = -1)
+
+    #     ###Compute useful statistics and matrices
+    #     mean = np.mean(ensemble,axis = 0)
+    #     state_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (ensemble - mean)
+
+    #     obs_mean = np.mean(pred_observations,axis = 0)
+    #     obs_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (pred_observations - obs_mean)
+
+    #     #cov(obs_pred,obs_pred)
+    #     S = obs_perturbation_matrix.T @ obs_perturbation_matrix + r_obs
+
+    #     #Stochastic noise to match KF equations statistically
+    #     perturbed_observations = np.full((self.num_realizations,*real_observations.shape),real_observations).astype(np.float64)
+
+    #     noise = rng.normal(0.,scale = np.sqrt(self.observations.likelihood.variance),size = perturbed_observations.shape)
+    #     perturbed_observations += noise
+
+    #     #Kalman gain terms
+    #     S_inv = np.linalg.pinv(S)
+    #     cross_cov = state_perturbation_matrix.T @ obs_perturbation_matrix
+    #     cross_cov = cross_cov
+
+    #     #Update Ensemble Members
+    #     for i_member in range(self.num_realizations):
+    #         innovation = perturbed_observations[i_member,...] - pred_observations[i_member,...]
+
+    #         alpha = S_inv @ innovation
+
+    #         member_post = ensemble[i_member,:] + cross_cov @ alpha
+
+    #         compartment_values[i_member,...] = member_post[:state_size].reshape((N,C))
+    #         compartment_values[i_member,...] = np.rint(np.clip(compartment_values[i_member,...],
+    #                                                                     a_min = 0., a_max = None))
+
+    #         for i_param,k in enumerate(param_values.keys()): 
+    #             i_param_block = int(N + i_param * N)
+
+    #             param_values[k][i_member, ...] = member_post[state_size + i_param * N:state_size+i_param_block]
+
+    #     return compartment_values,param_values
+
+    def _run_ensemble_kalman_filter(
+        self,
+        rume,
+        num_realizations,
+        initial_values,
+        unknown_params,
+        observations,
+        rng,
+        save_trajectories=True,
+    ):
+        """
+
+        Parameters
+        ----------
+        rume :
+            The RUME.
+        num_realizations :
+            The number of realizations.
+        initial_values :
+            The initial compartment values across each realization. The first dimension
+            is the realization dimension.
+        unknown_params :
+            The estimated parameter dictionary.
+        observations:
+            The observations.
+        rng :
+            The random number generator.
+        save_trajectories : 
+            A boolean indicating whether to save the full trajectories
+            of compartments,events, and parameters. Can require large amounts of
+            available memory for large models. 
+        Returns
+        -------
+        :
+            The ensemble kalman filter output.
+        """
+
+        ###Enforcement of Gaussian Likelihood 
+        if not isinstance(self.observations.likelihood,(Gaussian)): 
+            raise ValueError("Likelihood must be Gaussian for the EnKF.")
+
+        ###Convert unknown_params to NamePattern type
+        unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
+
+        context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+        new_params = {}
+        for name, param in rume.params.items():
+            if isinstance(param, ADRIO):
+                new_params[name] = param.with_context_internal(context).evaluate()
+            else:
+                new_params[name] = param
+
+        rume = dataclasses.replace(
+            rume,
+            params=new_params,
+        )
+
+        # Dimension of the system.
+        days = rume.time_frame.days
+        taus = rume.num_tau_steps
+        R = num_realizations
+        T = days
+        S = days * taus
+        N = rume.scope.nodes
+        C = rume.ipm.num_compartments
+        E = rume.ipm.num_events
+
+        initial = None
+        compartments = None
+        events = None
+        estimated_params = None
+
+        if save_trajectories:
+            # Allocate return values.
+            initial = np.zeros(shape=(R, N, C), dtype=np.int64)
+            compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+            events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+            estimated_params = {
+                k: np.zeros(shape=(R, T, N), dtype=np.float64)
+                for k in unknown_params.keys()
+            }
+
+        # Initialize the initial compartment and parameter values.
+        current_compartment_values, current_param_values = (
+            self._initialize_augmented_state_space(
+                rume, unknown_params, num_realizations, initial_values, rng
+            )
+        )
+        if save_trajectories:
+            initial = current_compartment_values
+
+        # Determine the number of observations and their associated time frames.
+        time_frames, labels = self._observation_time_frames(
+            rume, observations.model_link.time
+        )
+
+        context = Context.of(
+            scope=rume.scope,
+            time_frame=rume.time_frame,
+            ipm=rume.ipm
+        )
+        observations_array = observations._get_observations_numpy_array(context)
+
+        observed_values = []
+        predicted_values = []
+        posterior_values = []
+
+        day_idx = 0
+        step_idx = 0
+
+        pop_avgs = []
+        for i_observation in range(len(time_frames)):
+            time_frame = time_frames[i_observation]
+
+            day_right = day_idx + time_frame.days
+            step_right = step_idx + time_frame.days * rume.num_tau_steps
+
+            start = np.datetime64(time_frame.start_date.isoformat())
+            end = np.datetime64(time_frame.end_date.isoformat())
+            observation_array = observations_array[
+                (observations_array["date"][:, 0] >= start)
+                & (observations_array["date"][:, 0] <= end),
+                :,
+            ]
+
+            print(  # noqa: T201
+                (
+                    f"Observation: {i_observation}, "
+                    f"Label: {labels[i_observation]}, "
+                    f"Time Frame: {time_frame}"
+                ),end = "\r"
+            )
+
+        ###Simulation Step
+            current_predictions,compartment_update,events_update,params_update = self.simulation(rume,
+                            observations,
+                            num_realizations,
+                            unknown_params,
+                            current_param_values,
+                            current_compartment_values,
+                            time_frame,
+                            rng)
+            
+            population = compartment_update[:,-1,:,:].sum(-1)
+            pop_avgs.append(np.mean(population.sum(-1),axis = 0))
+
+            #Update if saving trajectories
+            if save_trajectories:
+                compartments[:, step_idx:step_right, ...] = compartment_update
+                events[:, step_idx:step_right, ...] = events_update
+                for k in unknown_params.keys():
+                    estimated_params[k][:, day_idx:day_right, ...] = params_update[k]
+
+            #Update currents 
+            current_compartment_values[:,...] = compartment_update[:,-1,...]
+            for k in unknown_params.keys():
+                current_param_values[k][:, ...] = params_update[k][:,-1,...]
+
+            pred_observations = np.array(current_predictions).squeeze()
+            predicted_values.append(pred_observations)
+
+            posterior_value = predicted_values[-1].copy()
+
+        ###Kalman Update Step###
+            real_observation_curr = np.zeros((N,))
+            if observation_array.shape[0] != 0:
+                real_observation_curr = observation_array["value"][0, :]
+
+
+            current_compartment_values,current_param_values = self.update(
+                        current_compartment_values,
+                        current_param_values,
+                        pred_observations,
+                        real_observation_curr,
+                        rng)
+
+            posterior_values.append(posterior_value)
+
+            day_idx = day_right
+            step_idx = step_right
+
+
+        return SimpleNamespace(
+            rume=rume,
+            initial=initial,
+            compartments=compartments,
+            events=events,
+            num_realizations=num_realizations,
+            estimated_params=estimated_params,
+            unknown_params=unknown_params,
+            final_compartment_values=current_compartment_values,
+            final_param_values=current_param_values,
+            predicted_values=np.array(predicted_values),
+            posterior_values=np.array(posterior_values),
+            observed_values=np.array(observed_values),
+            pop_avgs = np.array(pop_avgs)
+        )
+
+    def _initialize_augmented_state_space(
+        self, rume, unknown_params, num_realizations, initial_values, rng
+    ):
+        R = num_realizations
+        N = rume.scope.nodes
+        C = rume.ipm.num_compartments
+        current_param_values = {
+            k: np.zeros(shape=(R, N), dtype=np.float64) for k in unknown_params.keys()
+        }
+        for i_realization in range(num_realizations):
+            for k in current_param_values.keys():
+                if isinstance(unknown_params[k].prior, Prior):
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior.sample(size=(N,), rng=rng)
+                else:
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior[i_realization, ...]
+
+        current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
+        if initial_values is not None:
+            current_compartment_values = initial_values
+        else:
+            params_temp = {**rume.params}
+            for i_realization in range(num_realizations):
+                for k in unknown_params.keys():
+                    params_temp[k] = current_param_values[k][i_realization, ...]
+                rume_temp = dataclasses.replace(rume, params=params_temp)
+                data = rume_temp.evaluate_params(rng=rng)
+                current_compartment_values[i_realization, ...] = rume.initialize(
+                    data=data, rng=rng
+                )
+        return current_compartment_values, current_param_values
+
+    def _create_sim_rume(
+        self,
+        rume,
+        realization_index,
+        unknown_params,
+        current_param_values,
+        current_compartment_values,
+        override_time_frame,
+        rng,
+    ):
+        # Add unknown params to the RUME
+            #Update Ensemble Members
+        params_temp = {**rume.params}
+        for k in unknown_params.keys():
+            params_temp[k] = unknown_params[k].dynamics.with_initial(
+                current_param_values[k][realization_index, ...]
+            )
+        rume_temp = dataclasses.replace(
+            rume, params=params_temp, time_frame=override_time_frame
+        )
+
+        # Evaluate the params.
+        data = rume_temp.evaluate_params(rng=rng)
+        rume_temp = dataclasses.replace(
+            rume_temp,
+            params={k.to_pattern(): v for k, v in data.to_dict().items()},
+        )
+
+        # Add the compartment values.
+        strata_temp = [
+            dataclasses.replace(
+                stratum,
+                init=Explicit(
+                    initials=current_compartment_values[realization_index, ...][
+                        ..., rume.compartment_mask[stratum.name]
+                    ]
+                ),
+            )
+            for stratum in rume.strata
+        ]
+        rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
+        return rume_temp, data
+
+    def _observation_time_frames(self, rume, time_agg):
+        """
+        Find the sub time frames which correspond to each observation.
+
+        Parameters
+        ----------
+        rume :
+            The rume of the simulation.
+        time_agg :
+            The time aggregation.
+
+
+        Returns
+        -------
+        :
+            The list of time frames and the corresponding labels.
+        """
+        dim = Dim(nodes=1, days=rume.time_frame.days, tau_steps=rume.num_tau_steps)
+        dates = np.repeat(rume.time_frame.to_numpy(), rume.num_tau_steps)
+        ticks = np.arange(rume.num_ticks)
+        labels = time_agg.grouping.map(dim, ticks, dates)
+
+        # It is important that order is preserved.
+        _, label_idx = np.unique(labels, return_index=True)
+        label_idx = np.sort(label_idx)
+        values = labels[label_idx]
+
+        time_frames = []
+        for i in range(len(label_idx) - 1):
+            start_date = datetime.date.fromisoformat(str(dates[label_idx[i]]))
+            end_date = datetime.date.fromisoformat(str(dates[label_idx[i + 1]]))
+            time_frame = TimeFrame.rangex(
+                start_date=start_date, end_date_exclusive=end_date
+            )
+            time_frames.append(time_frame)
+
+        start_date = datetime.date.fromisoformat(str(dates[label_idx[-1]]))
+        end_date = datetime.date.fromisoformat(str(dates[-1]))
+        time_frames.append(TimeFrame.range(start_date=start_date, end_date=end_date))
+
+        return time_frames, values
+
+class EnsembleKalmanFilterSimulatorOld(PipelineSimulator):
     def __init__(
         self,
         config: PipelineConfig,
@@ -1021,137 +1880,53 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
 
         N = self.rume.scope.nodes
         C = self.rume.ipm.num_compartments
+        state_size = N * C
 
-        r_obs = np.array([[0.]])
-        if isinstance(self.observations.likelihood,Gaussian):
-            r_obs = np.array([[self.observations.likelihood.variance]])
+        ##State matrix construction
+        r_obs = self.observations.likelihood.variance * np.eye(N)
+        ensemble = compartment_values.reshape(self.num_realizations,-1)
+        for k in param_values.keys(): 
+            ensemble = np.concatenate((ensemble,param_values[k]),axis = -1)
 
-        for i_node in range(N): 
-            node_ensemble = compartment_values[:,i_node].reshape(self.num_realizations,-1)
-            for k in param_values.keys(): 
-                node_ensemble = np.concatenate((node_ensemble,param_values[k][:,i_node,np.newaxis]),axis = -1)
+        ###Compute useful statistics and matrices
+        mean = np.mean(ensemble,axis = 0)
+        state_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (ensemble - mean)
 
-            node_pred_observations = self.ensure_col(pred_observations)[:,i_node]
+        obs_mean = np.mean(pred_observations,axis = 0)
+        obs_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (pred_observations - obs_mean)
 
-            ###Compute useful statistics and matrices
-            mean = np.mean(node_ensemble,axis = 0)
-            state_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (node_ensemble - mean)
+        #cov(obs_pred,obs_pred)
+        S = obs_perturbation_matrix.T @ obs_perturbation_matrix + r_obs
 
-            obs_mean = np.mean(node_pred_observations,axis = 0)
-            obs_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (node_pred_observations - obs_mean)
+        #Stochastic noise to match KF equations statistically
+        perturbed_observations = np.full((self.num_realizations,*real_observations.shape),real_observations).astype(np.float64)
 
-            S_inv = np.linalg.pinv(obs_perturbation_matrix.T @ obs_perturbation_matrix + r_obs)
-            cross_cov = state_perturbation_matrix.T @ obs_perturbation_matrix
-            cross_cov = cross_cov[...,np.newaxis]
+        noise = rng.normal(0.,scale = np.sqrt(self.observations.likelihood.variance),size = perturbed_observations.shape)
+        perturbed_observations += noise
 
-            ###Stochastic noise to match KF equations statistically
-            node_perturbed_observations = np.full((self.num_realizations,
-                                              *real_observations[i_node].shape),
-                                             real_observations[i_node]).astype(np.float64)
+        #Kalman gain terms
+        S_inv = np.linalg.pinv(S)
+        cross_cov = state_perturbation_matrix.T @ obs_perturbation_matrix
+        cross_cov = cross_cov
 
-            node_perturbed_observations = self.observations.likelihood.sample(rng,node_perturbed_observations)
+        #Update Ensemble Members
+        for i_member in range(self.num_realizations):
+            innovation = perturbed_observations[i_member,...] - pred_observations[i_member,...]
 
+            alpha = S_inv @ innovation
 
-            ###Update loop
-            for i_member in range(self.num_realizations): 
+            member_post = ensemble[i_member,:] + cross_cov @ alpha
 
-                innovation = node_perturbed_observations[i_member] - node_pred_observations[i_member]
-                innovation = innovation[...,np.newaxis]
+            compartment_values[i_member,...] = member_post[:state_size].reshape((N,C))
+            compartment_values[i_member,...] = np.rint(np.clip(compartment_values[i_member,...],
+                                                                        a_min = 0., a_max = None))
 
-                alpha = S_inv @ innovation
+            for i_param,k in enumerate(param_values.keys()): 
+                i_param_block = int(N + i_param * N)
 
-                member_post = node_ensemble[i_member,:] + cross_cov @ alpha
-                compartment_values[i_member,i_node,:] = np.rint(np.clip(member_post[:C],a_min = 0.,a_max = None))
-                
-                for i_param,k in enumerate(param_values.keys()): 
-                    param_values[k][i_member,i_node] = member_post[C+i_param]
+                param_values[k][i_member, ...] = member_post[state_size + i_param * N:state_size+i_param_block]
 
         return compartment_values,param_values
-
-    # def update(self,
-    #            current_compartment_values,
-    #            current_param_values,
-    #            pred_observations,
-    #            real_observations,
-    #            rng): 
-
-    #     """
-
-    #     Parameters
-    #     ----------
-    #     current_compartment_values : 
-    #         The current values of the compartments, the leading index is num_realizations.
-    #     current_param_values : 
-    #         The current values of the parameters, a dictionary where keys are parameter names
-    #         and the values are arrays with leading axis of num_realizations. 
-    #     pred_observations :
-    #         The predicted observations corresponding to each realization, a numpy array 
-    #         with leading axis num_realizations. 
-    #     real_observations: 
-    #         The actual observation data, currently one observation for each node. 
-    #     rng :
-    #         The random number generator.
-    #     Returns
-    #     -------
-    #     :
-    #         The forecast output.
-    #     """
-
-    #     #Copy current_compartment_values and 
-    #     #current_param_values to ensure they are never edited
-
-    #     compartment_values = current_compartment_values.copy()
-    #     param_values = {k: v.copy() for k, v in current_param_values.items()}
-
-    #     N = self.rume.scope.nodes
-    #     C = self.rume.ipm.num_compartments
-    #     state_size = N * C
-
-    #     ##State matrix construction
-    #     r_obs = self.observations.likelihood.variance * np.eye(N)
-    #     ensemble = compartment_values.reshape(self.num_realizations,-1)
-    #     for k in param_values.keys(): 
-    #         ensemble = np.concatenate((ensemble,param_values[k]),axis = -1)
-
-    #     ###Compute useful statistics and matrices
-    #     mean = np.mean(ensemble,axis = 0)
-    #     state_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (ensemble - mean)
-
-    #     obs_mean = np.mean(pred_observations,axis = 0)
-    #     obs_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (pred_observations - obs_mean)
-
-    #     #cov(obs_pred,obs_pred)
-    #     S = obs_perturbation_matrix.T @ obs_perturbation_matrix + r_obs
-
-    #     #Stochastic noise to match KF equations statistically
-    #     perturbed_observations = np.full((self.num_realizations,*real_observations.shape),real_observations).astype(np.float64)
-
-    #     noise = rng.normal(0.,scale = np.sqrt(self.observations.likelihood.variance),size = perturbed_observations.shape)
-    #     perturbed_observations += noise
-
-    #     #Kalman gain terms
-    #     S_inv = np.linalg.pinv(S)
-    #     cross_cov = state_perturbation_matrix.T @ obs_perturbation_matrix
-    #     cross_cov = cross_cov
-
-    #     #Update Ensemble Members
-    #     for i_member in range(self.num_realizations):
-    #         innovation = perturbed_observations[i_member,...] - pred_observations[i_member,...]
-
-    #         alpha = S_inv @ innovation
-
-    #         member_post = ensemble[i_member,:] + cross_cov @ alpha
-
-    #         compartment_values[i_member,...] = member_post[:state_size].reshape((N,C))
-    #         compartment_values[i_member,...] = np.rint(np.clip(compartment_values[i_member,...],
-    #                                                                     a_min = 0., a_max = None))
-
-    #         for i_param,k in enumerate(param_values.keys()): 
-    #             i_param_block = int(N + i_param * N)
-
-    #             param_values[k][i_member, ...] = member_post[state_size + i_param * N:state_size+i_param_block]
-
-    #     return compartment_values,param_values
 
     def _run_ensemble_kalman_filter(
         self,
@@ -1191,8 +1966,8 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         """
 
         ###Enforcement of Gaussian Likelihood 
-        # if not isinstance(self.observations.likelihood,Gaussian): 
-        #     raise ValueError("Likelihood must be Gaussian for the EnKF.")
+        if not isinstance(self.observations.likelihood,(Gaussian,AdaptiveGaussian)): 
+            raise ValueError("Likelihood must be Gaussian for the EnKF.")
 
         ###Convert unknown_params to NamePattern type
         unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
@@ -1465,3 +2240,586 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         time_frames.append(TimeFrame.range(start_date=start_date, end_date=end_date))
 
         return time_frames, values
+
+class EnsembleKalmanFilterSimulatorPar(PipelineSimulator):
+    def __init__(
+        self,
+        config: PipelineConfig,
+        observations: Observations,
+        save_trajectories=True,
+    ):
+        self.rume = config.rume
+        self.num_realizations = config.num_realizations
+        self.unknown_params = config.unknown_params
+        self.initial_values = config.initial_values
+        self.observations = observations
+        self.save_trajectories = save_trajectories
+
+        ###Parallelization setup 
+        self.cpu_count = multiprocessing.cpu_count()
+        self.process_pool = multiprocessing.Pool()
+
+    def ensure_col(self,arr): 
+        if arr.ndim == 1: 
+            return arr[...,np.newaxis]
+        return arr
+
+    def run(self, rng):
+        num_workers = 4
+        worker_seeds = rng.spawn(num_workers)
+        self.process_pool = multiprocessing.Pool(processes=num_workers,initializer=init_worker,initargs=(worker_seeds,))
+
+        t0 = perf_counter()
+        output = self._run_ensemble_kalman_filter(
+            self.rume,
+            self.num_realizations,
+            self.initial_values,
+            self.unknown_params,
+            observations=self.observations,
+            rng=rng,
+            save_trajectories=self.save_trajectories,
+        )
+        t1 = perf_counter()
+        print(f"\nRuntime with {self.num_realizations} members and {self.rume.scope.nodes} Nodes is {np.round(t1-t0,2)} seconds.")
+
+        # ##Close the process pool
+        # self.process_pool.join()
+        # self.process_pool.close()
+
+        return ParticleFilterOutput(
+            simulator=self,
+            final_compartment_values=output.final_compartment_values,
+            final_param_values=output.final_param_values,
+            compartments=output.compartments,
+            events=output.events,
+            initial=output.initial,
+            posterior_values=output.posterior_values,
+            estimated_params=output.estimated_params,
+            pop_avgs = output.pop_avgs
+        )
+
+    def simulation(self,
+                    rume,observations,
+                    num_realizations,
+                    unknown_params,
+                    current_param_values,
+                    current_compartment_values,
+                    time_frame,
+                    rng):
+
+        """
+
+        Parameters
+        ----------
+        rume :
+            The RUME.
+        num_realizations :
+            The number of realizations.
+        unknown_params :
+            The estimated parameter names and values.
+        observations:
+            The observations object, encompassing the model link and aggregator.
+        time_frame :
+            The TimeFrame corresponding to the current data point
+        current_param_values : 
+            The current values of the unknown parameters, used for the 
+            forward model. 
+        current_compartment_values : 
+            The initial condition corresponding to each realization. 
+        rng :
+            The random number generator.
+        Returns
+        -------
+        :
+            The simulation output up to the next data point for each realization.
+        """
+
+        ###Array initialization
+        compartment_update = np.zeros((num_realizations,
+                                       rume.num_tau_steps * time_frame.duration_days,
+                                       rume.scope.nodes,rume.ipm.num_compartments),
+                                       dtype = np.float64)
+
+        events_update = np.zeros((num_realizations,
+                                       rume.num_tau_steps * time_frame.duration_days,
+                                       rume.scope.nodes,rume.ipm.num_events),
+                                       dtype = np.float64)
+
+        params_update = {
+                k: np.zeros(shape=(num_realizations, time_frame.duration_days, rume.scope.nodes), 
+                            dtype=np.float64)
+                for k in unknown_params.keys()
+            }
+
+        ### Loop over the realizations, run the forward model for each
+        current_predictions = np.zeros(shape = (num_realizations,rume.scope.nodes))
+
+        async_results = [self.process_pool.apply_async(simulation_par,args = (j_realization,
+                                                                  rume,unknown_params,
+                                                                  current_param_values,
+                                                                  current_compartment_values,
+                                                                  time_frame,
+                                                                  observations))
+                                                                  for j_realization in range(num_realizations)]
+
+        for r in async_results: 
+            j_realization,prediction,out_temp,data = r.get() ###Blocks execution
+
+            ###Update predictions
+            current_predictions[j_realization] = prediction
+
+            ###Update the compartments,events and parameters
+            compartment_update[j_realization,...] = out_temp.compartments
+            events_update[j_realization,...] = out_temp.events
+
+            for k in unknown_params.keys():
+                params_update[k][j_realization,...] = data.get_raw(k)
+
+
+        return current_predictions,compartment_update,events_update,params_update
+
+    def update(self,
+               current_compartment_values,
+               current_param_values,
+               pred_observations,
+               real_observations,
+               rng): 
+
+        """
+
+        Parameters
+        ----------
+        current_compartment_values : 
+            The current values of the compartments, the leading index is num_realizations.
+        current_param_values : 
+            The current values of the parameters, a dictionary where keys are parameter names
+            and the values are arrays with leading axis of num_realizations. 
+        pred_observations :
+            The predicted observations corresponding to each realization, a numpy array 
+            with leading axis num_realizations. 
+        real_observations: 
+            The actual observation data, currently one observation for each node. 
+        rng :
+            The random number generator.
+        Returns
+        -------
+        :
+            The forecast output.
+        """
+
+        #Copy current_compartment_values and 
+        #current_param_values to ensure they are never edited
+
+        compartment_values = current_compartment_values.copy()
+        param_values = {k: v.copy() for k, v in current_param_values.items()}
+
+        N = self.rume.scope.nodes
+        C = self.rume.ipm.num_compartments
+
+        r_obs = np.array([[self.observations.likelihood.variance]])
+
+        for i_node in range(N): 
+            node_ensemble = compartment_values[:,i_node,:]
+            for k in param_values.keys(): 
+                node_ensemble = np.concatenate((node_ensemble,param_values[k][:,i_node,np.newaxis]),axis = -1)
+
+            node_pred_observations = self.ensure_col(pred_observations)[:,i_node]
+
+            ###Compute useful statistics and matrices
+            mean = np.mean(node_ensemble,axis = 0)
+            state_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (node_ensemble - mean)
+
+            obs_mean = np.mean(node_pred_observations,axis = 0)
+            obs_perturbation_matrix = 1/np.sqrt(self.num_realizations - 1) * (node_pred_observations - obs_mean)
+
+            S_inv = np.linalg.pinv(obs_perturbation_matrix.T @ obs_perturbation_matrix + r_obs)
+            cross_cov = state_perturbation_matrix.T @ obs_perturbation_matrix
+            cross_cov = cross_cov[...,np.newaxis]
+
+            ###Stochastic noise to match KF equations statistically
+            node_perturbed_observations = np.full((self.num_realizations,
+                                              *real_observations[i_node].shape),
+                                             real_observations[i_node]).astype(np.float64)
+
+            node_perturbed_observations = self.observations.likelihood.sample(rng,node_perturbed_observations)
+
+
+            ###Update loop
+            for i_member in range(self.num_realizations): 
+
+                innovation = node_perturbed_observations[i_member] - node_pred_observations[i_member]
+                innovation = innovation[...,np.newaxis]
+
+                alpha = S_inv @ innovation
+
+                member_post = node_ensemble[i_member,:] + cross_cov @ alpha
+                compartment_values[i_member,i_node,:] = np.rint(np.clip(member_post[:C],a_min = 0.,a_max = None))
+
+                for i_param,k in enumerate(param_values.keys()): 
+                    param_values[k][i_member,i_node] = member_post[C+i_param]
+
+        return compartment_values,param_values
+
+    def _run_ensemble_kalman_filter(
+        self,
+        rume,
+        num_realizations,
+        initial_values,
+        unknown_params,
+        observations,
+        rng,
+        save_trajectories=True,
+    ):
+        """
+
+        Parameters
+        ----------
+        rume :
+            The RUME.
+        num_realizations :
+            The number of realizations.
+        initial_values :
+            The initial compartment values across each realization. The first dimension
+            is the realization dimension.
+        unknown_params :
+            The estimated parameter dictionary.
+        observations:
+            The observations.
+        rng :
+            The random number generator.
+        save_trajectories : 
+            A boolean indicating whether to save the full trajectories
+            of compartments,events, and parameters. Can require large amounts of
+            available memory for large models. 
+        Returns
+        -------
+        :
+            The ensemble kalman filter output.
+        """
+
+        ###Enforcement of Gaussian Likelihood 
+        if not isinstance(self.observations.likelihood,(Gaussian)): 
+            raise ValueError("Likelihood must be Gaussian for the EnKF.")
+
+        ###Convert unknown_params to NamePattern type
+        unknown_params = {NamePattern.of(k): v for k, v in unknown_params.items()}
+
+        context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+        new_params = {}
+        for name, param in rume.params.items():
+            if isinstance(param, ADRIO):
+                new_params[name] = param.with_context_internal(context).evaluate()
+            else:
+                new_params[name] = param
+
+        rume = dataclasses.replace(
+            rume,
+            params=new_params,
+        )
+
+        # Dimension of the system.
+        days = rume.time_frame.days
+        taus = rume.num_tau_steps
+        R = num_realizations
+        T = days
+        S = days * taus
+        N = rume.scope.nodes
+        C = rume.ipm.num_compartments
+        E = rume.ipm.num_events
+
+        initial = None
+        compartments = None
+        events = None
+        estimated_params = None
+
+        if save_trajectories:
+            # Allocate return values.
+            initial = np.zeros(shape=(R, N, C), dtype=np.int64)
+            compartments = np.zeros(shape=(R, S, N, C), dtype=np.int64)
+            events = np.zeros(shape=(R, S, N, E), dtype=np.int64)
+            estimated_params = {
+                k: np.zeros(shape=(R, T, N), dtype=np.float64)
+                for k in unknown_params.keys()
+            }
+
+        # Initialize the initial compartment and parameter values.
+        current_compartment_values, current_param_values = (
+            self._initialize_augmented_state_space(
+                rume, unknown_params, num_realizations, initial_values, rng
+            )
+        )
+        if save_trajectories:
+            initial = current_compartment_values
+
+        # Determine the number of observations and their associated time frames.
+        time_frames, labels = self._observation_time_frames(
+            rume, observations.model_link.time
+        )
+
+        context = Context.of(
+            scope=rume.scope,
+            time_frame=rume.time_frame,
+            ipm=rume.ipm
+        )
+        observations_array = observations._get_observations_numpy_array(context)
+
+        observed_values = []
+        predicted_values = []
+        posterior_values = []
+
+        day_idx = 0
+        step_idx = 0
+
+        pop_avgs = []
+        for i_observation in range(len(time_frames)):
+            time_frame = time_frames[i_observation]
+
+            day_right = day_idx + time_frame.days
+            step_right = step_idx + time_frame.days * rume.num_tau_steps
+
+            start = np.datetime64(time_frame.start_date.isoformat())
+            end = np.datetime64(time_frame.end_date.isoformat())
+            observation_array = observations_array[
+                (observations_array["date"][:, 0] >= start)
+                & (observations_array["date"][:, 0] <= end),
+                :,
+            ]
+
+            print(  # noqa: T201
+                (
+                    f"Observation: {i_observation}, "
+                    f"Label: {labels[i_observation]}, "
+                    f"Time Frame: {time_frame}"
+                ),end = "\r"
+            )
+
+        ###Simulation Step
+            current_predictions,compartment_update,events_update,params_update = self.simulation(rume,
+                            observations,
+                            num_realizations,
+                            unknown_params,
+                            current_param_values,
+                            current_compartment_values,
+                            time_frame,
+                            rng)
+            
+            population = compartment_update[:,-1,:,:].sum(-1)
+            pop_avgs.append(np.mean(population.sum(-1),axis = 0))
+
+            #Update if saving trajectories
+            if save_trajectories:
+                compartments[:, step_idx:step_right, ...] = compartment_update
+                events[:, step_idx:step_right, ...] = events_update
+                for k in unknown_params.keys():
+                    estimated_params[k][:, day_idx:day_right, ...] = params_update[k]
+
+            #Update currents 
+            current_compartment_values[:,...] = compartment_update[:,-1,...]
+            for k in unknown_params.keys():
+                current_param_values[k][:, ...] = params_update[k][:,-1,...]
+
+            pred_observations = np.array(current_predictions).squeeze()
+            predicted_values.append(pred_observations)
+
+            posterior_value = predicted_values[-1].copy()
+
+        ###Kalman Update Step###
+            real_observation_curr = np.zeros((N,))
+            if observation_array.shape[0] != 0:
+                real_observation_curr = observation_array["value"][0, :]
+
+
+            current_compartment_values,current_param_values = self.update(
+                        current_compartment_values,
+                        current_param_values,
+                        pred_observations,
+                        real_observation_curr,
+                        rng)
+
+            posterior_values.append(posterior_value)
+
+            day_idx = day_right
+            step_idx = step_right
+
+
+        return SimpleNamespace(
+            rume=rume,
+            initial=initial,
+            compartments=compartments,
+            events=events,
+            num_realizations=num_realizations,
+            estimated_params=estimated_params,
+            unknown_params=unknown_params,
+            final_compartment_values=current_compartment_values,
+            final_param_values=current_param_values,
+            predicted_values=np.array(predicted_values),
+            posterior_values=np.array(posterior_values),
+            observed_values=np.array(observed_values),
+            pop_avgs = np.array(pop_avgs)
+        )
+
+    def _initialize_augmented_state_space(
+        self, rume, unknown_params, num_realizations, initial_values, rng
+    ):
+        R = num_realizations
+        N = rume.scope.nodes
+        C = rume.ipm.num_compartments
+        current_param_values = {
+            k: np.zeros(shape=(R, N), dtype=np.float64) for k in unknown_params.keys()
+        }
+        for i_realization in range(num_realizations):
+            for k in current_param_values.keys():
+                if isinstance(unknown_params[k].prior, Prior):
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior.sample(size=(N,), rng=rng)
+                else:
+                    current_param_values[k][i_realization, ...] = unknown_params[
+                        k
+                    ].prior[i_realization, ...]
+
+        current_compartment_values = np.zeros(shape=(R, N, C), dtype=np.int64)
+        if initial_values is not None:
+            current_compartment_values = initial_values
+        else:
+            params_temp = {**rume.params}
+            for i_realization in range(num_realizations):
+                for k in unknown_params.keys():
+                    params_temp[k] = current_param_values[k][i_realization, ...]
+                rume_temp = dataclasses.replace(rume, params=params_temp)
+                data = rume_temp.evaluate_params(rng=rng)
+                current_compartment_values[i_realization, ...] = rume.initialize(
+                    data=data, rng=rng
+                )
+        return current_compartment_values, current_param_values
+
+    def _observation_time_frames(self, rume, time_agg):
+        """
+        Find the sub time frames which correspond to each observation.
+
+        Parameters
+        ----------
+        rume :
+            The rume of the simulation.
+        time_agg :
+            The time aggregation.
+
+
+        Returns
+        -------
+        :
+            The list of time frames and the corresponding labels.
+        """
+        dim = Dim(nodes=1, days=rume.time_frame.days, tau_steps=rume.num_tau_steps)
+        dates = np.repeat(rume.time_frame.to_numpy(), rume.num_tau_steps)
+        ticks = np.arange(rume.num_ticks)
+        labels = time_agg.grouping.map(dim, ticks, dates)
+
+        # It is important that order is preserved.
+        _, label_idx = np.unique(labels, return_index=True)
+        label_idx = np.sort(label_idx)
+        values = labels[label_idx]
+
+        time_frames = []
+        for i in range(len(label_idx) - 1):
+            start_date = datetime.date.fromisoformat(str(dates[label_idx[i]]))
+            end_date = datetime.date.fromisoformat(str(dates[label_idx[i + 1]]))
+            time_frame = TimeFrame.rangex(
+                start_date=start_date, end_date_exclusive=end_date
+            )
+            time_frames.append(time_frame)
+
+        start_date = datetime.date.fromisoformat(str(dates[label_idx[-1]]))
+        end_date = datetime.date.fromisoformat(str(dates[-1]))
+        time_frames.append(TimeFrame.range(start_date=start_date, end_date=end_date))
+
+        return time_frames, values
+
+### Helper functions for parallelization
+def simulation_par(j_realization,
+                   rume,
+                    unknown_params,
+                    current_param_values,
+                    current_compartment_values,
+                    time_frame,
+                    observations):
+
+        ###Create sim rume
+        rume_temp, data = create_sim_rume(
+                        rume,
+                        j_realization,
+                        unknown_params,
+                        current_param_values,
+                        current_compartment_values,
+                        time_frame,
+                        _worker_rng
+                    )
+
+
+        sim = BasicSimulator(rume_temp)
+        out_temp = sim.run(rng_factory=lambda: _worker_rng)
+
+        temp_time_agg = out_temp.rume.time_frame.select.all().agg()
+        new_time_agg = dataclasses.replace(
+                temp_time_agg,
+                aggregation=observations.model_link.time.aggregation,
+            )
+
+            ### Apply our aggregators so we get the predicted observation
+        predicted_df = munge(
+                out_temp,
+                geo=observations.model_link.geo,
+                time=new_time_agg,
+                quantity=observations.model_link.quantity,
+            )
+
+        prediction = predicted_df.drop(["geo", "time"], axis=1).to_numpy().squeeze()
+
+        return j_realization,prediction,out_temp,data
+
+def create_sim_rume(
+        rume,
+        realization_index,
+        unknown_params,
+        current_param_values,
+        current_compartment_values,
+        override_time_frame,
+        rng,
+    ):
+        # Add unknown params to the RUME
+            #Update Ensemble Members
+        params_temp = {**rume.params}
+        for k in unknown_params.keys():
+            params_temp[k] = unknown_params[k].dynamics.with_initial(
+                current_param_values[k][realization_index, ...]
+            )
+        rume_temp = dataclasses.replace(
+            rume, params=params_temp, time_frame=override_time_frame
+        )
+
+        # Evaluate the params.
+        data = rume_temp.evaluate_params(rng=rng)
+        rume_temp = dataclasses.replace(
+            rume_temp,
+            params={k.to_pattern(): v for k, v in data.to_dict().items()},
+        )
+
+        # Add the compartment values.
+        strata_temp = [
+            dataclasses.replace(
+                stratum,
+                init=Explicit(
+                    initials=current_compartment_values[realization_index, ...][
+                        ..., rume.compartment_mask[stratum.name]
+                    ]
+                ),
+            )
+            for stratum in rume.strata
+        ]
+        rume_temp = dataclasses.replace(rume_temp, strata=strata_temp)
+        return rume_temp, data
+
+def init_worker(worker_seeds): 
+    global _worker_rng 
+    idx = multiprocessing.current_process()._identity[0]-1 ##Index starts at 1
+    _worker_rng = worker_seeds[idx]

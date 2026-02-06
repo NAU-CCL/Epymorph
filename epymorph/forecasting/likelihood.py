@@ -27,7 +27,7 @@ class Likelihood(ABC):
         raise NotImplementedError("Subclasses should implement this method.")
     
     @abstractmethod
-    def sample(self,rng,mean):
+    def sample(self,rng,mean,**kwargs):
         """
         Samples the likelihood.
 
@@ -91,7 +91,7 @@ class Poisson(Likelihood):
             expected * self.scale + self.jitter + self.shift,
         )
 
-    def sample(self,rng,mean):
+    def sample(self,rng,mean,**kwargs):
         """
         Samples the likelihood.
 
@@ -141,7 +141,7 @@ class NegativeBinomial(Likelihood):
             p=self.r/(0.005+expected + self.r),
         )
     
-    def sample(self,rng,mean):
+    def sample(self,rng,mean,**kwargs):
         """
         Samples the likelihood.
 
@@ -178,7 +178,7 @@ class Gaussian(Likelihood):
     def compute_log(self, observed, expected):
         return norm.logpdf(observed, loc=expected, scale=np.sqrt(self.variance))
 
-    def sample(self,rng,mean):
+    def sample(self,rng,mean,**kwargs):
         """
         Samples the likelihood.
 
@@ -191,5 +191,32 @@ class Gaussian(Likelihood):
         """
 
         sample = rng.normal(0.,scale = np.sqrt(self.variance),size = mean.shape)
+
+        return mean + sample
+
+@dataclass(frozen=True)
+class AdaptiveGaussian(Likelihood):
+
+    jitter: float = 0.0001
+
+    def compute(self, observed, expected):
+        return norm.pdf(observed, loc=expected, scale=np.sqrt(expected + self.jitter))
+
+    def compute_log(self, observed, expected):
+        return norm.logpdf(observed, loc=expected, scale=np.sqrt(expected + self.jitter))
+
+    def sample(self,rng,mean,**kwargs):
+        """
+        Samples the likelihood.
+
+        Parameters
+        ----------
+        rng : np.random.generator
+            The numpy random number generator used to sample from the distribution 
+        mean : np.array
+            Mean of the distribution
+        """
+
+        sample = rng.normal(0.,scale = np.sqrt(mean + self.jitter),size = mean.shape)
 
         return mean + sample

@@ -89,10 +89,10 @@ class RandomLocationsAndRandomSeed(SeededInfection):
         return self.defer(sub)
 
 
-scope = CountyScope.in_states(["AZ"], year=2015)
+scope = StateScope.all(year=2015)
 mm = mm.Centroids()
 ipm = ipm.SIRH()
-sim_time_frame = TimeFrame.of("2015-01-01", 365)
+sim_time_frame = TimeFrame.of("2015-01-01", 182)
 my_rng = np.random.default_rng(0)
 
 '''Generate a random time dependent beta'''
@@ -186,7 +186,7 @@ from epymorph.forecasting.param_transformations import ExponentialTransform
 from epymorph.forecasting.pipeline import EnsembleKalmanFilterSimulator
 
 
-num_realizations = 50
+num_realizations = 100
 
 enkf_rume = SingleStrataRUME.build(
     # Load the Pei IPM
