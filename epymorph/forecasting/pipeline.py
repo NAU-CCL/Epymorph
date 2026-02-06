@@ -208,7 +208,6 @@ class ModelLink:
     time: TimeStrategy
     quantity: QuantityStrategy
 
-
 @dataclass(frozen=True)
 class Observations:
     source: ADRIO
