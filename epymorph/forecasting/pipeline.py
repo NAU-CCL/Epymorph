@@ -34,8 +34,21 @@ from epymorph.util import DateValueType
 
 @dataclass(frozen=True)
 class UnknownParam:
+    """
+    Contains the information for an unknown parameter. An unknown parameter is a
+    parameter which can vary across realizations in a multi-realization simulation. Some
+    simulators will try to estimate unknown parameters.
+    """
+
     prior: NDArray | Prior
+    """
+    The prior distribution or initial values of the parameter.
+    """
+
     dynamics: ParamFunctionDynamics
+    """
+    The dynamics of the parameter dictating how the parameter changes over time.
+    """
 
 
 @dataclass(frozen=True)
@@ -77,6 +90,10 @@ class PipelineConfig:
         unknown_params: Mapping[NamePattern, UnknownParam]
         | Mapping[str, UnknownParam] = {},
     ):
+        """
+        Creates a PipelineConfig from a RUME. Converts the keys of unknown_params into
+        NamePattern's.
+        """
         return cls(
             rume=rume,
             num_realizations=num_realizations,
@@ -92,6 +109,21 @@ class PipelineConfig:
         override_dynamics: Mapping[NamePattern, ParamFunctionDynamics]
         | Mapping[str, ParamFunctionDynamics] = {},
     ) -> Self:
+        """
+        Creates a PipelineConfig starting from the end of a previous PipelineOutput.
+        The RUME, unknown parameters, and initial compartment values are taken from the
+        output. The time frame is extended from the end of the previous time frame.
+
+        Parameters
+        ----------
+        output : PipelineOutput
+            The output to extend.
+        extend_duration : int
+            The number of days to extend the simulation from the end of the previous
+            output.
+        override_dynamics : Mapping[NamePattern, ParamFunctionDynamics]
+            Override the dyanmics of any parameters from the previous output.
+        """
         new_time_frame = TimeFrame.of(
             start_date=output.rume.time_frame.end_date + datetime.timedelta(1),
             duration_days=extend_duration,
@@ -255,6 +287,28 @@ def _initialize_compartments_and_params(
     initial_values: NDArray | None,
     rng: np.random.Generator,
 ) -> Tuple[NDArray, Mapping[NamePattern, NDArray]]:
+    """
+    Parameters
+    ----------
+    rume : RUME
+        The RUME.
+    unknown_params : Mapping[NamePattern, UnknownParam]
+        The unknown parameters. The initial parameter values are based on the prior of
+        each UnknownParam.
+    num_realizations : int
+        The number of realizations.
+    initial_values : NDArray | None
+        An array of shape (R, N, C) containing the initial compartment values.
+        If None then the RUME's intitializer is used to generate a single initial value
+        for each compartment.
+    rng : np.random.Generator
+        The random number generator.
+
+    Returns
+    -------
+    :
+        The initial compartment values and the initial paramter values.
+    """
     num_nodes = rume.scope.nodes
     num_compartments = rume.ipm.num_compartments
     current_params = {
@@ -292,9 +346,31 @@ def _initialize_compartments_and_params(
 @dataclass(frozen=True)
 class _SimulateRealizationsResult:
     compartments: NDArray
+    """
+    An array of shape (R, S, N, C) where R is the number of realizations, S is the
+    number of tau steps, N is the number of nodes, and C is the number of compartments.
+    Contains the compartment values of each realization over time.
+    """
+
     events: NDArray
+    """
+    An array of shape (R, S, N, E) where R is the number of realizations, S is the
+    number of tau steps, N is the number of nodes, and E is the number of events.
+    Contains the event values of each realization over time.
+    """
+
     estimated_params: Mapping[NamePattern, NDArray]
+    """
+    A dictionary containing arrays of shape (R, T, N) where R is the number of
+    realizations, T is the number of days, and N is the number of nodes. Each
+    array contains the values of the unknown parameters over time.
+    """
+
     predictions: List[NDArray]
+    """
+    A list of arrays containing the predicted observation corresponding to each
+    realization.
+    """
 
 
 def _simulate_realizations(
@@ -309,6 +385,38 @@ def _simulate_realizations(
     quantity: QuantitySelection | QuantityAggregation,
     rng: np.random.Generator,
 ) -> _SimulateRealizationsResult:
+    """
+    A helper function used by ForecastSimulator and ParticleFilterSimulator to propagate
+    realizations forward in time.
+
+    Parameters
+    ----------
+    rume_template : RUME
+        A partial RUME which will be filled out with the compartment and parameter
+        values of each realization.
+    override_time_frame : TimeFrame
+        An override of the time_frame of the RUME template.
+    num_realizations : int
+        The number of realizations.
+    initial_values : NDArray
+        An array of shape (R, N, C) containing the compartment values of each
+        realization.
+    unknown_params : Mapping[NamePattern, UnknownParam]
+        A dictionary containing the unknown parameters which are allowed to vary across
+        realizations. The prior field of each UnknownParam is ingnored in favor of
+        param_values.
+    param_values : Mapping[NamePattern, NDArray]
+        A dictionary containing the current parameter values.
+    geo : GeoSelection | GeoAggregation
+    time : TimeSelection | TimeAggregation
+    quantity : QuantitySelection | QuantityAggregation
+    rng : np.random.Generator
+
+    Returns
+    -------
+    :
+        The result of the simulation.
+    """
     num_days = override_time_frame.days
     taus = rume_template.num_tau_steps
     num_steps = num_days * taus
@@ -395,7 +503,33 @@ def _simulate_realizations(
 
 @dataclass(frozen=True)
 class ForecastSimulator(PipelineSimulator):
+    """
+    PipelineSimulator for running a multi-realization forecast of a RUME and any
+    unknown parameters.
+
+    Parameters
+    ----------
+    config : PipelineConfig
+        Contains the rume, number of realizations, initial compartment values, and
+        dictionary of unknown parameters.
+    """
+
+    config: PipelineConfig
+
     def run(self, rng) -> PipelineOutput:
+        """
+        Runs the multi-realization forecast.
+
+        Parameters
+        ----------
+        rng : np.random.Generator
+            The random number generator.
+
+        Returns
+        -------
+        :
+            The output of the forecast.
+        """
         rume = self.rume
         num_realizations = self.num_realizations
         initial_values = self.initial_values
@@ -485,11 +619,33 @@ class ModelLink:
 
 @dataclass(frozen=True)
 class Observations(Generic[ValueT]):
+    """
+    The observed data used to estimate the state and parameters of a simulation.
+    """
+
     source: ADRIO[DateValueType, ValueT] | NDArray[DateValueType]
+    """
+    The source of the observations which results in an (A, N) array where A is a time
+    axis of unknown length and N is the number of nodes. The entries of the array are
+    date-value pairs.
+    """
+
     model_link: ModelLink
+    """
+    Contains the information needed to generate a predicted observation from a
+    single realization of a simulation.
+    """
+
     likelihood: Likelihood
+    """
+    Contains a likelihood function used to compare a predicted observation to observed
+    data.
+    """
 
     def _get_observations_array(self, context: Context) -> NDArray[DateValueType]:
+        """
+        Get the arbitrary by node structured array of date value pairs.
+        """
         if isinstance(self.source, ADRIO):
             inspect = self.source.with_context_internal(context).inspect()
             return inspect.result
@@ -499,10 +655,36 @@ class Observations(Generic[ValueT]):
 
 @dataclass(frozen=True)
 class ParticleFilterSimulator(PipelineSimulator):
+    """
+    A PipelineSimulator for using a particle filter to estimate the state and parameters
+    of a system based on observed data.
+
+    Parameters
+    ----------
+    config : PipelineConfig
+        The RUME, number of realization, initial (prior) compartment values, and unknown
+        parameters to estimate.
+    observations : Observations
+        The observations used to estimate the compartment and parameter values.
+    """
+
     config: PipelineConfig
     observations: Observations
 
-    def run(self, rng):
+    def run(self, rng) -> ParticleFilterOutput:
+        """
+        Run the particle filter simulation.
+
+        Parameters
+        ----------
+        rng : np.random.Generator
+            The random number generator.
+
+        Returns
+        -------
+        :
+            The output of the particle filter.
+        """
         rume = self.rume
         num_realizations = self.num_realizations
         initial_values = self.initial_values
@@ -744,37 +926,45 @@ class ParticleFilterSimulator(PipelineSimulator):
         :
             The normalized (non-log) weights.
         """
-        # Calculating the normalized weights from the unnormalized log weights is
-        # essentiallty calculating the soft max of the of the log weights, so we
-        # borrow a number of techniques here.
+        # Converting unnormalized log weights to normalized non-log weights is
+        # essentially a soft max of the of the log weights.
 
-        # Shifting the log weights is equivalent to multiplying the non-log weights by a
-        # constant. This helps avoid underflow issues in the non-log weights without
-        # affecting the final normalized output.
+        # Shifting the log weights, equivalent to multiplying the unnormalized non-log
+        # weights by a constant, helps avoid underflow issues.
         shifted_log_weights = log_weights - np.max(log_weights, keepdims=True)
         underflow_lower_bound = -(10**2)
         clipped_log_weights = np.clip(
             shifted_log_weights, a_min=underflow_lower_bound, a_max=None
         )
+        # Perform the softmax.
         weights = np.exp(clipped_log_weights)
         weights = weights / np.sum(weights, keepdims=True)
         return weights
 
     @staticmethod
-    def _multinomial_resampling(weights, rng):
-        num_realizations = len(weights)
-        resampled_idx = rng.choice(
-            np.arange(num_realizations),
-            size=num_realizations,
-            replace=True,
-            p=weights,
-        )
+    def _systematic_resampling(weights: NDArray, rng: np.random.Generator):
+        """
+        Performs systematic resampling as part of a particle filter update. It is used
+        to take a weighted particle cloud and produce an equally-weighted particle cloud
+        through resampling. Each particle in the resampled cloud is a duplicate of a
+        particle in the orginal cloud. Not all particles are retained in the resampled
+        cloud. An important property of systematic resampling is that a cloud of
+        equally-weighted particles will produce the exact same cloud.
 
-        resampled_idx = np.sort(resampled_idx)
-        return resampled_idx
 
-    @staticmethod
-    def _systematic_resampling(weights, rng):
+        Parameters
+        ----------
+        weights :
+            An array of shape (R,) where R is the number of particles containing the
+            particle weights.
+        rng:
+            The random number generator.
+
+        Returns:
+        :
+            An array of shape (R,) where R is the number of particles containing the
+            indices of the prior particles corresponding to the resampled particles.
+        """
         num_realizations = len(weights)
         c = np.cumsum(weights)
         u = rng.uniform(0, 1)
