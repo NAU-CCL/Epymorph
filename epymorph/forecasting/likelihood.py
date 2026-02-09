@@ -13,7 +13,7 @@ class Likelihood(ABC):
     """
 
     @abstractmethod
-    def compute(self, observed: int, expected: int):
+    def compute(self, observed, expected):
         """
         Computes the likelihood of the observed data given the data expected by a model.
 
@@ -24,6 +24,10 @@ class Likelihood(ABC):
         expected : int
             The data predicted by the model.
         """
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    @abstractmethod
+    def compute_log(self, observed, expected):
         raise NotImplementedError("Subclasses should implement this method.")
 
 
@@ -81,9 +85,9 @@ class Poisson(Likelihood):
 @dataclass(frozen=True)
 class NegativeBinomial(Likelihood):
     """
-    Encapsulatees the Negative Binomial likelihood function for observational data. The expected
-    value of the observation is used as the parameter for the Negative Binomial distribution. The
-    observed values must be nonnegative integers.
+    Encapsulatees the Negative Binomial likelihood function for observational data. The
+    expected value of the observation is used as the parameter for the Negative Binomial
+    distribution. The observed values must be nonnegative integers.
 
     Attributes
     ----------

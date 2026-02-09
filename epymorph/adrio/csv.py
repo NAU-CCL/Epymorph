@@ -30,7 +30,7 @@ from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.geography.us_tiger import get_counties, get_states
 from epymorph.simulation import Context, validate_context_for_shape
 from epymorph.time import DateRange
-from epymorph.util import date_value_dtype, identity, to_date_value_array
+from epymorph.util import DateValueType, date_value_dtype, identity, to_date_value_array
 
 GeoKeyType = Literal["state_abbrev", "county_state", "geoid"]
 """
@@ -364,7 +364,7 @@ class CSVFileTxN(_CSVMixin, ADRIO[np.generic, np.generic]):
         )
 
 
-class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
+class CSVFileAxN(_CSVMixin, ADRIO[DateValueType, np.generic]):
     """
     Loads an AxN-shaped array of data from a user-provided CSV file where A is an
     arbitrary time axis labeled by date.
@@ -401,8 +401,6 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
     """Numerical index of the column containing the data of interest."""
     skiprows: int | None
     """Number of header rows in the file to be skipped."""
-    # date_range: DateRange | None
-    # """The time period encompassed by data in the file."""
 
     def __init__(
         self,
@@ -414,7 +412,6 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
         time_col: int,
         data_col: int,
         skiprows: int | None = None,
-        # date_range: DateRange | None = None,
     ):
         if len({key_col, data_col, time_col}) != 3:
             err = "Key, data, and time columns must all be unique."
@@ -426,7 +423,6 @@ class CSVFileAxN(_CSVMixin, ADRIO[np.generic, np.generic]):
         self.data_col = data_col
         self.key_type = key_type
         self.skiprows = skiprows
-        # self.date_range = date_range
         self.time_col = time_col
 
     @property
