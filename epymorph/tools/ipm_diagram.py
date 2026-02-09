@@ -86,6 +86,23 @@ def check_dependencies() -> None:
 # circular dependency issues.
 
 
+class CompartmentName(Protocol):
+    """A simplified `CompartmentName` interface."""
+
+    @abstractmethod
+    def __str__(self) -> str:
+        """The compartment's full name."""
+
+
+class CompartmentDef(Protocol):
+    """A simplified `CompartmentDef` interface."""
+
+    @property
+    @abstractmethod
+    def name(self) -> CompartmentName:
+        """The compartment name."""
+
+
 class EdgeDef(Protocol):
     """A simplified `EdgeDef` interface."""
 
@@ -102,6 +119,11 @@ class EdgeDef(Protocol):
 
 class CompartmentModel(Protocol):
     """A simplified `CompartmentModel` interface."""
+
+    @property
+    @abstractmethod
+    def compartments(self) -> Sequence[CompartmentDef]:
+        """The unique compartments in the model."""
 
     @property
     @abstractmethod
@@ -142,10 +164,18 @@ def construct_digraph(ipm: CompartmentModel) -> Iterator[Digraph]:
             node_attr={"shape": "square", "width": ".9", "height": ".8"},
             edge_attr={"minlen": "2.0"},
         )
+
+        for c in ipm.compartments:
+            # Explicitly declare nodes for all compartments, in case there are
+            # compartments which are neither the source nor destination of a
+            # transition edge. Otherwise this would be covered when declaring edges,
+            # but it doesn't hurt to do it now.
+            graph.node(str(c.name))
+
         for src, dst, rate in edges_group_sum(ipm.events):
-            # each rate is a sympy expression which we want to render as latex
+            # Each rate is a sympy expression which we want to render as latex
             # to do so, we have to `preview` them into temp files
-            # then use HTML table markup to place them on the graph
+            # then use HTML table markup to place them on the graph.
             with NamedTemporaryFile(suffix=".png", dir=tmp_dir, delete=False) as f:
                 preview(rate, viewer="file", filename=f.name, euler=False)
                 label = f'<<TABLE border="0"><TR><TD><IMG SRC="{f.name}"/></TD></TR></TABLE>>'  # noqa: E501

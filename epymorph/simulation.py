@@ -731,11 +731,15 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
                 "Specify param names as simple strings instead."
             )
             raise ValueError(err)
-        reqs = ReqTree.of(
-            {name.with_id(req.name): req for req in self.requirements},
+
+        ps = [
             Database({NamePattern.parse(k): v for k, v in params.items()}),
-        )
-        data = reqs.evaluate(scope, time_frame, ipm, rng)
+        ]
+        if scope:
+            ps = [*ps, Database({NamePattern.parse("label"): scope.labels})]
+
+        reqs = {name.with_id(req.name): req for req in self.requirements}
+        data = ReqTree.of(reqs, ps).evaluate(scope, time_frame, ipm, rng)
         ctx = Context.of(name, data, scope, time_frame, ipm, rng)
         return self.with_context_internal(ctx)
 

@@ -7,12 +7,13 @@ This module provides a foundation for that, encoding systems for how
 names work and defining the `DataAttribute` object itself.
 """
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Generic, Self, TypeVar
 
 from epymorph.data_shape import DataShape
 from epymorph.data_type import AttributeType, AttributeValue, dtype_as_np, dtype_check
-from epymorph.util import acceptable_name
+from epymorph.util import acceptable_name, filter_unique
 
 ########################
 # Names and Namespaces #
@@ -458,6 +459,34 @@ class NamePattern:
 
     def __str__(self) -> str:
         return f"{self.strata}::{self.module}::{self.id}"
+
+    @staticmethod
+    def conflicts(names: "Iterable[NamePattern]") -> "Sequence[NamePattern]":
+        """
+        Check a set of names for potential conflicts. Especially useful
+        because NamePatterns can contain wildcards, and it would be easy
+        to accidentally provide values which cause name resolution to be ambiguous.
+
+        Parameters
+        ----------
+        names :
+            The names to check against each other.
+
+        Returns
+        -------
+        :
+            The sequence of names which are in conflict, or an empty sequence
+            if there are no conflicts.
+        """
+        names_list = names if isinstance(names, list) else [*names]
+        return filter_unique(
+            [
+                this
+                for this in names_list
+                for other in names_list
+                if this != other and this.match(other)
+            ]
+        )
 
 
 @dataclass(frozen=True)

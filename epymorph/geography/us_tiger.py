@@ -278,15 +278,20 @@ def _load_summary_from_cache(
         with np.load(content["data.npz"]) as data_npz:
             return on_hit(**{k: v.tolist() for k, v in data_npz.items()})
     except CacheMissError:
-        data = on_miss()
-        data_bytes = BytesIO()
-        # NOTE: Python doesn't include a type for dataclass instances;
-        # you can import DataclassInstance from _typeshed, but that seems
-        # to break test discovery. Oh well; just ignore this one.
-        model_dict = asdict(data)  # type: ignore
-        np.savez_compressed(data_bytes, **model_dict)
-        save_bundle_to_cache(path, _CACHE_VERSION, {"data.npz": data_bytes})
-        return data
+        # passing through the exception context means the cache miss
+        # doesn't clutter up the exception stack if fetching the file
+        # from source fails.
+        pass
+
+    data = on_miss()
+    data_bytes = BytesIO()
+    # NOTE: Python doesn't include a type for dataclass instances;
+    # you can import DataclassInstance from _typeshed, but that seems
+    # to break test discovery. Oh well; just ignore this one.
+    model_dict = asdict(data)  # type: ignore
+    np.savez_compressed(data_bytes, **model_dict)
+    save_bundle_to_cache(path, _CACHE_VERSION, {"data.npz": data_bytes})
+    return data
 
 
 ##########

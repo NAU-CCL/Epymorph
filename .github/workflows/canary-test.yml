@@ -1,0 +1,38 @@
+# Runs automated canary tests
+
+# These tests perform minimal checks to validate that our integration with an external
+# service is still valid. We want these tests to be as small as possible and rare so that we
+# minimize excess traffic on our partners. However we also don't want ADRIOs (for example)
+# to start failing without us noticing. So it's a trade-off.
+
+name: Canary test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 16 1 * *" # 1st of every month, 9AM Arizona
+
+jobs:
+  canary-test:
+    name: Canary matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: ${{ vars.UV_VERSION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --dev
+
+      - name: Run canary tests
+        run: uv run pytest tests/canary

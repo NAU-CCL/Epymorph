@@ -1,6 +1,7 @@
 """Displaying epymorph simulation progress in console (or similar outputs)."""
 # ruff: noqa: T201
 
+import os
 from contextlib import contextmanager
 from functools import partial
 from math import ceil
@@ -12,16 +13,75 @@ from humanize import naturalsize
 
 from epymorph.attribute import NAME_PLACEHOLDER
 from epymorph.event import ADRIOProgress, EventBus, OnStart, OnTick
+from epymorph.settings import declare_setting, env_flag
 from epymorph.util import progress, subscriptions
 
 _events = EventBus()
+
+EPYMORPH_LIVE_MESSAGING = declare_setting(
+    name="EPYMORPH_LIVE_MESSAGING",
+    description=(
+        "An optional boolean value; true to force 'live' output rendering "
+        "style, false to disable it. By default, epymorph attempts to "
+        "auto-detect the appropriate setting."
+    ),
+    getter=lambda: env_flag("EPYMORPH_LIVE_MESSAGING"),
+)
+"""An environment variable for the 'live' messaging setting."""
+
+
+def is_live_messaging(override_setting: bool | None = None) -> bool:
+    """
+    Computes the setting to use for message rendering style: "live" (dynamic)
+    or "not live" (static).
+
+    Certain output elements like progress bars render nicely in an interactive
+    console or a Jupyter Notebook, but render poorly in static documents like Quarto
+    or logging output to a file. Hence this setting, which is used to adjust the way
+    these elements are rendered.
+
+    It would be unfortunate to require the user to change their code just to fix
+    rendering for whichever environment that code is going to be run in. Indeed,
+    the user may wish to run their code in many different environments! So this function
+    provides logic to auto-detect an appropriate setting based on environment variables.
+    However the default logic can be overridden explicitly by the user.
+
+    Parameters
+    ----------
+    override_setting :
+        `None` to auto-detect the rendering style to use based on the execution
+        environment; `True` to enable "live" style or `False` to disable it,
+        regardless of the environment.
+
+    Returns
+    -------
+    :
+        `True` to render messages as in a "live" (interactive) environment;
+        `False` to render messages as in a static environment.
+    """
+
+    # If setting is overridden at the call site, use that.
+    if override_setting is not None:
+        return override_setting
+
+    # Otherwise prefer the value of env var EPYMORPH_LIVE_MESSAGING
+    live_messaging = EPYMORPH_LIVE_MESSAGING.get()
+    if live_messaging is not None:
+        return live_messaging
+
+    # Otherwise, any obvious signs that we're in a static rendering environment?
+    if os.getenv("QUARTO_PROJECT_DIR") is not None:
+        return False  # In Quarto rendering, better to be static.
+
+    # If all else fails, assume True.
+    return True
 
 
 @contextmanager
 def sim_messaging(
     *,
     adrio: bool = True,
-    live: bool = True,
+    live: bool | None = None,
 ) -> Generator[None, None, None]:
     """
     Run simulations in this context manager to output (print) progress messages during
@@ -32,9 +92,10 @@ def sim_messaging(
     adrio :
         True to include ADRIO progress updates.
     live :
-        True if this is being used in an interactive environment like
-        the console or a Jupyter Notebook. When rendering static documents
-        (such as with Quarto), the output may look better by setting this to False.
+        An optional override for the rendering style to use in the output.
+        Leave this as `None` to use the default "liveness" logic.
+        Specify `True` or `False` to override the default.
+        See the `is_live_messaging()` function for more information.
 
     Examples
     --------
@@ -45,6 +106,7 @@ def sim_messaging(
     ```
     """
 
+    live = is_live_messaging(live)
     start_time: float | None = None
 
     def on_start(e: OnStart) -> None:

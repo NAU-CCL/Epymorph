@@ -42,13 +42,10 @@ from epymorph.compartment_model import (
     MultiStrataModelSymbols,
     TransitionDef,
 )
-from epymorph.data_shape import Shapes
 from epymorph.data_type import SimArray, dtype_str
 from epymorph.data_usage import CanEstimateData, estimate_report
 from epymorph.database import (
     Database,
-    DatabaseWithFallback,
-    DatabaseWithStrataFallback,
     DataResolver,
     ReqTree,
 )
@@ -64,11 +61,10 @@ from epymorph.simulation import (
     TickDelta,
     TickIndex,
 )
-from epymorph.strata import DEFAULT_STRATA, META_STRATA, gpm_strata
+from epymorph.strata import DEFAULT_STRATA, gpm_strata
 from epymorph.time import TimeFrame
 from epymorph.util import (
     CovariantMapping,
-    KeyValue,
     are_unique,
     map_values,
 )
@@ -130,21 +126,6 @@ class GPM:
 ########
 # RUME #
 ########
-
-
-GEO_LABELS = KeyValue(
-    AbsoluteName(META_STRATA, "geo", "label"),
-    AttributeDef(
-        "label",
-        str,
-        Shapes.N,
-        comment="Labels to use for each geo node.",
-    ),
-)
-"""
-A special attribute which, if provided to a RUME ("meta::geo::label"), will be used as
-labels for the geo node. Otherwise labels will be taken from the geo scope.
-"""
 
 
 class CombineTauStepsResult(NamedTuple):
@@ -279,6 +260,19 @@ def remap_taus(
     )
 
 
+def _as_rume_params(
+    params: CovariantMapping[str | NamePattern, ParamValue],
+) -> dict[NamePattern, ParamValue]:
+    """
+    Convert the user-friendly form of param value maps (keys are NamePattern or str)
+    into the more strict internal form (keys are NamePattern).
+    Returns the same instance if it's already in internal form.
+    """
+    if all(isinstance(k, NamePattern) for k in params.keys()):
+        return params  # type: ignore
+    return {NamePattern.of(k): v for k, v in params.items()}
+
+
 GeoScopeT = TypeVar("GeoScopeT", bound=GeoScope)
 """A type of `GeoScope`."""
 GeoScopeT_co = TypeVar("GeoScopeT_co", covariant=True, bound=GeoScope)
@@ -359,38 +353,6 @@ class RUME(ABC, Generic[GeoScopeT_co]):
                     yield AbsoluteName(strata_name, "init", a.name), a
 
         return OrderedDict(generate_items())
-
-    def _params_database(
-        self,
-        override_params: CovariantMapping[str | NamePattern, ParamValue] | None = None,
-    ) -> Database[ParamValue]:
-        label_name, _ = GEO_LABELS
-        params_db = DatabaseWithStrataFallback(
-            # RUME params are high priority,
-            data={**self.params},
-            # with fall back to strata params.
-            children={
-                **{
-                    gpm_strata(gpm.name): Database(
-                        {
-                            k.to_absolute(gpm_strata(gpm.name)): v
-                            for k, v in (gpm.params or {}).items()
-                        }
-                    )
-                    for gpm in self.strata
-                },
-                # And provide a low-priority default for node labels.
-                "meta": Database({label_name.to_pattern(): self.scope.labels}),
-            },
-        )
-        # If override_params is not empty, wrap in another layer
-        # where override_params have the highest priority.
-        if override_params is not None and len(override_params) > 0:
-            params_db = DatabaseWithFallback(
-                {NamePattern.of(k): v for k, v in override_params.items()},
-                params_db,
-            )
-        return params_db
 
     @cached_property
     def compartment_mask(self) -> Mapping[str, NDArray[np.bool_]]:
@@ -572,16 +534,23 @@ class RUME(ABC, Generic[GeoScopeT_co]):
             If the tree cannot be evaluated, for instance, due to containing circular
             dependencies.
         """
-        label_name, label_def = GEO_LABELS
-        return ReqTree.of(
-            requirements={
-                # Start with our top-level requirements.
-                **self.requirements,
-                # Artificially require the geo labels attribute.
-                label_name: label_def,
-            },
-            params=self._params_database(override_params),
-        )
+        params = [
+            # RUME parameters get highest priority
+            Database({**self.params}),
+            # Then strata parameters (flattened into one DB)
+            Database(
+                {
+                    key.to_absolute(gpm_strata(s.name)): value
+                    for s in self.strata
+                    for key, value in (s.params or {}).items()
+                }
+            ),
+            # Then default geo labels
+            Database({NamePattern.parse("label"): self.scope.labels}),
+        ]
+        if override_params:
+            params = [Database(_as_rume_params(override_params)), *params]
+        return ReqTree.of(self.requirements, params)
 
     def evaluate_params(
         self,
@@ -611,11 +580,7 @@ class RUME(ABC, Generic[GeoScopeT_co]):
             If the parameters cannot be evaluated for any reason, such as missing or
             invalid parameter values.
         """
-        ps = None
-        if override_params is not None and len(override_params) > 0:
-            ps = {NamePattern.of(k): v for k, v in override_params.items()}
-
-        reqs = self.requirements_tree(ps)
+        reqs = self.requirements_tree(override_params)
         return reqs.evaluate(self.scope, self.time_frame, self.ipm, rng)
 
     def initialize(self, data: DataResolver, rng: np.random.Generator) -> SimArray:
@@ -718,7 +683,7 @@ class SingleStrataRUME(RUME[GeoScopeT_co]):
             mms=OrderedDict([(DEFAULT_STRATA, mm)]),
             scope=scope,
             time_frame=time_frame,
-            params={NamePattern.of(k): v for k, v in params.items()},
+            params=_as_rume_params(params),
         )
 
     @override
@@ -792,7 +757,7 @@ class MultiStrataRUME(RUME[GeoScopeT_co]):
             mms=remap_taus([(gpm.name, gpm.mm) for gpm in strata]),
             scope=scope,
             time_frame=time_frame,
-            params={NamePattern.of(k): v for k, v in params.items()},
+            params=_as_rume_params(params),
         )
 
     @override

@@ -1,9 +1,7 @@
 # The mkdocs configuration for epymorph's API documentation.
-# This config file (which is the mkdocs default file) uses dev-environment values.
-# When building the production site, use mkdocs-prod.yml which inherits from this.
 
 site_name: epymorph
-site_url: https://docs.dev.epimorph.org/api
+site_url: https://docs.www.epimorph.org/api/latest
 repo_url: https://github.com/NAU-CCL/Epymorph
 
 extra:
@@ -11,6 +9,9 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/NAU-CCL/Epymorph/
       name: epymorph on Github
+  version:
+    provider: mike
+    alias: true
 
 theme:
   name: material
@@ -22,6 +23,7 @@ theme:
     - navigation.top
     - content.code.copy
     - content.code.annotate
+  custom_dir: docs/overrides
 
 extra_css:
   - styles.css
@@ -32,7 +34,6 @@ watch:
   - docs
   - epymorph
   - mkdocs.yml
-  - mkdocs-prod.yml
 
 exclude_docs: |
   _examples/
