@@ -83,6 +83,7 @@ class GaussianPrior(Prior):
 class ParamFunctionDynamics(ParamFunction[ResultDType], ABC):
     """
     Base class for the dynamics, e.g. the time-dependence, of an unknown parameter.
+    Once given an initial condition, it produces a time-by-node matrix of data.
     """
 
     _initial: NDArray[ResultDType] | None = None
@@ -118,6 +119,7 @@ class ParamFunctionDynamics(ParamFunction[ResultDType], ABC):
 class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
     """
     Model the time dependence of an unknown parameter as an Ornstein-Uhlenbeck process.
+    The process is independent for each node.
     """
 
     requirements = ()
@@ -138,6 +140,9 @@ class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
             self.dim, np.array(self.standard_deviation)
         )
         delta_t = 1
+
+        # These coefficients come from exactly solving the OU process. This is not an
+        # approximation, e.g. this is not Euler-Maruyama.
         A = np.exp(-damping * delta_t)  # noqa: N806
         M = mean * (np.exp(-damping * delta_t) - 1)  # noqa: N806
         C = standard_deviation * np.sqrt(1 - np.exp(-2 * damping * delta_t))
@@ -169,7 +174,8 @@ class Static(ParamFunctionDynamics[np.float64]):
 
 class BrownianMotion(ParamFunctionDynamics[np.float64]):
     """
-    Model the time dependence of an unknown parameter as Brownian motion.
+    Model the time dependence of an unknown parameter as Brownian motion. The Brownian
+    motion for each node is independent.
     """
 
     requirements = ()
@@ -192,6 +198,17 @@ class BrownianMotion(ParamFunctionDynamics[np.float64]):
 
 
 class ExponentialTransform(ParamFunction[np.float64]):
+    """
+    Produces a time-by-node matrix of data by taking the exponential of another
+    parameter.
+
+    Parameters
+    ----------
+    other : str
+        The name of the attribute to take the exponential of. This will be added as a
+        requirement.
+    """
+
     @property
     def requirements(self):
         return (self._value_req,)
@@ -204,6 +221,19 @@ class ExponentialTransform(ParamFunction[np.float64]):
 
 
 class ShiftTransform(ParamFunction[np.float64]):
+    """
+    Produces a time-by-node matrix of data by taking the sum of two other parameters.
+
+    Parameters
+    ----------
+    first : str
+        The name of the first attribute to take the sum of. This will be added as a
+        requirement.
+    second : str
+        The name of the second attribute to take the sum of. This will be added as a
+        requirement.
+    """
+
     @property
     def requirements(self):
         return (self._first_req, self._second_req)

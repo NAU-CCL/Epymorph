@@ -367,7 +367,8 @@ class CSVFileTxN(_CSVMixin, ADRIO[np.generic, np.generic]):
 class CSVFileAxN(_CSVMixin, ADRIO[DateValueType, np.generic]):
     """
     Loads an AxN-shaped array of data from a user-provided CSV file where A is an
-    arbitrary time axis labeled by date.
+    arbitrary time axis labeled by date. The array is a structured array of date-value
+    pairs. Missing data in the csv file is represented with a masked array.
 
     Parameters
     ----------

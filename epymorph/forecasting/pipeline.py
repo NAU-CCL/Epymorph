@@ -981,7 +981,7 @@ class ParticleFilterSimulator(PipelineSimulator):
 @dataclass(frozen=True)
 class EnsembleKalmanFilterOutput(PipelineOutput):
     """
-    Output object for the particle filter which contains additional output and
+    Output object for the ensemble Kalman filter which contains additional output and
     diagnostic information.
     """
 
@@ -999,6 +999,19 @@ class EnsembleKalmanFilterOutput(PipelineOutput):
 
 @dataclass(frozen=True)
 class EnsembleKalmanFilterSimulator(PipelineSimulator):
+    """
+    A PipelineSimulator for using an ensemble Kalman filter to estimate the state and
+    parameters of a system based on observed data.
+
+    Parameters
+    ----------
+    config : PipelineConfig
+        The RUME, number of realization, initial (prior) compartment values, and unknown
+        parameters to estimate.
+    observations : Observations
+        The observations used to estimate the compartment and parameter values.
+    """
+
     config: PipelineConfig
     observations: Observations
 
