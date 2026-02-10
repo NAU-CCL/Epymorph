@@ -484,11 +484,14 @@ class CSVFileAxN(_CSVMixin, ADRIO[DateValueType, np.generic]):
             columns="key",
             values="data",
             fill_value=0,
-            aggfunc="first",  # Other aggfunc's may change the dtype.
+            aggfunc="first",  # Other aggfunc's may change the dtype. # type: ignore
             dropna=False,
         )
         missing = work_df.assign(data=work_df["data"].isna()).pivot_table(
-            index="time", columns="key", values="data", aggfunc="first"
+            index="time",
+            columns="key",
+            values="data",
+            aggfunc="first",  # type: ignore
         )
 
         if np.any(np.isnan(result_np)):
