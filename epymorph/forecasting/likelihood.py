@@ -126,15 +126,12 @@ class NegativeBinomial(Likelihood):
 @dataclass(frozen=True)
 class Gaussian(Likelihood):
     """
-    Encapsulatees the Poisson likelihood function for observational data. The expected
-    value of the observation is used as the parameter for the Poisson distribution. The
-    observed values must be nonnegative integers.
+    A Gaussian likelihood function for observational data.
 
     Attributes
     ----------
-    jitter : float
-        A small number added to the expected value to avoid the degenerate case when the
-        expected value is zero.
+    variance : float
+        The variance of the Gaussian distribution.
     """
 
     variance: float

@@ -1023,6 +1023,13 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         observations = self.observations
         rng = rng
 
+        if not isinstance(observations.likelihood, Gaussian):
+            msg = (
+                "The ensemble Kalman filter only supports a Gaussian"
+                "likelihood for observational data."
+            )
+            raise ValueError(msg)
+
         # Precompute ADRIO values.
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
         new_params = {}
@@ -1139,9 +1146,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             # posterior_value will be modified in-place.
             posterior_value = current_predictions.copy()
 
-            observation_cov = 0
-            if isinstance(self.observations.likelihood, Gaussian):
-                observation_cov = self.observations.likelihood.variance
+            observation_cov = observations.likelihood.variance
 
             # Hard code localization
             for i_node in range(num_nodes):
