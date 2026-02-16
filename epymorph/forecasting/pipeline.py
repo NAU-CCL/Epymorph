@@ -590,7 +590,7 @@ class ParticleFilterOutput(PipelineOutput):
 
     simulator: "ParticleFilterSimulator"
 
-    posterior_values: NDArray | None
+    posterior_values: NDArray
     """
     The posterior estimate of the observed data. The first dimension of the array is the
     number of realizations, the second dimension is the number of observations. The
@@ -599,7 +599,7 @@ class ParticleFilterOutput(PipelineOutput):
     parameter values are resampled.
     """
 
-    effective_sample_size: NDArray | None
+    effective_sample_size: NDArray
     """
     The effective sample size for each observation and each node.
     """
@@ -987,7 +987,7 @@ class EnsembleKalmanFilterOutput(PipelineOutput):
 
     simulator: "EnsembleKalmanFilterSimulator"
 
-    posterior_values: NDArray | None
+    posterior_values: NDArray
     """
     The posterior estimate of the observed data. The first dimension of the array is the
     number of realizations, the second dimension is the number of observations. The
@@ -1198,6 +1198,10 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                         # fmt: on
                     current_compartments[:, i_node, :] = np.clip(
                         current_compartments[:, i_node, :], a_min=0, a_max=None
+                    )
+
+                    posterior_value[:, i_node] = np.clip(
+                        posterior_value[:, i_node], a_min=0, a_max=None
                     )
 
             posterior_values.append(posterior_value)
