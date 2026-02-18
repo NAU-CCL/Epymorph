@@ -1022,6 +1022,14 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
     config: PipelineConfig
     observations: Observations
 
+    def __post_init__(self):
+        if not isinstance(self.observations.likelihood, Gaussian):
+            msg = (
+                "The ensemble Kalman filter only supports a Gaussian "
+                "likelihood for observational data."
+            )
+            raise ValueError(msg)
+
     @override
     def run(self, rng: np.random.Generator) -> EnsembleKalmanFilterOutput:
         rume = self.rume
@@ -1033,7 +1041,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
 
         if not isinstance(observations.likelihood, Gaussian):
             msg = (
-                "The ensemble Kalman filter only supports a Gaussian"
+                "The ensemble Kalman filter only supports a Gaussian "
                 "likelihood for observational data."
             )
             raise ValueError(msg)
