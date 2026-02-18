@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Tuple, final
+from typing import Self, final
 
 import numpy as np
 import scipy as sp
@@ -12,13 +12,13 @@ from epymorph.data_shape import Shapes
 from epymorph.params import ParamFunction, ResultDType
 
 
-class Prior:
+class Prior(ABC):
     """
     Abstract class representing the prior distribution of an unknown parameter.
     """
 
     @abstractmethod
-    def sample(self, size: Tuple[int], rng: np.random.Generator):
+    def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         """
         Sample values from the prior distribution.
         """
@@ -43,7 +43,7 @@ class UniformPrior(Prior):
         self.lower = lower
         self.upper = upper
 
-    def sample(self, size: Tuple[int], rng: np.random.Generator):
+    def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         """
         Sample an array of uniform random variates.
         """
@@ -71,7 +71,7 @@ class GaussianPrior(Prior):
         self.mean = mean
         self.standard_deviation = standard_deviation
 
-    def sample(self, size: Tuple[int], rng: np.random.Generator):
+    def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         """
         Sample an array of Gaussian random variates.
         """
@@ -88,7 +88,7 @@ class ParamFunctionDynamics(ParamFunction[ResultDType], ABC):
 
     _initial: NDArray[ResultDType] | None = None
 
-    def with_initial(self, initial: NDArray[ResultDType]):
+    def with_initial(self, initial: NDArray[ResultDType]) -> Self:
         """
         Add an initial value so that this parameter is suitable for evaluation from
         within a RUME.
@@ -129,7 +129,9 @@ class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
         self.mean = mean
         self.standard_deviation = standard_deviation
 
-    def _evaluate_from_initial(self, initial):
+    def _evaluate_from_initial(
+        self, initial: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
         previous = initial
 
@@ -166,7 +168,9 @@ class Static(ParamFunctionDynamics[np.float64]):
     def __init__(self):
         pass
 
-    def _evaluate_from_initial(self, initial: NDArray[np.float64]):
+    def _evaluate_from_initial(
+        self, initial: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
         result[...] = initial.copy()
         return result
@@ -180,16 +184,18 @@ class BrownianMotion(ParamFunctionDynamics[np.float64]):
 
     requirements = ()
 
-    def __init__(self, voliatility: float):
-        self.voliatility = voliatility
+    def __init__(self, volatility: float):
+        self.volatility = volatility
 
-    def _evaluate_from_initial(self, initial: NDArray[np.float64]):
+    def _evaluate_from_initial(
+        self, initial: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
         previous = initial
-        voliatility = self.voliatility
-        voliatility = Shapes.TxN.adapt(self.dim, np.array(voliatility))
+        volatility = self.volatility
+        volatility = Shapes.TxN.adapt(self.dim, np.array(volatility))
         for i_day in range(self.time_frame.days):
-            current = previous + voliatility[i_day, ...] * self.rng.normal(
+            current = previous + volatility[i_day, ...] * self.rng.normal(
                 size=self.scope.nodes
             )
             result[i_day, ...] = current
@@ -209,8 +215,10 @@ class ExponentialTransform(ParamFunction[np.float64]):
         requirement.
     """
 
+    _value_req: AttributeDef
+
     @property
-    def requirements(self):
+    def requirements(self) -> tuple[AttributeDef]:
         return (self._value_req,)
 
     def __init__(self, other: str):
@@ -234,8 +242,11 @@ class ShiftTransform(ParamFunction[np.float64]):
         requirement.
     """
 
+    _first_req: AttributeDef
+    _second_req: AttributeDef
+
     @property
-    def requirements(self):
+    def requirements(self) -> tuple[AttributeDef, AttributeDef]:
         return (self._first_req, self._second_req)
 
     def __init__(self, first: str, second: str):

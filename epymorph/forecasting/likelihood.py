@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import NDArray
 from scipy.stats import nbinom, norm, poisson
 
 
@@ -13,7 +14,9 @@ class Likelihood(ABC):
     """
 
     @abstractmethod
-    def compute(self, observed, expected):
+    def compute(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         """
         Computes the likelihood of the observed data given the data expected by a model.
 
@@ -27,7 +30,9 @@ class Likelihood(ABC):
         raise NotImplementedError("Subclasses should implement this method.")
 
     @abstractmethod
-    def compute_log(self, observed, expected):
+    def compute_log(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         raise NotImplementedError("Subclasses should implement this method.")
 
 
@@ -49,7 +54,9 @@ class Poisson(Likelihood):
     shift: int = 0
     scale: float = 1.0
 
-    def compute(self, observed, expected):
+    def compute(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         """
         Computes the Poisson likelihood.
 
@@ -65,7 +72,9 @@ class Poisson(Likelihood):
             expected * self.scale + self.jitter + self.shift,
         )
 
-    def compute_log(self, observed, expected):
+    def compute_log(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         """
         Computes the Poisson likelihood.
 
@@ -98,14 +107,18 @@ class NegativeBinomial(Likelihood):
 
     r: int
 
-    def compute(self, observed, expected):
+    def compute(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         return nbinom.pmf(
             observed,
             n=self.r,
             p=1 / (1 + expected / self.r),
         )
 
-    def compute_log(self, observed, expected):
+    def compute_log(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         """
         Computes the Negative Binomial likelihood.
 
@@ -136,8 +149,12 @@ class Gaussian(Likelihood):
 
     variance: float
 
-    def compute(self, observed, expected):
+    def compute(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         return norm.pdf(observed, loc=expected, scale=np.sqrt(self.variance))
 
-    def compute_log(self, observed, expected):
+    def compute_log(
+        self, observed: NDArray[np.float64], expected: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         return norm.logpdf(observed, loc=expected, scale=np.sqrt(self.variance))
