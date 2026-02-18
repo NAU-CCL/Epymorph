@@ -6,6 +6,7 @@ from typing import Generic, Mapping, Self, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.adrio.adrio import ADRIO, ValueT
 from epymorph.attribute import NamePattern
@@ -334,8 +335,8 @@ def _initialize_compartments_and_params(
     else:
         params_temp = {**rume.params}
         for i_realization in range(num_realizations):
-            for k in unknown_params.keys():
-                params_temp[k] = current_params[k][i_realization, ...]
+            for name in current_params.keys():
+                params_temp[name] = current_params[name][i_realization, ...]
             rume_temp = dataclasses.replace(rume, params=params_temp)
             data = rume_temp.evaluate_params(rng=rng)
             current_compartments[i_realization, ...] = rume.initialize(
@@ -491,8 +492,8 @@ def _simulate_realizations(
         compartments[i_realization, ...] = out_temp.compartments
         events[i_realization, ...] = out_temp.events
 
-        for k in unknown_params.keys():
-            estimated_params[k][i_realization, ...] = data.get_raw(k)
+        for name in estimated_params.keys():
+            estimated_params[name][i_realization, ...] = data.get_raw(name)
 
     return _SimulateRealizationsResult(
         compartments=compartments,
@@ -517,6 +518,7 @@ class ForecastSimulator(PipelineSimulator):
 
     config: PipelineConfig
 
+    @override
     def run(self, rng: np.random.Generator) -> PipelineOutput:
         """
         Runs the multi-realization forecast.
@@ -573,7 +575,8 @@ class ForecastSimulator(PipelineSimulator):
             simulator=self,
             final_compartments=result.compartments[:, -1, ...],
             final_params={
-                k: result.estimated_params[k][:, -1, ...] for k in unknown_params.keys()
+                k: result.estimated_params[k][:, -1, ...]
+                for k in result.estimated_params.keys()
             },
             compartments=result.compartments,
             events=result.events,
@@ -672,6 +675,7 @@ class ParticleFilterSimulator(PipelineSimulator):
     config: PipelineConfig
     observations: Observations
 
+    @override
     def run(self, rng: np.random.Generator) -> ParticleFilterOutput:
         """
         Run the particle filter simulation.
@@ -792,7 +796,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             events[:, step_idx:step_right, ...] = result.events
 
             current_params = {}
-            for name in unknown_params.keys():
+            for name in estimated_params.keys():
                 estimated_params[name][:, day_idx:day_right, ...] = (
                     result.estimated_params[name]
                 )
@@ -1018,6 +1022,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
     config: PipelineConfig
     observations: Observations
 
+    @override
     def run(self, rng: np.random.Generator) -> EnsembleKalmanFilterOutput:
         rume = self.rume
         num_realizations = self.num_realizations
@@ -1128,7 +1133,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             events[:, step_idx:step_right, ...] = result.events
 
             current_params = {}
-            for name in unknown_params.keys():
+            for name in estimated_params.keys():
                 estimated_params[name][:, day_idx:day_right, ...] = (
                     result.estimated_params[name]
                 )
@@ -1163,7 +1168,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     )
                     prior_params_mean = {
                         k: np.mean(current_params[k][:, i_node])
-                        for k in unknown_params.keys()
+                        for k in current_params.keys()
                     }
 
                     # The double use of the term perturbation is unfortunate.
@@ -1173,7 +1178,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     )
                     params_perturbation = {
                         k: current_params[k][:, i_node] - prior_params_mean[k]
-                        for k in unknown_params.keys()
+                        for k in current_params.keys()
                     }
                     prediction_perturbation = (
                         current_predictions[:, i_node]
@@ -1187,7 +1192,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     # fmt: off
                     kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, prediction_perturbation) * residual_cov_inverse  # noqa: E501
                     kalman_gain_params = {
-                        k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in unknown_params.keys() # noqa: E501
+                        k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
                     }
                     kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbation, prediction_perturbation) * residual_cov_inverse # noqa: E501
                     # fmt: on
@@ -1199,7 +1204,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                         innovation = observation - (prediction + perturbation)
                         # fmt: off
                         current_compartments[i_realization, i_node, :] += np.rint(kalman_gain_compartments * innovation).astype(np.int64) # noqa: E501
-                        for name in unknown_params.keys():
+                        for name in kalman_gain_params.keys():
                             current_params[name][i_realization, i_node] += kalman_gain_params[name] * innovation  # noqa: E501
 
                         posterior_value[i_realization, i_node] += kalman_gain_prediction * innovation  # noqa: E501

@@ -43,6 +43,7 @@ class UniformPrior(Prior):
         self.lower = lower
         self.upper = upper
 
+    @override
     def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         """
         Sample an array of uniform random variates.
@@ -71,6 +72,7 @@ class GaussianPrior(Prior):
         self.mean = mean
         self.standard_deviation = standard_deviation
 
+    @override
     def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         """
         Sample an array of Gaussian random variates.
@@ -129,6 +131,7 @@ class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
         self.mean = mean
         self.standard_deviation = standard_deviation
 
+    @override
     def _evaluate_from_initial(
         self, initial: NDArray[np.float64]
     ) -> NDArray[np.float64]:
@@ -168,6 +171,7 @@ class Static(ParamFunctionDynamics[np.float64]):
     def __init__(self):
         pass
 
+    @override
     def _evaluate_from_initial(
         self, initial: NDArray[np.float64]
     ) -> NDArray[np.float64]:
@@ -187,6 +191,7 @@ class BrownianMotion(ParamFunctionDynamics[np.float64]):
     def __init__(self, volatility: float):
         self.volatility = volatility
 
+    @override
     def _evaluate_from_initial(
         self, initial: NDArray[np.float64]
     ) -> NDArray[np.float64]:
@@ -224,6 +229,7 @@ class ExponentialTransform(ParamFunction[np.float64]):
     def __init__(self, other: str):
         self._value_req = AttributeDef(other, float, Shapes.TxN)
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         return np.exp(self.data(self._value_req))
 
@@ -253,5 +259,6 @@ class ShiftTransform(ParamFunction[np.float64]):
         self._first_req = AttributeDef(first, float, Shapes.TxN)
         self._second_req = AttributeDef(second, float, Shapes.TxN)
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         return np.add(self.data(self._first_req), self.data(self._second_req))
