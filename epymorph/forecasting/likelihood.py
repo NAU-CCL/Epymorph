@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 from scipy.stats import nbinom, norm, poisson
+from typing_extensions import override
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,7 @@ class Poisson(Likelihood):
     shift: int = 0
     scale: float = 1.0
 
+    @override
     def compute(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
@@ -72,6 +74,7 @@ class Poisson(Likelihood):
             expected * self.scale + self.jitter + self.shift,
         )
 
+    @override
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
@@ -107,6 +110,7 @@ class NegativeBinomial(Likelihood):
 
     r: int
 
+    @override
     def compute(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
@@ -116,6 +120,7 @@ class NegativeBinomial(Likelihood):
             p=1 / (1 + expected / self.r),
         )
 
+    @override
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
@@ -149,11 +154,13 @@ class Gaussian(Likelihood):
 
     variance: float
 
+    @override
     def compute(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
         return norm.pdf(observed, loc=expected, scale=np.sqrt(self.variance))
 
+    @override
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
