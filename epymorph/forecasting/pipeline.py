@@ -1,8 +1,8 @@
 import dataclasses
 import datetime
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from typing import Generic, List, Mapping, Self, Sequence, Tuple
+from typing import Generic, Mapping, Self, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -13,6 +13,7 @@ from epymorph.compartment_model import (
     QuantityAggregation,
     QuantitySelection,
 )
+from epymorph.data_type import SimDType
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
 from epymorph.forecasting.likelihood import Gaussian, Likelihood
 from epymorph.geography.scope import GeoAggregation, GeoSelection
@@ -40,7 +41,7 @@ class UnknownParam:
     simulators will try to estimate unknown parameters.
     """
 
-    prior: NDArray | Prior
+    prior: NDArray[np.float64] | Prior
     """
     The prior distribution or initial values of the parameter.
     """
@@ -69,7 +70,7 @@ class PipelineConfig:
     The number of realizations of the simulator.
     """
 
-    initial_values: NDArray | None
+    initial_values: NDArray[SimDType] | None
     """
     The optional array of initial compartment values of the simulator. It has shape
     (R, N, C) where R is the number of realizations, N is the number of nodes,
@@ -86,10 +87,10 @@ class PipelineConfig:
         cls,
         rume: RUME,
         num_realizations: int,
-        initial_values: NDArray | None = None,
+        initial_values: NDArray[SimDType] | None = None,
         unknown_params: Mapping[NamePattern, UnknownParam]
         | Mapping[str, UnknownParam] = {},
-    ):
+    ) -> Self:
         """
         Creates a PipelineConfig from a RUME. Converts the keys of unknown_params into
         NamePattern's.
@@ -162,7 +163,7 @@ class PipelineOutput:
     compartments were initialized.
     """
 
-    final_compartments: NDArray
+    final_compartments: NDArray[SimDType]
     """
     An array of shape (R, N, C) where R is the number of realizations, N is the number
     of nodes, and C is the number of compartments. Each realization is an array of
@@ -170,7 +171,7 @@ class PipelineOutput:
     interpretation of the array depends on the simulator used to produce the output.
     """
 
-    final_params: Mapping[NamePattern, NDArray]
+    final_params: Mapping[NamePattern, NDArray[np.float64]]
     """
     A dictionary where the keys are unknown parameters and the values are of arrays of
     shape (R, N) where R is the number of realizations and N is the number of nodes.
@@ -179,7 +180,7 @@ class PipelineOutput:
     the simulator used to produce the output.
     """
 
-    compartments: NDArray
+    compartments: NDArray[SimDType]
     """
     An array of shape (R, S, N, C) where R is the number of realizations, S is
     the number of tau steps, N is the number of nodes, and C is the number of
@@ -189,7 +190,7 @@ class PipelineOutput:
     values with no guarantees of the temporal structure.
     """
 
-    events: NDArray
+    events: NDArray[SimDType]
     """
     An array of shape (R, S, N, E) where R is the number of realizations, S is
     the number of tau steps, N is the number of nodes, and E is the number of
@@ -199,14 +200,14 @@ class PipelineOutput:
     values with no guarantees of the temporal structure.
     """
 
-    initial: NDArray
+    initial: NDArray[SimDType]
     """
     An array of shape (R, N, C) where R is the number of realizations, N is the
     number of nodes, and C is the number of compartments. The interpretation of this
     output depends on the simulator which produced it.
     """
 
-    estimated_params: Mapping[NamePattern, NDArray]
+    estimated_params: Mapping[NamePattern, NDArray[np.float64]]
     """
     A dictionary where the keys are unknown parameters and the values are
     arrays of shape (R, T, N) where R is the number of realizations, T is the number of
@@ -228,12 +229,12 @@ class PipelineOutput:
         return self.simulator.num_realizations
 
     @property
-    def initial_values(self) -> NDArray | None:
+    def initial_values(self) -> NDArray[SimDType] | None:
         return self.simulator.initial_values
 
 
 @dataclass(frozen=True)
-class PipelineSimulator:
+class PipelineSimulator(ABC):
     """
     A base class for multi-realization simulations.
     """
@@ -256,7 +257,7 @@ class PipelineSimulator:
         return self.config.num_realizations
 
     @property
-    def initial_values(self) -> NDArray | None:
+    def initial_values(self) -> NDArray[SimDType] | None:
         """
         An optional array of initial compartment values of shape (R, N, C) where R is
         the number of realizations, N is the number of nodes, and C is the number of
@@ -284,9 +285,9 @@ def _initialize_compartments_and_params(
     rume: RUME,
     unknown_params: Mapping[NamePattern, UnknownParam],
     num_realizations: int,
-    initial_values: NDArray | None,
+    initial_values: NDArray[SimDType] | None,
     rng: np.random.Generator,
-) -> Tuple[NDArray, Mapping[NamePattern, NDArray]]:
+) -> tuple[NDArray, Mapping[NamePattern, NDArray]]:
     """
     Parameters
     ----------
@@ -297,7 +298,7 @@ def _initialize_compartments_and_params(
         each UnknownParam.
     num_realizations : int
         The number of realizations.
-    initial_values : NDArray | None
+    initial_values : NDArray[SimDType] | None
         An array of shape (R, N, C) containing the initial compartment values.
         If None then the RUME's intitializer is used to generate a single initial value
         for each compartment.
@@ -345,14 +346,14 @@ def _initialize_compartments_and_params(
 
 @dataclass(frozen=True)
 class _SimulateRealizationsResult:
-    compartments: NDArray
+    compartments: NDArray[SimDType]
     """
     An array of shape (R, S, N, C) where R is the number of realizations, S is the
     number of tau steps, N is the number of nodes, and C is the number of compartments.
     Contains the compartment values of each realization over time.
     """
 
-    events: NDArray
+    events: NDArray[SimDType]
     """
     An array of shape (R, S, N, E) where R is the number of realizations, S is the
     number of tau steps, N is the number of nodes, and E is the number of events.
@@ -366,7 +367,7 @@ class _SimulateRealizationsResult:
     array contains the values of the unknown parameters over time.
     """
 
-    predictions: List[NDArray]
+    predictions: list[NDArray]
     """
     A list of arrays containing the predicted observation corresponding to each
     realization.
@@ -398,7 +399,7 @@ def _simulate_realizations(
         An override of the time_frame of the RUME template.
     num_realizations : int
         The number of realizations.
-    initial_values : NDArray
+    initial_values : NDArray[SimDType]
         An array of shape (R, N, C) containing the compartment values of each
         realization.
     unknown_params : Mapping[NamePattern, UnknownParam]
@@ -516,7 +517,7 @@ class ForecastSimulator(PipelineSimulator):
 
     config: PipelineConfig
 
-    def run(self, rng) -> PipelineOutput:
+    def run(self, rng: np.random.Generator) -> PipelineOutput:
         """
         Runs the multi-realization forecast.
 
@@ -590,7 +591,7 @@ class ParticleFilterOutput(PipelineOutput):
 
     simulator: "ParticleFilterSimulator"
 
-    posterior_values: NDArray
+    posterior_values: NDArray[np.float64]
     """
     The posterior estimate of the observed data. The first dimension of the array is the
     number of realizations, the second dimension is the number of observations. The
@@ -599,7 +600,7 @@ class ParticleFilterOutput(PipelineOutput):
     parameter values are resampled.
     """
 
-    effective_sample_size: NDArray
+    effective_sample_size: NDArray[np.float64]
     """
     The effective sample size for each observation and each node.
     """
@@ -671,7 +672,7 @@ class ParticleFilterSimulator(PipelineSimulator):
     config: PipelineConfig
     observations: Observations
 
-    def run(self, rng) -> ParticleFilterOutput:
+    def run(self, rng: np.random.Generator) -> ParticleFilterOutput:
         """
         Run the particle filter simulation.
 
@@ -866,7 +867,7 @@ class ParticleFilterSimulator(PipelineSimulator):
     @staticmethod
     def _observation_time_frames(
         rume: RUME, time_grouping: TimeGrouping | None
-    ) -> Tuple[Sequence[TimeFrame], NDArray[GroupKeyType]]:
+    ) -> tuple[Sequence[TimeFrame], NDArray[GroupKeyType]]:
         """
         Find the sub time frames which correspond to each observation.
 
@@ -912,7 +913,7 @@ class ParticleFilterSimulator(PipelineSimulator):
         return time_frames, values
 
     @staticmethod
-    def _normalize_log_weights(log_weights):
+    def _normalize_log_weights(log_weights: NDArray[np.float64]) -> NDArray[np.float64]:
         """
         Calculate the normalized particle weights from the un-normalized natural
         logarithm of the weights. This method uses multiple techniques to mitigate
@@ -944,7 +945,9 @@ class ParticleFilterSimulator(PipelineSimulator):
         return weights
 
     @staticmethod
-    def _systematic_resampling(weights: NDArray, rng: np.random.Generator):
+    def _systematic_resampling(
+        weights: NDArray, rng: np.random.Generator
+    ) -> NDArray[np.int64]:
         """
         Performs systematic resampling as part of a particle filter update. It is used
         to take a weighted particle cloud and produce an equally-weighted particle cloud
@@ -987,7 +990,7 @@ class EnsembleKalmanFilterOutput(PipelineOutput):
 
     simulator: "EnsembleKalmanFilterSimulator"
 
-    posterior_values: NDArray
+    posterior_values: NDArray[np.float64]
     """
     The posterior estimate of the observed data. The first dimension of the array is the
     number of realizations, the second dimension is the number of observations. The
@@ -1015,7 +1018,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
     config: PipelineConfig
     observations: Observations
 
-    def run(self, rng) -> EnsembleKalmanFilterOutput:
+    def run(self, rng: np.random.Generator) -> EnsembleKalmanFilterOutput:
         rume = self.rume
         num_realizations = self.num_realizations
         initial_values = self.initial_values
