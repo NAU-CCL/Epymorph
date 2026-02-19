@@ -29,24 +29,24 @@ def test_year(year: int):
     counties_by_state = c.STATE.grouped(np.array(counties))
 
     for x in states:
-        assert (
-            len(counties_by_state.get(x, [])) > 0
-        ), f"State {x} does not have at least one county."
+        assert len(counties_by_state.get(x, [])) > 0, (
+            f"State {x} does not have at least one county."
+        )
 
     # 3. test that each county contains at least one tract
     tracts = t.get_tracts(year).geoid
     tracts_by_county = c.COUNTY.grouped(np.array(tracts))
 
     for x in counties:
-        assert (
-            len(tracts_by_county.get(x, [])) > 0
-        ), f"County {x} does not have at least one tract."
+        assert len(tracts_by_county.get(x, [])) > 0, (
+            f"County {x} does not have at least one tract."
+        )
 
     # 4. test that each tract contains at least one block group
     cbgs = t.get_block_groups(year).geoid
     cbgs_by_tract = c.TRACT.grouped(np.array(cbgs))
 
     for x in tracts:
-        assert (
-            len(cbgs_by_tract.get(x, [])) > 0
-        ), f"Tract {x} does not have at least one block group."
+        assert len(cbgs_by_tract.get(x, [])) > 0, (
+            f"Tract {x} does not have at least one block group."
+        )
