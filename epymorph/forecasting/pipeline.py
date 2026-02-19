@@ -1,10 +1,11 @@
 import dataclasses
 import datetime
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from dataclasses import dataclass, replace
 from typing import Generic, List, Mapping, Self, Sequence, Tuple
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 
 from epymorph.adrio.adrio import ADRIO, ValueT
@@ -230,6 +231,48 @@ class PipelineOutput:
     @property
     def initial_values(self) -> NDArray | None:
         return self.simulator.initial_values
+
+    @property
+    def dataframe(self) -> pd.DataFrame:
+        NP = self.num_realizations
+        C = self.rume.ipm.num_compartments
+        E = self.rume.ipm.num_events
+        N = self.rume.scope.nodes
+        S = self.rume.num_ticks
+        tau_steps = self.rume.num_tau_steps
+
+        data_np = np.concatenate(
+            (self.compartments, self.events),
+            axis=3,
+        ).reshape((-1, C + E), order="C")
+
+        # Here I'm concatting two DFs sideways so that the index columns come first.
+        # Could use insert, but this is nicer.
+        return pd.concat(
+            (
+                # A dataframe for the various indices
+                pd.DataFrame(
+                    {
+                        "realization": np.repeat(np.arange(NP), S * N),
+                        "tick": np.tile(np.repeat(np.arange(S), N), NP),
+                        "date": np.tile(
+                            np.repeat(self.rume.time_frame.to_numpy(), N * tau_steps),
+                            NP,
+                        ),
+                        "node": np.tile(self.rume.scope.node_ids, S * NP),
+                    }
+                ),
+                # A dataframe for the data columns
+                pd.DataFrame(
+                    data=data_np,
+                    columns=[
+                        *(c.name.full for c in self.rume.ipm.compartments),
+                        *(e.name.full for e in self.rume.ipm.events),
+                    ],
+                ),
+            ),
+            axis=1,  # stick them together side-by-side
+        )
 
 
 @dataclass(frozen=True)

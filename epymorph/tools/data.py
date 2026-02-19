@@ -206,9 +206,11 @@ def munge(
                 data_df["tick"].to_numpy(),
                 data_df["date"].to_numpy(),
             )
+
             if time_axis.shape[0] != data_df.shape[0]:
                 err = "Chosen time-axis grouping did not return a group for every row."
                 raise ValueError(err)
+
         data_df = (
             data_df.drop(columns=["tick", "date"])
             .assign(time=time_axis)
