@@ -48,7 +48,9 @@ jobs:
         run: uv sync --frozen --all-extras --dev
 
       - name: Check imports and formatting
-        run: uv run ruff check --no-fix --exclude doc/devlog --output-format=github .
+        run: |
+          uv run ruff check --no-fix --exclude doc/devlog --output-format=github .
+          uv run ruff format --check
 
       - name: Check data package exports
         run: uv run scripts/data_exports.py --check
