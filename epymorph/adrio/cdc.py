@@ -137,6 +137,7 @@ class _HealthdataAnagCw7uMixin(FetchADRIO[DateValueType, np.int64]):
             on_date_values(validate_values_in_range(0, None)),
         )
 
+
 class _HealthdataG62hSyehMixin(FetchADRIO[DateValueType, np.int64]):
     """
     A mixin implementing some of `FetchADRIO`'s API for ADRIOs which fetch
@@ -214,17 +215,21 @@ class InfluenzaStateHospitalizationDaily(
     _fix_missing: Fill[np.int64]
     _ADMISSIONS = "previous_day_admission_influenza_confirmed"
     _HOSPITALIZATIONS = "total_patients_hospitalized_confirmed_influenza"
-    _column_name: Literal["admissions","hospitalizations"]
+    _column_name: Literal["admissions", "hospitalizations"]
 
     def __init__(
         self,
         *,
-        column: Literal["admissions","hospitalizations"],
-        fix_missing: FillLikeInt = False
+        column: Literal["admissions", "hospitalizations"],
+        fix_missing: FillLikeInt = False,
     ):
-        if column not in ("admissions","hospitalizations"):
-            raise ValueError(("Invalid value for column. Supported values are "
-            "admissions and hospitalizations."))
+        if column not in ("admissions", "hospitalizations"):
+            raise ValueError(
+                (
+                    "Invalid value for column. Supported values are "
+                    "admissions and hospitalizations."
+                )
+            )
         self._column_name = column
         try:
             self._fix_missing = Fill.of_int64(fix_missing)
@@ -233,13 +238,13 @@ class InfluenzaStateHospitalizationDaily(
 
     @override
     def _fetch(self, context: Context) -> pd.DataFrame:
-
         match self._column_name:
             case "admissions":
                 values = [q.Select(self._ADMISSIONS, "nullable_int", as_name="value")]
             case "hospitalizations":
-                values = [q.Select(self._HOSPITALIZATIONS, "nullable_int",
-                                   as_name="value")]
+                values = [
+                    q.Select(self._HOSPITALIZATIONS, "nullable_int", as_name="value")
+                ]
             case x:
                 raise ValueError(f"Unsupported `column_name`: {x}")
 
@@ -280,17 +285,15 @@ class InfluenzaStateHospitalizationDaily(
         data_df: pd.DataFrame,
     ) -> PipelineResult[DateValueType]:
         time_series = self._TIME_RANGE.overlap_or_raise(context.time_frame).to_numpy()
-        pipeline = (
-            DataPipeline(
-                axes=(
-                    PivotAxis("date", time_series),
-                    PivotAxis("geoid", context.scope.labels),
-                ),
-                ndims=2,
-                dtype=self.result_format.dtype["value"].type,
-                rng=context,
-            ).finalize(self._fix_missing)
-        )
+        pipeline = DataPipeline(
+            axes=(
+                PivotAxis("date", time_series),
+                PivotAxis("geoid", context.scope.labels),
+            ),
+            ndims=2,
+            dtype=self.result_format.dtype["value"].type,
+            rng=context,
+        ).finalize(self._fix_missing)
         return pipeline(data_df).to_date_value(time_series)
 
 
