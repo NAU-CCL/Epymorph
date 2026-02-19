@@ -1,3 +1,8 @@
+"""
+Components for specifying a likelihood function for comparing observed data to
+predicted values for state and parameter fitting.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -38,77 +43,57 @@ class Likelihood(ABC):
 
 
 @dataclass(frozen=True)
-class Poisson(Likelihood):
+class PoissonLikelihood(Likelihood):
     """
     Encapsulatees the Poisson likelihood function for observational data. The expected
     value of the observation is used as the parameter for the Poisson distribution. The
     observed values must be nonnegative integers.
 
-    Attributes
+    Parameters
     ----------
-    jitter : float
+    jitter :
         A small number added to the expected value to avoid the degenerate case when the
         expected value is zero.
     """
 
     jitter: float = 0.0001
-    shift: int = 0
-    scale: float = 1.0
 
     @override
     def compute(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        """
-        Computes the Poisson likelihood.
-
-        Parameters
-        ----------
-        observed : int
-            The observational data.
-        expected : int
-            The data predicted by the model.
-        """
         return poisson.pmf(
             observed,
-            expected * self.scale + self.jitter + self.shift,
+            expected + self.jitter,
         )
 
     @override
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        """
-        Computes the Poisson likelihood.
-
-        Parameters
-        ----------
-        observed : int
-            The observational data.
-        expected : int
-            The data predicted by the model.
-        """
         return poisson.logpmf(
             observed,
-            expected * self.scale + self.jitter + self.shift,
+            expected + self.jitter,
         )
 
 
 @dataclass(frozen=True)
-class NegativeBinomial(Likelihood):
+class NegativeBinomialLikelihood(Likelihood):
     """
-    Encapsulatees the Negative Binomial likelihood function for observational data. The
-    expected value of the observation is used as the parameter for the Negative Binomial
-    distribution. The observed values must be nonnegative integers.
+    Encapsulatees the Negative Binomial likelihood function for observational data.
 
-    Attributes
+    Parameters
     ----------
-    r : int
-        The overdispersion parameter of the Negative Binomial distribution. As r->inf
-        NB -> Poisson
+    r :
+        The overdispersion parameter of the Negative Binomial distribution. Must be
+        positive.
     """
 
     r: int
+
+    def __post_init__(self):
+        if self.r <= 0:
+            raise ValueError("The overdispersion parameter, r, must be positive.")
 
     @override
     def compute(
@@ -124,16 +109,6 @@ class NegativeBinomial(Likelihood):
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        """
-        Computes the Negative Binomial likelihood.
-
-        Parameters
-        ----------
-        observed : int
-            The observational data.
-        expected : int
-            The data predicted by the model.
-        """
         return nbinom.logpmf(
             observed,
             n=self.r,
@@ -142,26 +117,30 @@ class NegativeBinomial(Likelihood):
 
 
 @dataclass(frozen=True)
-class Gaussian(Likelihood):
+class GaussianLikelihood(Likelihood):
     """
     A Gaussian likelihood function for observational data.
 
-    Attributes
+    Parameters
     ----------
-    variance : float
-        The variance of the Gaussian distribution.
+    standard_deviation :
+        The standard_deviation of the Gaussian distribution. Must be positive.
     """
 
-    variance: float
+    standard_deviation: float
+
+    def __post_init__(self):
+        if self.standard_deviation <= 0:
+            raise ValueError("The standard_deviation must be positive.")
 
     @override
     def compute(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        return norm.pdf(observed, loc=expected, scale=np.sqrt(self.variance))
+        return norm.pdf(observed, loc=expected, scale=self.standard_deviation)
 
     @override
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        return norm.logpdf(observed, loc=expected, scale=np.sqrt(self.variance))
+        return norm.logpdf(observed, loc=expected, scale=self.standard_deviation)

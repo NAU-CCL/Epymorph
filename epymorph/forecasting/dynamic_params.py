@@ -1,9 +1,12 @@
+"""Components for initializing, propagating, and transforming unknown parameters."""
+
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Self, final
 
 import numpy as np
 import scipy as sp
+from attr import dataclass
 from numpy.typing import NDArray
 from typing_extensions import override
 
@@ -12,6 +15,7 @@ from epymorph.data_shape import Shapes
 from epymorph.params import ParamFunction, ResultDType
 
 
+@dataclass(frozen=True)
 class Prior(ABC):
     """
     Abstract class representing the prior distribution of an unknown parameter.
@@ -21,12 +25,33 @@ class Prior(ABC):
     def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         """
         Sample values from the prior distribution.
+
+        Parameters
+        ----------
+        size:
+            The shape of the resulting array of values.
+        rng:
+            The random number generator to use.
+
+        Returns
+        -------
+        :
+            An array of random values sampled from the distribution.
         """
 
 
+@dataclass(frozen=True)
 class UniformPrior(Prior):
     """
     A uniform prior distribution.
+
+    Parameters
+    ----------
+    lower :
+        The lower bound of the uniform distribution.
+    upper :
+        The upper bound of the uniform distribution. Must be greater than or equal to
+        the lower bound.
     """
 
     lower: float
@@ -39,23 +64,28 @@ class UniformPrior(Prior):
     The upper bound of the uniform distribution.
     """
 
-    def __init__(self, lower: float, upper: float):
-        self.lower = lower
-        self.upper = upper
+    def __post_init__(self):
+        if self.lower > self.upper:
+            raise ValueError("The lower bound cannot be greater than the upper bound.")
 
     @override
     def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
-        """
-        Sample an array of uniform random variates.
-        """
         return sp.stats.uniform.rvs(
             loc=self.lower, scale=(self.upper - self.lower), size=size, random_state=rng
         )
 
 
+@dataclass(frozen=True)
 class GaussianPrior(Prior):
     """
     A Gaussian prior distribution.
+
+    Parameters
+    ----------
+    mean:
+        The mean of the Gaussian distribution.
+    standard_deviation:
+        The standard deviation of the Gaussian distribution. Must be non-negative.
     """
 
     mean: float
@@ -68,15 +98,12 @@ class GaussianPrior(Prior):
     The standard deviation of the Gaussian distribution.
     """
 
-    def __init__(self, mean: float, standard_deviation: float):
-        self.mean = mean
-        self.standard_deviation = standard_deviation
+    def __post_init__(self):
+        if self.standard_deviation < 0:
+            raise ValueError("The standard deviation must be non-negative.")
 
     @override
     def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
-        """
-        Sample an array of Gaussian random variates.
-        """
         return sp.stats.norm.rvs(
             loc=self.mean, scale=self.standard_deviation, size=size, random_state=rng
         )
@@ -94,6 +121,12 @@ class ParamFunctionDynamics(ParamFunction[ResultDType], ABC):
         """
         Add an initial value so that this parameter is suitable for evaluation from
         within a RUME.
+
+        Parameters
+        ----------
+        initial:
+            An array of shape (N,) where N is the number of nodes containing the initial
+            values.
         """
         clone = deepcopy(self)
         setattr(clone, "_initial", initial)
@@ -115,20 +148,44 @@ class ParamFunctionDynamics(ParamFunction[ResultDType], ABC):
     ) -> NDArray[ResultDType]:
         """
         Produce a trajectory matching the attribute requirements from the initial value.
+
+        Parameters
+        ----------
+        initial:
+            An array of shape (N,) where N is the number of nodes containing the initial
+            values.
         """
 
 
 class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
     """
     Model the time dependence of an unknown parameter as an Ornstein-Uhlenbeck process.
-    The process is independent for each node.
+    The process is independent for each node. The process is parameterized in terms of
+    the resulting stationary distribution.
+
+    Parameters
+    ----------
+    damping:
+        The damping of the process. Must be positive.
+    mean:
+        The mean of the stationary distribution.
+    standard_deviation:
+        The standard deviation of the stationary distribution. Must be non-negative.
     """
+
+    damping: float
+    mean: float
+    standard_deviation: float
 
     requirements = ()
 
     def __init__(self, damping: float, mean: float, standard_deviation: float):
+        if damping <= 0:
+            raise ValueError("Damping must be positive.")
         self.damping = damping
         self.mean = mean
+        if standard_deviation < 0:
+            raise ValueError("Standard deviation must be non-negative.")
         self.standard_deviation = standard_deviation
 
     @override
@@ -184,11 +241,21 @@ class BrownianMotion(ParamFunctionDynamics[np.float64]):
     """
     Model the time dependence of an unknown parameter as Brownian motion. The Brownian
     motion for each node is independent.
+
+    Parameters
+    ----------
+    volatility:
+        The volatility of the Brownian motion. Must be non-negative.
     """
+
+    volatility: float
+    """The volatility of the Brownian motion."""
 
     requirements = ()
 
     def __init__(self, volatility: float):
+        if volatility < 0:
+            raise ValueError("The volatility must be non-negative.")
         self.volatility = volatility
 
     @override
@@ -221,6 +288,7 @@ class ExponentialTransform(ParamFunction[np.float64]):
     """
 
     _value_req: AttributeDef
+    """The name of the attribute to take the exponential of."""
 
     @property
     def requirements(self) -> tuple[AttributeDef]:
@@ -249,7 +317,10 @@ class ShiftTransform(ParamFunction[np.float64]):
     """
 
     _first_req: AttributeDef
+    """The name of the first attribute to take the sum of."""
+
     _second_req: AttributeDef
+    """The name of the second attribute to take the sum of."""
 
     @property
     def requirements(self) -> tuple[AttributeDef, AttributeDef]:
