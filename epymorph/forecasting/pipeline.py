@@ -1,6 +1,6 @@
 import dataclasses
 import datetime
-from abc import abstractmethod, ABC
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import Generic, List, Mapping, Self, Sequence, Tuple
 
@@ -11,11 +11,17 @@ from numpy.typing import NDArray
 from epymorph.adrio.adrio import ADRIO, ValueT
 from epymorph.attribute import NamePattern
 from epymorph.compartment_model import (
+    CompartmentDef,
     QuantityAggregation,
     QuantitySelection,
 )
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
 from epymorph.forecasting.likelihood import Gaussian, Likelihood
+from epymorph.forecasting.munge_realizations import (
+    RealizationAggregation,
+    RealizationSelection,
+    RealizationSelector,
+)
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.initializer import Explicit
 from epymorph.rume import RUME
@@ -29,8 +35,7 @@ from epymorph.time import (
     TimeGrouping,
     TimeSelection,
 )
-from epymorph.tools.data import munge
-from epymorph.forecasting.munge_realizations import *
+from epymorph.tools.data import mask, munge
 from epymorph.util import DateValueType
 
 
@@ -274,7 +279,7 @@ class PipelineOutput:
             ),
             axis=1,  # stick them together side-by-side
         )
-    
+
     @property
     def select(self)->RealizationSelector:
         """
@@ -1276,14 +1281,14 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             posterior_values=np.array(posterior_values),
             estimated_params=estimated_params,
         )
-    
+
 def munge_pipeline_output(
         output: PipelineOutput,
         realization: RealizationSelection | RealizationAggregation,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation
-) -> pd.DataFrame: 
+) -> pd.DataFrame:
 
     NP = output.num_realizations
     N = output.rume.scope.nodes
@@ -1390,10 +1395,14 @@ def munge_pipeline_output(
             .reset_index()
         )
 
-    value_cols = list(q_mapping.keys())
+    if realization.aggregation is None:
+        # Without agg: use realization IDs as the realization dimension.
+        pass
+    else:
+        #This avoids adding aggregation over the realization column to the dataframe. 
+        value_cols = list(q_mapping.keys())
+        data_df = (data_df.groupby(["time", "geo"], sort=False)[value_cols]
+                   .agg(realization.aggregation)
+                   .reset_index())
 
-    ### Realization aggregation 
-    if(realization.aggregation is not None):
-        data_df = data_df.groupby(["time", "geo"], sort=False)[value_cols].agg(realization.aggregation).reset_index()
- 
     return data_df.rename(columns=q_mapping)
