@@ -4,6 +4,10 @@ name: Test matrix
 
 on: workflow_dispatch
 
+permissions:
+  id-token: write  # for aws-actions/configure-aws-credentials
+  contents: read  # for actions/checkout
+
 jobs:
   test-matrix:
     name: Test matrix

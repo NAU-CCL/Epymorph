@@ -5,10 +5,15 @@
 # https://docs.astral.sh/ruff/integrations/#github-actions
 
 name: Code quality checks
+
 on:
   pull_request:
   push:
     branches: ['main']
+
+permissions:
+  id-token: write  # for aws-actions/configure-aws-credentials
+  contents: read  # for actions/checkout
 
 jobs:
   code-quality:
