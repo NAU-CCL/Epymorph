@@ -48,10 +48,9 @@ jobs:
 
       - name: Configure AWS Credentials
         if: vars.SIDELOAD_CACHE == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5.1.1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE }}
           aws-region: us-west-2
 
       - name: Download cache files from S3
