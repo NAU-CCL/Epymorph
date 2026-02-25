@@ -21,6 +21,7 @@ from epymorph.forecasting.munge_realizations import (
     RealizationAggregation,
     RealizationSelection,
     RealizationSelector,
+    agg_methods
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.initializer import Explicit
@@ -1303,8 +1304,9 @@ def munge_pipeline_output(
     columns = np.concatenate(([True,True, True, True], quantity.selection))
     data_df = output.dataframe
     data_df = data_df.loc[time_mask & geo_mask].loc[:, columns]
-    data_df = data_df.set_axis(["realization","tick", "date", "geo", *data_df.columns[4:]], axis=1)
-    data_df = data_df.loc[data_df['realization'].isin(realization.selection)]
+    data_df = data_df.set_axis(["realization","tick", "date", "geo",
+                                *data_df.columns[4:]], axis=1)
+    data_df = data_df.loc[data_df["realization"].isin(realization.selection)]
 
     if geo.aggregation is None:
         # Without agg: use node IDs as the geo dimension.
@@ -1401,8 +1403,12 @@ def munge_pipeline_output(
     else:
         #This avoids adding aggregation over the realization column to the dataframe. 
         value_cols = list(q_mapping.keys())
+
+        agg_dict = {f"{col_name}":[agg_methods[meth_name] for meth_name in realization.aggregation] 
+                    for col_name in value_cols}
+
         data_df = (data_df.groupby(["time", "geo"], sort=False)[value_cols]
-                   .agg(realization.aggregation)
+                   .agg(agg_dict)
                    .reset_index())
 
     return data_df.rename(columns=q_mapping)
