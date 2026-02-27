@@ -95,13 +95,12 @@ class RealizationSelection(RealizationStrategy):
         agg_list = []
         for agg in aggs: 
             if agg == 'quantiles':
-                agg_list.extend([f"quantile_{round(100 * q_val,1)}" 
-                                for q_val in np.arange(0.,1.+0.025,0.025)])
+                agg_list.extend(quantile_methods.keys())
 
             elif agg in agg_methods.keys():
                 agg_list.append(agg)
 
-            else: 
+            else:
                 raise ValueError(f"{agg} is not a supported aggregator. ")
 
 
@@ -112,8 +111,8 @@ class RealizationSelection(RealizationStrategy):
 
     def std(self)->RealizationAggregation:
         return self.agg('std')
-    
-    def quantiles(self)->RealizationAggregation: 
+
+    def quantiles(self)->RealizationAggregation:
         return self.agg('quantiles')
 
 
