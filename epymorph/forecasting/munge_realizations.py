@@ -3,7 +3,7 @@ This module extends the functionality of munge over an additional axis, the real
 """
 
 from dataclasses import dataclass, field
-from typing import List, Literal,Dict,Callable
+from typing import List, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,19 +11,22 @@ from numpy.typing import NDArray
 RealizationAggMethod = Literal["mean","std","quantiles"]
 """The supported methods for aggregating realizations."""
 
-'''Dictionaries of aggregation methods.'''
-agg_methods = {"mean":lambda x: x.mean(),
-            "std":lambda x: x.std()}
+def quantile_method(q_val: float):
+    def method(x):
+        return x.quantile(q_val)
 
-quantile_methods = {f"quantile_{round(100 * q_val,1)}":
-                    lambda x, q=q_val: x.quantile(q)
-                    for q_val in np.arange(0.,1.+ 0.025,0.025)}
+    method.__name__ = f"quantile_{round(100 * q_val, 1)}"
+    return method
 
-agg_methods.update(quantile_methods)
 
-for (meth_name, method) in agg_methods.items(): 
-    method.__name__ = meth_name
+_every_025 = np.linspace(0.0, 1.0, 41)
 
+"""Dictionaries of aggregation methods."""
+agg_methods = {
+    "mean": ["mean"],
+    "std": ["std"],
+    "quantiles": list(map(quantile_method, _every_025)),
+}
 
 @dataclass(frozen=True)
 class RealizationStrategy:
@@ -88,23 +91,14 @@ class RealizationSelection(RealizationStrategy):
     """An integer array indicating which realization indices are selected. """
     aggregation: None = field(init = False, default = None)
 
-    def agg(self,*aggs)->RealizationAggregation:
-        if len(aggs) == 0:
-            raise ValueError("No realization aggregation method supplied.")
-
-        agg_list = []
-        for agg in aggs: 
-            if agg == 'quantiles':
-                agg_list.extend(quantile_methods.keys())
-
-            elif agg in agg_methods.keys():
-                agg_list.append(agg)
-
-            else:
+    def agg(self, *aggs) -> RealizationAggregation:
+            if len(aggs) == 0:
+                raise ValueError("No realization aggregation method supplied.")
+            if any((agg := name) not in agg_methods for name in aggs):
                 raise ValueError(f"{agg} is not a supported aggregator. ")
+            agg_list = [m for name in aggs for m in agg_methods[name]]
+            return RealizationAggregation(self.num_realizations, self.selection, agg_list)
 
-
-        return RealizationAggregation(self.num_realizations,self.selection,agg_list)
 
     def mean(self) -> RealizationAggregation:
         return self.agg('mean')
@@ -157,11 +151,11 @@ class RealizationSelector:
             The selection object. 
         """
         if (size <= 0) or (size > self._num_realizations):
-            raise ValueError(("Sample size must be greater ",
-            "than zero and less than the number of realizations. "))
+            raise ValueError("Sample size must be greater than zero and less than the number of realizations. ")
 
         if not isinstance(rng,np.random.Generator): 
             raise ValueError("Parameter rng must be a NumPy random number generator. ")
 
-        return RealizationSelection(self._num_realizations,
-                                     rng.choice(np.arange(self._num_realizations),size))
+        indices = rng.choice(np.arange(self._num_realizations),size,replace = False)
+
+        return RealizationSelection(self._num_realizations,indices)

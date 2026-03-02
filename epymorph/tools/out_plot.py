@@ -417,3 +417,4 @@ class PlotRendererMixin(Output):
     def plot(self) -> PlotRenderer:
         """Render a plot from this output."""
         return PlotRenderer(self)
+
