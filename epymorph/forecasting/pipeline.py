@@ -2,22 +2,15 @@ import dataclasses
 import datetime
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from datetime import timedelta
-from itertools import cycle
-from math import ceil
-from pathlib import Path
 from typing import (
-    Callable,
     Generic,
     List,
-    Literal,
     Mapping,
     Self,
     Sequence,
     Tuple,
 )
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -35,7 +28,6 @@ from epymorph.forecasting.munge_realizations import (
     RealizationAggregation,
     RealizationSelection,
     RealizationSelector,
-    agg_methods,
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.initializer import Explicit
@@ -51,8 +43,7 @@ from epymorph.time import (
     TimeSelection,
 )
 from epymorph.tools.data import mask, munge
-from epymorph.tools.out_plot import LegendOption, TimeFormatOption
-from epymorph.util import DateValueType, identity
+from epymorph.util import DateValueType
 
 
 @dataclass(frozen=True)
@@ -1426,189 +1417,3 @@ def munge_pipeline_output(
                    .reset_index())
 
     return data_df.rename(columns=q_mapping)
-
-class PlotRendererFilter: 
-    """
-    Provides methods for rendering an output in plot form.
-
-    Most commonly, you will use `PlotRendererFilter` starting from a filter output object
-    that supports it:
-
-    Parameters
-    ----------
-    output : PipelineOutput
-        The PipelineOutput the renderer will use.
-    ```
-    """
-
-    output: PipelineOutput
-    """The output the renderer will use."""
-
-    def __init__(self, output: PipelineOutput):
-        self.output = output
-
-    def _time_format(
-        self,
-        time: TimeSelection | TimeAggregation,  # what format did we produce?
-        requested_time_format: TimeFormatOption,  # what format do we want?
-    ) -> tuple[
-        Literal["tick", "date", "day", "other"],  # what format can we actually do?
-        Callable[[pd.Series], pd.Series],  # converts time axis into format
-    ]:
-        """
-        Figures out time-axis formatting for plots. This is basically a
-        best-effort negotiation depending on the time format we have after
-        applying time selection/aggregation (if any) and the time format
-        requested.
-        """
-
-        tau_step_lengths = self.output.rume.tau_step_lengths
-        num_tau_steps = self.output.rume.num_tau_steps
-        start_date = self.output.rume.time_frame.start_date
-        S = self.output.rume.num_ticks
-        T = self.output.rume.time_frame.days
-        match (time.group_format, requested_time_format):
-            case ("tick", "auto" | "day"):
-                # Convert ticks to simulation-day scale:
-                # e.g.: [0.333, 1.0, 1.333, ...]
-                # NOTE: each tick is represented as the end of its timespan
-                def ticks_to_days(time_groups: pd.Series) -> pd.Series:
-                    deltas = np.array(tau_step_lengths).cumsum()
-                    days = (
-                        np.arange(T).repeat(num_tau_steps)  #
-                        + np.tile(deltas, T)
-                    )
-                    ticks = np.arange(S)
-                    time_map = dict(zip(ticks, days))
-                    return time_groups.apply(lambda x: time_map[x])
-
-                return "day", ticks_to_days
-
-            case ("tick", "date"):
-                # Convert ticks to date scale:
-                # e.g.: [2020-01-01T08:00, 2020-01-02T00:00, 2020-01-02T08:00, ...]
-                # NOTE: each tick is represented as the end of its timespan
-                def ticks_to_dates(time_groups: pd.Series) -> pd.Series:
-                    deltas = np.array(
-                        [timedelta(days=x) for x in tau_step_lengths],
-                        dtype=np.timedelta64,
-                    ).cumsum()
-                    dates = (
-                        pd.date_range(start=start_date, periods=T).repeat(
-                            num_tau_steps
-                        )  #
-                        + np.tile(deltas, T)  #
-                    )
-                    ticks = np.arange(S)
-                    time_map = dict(zip(ticks, dates))
-                    return time_groups.apply(lambda x: time_map[x])
-
-                return "date", ticks_to_dates
-
-            case ("date", "day"):
-                # Convert dates to simulation-day scale:
-                # e.g.: [0, 1, 2, 3, 4, ...]
-                # Note: this can produce "negative" days;
-                # e.g., if you group by week but the first day of the week is Monday
-                # and you start the sim on a Tuesday.
-                def dates_to_days(time_groups: pd.Series) -> pd.Series:
-                    start = pd.Timestamp(start_date)
-                    return time_groups.apply(lambda x: (x - start).days)
-
-                return "day", dates_to_days
-
-            case (actual, _):
-                # Any other combo doesn't need to be or can't be mapped.
-                return actual, identity
-
-    def spaghetti(
-        self,
-        realizations: RealizationSelection,
-        geo: GeoSelection | GeoAggregation,
-        time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
-        *,
-        ncols : int = 3,
-        legend: LegendOption = "auto",
-        line_kwargs: list[dict] | None = None,
-        time_format: TimeFormatOption = "auto",
-        label_format: str = "{r}: {q}",
-        title: str | None = None,
-        additional_data: pd.DataFrame | None = None
-    ) -> None:
-
-        if not isinstance(realizations,RealizationSelection): 
-            raise ValueError("Spaghetti plots require a RealizationSelection.")
-
-        try:
-            num_nodes = self.output.rume.scope.nodes
-            nrows = ceil(num_nodes / ncols)
-            fig,axes = plt.subplots(
-                    nrows,
-                    ncols,
-                    figsize=(ncols * 5, nrows * 3),
-                    sharex = True,
-                    layout = "constrained"
-                )
-
-            data_df = munge_pipeline_output(self.output,realizations, geo, time, quantity)
-
-            if line_kwargs == None:
-                line_kwargs = [{}]
-
-            # Y-axis
-            fig.supylabel("count")
-
-            #Title
-            fig.suptitle(t = title)
-
-            # Legend
-            if legend == "auto":
-                # auto: show a legend if there are at most 5 realizations.
-                legend = "on" if self.output.num_realizations <= 5 else "off"
-
-            # Map time labels:
-            _, map_time_axis = self._time_format(time, time_format)
-            data_df["time"] = map_time_axis(data_df["time"])
-
-            # Map geo labels:
-            result_scope = geo.to_scope()
-            if (labels := result_scope.labels_option) is not None:
-                geo_map = dict(zip(result_scope.node_ids, labels))
-                data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
-
-            # Before melting, disambiguate any quantities with the same name.
-            q_mapping = quantity.disambiguate_groups()
-
-            groups_df = data_df.set_axis(["realization","time", "geo", *q_mapping.keys()], axis=1).groupby("geo")
-
-            #Plotting
-            axes = axes.flatten()
-
-            for index,(geo_group_name,gdf) in enumerate(groups_df): 
-                axes[index].set_title(f"{geo_group_name}")
-                axes[index].tick_params(axis='x', labelrotation=45)
-
-                realization_groups = (
-                    gdf.melt(id_vars=["realization","time", "geo"], var_name="quantity")
-                    .groupby(["realization","quantity"])
-                )
-
-                for (realization_group_name,rdf),kwargs in zip(realization_groups,cycle(line_kwargs)):
-                    q_name = q_mapping[realization_group_name[1]]
-                    label = label_format.format(r = realization_group_name[0],q = q_name)
-                    curr_kwargs = {"label": label, **kwargs}
-                    axes[index].plot(rdf["time"],rdf["value"],**curr_kwargs)
-
-                if legend == "on":
-                    axes[index].legend()
-                elif legend == "outside":
-                    axes[index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
-
-            #Cleanup
-            for j in range(index+1,nrows * ncols): 
-                fig.delaxes(axes[j])
-
-        except:
-            plt.close()
-            raise

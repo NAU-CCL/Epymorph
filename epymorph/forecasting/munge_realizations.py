@@ -91,7 +91,7 @@ class RealizationSelection(RealizationStrategy):
     """An integer array indicating which realization indices are selected. """
     aggregation: None = field(init = False, default = None)
 
-    def agg(self, *aggs) -> RealizationAggregation:
+    def agg(self, aggs) -> RealizationAggregation:
             if len(aggs) == 0:
                 raise ValueError("No realization aggregation method supplied.")
             if any((agg := name) not in agg_methods for name in aggs):
@@ -101,13 +101,13 @@ class RealizationSelection(RealizationStrategy):
 
 
     def mean(self) -> RealizationAggregation:
-        return self.agg('mean')
+        return self.agg(['mean'])
 
     def std(self)->RealizationAggregation:
-        return self.agg('std')
+        return self.agg(['std'])
 
     def quantiles(self)->RealizationAggregation:
-        return self.agg('quantiles')
+        return self.agg(['quantiles'])
 
 
 class RealizationSelector:
