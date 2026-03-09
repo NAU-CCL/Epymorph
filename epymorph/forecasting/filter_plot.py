@@ -162,7 +162,7 @@ class PlotRendererFilter:
                 layout="constrained",
             )
 
-            if line_kwargs == None:
+            if line_kwargs is None:
                 line_kwargs = [{}]
 
             if transform is None:
@@ -204,7 +204,7 @@ class PlotRendererFilter:
 
     def spaghetti_plt(
         self,
-        axes: list[Axes],
+        axes: NDArray[Axes],
         realizations: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
@@ -266,7 +266,7 @@ class PlotRendererFilter:
                         label if realization_index == 1 else "_nolegend_"
                     )
                     rdf = rdf.sort_values("time")
-                    data = transform(rdf.assign(quantity=q_name))
+                    data = transform(rdf.assign(quantity=q_name))  # type: ignore
                     ls = axes[plot_index].plot(
                         rdf["time"], data["value"], **plot_kwargs
                     )
@@ -278,7 +278,7 @@ class PlotRendererFilter:
             elif legend == "outside":
                 axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
-            if axes[plot_index].get_subplotspec().is_last_row():
+            if axes[plot_index].get_subplotspec().is_last_row():  # type: ignore
                 if _time_format == "date":
                     axes[plot_index].set_xlabel("date")
                     axes[plot_index].xaxis.set_major_formatter(
@@ -310,11 +310,11 @@ class PlotRendererFilter:
         *,
         ncols: int = 3,
         legend: LegendOption = "auto",
+        fill_kwargs: list[dict] | None = None,
+        line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
-        label_format: str = "{q}",
         title: str | None = None,
         to_file: str | Path | None = None,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
         try:
             num_nodes = self.output.rume.scope.nodes
@@ -327,8 +327,11 @@ class PlotRendererFilter:
                 layout="constrained",
             )
 
-            if transform is None:
-                transform = identity
+            if fill_kwargs is None:
+                fill_kwargs = [{}]
+
+            if line_kwargs is None:
+                line_kwargs = [{}]
 
             # Y-axis
             fig.supylabel("count")
@@ -348,9 +351,9 @@ class PlotRendererFilter:
                 quantity,
                 credible_intervals,
                 legend,
+                fill_kwargs,
+                line_kwargs,
                 time_format,
-                label_format,
-                transform,
             )
 
             if to_file is None:
@@ -365,22 +368,27 @@ class PlotRendererFilter:
 
     def quantiles_plt(
         self,
-        axes: list[Axes],
+        axes: NDArray[Axes],
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         credible_intervals: list[float],
         legend: LegendOption,
+        fill_kwargs: list[dict],
+        line_kwargs: list[dict],
         time_format: TimeFormatOption,
-        label_format: str,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
         quantile_list = list(list())
-        for interval in sorted(credible_intervals,reverse = True):
+        for interval in sorted(credible_intervals, reverse=True):
             lower, upper = self._compute_quantile_range(interval)
             quantile_list.append([f"quantile_{lower}", f"quantile_{upper}"])
 
-        realizations_agg = self.output.select.all().quantiles()
+        flat_quantile_list = [
+            quantile for sublist in quantile_list for quantile in sublist
+        ]
+        flat_quantile_list.append("quantile_50.0")
+        realizations_agg = self.output.select.all().agg(flat_quantile_list)
+
         data_df = munge_pipeline_output(
             self.output, realizations_agg, geo, time, quantity
         )
@@ -407,22 +415,24 @@ class PlotRendererFilter:
             axes[plot_index].set_title(f"{geo_group_name}")
             axes[plot_index].tick_params(axis="x", labelrotation=45)
 
-            for quantity_name in quantity.labels:
-                for ci_index,(upper, lower) in enumerate(quantile_list):
+            for quantity_name, l_kwargs in zip(quantity.labels, cycle(line_kwargs)):
+                for (ci_index, (upper, lower)), f_kwargs in zip(
+                    enumerate(quantile_list), cycle(fill_kwargs)
+                ):
                     axes[plot_index].fill_between(
                         gdf["time"],
                         gdf[quantity_name][lower],
                         gdf[quantity_name][upper],
-                        label=f"{credible_intervals[ci_index]}% CI of {quantity_name}"
+                        label=f"{credible_intervals[ci_index]}% CI of {quantity_name}",
+                        **f_kwargs,
                     )
-                    axes[plot_index].plot(
+                axes[plot_index].plot(
                     gdf["time"],
                     gdf[quantity_name]["quantile_50.0"],
                     label=f"Median of {quantity_name}",
-                    color="red",
                     zorder=100,
+                    **l_kwargs,
                 )
-
 
             ##Labels and Legend
             if legend == "on":
@@ -448,5 +458,107 @@ class PlotRendererFilter:
                     axes[plot_index].set_xlabel("tick")
                 else:
                     axes[plot_index].set_xlabel("time")
+
+            plot_index += 1
+
+    def histogram(
+        self,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        hist_kwargs: list[dict] | None = None,
+        ncols: int = 3,
+        legend: LegendOption = "auto",
+        time_format: TimeFormatOption = "auto",
+        title: str | None = None,
+        to_file: str | Path | None = None,
+    ):
+        try:
+            num_nodes = self.output.rume.scope.nodes
+            nrows = ceil(num_nodes / ncols)
+            fig, axes = plt.subplots(
+                nrows,
+                ncols,
+                figsize=(ncols * 5, nrows * 3),
+                layout="constrained",
+            )
+
+            if hist_kwargs is None:
+                hist_kwargs = [{}]
+
+            # Y-axis
+            fig.supylabel("Density")
+
+            #X-axis
+            fig.supxlabel("Count")
+
+            # Title
+            fig.suptitle(t=title)  # type: ignore
+
+            # Legend
+            if legend == "auto":
+                # auto: show a legend if there are at most 5 realizations.
+                legend = "on" if len(quantity.labels) <= 4 else "off"
+
+            self.histogram_plt(
+                axes, geo, time, quantity, legend, hist_kwargs, time_format
+            )
+
+            if to_file is None:
+                plt.show()
+            else:
+                path = Path(to_file)
+                fig.savefig(path)
+
+        except:
+            plt.close()
+            raise
+
+    def histogram_plt(
+        self,
+        axes: NDArray[Axes],
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection,
+        quantity: QuantitySelection | QuantityAggregation,
+        legend: LegendOption,
+        hist_kwargs,
+        time_format: TimeFormatOption,
+    ):
+        realizations_agg = self.output.select.all()
+        data_df = munge_pipeline_output(
+            self.output, realizations_agg, geo, time, quantity
+        )
+
+        # Map time labels:
+        _, map_time_axis = self._time_format(time, time_format)
+        data_df["time"] = map_time_axis(data_df["time"])
+
+        # Map geo labels:
+        result_scope = geo.to_scope()
+        if (labels := result_scope.labels_option) is not None:
+            geo_map = dict(zip(result_scope.node_ids, labels))
+            data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
+
+        groups_df = data_df.groupby("geo")
+
+        # Plotting
+        axes = axes.flatten()
+
+        plot_index = 0
+        for geo_group_name, gdf in groups_df:
+            axes[plot_index].set_title(f"{geo_group_name}")
+            axes[plot_index].tick_params(axis="x", labelrotation=45)
+
+            for quantity_name, kwargs in zip(quantity.labels, cycle(hist_kwargs)):
+                axes[plot_index].hist(
+                    gdf[quantity_name], label=f"Histogram of {quantity_name} at Time: {gdf['time'].iloc[0]}", **kwargs
+                )
+
+            ##Labels and Legend
+            if legend == "on":
+                axes[plot_index].legend()
+            elif legend == "outside":
+                axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
             plot_index += 1
