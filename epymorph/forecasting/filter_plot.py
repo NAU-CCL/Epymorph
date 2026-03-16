@@ -9,18 +9,17 @@ from typing import (
 
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy.typing import NDArray
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.dates import AutoDateLocator, DateFormatter
 from matplotlib.lines import Line2D
+from numpy.typing import NDArray
 
 from epymorph.compartment_model import (
     QuantityAggregation,
     QuantitySelection,
 )
 from epymorph.forecasting.munge_realizations import (
-    RealizationAggregation,
     RealizationSelection,
 )
 from epymorph.forecasting.pipeline import PipelineOutput, munge_pipeline_output
@@ -139,6 +138,7 @@ class PlotRendererFilter:
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
+        sharex: bool = True,
         ncols: int = 3,
         legend: LegendOption = "auto",
         line_kwargs: list[dict] | None = None,
@@ -158,7 +158,7 @@ class PlotRendererFilter:
                 nrows,
                 ncols,
                 figsize=(ncols * 5, nrows * 3),
-                sharex=True,
+                sharex=sharex,
                 layout="constrained",
             )
 
@@ -176,7 +176,7 @@ class PlotRendererFilter:
 
             # Legend
             if legend == "auto":
-                # auto: show a legend if there are at most 5 realizations.
+                # auto: show a legend if there are at most 4 quantities.
                 legend = "on" if len(quantity.labels) <= 4 else "off"
 
             lines = self.spaghetti_plt(
@@ -204,7 +204,7 @@ class PlotRendererFilter:
 
     def spaghetti_plt(
         self,
-        axes: NDArray[Axes],
+        axes: NDArray[Axes], # type: ignore
         realizations: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
@@ -308,6 +308,7 @@ class PlotRendererFilter:
         quantity: QuantitySelection | QuantityAggregation,
         credible_intervals: list[float] = [95],
         *,
+        sharex: bool = True,
         ncols: int = 3,
         legend: LegendOption = "auto",
         fill_kwargs: list[dict] | None = None,
@@ -323,7 +324,7 @@ class PlotRendererFilter:
                 nrows,
                 ncols,
                 figsize=(ncols * 5, nrows * 3),
-                sharex=True,
+                sharex=sharex,
                 layout="constrained",
             )
 
@@ -368,7 +369,7 @@ class PlotRendererFilter:
 
     def quantiles_plt(
         self,
-        axes: NDArray[Axes],
+        axes: NDArray[Axes], # type: ignore
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
@@ -419,11 +420,17 @@ class PlotRendererFilter:
                 for (ci_index, (upper, lower)), f_kwargs in zip(
                     enumerate(quantile_list), cycle(fill_kwargs)
                 ):
+                    ci_label = (
+                        ""
+                        if len(fill_kwargs) == 1
+                        else f"{credible_intervals[ci_index]}% CI of {quantity_name}"
+                    )
+
                     axes[plot_index].fill_between(
                         gdf["time"],
                         gdf[quantity_name][lower],
                         gdf[quantity_name][upper],
-                        label=f"{credible_intervals[ci_index]}% CI of {quantity_name}",
+                        label=ci_label,
                         **f_kwargs,
                     )
                 axes[plot_index].plot(
@@ -464,7 +471,7 @@ class PlotRendererFilter:
     def histogram(
         self,
         geo: GeoSelection | GeoAggregation,
-        time: TimeSelection,
+        time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
         *,
         hist_kwargs: list[dict] | None = None,
@@ -490,7 +497,7 @@ class PlotRendererFilter:
             # Y-axis
             fig.supylabel("Density")
 
-            #X-axis
+            # X-axis
             fig.supxlabel("Count")
 
             # Title
@@ -517,7 +524,7 @@ class PlotRendererFilter:
 
     def histogram_plt(
         self,
-        axes: NDArray[Axes],
+        axes: NDArray[Axes], # type: ignore
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection,
         quantity: QuantitySelection | QuantityAggregation,
@@ -552,7 +559,9 @@ class PlotRendererFilter:
 
             for quantity_name, kwargs in zip(quantity.labels, cycle(hist_kwargs)):
                 axes[plot_index].hist(
-                    gdf[quantity_name], label=f"Histogram of {quantity_name} at Time: {gdf['time'].iloc[0]}", **kwargs
+                    gdf[quantity_name],
+                    label=f"Histogram of {quantity_name} at Time: {gdf['time'].iloc[0]}",
+                    **kwargs,
                 )
 
             ##Labels and Legend
