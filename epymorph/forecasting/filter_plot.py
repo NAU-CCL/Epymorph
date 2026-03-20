@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.dates import AutoDateLocator, DateFormatter
+from matplotlib.ticker import EngFormatter
 from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
@@ -20,6 +21,7 @@ from epymorph.compartment_model import (
     QuantitySelection,
 )
 from epymorph.forecasting.munge_realizations import (
+    RealizationAggregation,
     RealizationSelection,
 )
 from epymorph.forecasting.pipeline import PipelineOutput, munge_pipeline_output
@@ -28,7 +30,7 @@ from epymorph.time import (
     TimeAggregation,
     TimeSelection,
 )
-from epymorph.tools.out_plot import LegendOption, TimeFormatOption
+from epymorph.tools.out_plot import LegendOption, TimeFormatOption, OrderingOption
 from epymorph.util import identity
 
 
@@ -149,7 +151,7 @@ class PlotRendererFilter:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         if not isinstance(realizations, RealizationSelection):
-            raise ValueError("Spaghetti plots require a RealizationSelection.")
+            raise ValueError("Spaghetti plots only support RealizationSelection.")
 
         try:
             num_nodes = self.output.rume.scope.nodes
@@ -204,7 +206,7 @@ class PlotRendererFilter:
 
     def spaghetti_plt(
         self,
-        axes: NDArray[Axes], # type: ignore
+        axes: NDArray[Axes],  # type: ignore
         realizations: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
@@ -306,7 +308,7 @@ class PlotRendererFilter:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
-        credible_intervals: list[float] = [95],
+        credible_intervals: list[float] = [95.0],
         *,
         sharex: bool = True,
         ncols: int = 3,
@@ -369,7 +371,7 @@ class PlotRendererFilter:
 
     def quantiles_plt(
         self,
-        axes: NDArray[Axes], # type: ignore
+        axes: NDArray[Axes],  # type: ignore
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantitySelection | QuantityAggregation,
@@ -524,7 +526,7 @@ class PlotRendererFilter:
 
     def histogram_plt(
         self,
-        axes: NDArray[Axes], # type: ignore
+        axes: NDArray[Axes],  # type: ignore
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection,
         quantity: QuantitySelection | QuantityAggregation,
@@ -571,3 +573,143 @@ class PlotRendererFilter:
                 axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
             plot_index += 1
+
+    def line(
+        self,
+        realization: RealizationSelection | RealizationAggregation,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        label_format: str = "{n}: {q}: {m}",
+        legend: LegendOption = "auto",
+        line_kwargs: list[dict] | None = None,
+        time_format: TimeFormatOption = "auto",
+        title: str | None = None,
+        to_file: str | Path | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    ) -> None:
+        if not isinstance(realization, RealizationAggregation):
+            raise ValueError("line plots only support RealizationAggregation.")
+
+        try:
+            _, ax = plt.subplots(layout="constrained")
+
+            lines = self.line_plt(
+                ax,
+                realization,
+                geo,
+                time,
+                quantity,
+                line_kwargs=line_kwargs,
+                label_format=label_format,
+                time_format=time_format,
+                transform=transform,
+            )
+
+            # Y-axis
+            plt.ylabel("count")
+            ax.yaxis.set_major_formatter(EngFormatter(sep=""))
+
+            # X-axis
+            _time_format, _ = self._time_format(time, time_format)
+            if _time_format == "date":
+                plt.xlabel("date")
+                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_locator(
+                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
+                )
+                plt.xticks(rotation=45)
+            elif _time_format == "day":
+                plt.xlabel("day")
+            elif _time_format == "tick":
+                plt.xlabel("tick")
+            else:
+                plt.xticks(rotation=45)
+                plt.xlabel("time")
+
+            # Legend
+            if legend == "auto":
+                # auto: show a legend if there are at most 12 lines.
+                legend = "on" if len(lines) <= 12 else "off"
+
+            if legend == "on":
+                plt.legend()
+            elif legend == "outside":
+                plt.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if title is not None:
+                plt.title(title)
+
+            if to_file is None:
+                plt.show()
+            else:
+                path = Path(to_file)
+                plt.savefig(path)
+        except:
+            plt.close()
+            raise
+
+    def line_plt(
+        self,
+        ax: Axes,
+        realization: RealizationSelection | RealizationAggregation,
+        geo: GeoSelection | GeoAggregation,
+        time: TimeSelection | TimeAggregation,
+        quantity: QuantitySelection | QuantityAggregation,
+        *,
+        label_format: str = "{n}: {q}: {m}",
+        line_kwargs: list[dict] | None = None,
+        time_format: TimeFormatOption = "auto",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    ) -> list[Line2D]:
+        if line_kwargs is None or len(line_kwargs) == 0:
+            line_kwargs = [{}]
+        if transform is None:
+            transform = identity
+
+        data_df = munge_pipeline_output(self.output, realization, geo, time, quantity)
+
+        # Map time labels:
+        _, map_time_axis = self._time_format(time, time_format)
+        data_df["time"] = map_time_axis(data_df["time"])
+
+        # Map geo labels:
+        result_scope = geo.to_scope()
+        if (labels := result_scope.labels_option) is not None:
+            geo_map = dict(zip(result_scope.node_ids, labels))
+            data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
+
+        # Before melting, disambiguate any quantities with the same name.
+        q_mapping = quantity.disambiguate_groups()
+
+        data_df = data_df.rename(
+            columns={
+                "time": "time",
+                "geo": "geo",
+                **{v: k for k, v in q_mapping.items()},
+            }
+        )
+
+        lines = list[Line2D]()
+
+        geo_groups = data_df.groupby("geo")
+
+        line_index = 0
+        for (group_name, gdf) in geo_groups:
+            for quantity_dis_label, quantity_label in q_mapping.items():
+                qdf = gdf[quantity_dis_label]
+                qdf = qdf.melt(var_name="metric")
+
+                metric_groups = qdf.groupby("metric")
+
+                for metric_name, mdf in metric_groups:
+                    kwargs = line_kwargs[line_index % len(line_kwargs)]
+                    label = label_format.format(n=group_name, q=quantity_label, m=metric_name)
+                    curr_kwargs = {"label": label, **kwargs}
+                    data = transform(mdf)
+                    ls = ax.plot(gdf["time"], data["value"], **curr_kwargs)
+                    lines.extend(ls)
+                    line_index += 1
+
+        return lines

@@ -26,6 +26,7 @@ _every_025 = np.linspace(0.0, 1.0, 41)
 agg_methods = {
     "mean": ["mean"],
     "std": ["std"],
+    "median": ["median"],
     "quantiles": list(map(quantile_method, _every_025)),
 }
 
