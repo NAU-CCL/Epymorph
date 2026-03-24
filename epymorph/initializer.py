@@ -405,6 +405,7 @@ class IndexedLocations(SeededInfection):
             result[i, infection] += n
         return result
 
+
 class RandomLocationsAndRandomSeed(SeededInfection):
     """
     Seed an random number of infected in a number of randomly selected locations.
@@ -416,8 +417,8 @@ class RandomLocationsAndRandomSeed(SeededInfection):
     num_locations :
         The number of locations to choose.
     seed_max :
-        The maximum number of individuals to infect. 
-        The seed is drawn uniformly on [0,seed_max]. 
+        The maximum number of individuals to infect.
+        The seed is drawn uniformly on [0,seed_max].
     initial_compartment :
         Which compartment (by index or name) is "not infected", where most individuals
         start out.
@@ -472,6 +473,7 @@ class RandomLocationsAndRandomSeed(SeededInfection):
             infection_compartment=self.infection_compartment,
         )
         return self.defer(sub)
+
 
 class SingleLocation(IndexedLocations):
     """
