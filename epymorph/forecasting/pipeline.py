@@ -272,7 +272,7 @@ class PipelineOutput:
             axis=3,
         )
 
-        data_np = np.concatenate((states_np, param_np), axis=-1).reshape(-1,P + E + C)
+        data_np = np.concatenate((states_np, param_np), axis=-1).reshape((-1,P + E + C))
 
         # Here I'm concatting two DFs sideways so that the index columns come first.
         # Could use insert, but this is nicer.
