@@ -318,6 +318,7 @@ class PlotRendererFilter:
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
         try:
             num_nodes = self.output.rume.scope.nodes
@@ -329,6 +330,10 @@ class PlotRendererFilter:
                 sharex=sharex,
                 layout="constrained",
             )
+
+            if transform is None: 
+                transform = identity
+
 
             if fill_kwargs is None:
                 fill_kwargs = [{}]
@@ -357,6 +362,7 @@ class PlotRendererFilter:
                 fill_kwargs,
                 line_kwargs,
                 time_format,
+                transform,
             )
 
             if to_file is None:
@@ -380,7 +386,9 @@ class PlotRendererFilter:
         fill_kwargs: list[dict],
         line_kwargs: list[dict],
         time_format: TimeFormatOption,
+        transform: Callable[[pd.DataFrame], pd.DataFrame],
     ):
+
         quantile_list = list(list())
         for interval in sorted(credible_intervals, reverse=True):
             lower, upper = self._compute_quantile_range(interval)
@@ -430,14 +438,14 @@ class PlotRendererFilter:
 
                     axes[plot_index].fill_between(
                         gdf["time"],
-                        gdf[quantity_name][lower],
-                        gdf[quantity_name][upper],
+                        transform(gdf[quantity_name][lower]),
+                        transform(gdf[quantity_name][upper]),
                         label=ci_label,
                         **f_kwargs,
                     )
                 axes[plot_index].plot(
                     gdf["time"],
-                    gdf[quantity_name]["quantile_50.0"],
+                    transform(gdf[quantity_name]["quantile_50.0"]),
                     label=f"Median of {quantity_name}",
                     zorder=100,
                     **l_kwargs,
@@ -482,6 +490,7 @@ class PlotRendererFilter:
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None
     ):
         try:
             num_nodes = self.output.rume.scope.nodes
@@ -590,7 +599,7 @@ class PlotRendererFilter:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         if not isinstance(realization, RealizationAggregation):
-            raise ValueError("line plots only support RealizationAggregation.")
+            raise ValueError("Line plots only support RealizationAggregation.")
 
         try:
             _, ax = plt.subplots(layout="constrained")
@@ -609,7 +618,6 @@ class PlotRendererFilter:
 
             # Y-axis
             plt.ylabel("count")
-            ax.yaxis.set_major_formatter(EngFormatter(sep=""))
 
             # X-axis
             _time_format, _ = self._time_format(time, time_format)
@@ -665,6 +673,7 @@ class PlotRendererFilter:
     ) -> list[Line2D]:
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
+
         if transform is None:
             transform = identity
 
@@ -696,7 +705,7 @@ class PlotRendererFilter:
         geo_groups = data_df.groupby("geo")
 
         line_index = 0
-        for (group_name, gdf) in geo_groups:
+        for group_name, gdf in geo_groups:
             for quantity_dis_label, quantity_label in q_mapping.items():
                 qdf = gdf[quantity_dis_label]
                 qdf = qdf.melt(var_name="metric")
@@ -705,7 +714,9 @@ class PlotRendererFilter:
 
                 for metric_name, mdf in metric_groups:
                     kwargs = line_kwargs[line_index % len(line_kwargs)]
-                    label = label_format.format(n=group_name, q=quantity_label, m=metric_name)
+                    label = label_format.format(
+                        n=group_name, q=quantity_label, m=metric_name
+                    )
                     curr_kwargs = {"label": label, **kwargs}
                     data = transform(mdf)
                     ls = ax.plot(gdf["time"], data["value"], **curr_kwargs)

@@ -2,8 +2,9 @@
 This module extends the functionality of munge over an additional axis, the realizations.
 """
 
+from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Literal
+from typing import List, Literal, OrderedDict, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -161,7 +162,10 @@ class RealizationSelector:
         """
         if (size <= 0) or (size > self._num_realizations):
             raise ValueError(
-                "Sample size must be greater than zero and less than the number of realizations. "
+                (
+                    "Sample size must be greater than zero "
+                    "and less than the number of realizations. "
+                )
             )
 
         if not isinstance(rng, np.random.Generator):
@@ -170,3 +174,105 @@ class RealizationSelector:
         indices = rng.choice(np.arange(self._num_realizations), size, replace=False)
 
         return RealizationSelection(self._num_realizations, indices)
+
+
+@dataclass(frozen=True)
+class ParameterStrategy:
+    param_names: list[str]
+    """A list of estimated parameter names."""
+    selection: NDArray[np.bool_]
+    """A boolean mask for selection of a subset of parameters."""
+    grouping: None
+    """Grouping for parameters (unimplemented)."""
+    aggregation: None
+    """Aggregation for parameters (unimplemented)."""
+
+    def disambiguate(self) -> OrderedDict[str, str]:
+        selected = [(i, q) for i, q in enumerate(self.param_names) if self.selection[i]]
+        qs_original = [str(q) for i, q in selected]
+        qs_renamed = [f"{str(q)}_{i}" for i, q in selected]
+        return OrderedDict(zip(qs_renamed, qs_original))
+
+    @property
+    def selected(self):
+        """The quantities from the IPM which are selected, prior to any grouping."""
+        return [q for sel, q in zip(self.selection, self.param_names) if sel]
+
+    @property
+    @abstractmethod
+    def labels(self) -> Sequence[str]:
+        """Labels for the parameters in the result, after any grouping."""
+
+    def disambiguate_groups(self) -> OrderedDict[str, str]:
+        return self.disambiguate()
+
+
+@dataclass(frozen=True)
+class ParameterSelection(ParameterStrategy):
+    param_names: list
+    """A list of estimated parameter names."""
+    selection: NDArray[np.bool_]
+    """A boolean mask for selection of a subset of parameters."""
+    grouping: None = field(init=False, default=None)
+    """Grouping for parameters (unimplemented)."""
+    aggregation: None = field(init=False, default=None)
+    """Aggregation for parameters (unimplemented)."""
+
+    @property
+    def labels(self) -> Sequence[str]:
+        """Labels for the parameters in the result, after any grouping."""
+        return self.selected
+
+
+class ParameterSelector:
+    _param_names: list[str]
+    """A list of estimated parameter names."""
+
+    def __init__(self, param_names: list[str]):
+        self._param_names = param_names
+
+    def _mask(
+        self,
+        parameters: bool | list[bool] = False,
+    ) -> NDArray[np.bool_]:
+        m = np.zeros(shape=len(self._param_names), dtype=np.bool_)
+        if parameters is not False:
+            m[:] = parameters
+
+        return m
+
+    def all(self) -> ParameterSelection:
+        """
+        Select all parameters.
+
+        Returns
+        -------
+        :
+            The selection object.
+        """
+        m = self._mask(parameters=True)
+        return ParameterSelection(self._param_names, m)
+
+    def by_name(self, *patterns: str) -> ParameterSelection:
+        """
+        Select parameters by name.
+
+        Returns
+        -------
+        :
+            The selection object.
+        """
+        if len(patterns) == 0:
+            mask = self._mask(parameters=True)
+        else:
+            mask = self._mask()
+            for p in patterns:
+                curr = self._mask(
+                    parameters=[(p == name) for name in self._param_names]
+                )
+                if not np.any(curr):
+                    err = f"Pattern '{p}' did not match any parameters."
+                    raise ValueError(err)
+                mask |= curr
+
+        return ParameterSelection(self._param_names, mask)

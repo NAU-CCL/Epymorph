@@ -21,10 +21,13 @@ from epymorph.compartment_model import (
     CompartmentDef,
     QuantityAggregation,
     QuantitySelection,
+    QuantityStrategy,
 )
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
 from epymorph.forecasting.likelihood import Gaussian, Likelihood
 from epymorph.forecasting.munge_realizations import (
+    ParameterSelector,
+    ParameterStrategy,
     RealizationAggregation,
     RealizationSelection,
     RealizationSelector,
@@ -252,12 +255,24 @@ class PipelineOutput:
         E = self.rume.ipm.num_events
         N = self.rume.scope.nodes
         S = self.rume.num_ticks
+        P = len(self.unknown_params.keys())
         tau_steps = self.rume.num_tau_steps
 
-        data_np = np.concatenate(
+        states_np = np.concatenate(
             (self.compartments, self.events),
             axis=3,
-        ).reshape((-1, C + E), order="C")
+        )
+
+        ### Extract the parameter data
+        param_np = np.concatenate(
+            [
+                np.repeat(val[..., np.newaxis],tau_steps,axis = 1)
+                for val in self.estimated_params.values()
+            ],
+            axis=3,
+        )
+
+        data_np = np.concatenate((states_np, param_np), axis=-1).reshape(-1,P + E + C)
 
         # Here I'm concatting two DFs sideways so that the index columns come first.
         # Could use insert, but this is nicer.
@@ -281,6 +296,7 @@ class PipelineOutput:
                     columns=[
                         *(c.name.full for c in self.rume.ipm.compartments),
                         *(e.name.full for e in self.rume.ipm.events),
+                        *(str(key) for key in self.unknown_params.keys()),
                     ],
                 ),
             ),
@@ -288,12 +304,15 @@ class PipelineOutput:
         )
 
     @property
-    def select(self)->RealizationSelector:
+    def select(self) -> RealizationSelector:
         """
-        Returns an instance of RealizationSelector. 
+        Returns an instance of RealizationSelector.
         """
         return RealizationSelector(self.num_realizations)
 
+    @property
+    def param_select(self) -> ParameterSelector:
+        return ParameterSelector([str(key) for key in self.estimated_params.keys()])
 
 
 @dataclass(frozen=True)
@@ -1289,29 +1308,43 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             estimated_params=estimated_params,
         )
 
-def munge_pipeline_output(
-        output: PipelineOutput,
-        realization: RealizationSelection | RealizationAggregation,
-        geo: GeoSelection | GeoAggregation,
-        time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation
-) -> pd.DataFrame:
 
+def munge_pipeline_output(
+    output: PipelineOutput,
+    realization: RealizationSelection | RealizationAggregation,
+    geo: GeoSelection | GeoAggregation,
+    time: TimeSelection | TimeAggregation,
+    quantity: QuantityStrategy | ParameterStrategy,
+) -> pd.DataFrame:
     NP = output.num_realizations
     N = output.rume.scope.nodes
     S = output.rume.num_ticks
+    C = output.rume.ipm.num_compartments
+    E = output.rume.ipm.num_events
     taus = output.rume.num_tau_steps
+    P = len(output.unknown_params.keys())
 
     # Apply selections first so that aggregations operate on less data.
-    time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N),NP)
-    geo_mask = np.tile(np.tile(geo.selection, S),NP)
+    time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N), NP)
+    geo_mask = np.tile(np.tile(geo.selection, S), NP)
 
     # columns are: ["realization","tick", "date", "node", *quantities]
-    columns = np.concatenate(([True,True, True, True], quantity.selection))
+
+    columns = [True, True, True, True]
+    if isinstance(quantity, QuantityStrategy):
+        columns = np.concatenate(
+            (columns, quantity.selection, [False for _ in range(P)])
+        )
+    else:
+        columns = np.concatenate(
+            (columns, [False for _ in range(C + E)], quantity.selection)
+        )
+
     data_df = output.dataframe
     data_df = data_df.loc[time_mask & geo_mask].loc[:, columns]
-    data_df = data_df.set_axis(["realization","tick", "date", "geo",
-                                *data_df.columns[4:]], axis=1)
+    data_df = data_df.set_axis(
+        ["realization", "tick", "date", "geo", *data_df.columns[4:]], axis=1
+    )
     data_df = data_df.loc[data_df["realization"].isin(realization.selection)]
 
     if geo.aggregation is None:
@@ -1329,7 +1362,7 @@ def munge_pipeline_output(
 
         data_df = (
             data_df.assign(geo=geo_groups)
-            .groupby(["realization","tick", "date", "geo"], sort=False)
+            .groupby(["realization", "tick", "date", "geo"], sort=False)
             .agg(geo.aggregation)
             .reset_index()
         )
@@ -1389,7 +1422,7 @@ def munge_pipeline_output(
         data_df = (
             data_df.drop(columns=["tick", "date"])
             .assign(time=time_axis)
-            .groupby(["realization","time", "geo"], sort=False)
+            .groupby(["realization", "time", "geo"], sort=False)
             .agg(
                 {
                     col: (
@@ -1407,13 +1440,15 @@ def munge_pipeline_output(
         # Without agg: use realization IDs as the realization dimension.
         pass
     else:
-        #This avoids adding aggregation over the realization column to the dataframe. 
+        # This avoids adding aggregation over the realization column to the dataframe.
         value_cols = list(q_mapping.keys())
 
         agg_dict = {f"{col_name}": realization.aggregation for col_name in value_cols}
 
-        data_df = (data_df.groupby(["time", "geo"], sort=False)[value_cols]
-                   .agg(agg_dict)
-                   .reset_index())
+        data_df = (
+            data_df.groupby(["time", "geo"], sort=False)[value_cols]
+            .agg(agg_dict)
+            .reset_index()
+        )
 
     return data_df.rename(columns=q_mapping)
