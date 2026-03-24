@@ -21,7 +21,7 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_type import SimDType
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
-from epymorph.forecasting.likelihood import GaussianLikelihood, Likelihood
+from epymorph.forecasting.likelihood import Likelihood
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.initializer import Explicit
 from epymorph.rume import RUME
@@ -1107,13 +1107,13 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
     config: PipelineConfig
     observations: Observations
 
-    def __post_init__(self):
-        if not isinstance(self.observations.likelihood, GaussianLikelihood):
-            msg = (
-                "The ensemble Kalman filter only supports a Gaussian "
-                "likelihood for observational data."
-            )
-            raise ValueError(msg)
+    # def __post_init__(self):
+    #     if not isinstance(self.observations.likelihood, GaussianLikelihood):
+    #         msg = (
+    #             "The ensemble Kalman filter only supports a Gaussian "
+    #             "likelihood for observational data."
+    #         )
+    #         raise ValueError(msg)
 
     @override
     def run(self, rng: np.random.Generator) -> EnsembleKalmanFilterOutput:
@@ -1124,12 +1124,12 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         observations = self.observations
         rng = rng
 
-        if not isinstance(observations.likelihood, GaussianLikelihood):
-            msg = (
-                "The ensemble Kalman filter only supports a Gaussian "
-                "likelihood for observational data."
-            )
-            raise ValueError(msg)
+        # if not isinstance(observations.likelihood, GaussianLikelihood):
+        #     msg = (
+        #         "The ensemble Kalman filter only supports a Gaussian "
+        #         "likelihood for observational data."
+        #     )
+        #     raise ValueError(msg)
 
         # Precompute ADRIO values.
         context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
@@ -1247,7 +1247,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             # posterior_value will be modified in-place.
             posterior_value = current_predictions.copy()
 
-            observation_cov = observations.likelihood.standard_deviation**2
+            # observation_cov = observations.likelihood.standard_deviation**2
 
             # Hard code localization
             for i_node in range(num_nodes):
@@ -1273,28 +1273,47 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                         k: current_params[k][:, i_node] - prior_params_mean[k]
                         for k in current_params.keys()
                     }
-                    prediction_perturbation = (
-                        current_predictions[:, i_node]
-                        - current_predictions[:, i_node].mean()
+                    # prediction_perturbation = (
+                    #     current_predictions[:, i_node]
+                    #     - current_predictions[:, i_node].mean()
+                    # )
+
+                    simulated_observations = observations.likelihood.sample(
+                        current_predictions[:, i_node], rng=rng
+                    )
+                    simulated_perturbations = (
+                        simulated_observations - simulated_observations.mean()
                     )
 
-                    prediction_cov = np.var(current_predictions[:, i_node])
-                    residual_cov_inverse = 1 / (prediction_cov + observation_cov)
+                    # prediction_cov = np.var(current_predictions[:, i_node])
+                    # residual_cov_inverse = 1 / (prediction_cov + observation_cov)
+
+                    residual_cov_inverse = 1 / np.var(simulated_observations)
+
+                    # # np.matmul behaves nicely with 1-D arrays.
+                    # # fmt: off
+                    # kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, prediction_perturbation) * residual_cov_inverse  # noqa: E501
+                    # kalman_gain_params = {
+                    #     k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
+                    # }
+                    # kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbation, prediction_perturbation) * residual_cov_inverse # noqa: E501
+                    # # fmt: on
 
                     # np.matmul behaves nicely with 1-D arrays.
                     # fmt: off
-                    kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, prediction_perturbation) * residual_cov_inverse  # noqa: E501
+                    kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, simulated_perturbations) * residual_cov_inverse  # noqa: E501
                     kalman_gain_params = {
-                        k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
+                        k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], simulated_perturbations) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
                     }
-                    kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbation, prediction_perturbation) * residual_cov_inverse # noqa: E501
+                    kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(simulated_perturbations, simulated_perturbations) * residual_cov_inverse # noqa: E501
                     # fmt: on
 
                     observation = current_observation["value"][i_node]
                     for i_realization in range(num_realizations):
-                        prediction = current_predictions[i_realization, i_node]
-                        perturbation = rng.normal(loc=0, scale=np.sqrt(observation_cov))
-                        innovation = observation - (prediction + perturbation)
+                        # prediction = current_predictions[i_realization, i_node]
+                        # perturbation = rng.normal(loc=0, scale=np.sqrt(observation_cov))
+                        # innovation = observation - (prediction + perturbation)
+                        innovation = observation - simulated_observations[i_realization]
                         # fmt: off
                         current_compartments[i_realization, i_node, :] += np.rint(kalman_gain_compartments * innovation).astype(np.int64) # noqa: E501
                         for name in kalman_gain_params.keys():

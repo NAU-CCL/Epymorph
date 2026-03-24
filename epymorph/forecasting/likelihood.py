@@ -41,6 +41,12 @@ class Likelihood(ABC):
     ) -> NDArray[np.float64]:
         raise NotImplementedError("Subclasses should implement this method.")
 
+    @abstractmethod
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        raise NotImplementedError("Subclasses should implement this method.")
+
 
 @dataclass(frozen=True)
 class PoissonLikelihood(Likelihood):
@@ -75,6 +81,11 @@ class PoissonLikelihood(Likelihood):
             observed,
             expected + self.jitter,
         )
+
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        return poisson.rvs(expected + self.jitter, random_state=rng)
 
 
 @dataclass(frozen=True)
@@ -115,6 +126,12 @@ class NegativeBinomialLikelihood(Likelihood):
             p=1 / (1 + expected / self.r),
         )
 
+    @override
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        return nbinom.rvs(n=self.r, p=1 / (1 + expected / self.r), random_state=rng)
+
 
 @dataclass(frozen=True)
 class GaussianLikelihood(Likelihood):
@@ -144,3 +161,9 @@ class GaussianLikelihood(Likelihood):
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
         return norm.logpdf(observed, loc=expected, scale=self.standard_deviation)
+
+    @override
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        return norm.rvs(loc=expected, scale=self.standard_deviation, random_state=rng)
