@@ -126,9 +126,9 @@ class PipelineConfig:
         num_realizations :
             The number of realizations of the simulator.
         initial_values :
-            The optional array of initial compartment values of the simulator. It has shape
-            (R, N, C) where R is the number of realizations, N is the number of nodes,
-            and C is the number of compartments.
+            The optional array of initial compartment values of the simulator. It has
+            shape (R, N, C) where R is the number of realizations, N is the number of
+            nodes, and C is the number of compartments.
         unknown_params :
             The dictionary of unknown paramters of the simulator. String names are
             converted to NamePattern
@@ -689,9 +689,9 @@ class Observations(Generic[ValueT]):
     Parameters
     ----------
     source :
-        The source of the observations which results in an (A, N) array where A is a time
-        axis of unknown length and N is the number of nodes. The entries of the array are
-        date-value pairs.
+        The source of the observations which results in an (A, N) array where A is a
+        time axis of unknown length and N is the number of nodes. The entries of the
+        array are date-value pairs.
     model_link :
         Contains the information needed to generate a predicted observation from a
         single realization of a simulation.
