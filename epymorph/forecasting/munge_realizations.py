@@ -195,7 +195,7 @@ class ParameterStrategy:
 
     @property
     def selected(self):
-        """The quantities from the IPM which are selected, prior to any grouping."""
+        """The parameters from the model which are selected, prior to any grouping."""
         return [q for sel, q in zip(self.selection, self.param_names) if sel]
 
     @property

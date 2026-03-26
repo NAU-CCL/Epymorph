@@ -12,15 +12,16 @@ import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.dates import AutoDateLocator, DateFormatter
-from matplotlib.ticker import EngFormatter
 from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from epymorph.compartment_model import (
     QuantityAggregation,
     QuantitySelection,
+    QuantityStrategy,
 )
 from epymorph.forecasting.munge_realizations import (
+    ParameterStrategy,
     RealizationAggregation,
     RealizationSelection,
 )
@@ -30,7 +31,7 @@ from epymorph.time import (
     TimeAggregation,
     TimeSelection,
 )
-from epymorph.tools.out_plot import LegendOption, TimeFormatOption, OrderingOption
+from epymorph.tools.out_plot import LegendOption, TimeFormatOption
 from epymorph.util import identity
 
 
@@ -138,7 +139,7 @@ class PlotRendererFilter:
         realizations: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         *,
         sharex: bool = True,
         ncols: int = 3,
@@ -210,7 +211,7 @@ class PlotRendererFilter:
         realizations: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         legend: LegendOption = "auto",
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
@@ -307,7 +308,7 @@ class PlotRendererFilter:
         self,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         credible_intervals: list[float] = [95.0],
         *,
         sharex: bool = True,
@@ -331,9 +332,8 @@ class PlotRendererFilter:
                 layout="constrained",
             )
 
-            if transform is None: 
+            if transform is None:
                 transform = identity
-
 
             if fill_kwargs is None:
                 fill_kwargs = [{}]
@@ -380,7 +380,7 @@ class PlotRendererFilter:
         axes: NDArray[Axes],  # type: ignore
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         credible_intervals: list[float],
         legend: LegendOption,
         fill_kwargs: list[dict],
@@ -388,7 +388,6 @@ class PlotRendererFilter:
         time_format: TimeFormatOption,
         transform: Callable[[pd.DataFrame], pd.DataFrame],
     ):
-
         quantile_list = list(list())
         for interval in sorted(credible_intervals, reverse=True):
             lower, upper = self._compute_quantile_range(interval)
@@ -436,16 +435,27 @@ class PlotRendererFilter:
                         else f"{credible_intervals[ci_index]}% CI of {quantity_name}"
                     )
 
+                    data_lower = transform(
+                        pd.DataFrame({"value": gdf[quantity_name][lower]})
+                    )
+                    data_upper = transform(
+                        pd.DataFrame({"value": gdf[quantity_name][upper]})
+                    )
+
                     axes[plot_index].fill_between(
                         gdf["time"],
-                        transform(gdf[quantity_name][lower]),
-                        transform(gdf[quantity_name][upper]),
+                        data_lower["value"],
+                        data_upper["value"],
                         label=ci_label,
                         **f_kwargs,
                     )
+                data_median = transform(
+                    pd.DataFrame({"value": gdf[quantity_name]["quantile_50.0"]})
+                )
+
                 axes[plot_index].plot(
                     gdf["time"],
-                    transform(gdf[quantity_name]["quantile_50.0"]),
+                    data_median["value"],
                     label=f"Median of {quantity_name}",
                     zorder=100,
                     **l_kwargs,
@@ -482,7 +492,7 @@ class PlotRendererFilter:
         self,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         *,
         hist_kwargs: list[dict] | None = None,
         ncols: int = 3,
@@ -490,7 +500,7 @@ class PlotRendererFilter:
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
         try:
             num_nodes = self.output.rume.scope.nodes
@@ -538,7 +548,7 @@ class PlotRendererFilter:
         axes: NDArray[Axes],  # type: ignore
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         legend: LegendOption,
         hist_kwargs,
         time_format: TimeFormatOption,

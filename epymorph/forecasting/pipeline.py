@@ -1427,7 +1427,7 @@ def munge_pipeline_output(
                 {
                     col: (
                         time.aggregation.compartments
-                        if isinstance(q, CompartmentDef)
+                        if (isinstance(q, CompartmentDef) or isinstance(q,str)) #TODO Parameters need proper typing
                         else time.aggregation.events
                     )
                     for col, q in zip(q_mapping.keys(), quantity.selected)
