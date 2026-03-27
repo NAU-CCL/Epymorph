@@ -85,7 +85,7 @@ class RealizationAggregation(RealizationStrategy):
     num_realizations: int
     """The number of realizations in the original output. """
     selection: NDArray[np.int_]
-    """An integer array indicating which realization indices are selected. """
+    """An integer array indicating which realizations are selected. """
     aggregation: List[RealizationAggMethod]
     """A list of methods for aggregating the realization data."""
 

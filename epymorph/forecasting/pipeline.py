@@ -241,7 +241,7 @@ class PipelineOutput:
         E = self.rume.ipm.num_events
         N = self.rume.scope.nodes
         S = self.rume.num_ticks
-        P = len(self.unknown_params.keys())
+        P = self.num_unknown_parameters
         tau_steps = self.rume.num_tau_steps
 
         states_np = np.concatenate(
@@ -1304,7 +1304,6 @@ def munge_pipeline_output(
     time: TimeSelection | TimeAggregation,
     quantity: QuantityStrategy | ParameterStrategy,
 ) -> pd.DataFrame:
-
     NP = output.num_realizations
     N = output.rume.scope.nodes
     S = output.rume.num_ticks
