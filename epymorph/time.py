@@ -861,7 +861,7 @@ class _CanAggregate(TimeStrategy):
         self,
         compartments: AggMethod = "last",
         events: AggMethod = "sum",
-        parameters: AggMethod = "last"
+        parameters: AggMethod = "last",
     ) -> "TimeAggregation":
         """
         Aggregate the time series using the specified methods.
@@ -882,7 +882,7 @@ class _CanAggregate(TimeStrategy):
             self.time_frame,
             self.selection,
             self.grouping,
-            TimeAggMethod(compartments, events,parameters),
+            TimeAggMethod(compartments, events, parameters),
         )
 
 
