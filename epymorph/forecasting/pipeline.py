@@ -236,12 +236,12 @@ class PipelineOutput:
 
     @property
     def dataframe(self) -> pd.DataFrame:
-        NP = self.num_realizations
+        NP = self.num_realizations  # noqa: N806
         C = self.rume.ipm.num_compartments
         E = self.rume.ipm.num_events
         N = self.rume.scope.nodes
         S = self.rume.num_ticks
-        P = self.num_unknown_parameters
+        P = self.num_unknown_parameters  # noqa: N806
         tau_steps = self.rume.num_tau_steps
 
         states_np = np.concatenate(
@@ -1304,13 +1304,13 @@ def munge_pipeline_output(
     time: TimeSelection | TimeAggregation,
     quantity: QuantityStrategy | ParameterStrategy,
 ) -> pd.DataFrame:
-    NP = output.num_realizations
+    NP = output.num_realizations  # noqa: N806
     N = output.rume.scope.nodes
     S = output.rume.num_ticks
     C = output.rume.ipm.num_compartments
     E = output.rume.ipm.num_events
     taus = output.rume.num_tau_steps
-    P = output.num_unknown_parameters
+    P = output.num_unknown_parameters  # noqa: N806
 
     # Apply selections first so that aggregations operate on less data.
     time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N), NP)

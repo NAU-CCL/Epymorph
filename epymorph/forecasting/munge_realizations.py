@@ -93,7 +93,8 @@ class RealizationAggregation(RealizationStrategy):
 @dataclass(frozen=True)
 class RealizationSelection(RealizationStrategy):
     """
-    A kind of `RealizationStrategy` describing a sub-selection of realizations.
+    A kind of `RealizationStrategy`
+    describing a sub-selection of realizations.
     A selection performs no grouping or aggregation.
     """
 
@@ -229,7 +230,7 @@ class ParameterSelection(ParameterStrategy):
     @property
     def labels(self) -> Sequence[str]:
         """Labels for the parameters in the result, after any grouping."""
-        return [str(k) for k, v in self.parameters]
+        return [str(k) for k, v in self.parameters] # type: ignore
 
 
 class ParameterSelector:
@@ -276,10 +277,9 @@ class ParameterSelector:
             param_str = "*::*::{n}"
             mask = self._mask()
             for p in patterns:
-
                 curr = self._mask(
                     parameters_boolean=[
-                        (param_str.format(n = p) == str(name))
+                        (param_str.format(n=p) == str(name))
                         for name in self.parameters.keys()
                     ]
                 )
