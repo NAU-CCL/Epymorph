@@ -2,37 +2,19 @@ import dataclasses
 import datetime
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import (
-    Generic,
-    List,
-    Mapping,
-    Self,
-    Sequence,
-    Tuple,
-)
+from typing import Generic, List, Mapping, Self, Sequence, Tuple
 
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
 
 from epymorph.adrio.adrio import ADRIO, ValueT
 from epymorph.attribute import NamePattern
 from epymorph.compartment_model import (
-    CompartmentDef,
     QuantityAggregation,
     QuantitySelection,
-    QuantityStrategy,
 )
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
 from epymorph.forecasting.likelihood import Gaussian, Likelihood
-from epymorph.forecasting.munge_realizations import (
-    ParameterSelector,
-    ParameterStrategy,
-    RealizationAggregation,
-    RealizationSelection,
-    RealizationSelector,
-)
-from epymorph.forecasting.unknown_params import UnknownParam
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.initializer import Explicit
 from epymorph.rume import RUME
@@ -46,8 +28,27 @@ from epymorph.time import (
     TimeGrouping,
     TimeSelection,
 )
-from epymorph.tools.data import mask, munge
+from epymorph.tools.data import munge
 from epymorph.util import DateValueType
+
+
+@dataclass(frozen=True)
+class UnknownParam:
+    """
+    Contains the information for an unknown parameter. An unknown parameter is a
+    parameter which can vary across realizations in a multi-realization simulation. Some
+    simulators will try to estimate unknown parameters.
+    """
+
+    prior: NDArray | Prior
+    """
+    The prior distribution or initial values of the parameter.
+    """
+
+    dynamics: ParamFunctionDynamics
+    """
+    The dynamics of the parameter dictating how the parameter changes over time.
+    """
 
 
 @dataclass(frozen=True)
@@ -229,78 +230,6 @@ class PipelineOutput:
     @property
     def initial_values(self) -> NDArray | None:
         return self.simulator.initial_values
-
-    @property
-    def num_unknown_parameters(self) -> int:
-        return len(self.unknown_params.keys())
-
-    @property
-    def dataframe(self) -> pd.DataFrame:
-        NP = self.num_realizations  # noqa: N806
-        C = self.rume.ipm.num_compartments
-        E = self.rume.ipm.num_events
-        N = self.rume.scope.nodes
-        S = self.rume.num_ticks
-        P = self.num_unknown_parameters  # noqa: N806
-        tau_steps = self.rume.num_tau_steps
-
-        states_np = np.concatenate(
-            (self.compartments, self.events),
-            axis=3,
-        )
-
-        ### Extract the parameter data
-        param_np = np.concatenate(
-            [
-                np.repeat(val[..., np.newaxis], tau_steps, axis=1)
-                for val in self.estimated_params.values()
-            ],
-            axis=3,
-        )
-
-        data_np = np.concatenate((states_np, param_np), axis=-1).reshape(
-            (-1, P + E + C)
-        )
-
-        # Here I'm concatting two DFs sideways so that the index columns come first.
-        # Could use insert, but this is nicer.
-        return pd.concat(
-            (
-                # A dataframe for the various indices
-                pd.DataFrame(
-                    {
-                        "realization": np.repeat(np.arange(NP), S * N),
-                        "tick": np.tile(np.repeat(np.arange(S), N), NP),
-                        "date": np.tile(
-                            np.repeat(self.rume.time_frame.to_numpy(), N * tau_steps),
-                            NP,
-                        ),
-                        "node": np.tile(self.rume.scope.node_ids, S * NP),
-                    }
-                ),
-                # A dataframe for the data columns
-                pd.DataFrame(
-                    data=data_np,
-                    columns=[
-                        *(c.name.full for c in self.rume.ipm.compartments),
-                        *(e.name.full for e in self.rume.ipm.events),
-                        *(str(key) for key in self.unknown_params.keys()),
-                    ],
-                ),
-            ),
-            axis=1,  # stick them together side-by-side
-        )
-
-    @property
-    def select(self) -> RealizationSelector:
-        """
-        Returns an instance of RealizationSelector.
-        """
-        return RealizationSelector(self.num_realizations)
-
-    @property
-    def param_select(self) -> ParameterSelector:
-        return ParameterSelector(self.unknown_params)
 
 
 @dataclass(frozen=True)
@@ -1295,150 +1224,3 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             posterior_values=np.array(posterior_values),
             estimated_params=estimated_params,
         )
-
-
-def munge_pipeline_output(
-    output: PipelineOutput,
-    realization: RealizationSelection | RealizationAggregation,
-    geo: GeoSelection | GeoAggregation,
-    time: TimeSelection | TimeAggregation,
-    quantity: QuantityStrategy | ParameterStrategy,
-) -> pd.DataFrame:
-    NP = output.num_realizations  # noqa: N806
-    N = output.rume.scope.nodes
-    S = output.rume.num_ticks
-    C = output.rume.ipm.num_compartments
-    E = output.rume.ipm.num_events
-    taus = output.rume.num_tau_steps
-    P = output.num_unknown_parameters  # noqa: N806
-
-    # Apply selections first so that aggregations operate on less data.
-    time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N), NP)
-    geo_mask = np.tile(np.tile(geo.selection, S), NP)
-
-    # columns are: ["realization","tick", "date", "node", *quantities]
-
-    columns = [True, True, True, True]
-    if isinstance(quantity, QuantityStrategy):
-        columns = np.concatenate(
-            (columns, quantity.selection, [False for _ in range(P)])
-        )
-    else:
-        columns = np.concatenate(
-            (columns, [False for _ in range(C + E)], quantity.selection)
-        )
-
-    data_df = output.dataframe
-    data_df = data_df.loc[time_mask & geo_mask].loc[:, columns]
-    data_df = data_df.set_axis(
-        ["realization", "tick", "date", "geo", *data_df.columns[4:]], axis=1
-    )
-    data_df = data_df.loc[data_df["realization"].isin(realization.selection)]
-
-    if geo.aggregation is None:
-        # Without agg: use node IDs as the geo dimension.
-        pass
-    else:
-        # With agg:
-        agg_df = data_df
-        if geo.grouping is None:
-            # With no grouping: the geo dimension collapses.
-            geo_groups = "*"
-        else:
-            # With group: geo dimension comes from group.
-            geo_groups = geo.grouping.map(agg_df["geo"].to_numpy())
-
-        data_df = (
-            data_df.assign(geo=geo_groups)
-            .groupby(["realization", "tick", "date", "geo"], sort=False)
-            .agg(geo.aggregation)
-            .reset_index()
-        )
-
-    if quantity.aggregation is None:
-        # For the sake of aggregating and sorting, we need to ensure column names
-        # are not ambiguous. But we don't want to alter the names arbitrarily;
-        # so we'll rename the columns, do our munging, then restore the original names.
-        q_mapping = quantity.disambiguate()
-        data_df = data_df.set_axis([*data_df.columns[0:4], *q_mapping.keys()], axis=1)
-    else:
-        # currently only supported agg is "sum"
-        def agg(qty_indices: tuple[int, ...]) -> pd.Series:
-            offset = 4  # we have three leading columns before quantities start
-            col_indices = [i + offset for i in qty_indices]
-            return data_df.iloc[:, col_indices].sum(axis=1)
-
-        group_defs, group_indices = quantity.grouping.map(quantity.selected)
-        group_names = [g.name.full for g in group_defs]
-        data_df = pd.DataFrame(
-            {
-                "realization": data_df["realization"],
-                "tick": data_df["tick"],
-                "date": data_df["date"],
-                "geo": data_df["geo"],
-                **{g: agg(xs) for g, xs in zip(group_names, group_indices)},
-            }
-        )
-        # When there is any grouping applied, it should not be possible to
-        # produce ambiguous quantity names; but to keep things simple we'll
-        # just provide a no-op map for this case.
-        q_mapping = dict(zip(group_names, group_names))
-
-    if time.aggregation is None:
-        # Without agg: drop date and use ticks as the time dimension.
-        data_df = data_df.drop(columns=["date"]).rename(columns={"tick": "time"})
-    else:
-        # With agg:
-        if time.grouping is None:
-            # Without group: time dimension collapses.
-            time_axis = "*"
-        else:
-            # With group: time dimension comes from grouping.
-            nodes = data_df["geo"].unique().shape[0]
-            sample_realizations = data_df["realization"].unique().shape[0]
-            days = data_df.shape[0] // (sample_realizations * nodes * taus)
-            time_axis = time.grouping.map(
-                Dim(nodes=nodes, days=days, tau_steps=taus),
-                data_df["tick"].to_numpy(),
-                data_df["date"].to_numpy(),
-            )
-
-            if time_axis.shape[0] != data_df.shape[0]:
-                err = "Chosen time-axis grouping did not return a group for every row."
-                raise ValueError(err)
-
-        data_df = (
-            data_df.drop(columns=["tick", "date"])
-            .assign(time=time_axis)
-            .groupby(["realization", "time", "geo"], sort=False)
-            .agg(
-                {
-                    col: (
-                        time.aggregation.compartments
-                        if (
-                            isinstance(q, CompartmentDef) or isinstance(q, UnknownParam)
-                        )
-                        else time.aggregation.events
-                    )
-                    for col, q in zip(q_mapping.keys(), quantity.selected)
-                }
-            )
-            .reset_index()
-        )
-
-    if realization.aggregation is None:
-        # Without agg: use realization IDs as the realization dimension.
-        pass
-    else:
-        # This avoids adding aggregation over the realization column to the dataframe.
-        value_cols = list(q_mapping.keys())
-
-        agg_dict = {f"{col_name}": realization.aggregation for col_name in value_cols}
-
-        data_df = (
-            data_df.groupby(["time", "geo"], sort=False)[value_cols]
-            .agg(agg_dict)
-            .reset_index()
-        )
-
-    return data_df.rename(columns=q_mapping)

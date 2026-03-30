@@ -11,7 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.attribute import NamePattern
-from epymorph.forecasting.unknown_params import UnknownParam
+from epymorph.forecasting.pipeline import UnknownParam
 
 RealizationAggMethod = Literal["mean", "std", "quantiles"]
 """The supported methods for aggregating realizations."""
