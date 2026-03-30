@@ -85,7 +85,8 @@ class RealizationAggregation(RealizationStrategy):
     num_realizations: int
     """The number of realizations in the original output. """
     selection: NDArray[np.int_]
-    """An integer array indicating which realizations are selected. """
+    """An integer array indicating which
+    realizations are selected. """
     aggregation: List[RealizationAggMethod]
     """A list of methods for aggregating the realization data."""
 
@@ -230,7 +231,7 @@ class ParameterSelection(ParameterStrategy):
     @property
     def labels(self) -> Sequence[str]:
         """Labels for the parameters in the result, after any grouping."""
-        return [str(k) for k, v in self.parameters] # type: ignore
+        return [str(k) for k, v in self.parameters]  # type: ignore
 
 
 class ParameterSelector:
