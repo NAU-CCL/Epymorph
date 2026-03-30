@@ -1,5 +1,6 @@
 """
-This module extends the functionality of munge over an additional axis, the realizations.
+This module extends the functionality of munge
+over an additional axis, the realizations.
 """
 
 from abc import abstractmethod
