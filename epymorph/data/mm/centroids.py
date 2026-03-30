@@ -55,7 +55,9 @@ class CentroidsClause(MovementClause):
         centroid = self.data("centroid")
         phi = self.data("phi")
         distance = pairwise_haversine(centroid)
-        return row_normalize(1 / np.exp(distance / phi))
+        prob = np.exp(-np.clip(distance/phi,a_max = 100.,a_min = None))
+        return row_normalize(prob)
+
 
     def evaluate(self, tick: Tick) -> NDArray[np.int64]:
         pop = self.data("population")
