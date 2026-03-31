@@ -25,9 +25,8 @@ from epymorph.compartment_model import (
 )
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
 from epymorph.forecasting.likelihood import Gaussian, Likelihood
-from epymorph.forecasting.munge_realizations import (
-    ParameterSelector,
-    ParameterStrategy,
+from epymorph.forecasting.parameter_strategy import ParameterSelector, ParameterStrategy
+from epymorph.forecasting.realization_strategy import (
     RealizationAggregation,
     RealizationSelection,
     RealizationSelector,
@@ -1459,4 +1458,5 @@ def munge_pipeline_output(
             .reset_index()
         )
 
-    return data_df.rename(columns=q_mapping)
+
+    return data_df.rename(columns=q_mapping).reset_index(drop = True)
