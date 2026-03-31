@@ -1458,5 +1458,4 @@ def munge_pipeline_output(
             .reset_index()
         )
 
-
-    return data_df.rename(columns=q_mapping).reset_index(drop = True)
+    return data_df.rename(columns=q_mapping).reset_index(drop=True)
