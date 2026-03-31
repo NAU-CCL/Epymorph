@@ -5,8 +5,6 @@ from typing import OrderedDict, Sequence
 import numpy as np
 from numpy.typing import NDArray
 
-from epymorph.attribute import NamePattern
-
 
 @dataclass(frozen=True)
 class ParameterStrategy:
