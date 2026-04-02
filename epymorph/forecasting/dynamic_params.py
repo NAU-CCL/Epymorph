@@ -1,9 +1,12 @@
+"""Components for initializing, propagating, and transforming unknown parameters."""
+
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Tuple, final
+from typing import Self, final
 
 import numpy as np
 import scipy as sp
+from attr import dataclass
 from numpy.typing import NDArray
 from typing_extensions import override
 
@@ -12,21 +15,43 @@ from epymorph.data_shape import Shapes
 from epymorph.params import ParamFunction, ResultDType
 
 
-class Prior:
+@dataclass(frozen=True)
+class Prior(ABC):
     """
     Abstract class representing the prior distribution of an unknown parameter.
     """
 
     @abstractmethod
-    def sample(self, size: Tuple[int], rng: np.random.Generator):
+    def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         """
         Sample values from the prior distribution.
+
+        Parameters
+        ----------
+        size:
+            The shape of the resulting array of values.
+        rng:
+            The random number generator to use.
+
+        Returns
+        -------
+        :
+            An array of random values sampled from the distribution.
         """
 
 
+@dataclass(frozen=True)
 class UniformPrior(Prior):
     """
     A uniform prior distribution.
+
+    Parameters
+    ----------
+    lower :
+        The lower bound of the uniform distribution.
+    upper :
+        The upper bound of the uniform distribution. Must be greater than or equal to
+        the lower bound.
     """
 
     lower: float
@@ -39,22 +64,28 @@ class UniformPrior(Prior):
     The upper bound of the uniform distribution.
     """
 
-    def __init__(self, lower: float, upper: float):
-        self.lower = lower
-        self.upper = upper
+    def __post_init__(self):
+        if np.any(self.lower > self.upper):
+            raise ValueError("The lower bound cannot be greater than the upper bound.")
 
-    def sample(self, size: Tuple[int], rng: np.random.Generator):
-        """
-        Sample an array of uniform random variates.
-        """
+    @override
+    def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         return sp.stats.uniform.rvs(
             loc=self.lower, scale=(self.upper - self.lower), size=size, random_state=rng
         )
 
 
+@dataclass(frozen=True)
 class GaussianPrior(Prior):
     """
     A Gaussian prior distribution.
+
+    Parameters
+    ----------
+    mean:
+        The mean of the Gaussian distribution.
+    standard_deviation:
+        The standard deviation of the Gaussian distribution. Must be non-negative.
     """
 
     mean: float
@@ -67,14 +98,12 @@ class GaussianPrior(Prior):
     The standard deviation of the Gaussian distribution.
     """
 
-    def __init__(self, mean: float, standard_deviation: float):
-        self.mean = mean
-        self.standard_deviation = standard_deviation
+    def __post_init__(self):
+        if self.standard_deviation < 0:
+            raise ValueError("The standard deviation must be non-negative.")
 
-    def sample(self, size: Tuple[int], rng: np.random.Generator):
-        """
-        Sample an array of Gaussian random variates.
-        """
+    @override
+    def sample(self, size: tuple[int], rng: np.random.Generator) -> NDArray[np.float64]:
         return sp.stats.norm.rvs(
             loc=self.mean, scale=self.standard_deviation, size=size, random_state=rng
         )
@@ -88,10 +117,16 @@ class ParamFunctionDynamics(ParamFunction[ResultDType], ABC):
 
     _initial: NDArray[ResultDType] | None = None
 
-    def with_initial(self, initial: NDArray[ResultDType]):
+    def with_initial(self, initial: NDArray[ResultDType]) -> Self:
         """
         Add an initial value so that this parameter is suitable for evaluation from
         within a RUME.
+
+        Parameters
+        ----------
+        initial:
+            An array of shape (N,) where N is the number of nodes containing the initial
+            values.
         """
         clone = deepcopy(self)
         setattr(clone, "_initial", initial)
@@ -113,23 +148,50 @@ class ParamFunctionDynamics(ParamFunction[ResultDType], ABC):
     ) -> NDArray[ResultDType]:
         """
         Produce a trajectory matching the attribute requirements from the initial value.
+
+        Parameters
+        ----------
+        initial:
+            An array of shape (N,) where N is the number of nodes containing the initial
+            values.
         """
 
 
 class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
     """
     Model the time dependence of an unknown parameter as an Ornstein-Uhlenbeck process.
-    The process is independent for each node.
+    The process is independent for each node. The process is parameterized in terms of
+    the resulting stationary distribution.
+
+    Parameters
+    ----------
+    damping:
+        The damping of the process. Must be positive.
+    mean:
+        The mean of the stationary distribution.
+    standard_deviation:
+        The standard deviation of the stationary distribution. Must be non-negative.
     """
+
+    damping: float
+    mean: float
+    standard_deviation: float
 
     requirements = ()
 
     def __init__(self, damping: float, mean: float, standard_deviation: float):
+        if np.any(damping <= 0):
+            raise ValueError("Damping must be positive.")
         self.damping = damping
         self.mean = mean
+        if np.any(standard_deviation < 0):
+            raise ValueError("Standard deviation must be non-negative.")
         self.standard_deviation = standard_deviation
 
-    def _evaluate_from_initial(self, initial):
+    @override
+    def _evaluate_from_initial(
+        self, initial: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
         previous = initial
 
@@ -166,7 +228,10 @@ class Static(ParamFunctionDynamics[np.float64]):
     def __init__(self):
         pass
 
-    def _evaluate_from_initial(self, initial: NDArray[np.float64]):
+    @override
+    def _evaluate_from_initial(
+        self, initial: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
         result[...] = initial.copy()
         return result
@@ -176,20 +241,33 @@ class BrownianMotion(ParamFunctionDynamics[np.float64]):
     """
     Model the time dependence of an unknown parameter as Brownian motion. The Brownian
     motion for each node is independent.
+
+    Parameters
+    ----------
+    volatility:
+        The volatility of the Brownian motion. Must be non-negative.
     """
+
+    volatility: float
+    """The volatility of the Brownian motion."""
 
     requirements = ()
 
-    def __init__(self, voliatility: float):
-        self.voliatility = voliatility
+    def __init__(self, volatility: float):
+        if np.any(volatility < 0):
+            raise ValueError("The volatility must be non-negative.")
+        self.volatility = volatility
 
-    def _evaluate_from_initial(self, initial: NDArray[np.float64]):
+    @override
+    def _evaluate_from_initial(
+        self, initial: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         result = np.zeros((self.time_frame.days, self.scope.nodes), np.float64)
         previous = initial
-        voliatility = self.voliatility
-        voliatility = Shapes.TxN.adapt(self.dim, np.array(voliatility))
+        volatility = self.volatility
+        volatility = Shapes.TxN.adapt(self.dim, np.array(volatility))
         for i_day in range(self.time_frame.days):
-            current = previous + voliatility[i_day, ...] * self.rng.normal(
+            current = previous + volatility[i_day, ...] * self.rng.normal(
                 size=self.scope.nodes
             )
             result[i_day, ...] = current
@@ -209,13 +287,17 @@ class ExponentialTransform(ParamFunction[np.float64]):
         requirement.
     """
 
+    _value_req: AttributeDef
+    """The name of the attribute to take the exponential of."""
+
     @property
-    def requirements(self):
+    def requirements(self) -> tuple[AttributeDef]:
         return (self._value_req,)
 
     def __init__(self, other: str):
         self._value_req = AttributeDef(other, float, Shapes.TxN)
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         return np.exp(self.data(self._value_req))
 
@@ -234,13 +316,20 @@ class ShiftTransform(ParamFunction[np.float64]):
         requirement.
     """
 
+    _first_req: AttributeDef
+    """The name of the first attribute to take the sum of."""
+
+    _second_req: AttributeDef
+    """The name of the second attribute to take the sum of."""
+
     @property
-    def requirements(self):
+    def requirements(self) -> tuple[AttributeDef, AttributeDef]:
         return (self._first_req, self._second_req)
 
     def __init__(self, first: str, second: str):
         self._first_req = AttributeDef(first, float, Shapes.TxN)
         self._second_req = AttributeDef(second, float, Shapes.TxN)
 
+    @override
     def evaluate(self) -> NDArray[np.float64]:
         return np.add(self.data(self._first_req), self.data(self._second_req))
