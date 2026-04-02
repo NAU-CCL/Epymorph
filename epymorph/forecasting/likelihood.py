@@ -39,7 +39,17 @@ class Likelihood(ABC):
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        raise NotImplementedError("Subclasses should implement this method.")
+        """
+        Computes the log of the likelihood of the observed data given the data expected
+        by a model.
+
+        Parameters
+        ----------
+        observed : int
+            The observational data.
+        expected : int
+            The data predicted by the model.
+        """
 
 
 @dataclass(frozen=True)
@@ -89,10 +99,10 @@ class NegativeBinomialLikelihood(Likelihood):
         positive.
     """
 
-    r: int
+    r: float
 
     def __post_init__(self):
-        if self.r <= 0:
+        if np.any(self.r <= 0):
             raise ValueError("The overdispersion parameter, r, must be positive.")
 
     @override

@@ -447,9 +447,13 @@ def _simulate_realizations(
     param_values :
         A dictionary containing the current parameter values.
     geo :
+        The geo strategy for munging the output.
     time :
+        The time strategy for munging the output.
     quantity :
+        The quantity strategy for munging the output.
     rng :
+        The random number generator.
 
     Returns
     -------
