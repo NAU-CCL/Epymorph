@@ -946,7 +946,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             compartments=compartments,
             events=events,
             initial=initial,
-            posterior_values=np.array(posterior_values),
+            posterior_values=np.stack(posterior_values, axis=1),
             effective_sample_size=effective_sample_size,
             estimated_params=estimated_params,
         )
@@ -1326,6 +1326,6 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             compartments=compartments,
             events=events,
             initial=initial,
-            posterior_values=np.array(posterior_values),
+            posterior_values=np.stack(posterior_values, axis=1),
             estimated_params=estimated_params,
         )
