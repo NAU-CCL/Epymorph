@@ -63,8 +63,9 @@ def test_fetch_acs5_validate_context(monkeypatch):
     with pytest.raises(ADRIOContextError, match="not a supported year for ACS5 data"):
         adrio.validate_context(Context.of(scope=states_2008))
 
+    unsupported = acs5.ACS5_YEARS[-1] + 1
     states_2024 = MagicMock(spec=StateScope)
-    states_2024.year = 2024  # mock b/c this isn't a valid scope in the first place
+    states_2024.year = unsupported  # mock b/c this might not be a valid scope
     with pytest.raises(ADRIOContextError, match="not a supported year for ACS5 data"):
         adrio.validate_context(Context.of(scope=states_2024))
 

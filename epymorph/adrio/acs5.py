@@ -85,10 +85,10 @@ def census_api_key() -> str | None:
 
 
 # fmt:off
-ACS5Year = Literal[2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]  # noqa: E501
+ACS5Year = Literal[2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]  # noqa: E501
 """A supported ACS5 data year."""
 
-ACS5_YEARS: Sequence[ACS5Year] = (2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023)  # noqa: E501
+ACS5_YEARS: Sequence[ACS5Year] = (2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024)  # noqa: E501
 """All supported ACS5 data years."""
 # fmt: on
 

@@ -35,4 +35,6 @@ jobs:
         run: uv sync --frozen --all-extras --dev
 
       - name: Run canary tests
+        env:
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
         run: uv run pytest tests/canary
