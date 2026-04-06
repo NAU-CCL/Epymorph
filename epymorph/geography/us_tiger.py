@@ -70,11 +70,11 @@ from epymorph.util import cache_transparent, normalize_list, normalize_str, zip_
 # NOTE: TIGER files express areas in meters-squared.
 
 # fmt: off
-TigerYear = Literal[2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023] # noqa
-"""A supported TIGER file year. (2000 and 2009-2023)"""
+TigerYear = Literal[2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025] # noqa
+"""A supported TIGER file year. (2000 and 2009-2025)"""
 
-TIGER_YEARS: Sequence[TigerYear] = (2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023) #noqa
-"""All supported TIGER file years. (2000 and 2009-2023)"""
+TIGER_YEARS: Sequence[TigerYear] = (2000, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025) #noqa
+"""All supported TIGER file years. (2000 and 2009-2025)"""
 
 _SUPPORTED_STATES = [
     "01", "02", "04", "05", "06", "08", "09", "10", "11", "12",
@@ -304,7 +304,7 @@ def _get_states_config(year: int) -> _DataConfig:
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
     match year:
-        case year if year in range(2011, 2024):
+        case year if year >= 2011:
             cols = ["GEOID", "NAME", "STUSPS", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [f"{_TIGER_URL}/TIGER{year}/STATE/tl_{year}_us_state.zip"]
         case 2010:
@@ -508,7 +508,7 @@ def _get_counties_config(year: int) -> _DataConfig:
     if not is_tiger_year(year):
         raise GeographyError(f"Unsupported year: {year}")
     match year:
-        case year if year in range(2011, 2024):
+        case year if year >= 2011:
             cols = ["GEOID", "NAME", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [f"{_TIGER_URL}/TIGER{year}/COUNTY/tl_{year}_us_county.zip"]
         case 2010:
@@ -706,7 +706,7 @@ def _get_tracts_config(
         states = states[states["GEOID"].isin(state_ids)]
 
     match year:
-        case year if year in range(2011, 2024):
+        case year if year >= 2011:
             cols = ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [
                 f"{_TIGER_URL}/TIGER{year}/TRACT/tl_{year}_{xx}_tract.zip"
@@ -855,7 +855,7 @@ def _get_block_groups_config(
         states = states[states["GEOID"].isin(state_ids)]
 
     match year:
-        case year if year in range(2011, 2024):
+        case year if year >= 2011:
             cols = ["GEOID", "ALAND", "INTPTLAT", "INTPTLON"]
             urls = [
                 f"{_TIGER_URL}/TIGER{year}/BG/tl_{year}_{xx}_bg.zip"
