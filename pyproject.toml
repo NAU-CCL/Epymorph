@@ -1,7 +1,10 @@
 [project]
 name = "epymorph"
-
-dynamic = ["version"]
+description = "EpiMoRPH spatial disease modeling"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+keywords = ["epidemiology", "disease modeling", "metapopulation"]
 
 authors = [
   { name = "Tyler Coles", email = "tyler.coles@nau.edu" },
@@ -11,15 +14,9 @@ authors = [
   { name = "Joseph Mihaljevic", email = "joseph.mihaljevic@nau.edu" },
 ]
 
-description = "EpiMoRPH spatial disease modeling"
-
-readme = "README.md"
+dynamic = ["version"]
 
 requires-python = ">=3.11"
-
-license = {text="GPL-3.0-only"}
-
-keywords = ["epidemiology", "disease modeling", "metapopulation"]
 
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -29,7 +26,6 @@ classifiers = [
   "Operating System :: OS Independent",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
-  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Typing :: Typed",
   "Development Status :: 5 - Production/Stable",
 ]
@@ -54,6 +50,17 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Version pinning for transitive dependencies.
+# We don't directly depend on these, but there are known CVEs
+# with versions prior to these. Pinning them here protects us
+# from vulnerabilities and cleans up `uv audit`.
+transitive_pin = [
+  "pillow~=12.1.1", # from matplotlib
+  "fonttools~=4.62.1", # from matplotlib
+  "urllib3~=2.6.3", # from requests
+  "setuptools==82.0.1", # from setuptools-scm
+]
+
 dev = [
   # Jupyter
   "ipykernel>=6.29.5",
@@ -64,7 +71,7 @@ dev = [
   "pytest-cov>=6.0.0",
   "vcrpy>=7.0.0",
   # Build
-  "setuptools-scm>=8.1.0",
+  "setuptools-scm==10.0.5",
   # Documentation
   "mkdocs>=1.6.1",
   "mkdocs-material>=9.6.12",
@@ -72,6 +79,10 @@ dev = [
   "mkdocstrings[python]>=0.29.1",
   "griffe-inherited-docstrings>=1.1.1",
 ]
+
+[tool.uv]
+exclude-newer = "7 days" # supply chain attack mitigation
+default-groups = ["dev", "transitive_pin"]
 
 [project.urls]
 Homepage = "https://docs.www.epimorph.org"
@@ -81,8 +92,6 @@ Issues = "https://github.com/NAU-CCL/Epymorph/issues"
 [project.scripts]
 epymorph = "epymorph.__main__:main"
 
-[tool.uv]
-exclude-newer = "7 days"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -91,14 +100,8 @@ addopts = [
 ]
 
 [build-system]
-requires = ["setuptools>=74.0.0", "setuptools-scm>=8.1.0"]
+requires = ["setuptools==82.0.1", "setuptools-scm[simple]==10.0.5"]
 build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-# squash addition of license-files metadata field
-# because PyPI complains if it's there? idk
-# https://github.com/pypa/setuptools/issues/4759#issuecomment-2547778989
-license-files = []
 
 [tool.setuptools.packages.find]
 include = ["epymorph*"]
@@ -107,7 +110,7 @@ include = ["epymorph*"]
 "epymorph" = ["py.typed"]
 
 [tool.setuptools_scm]
-# enable setuptools_scm
+# enable setuptools_scm; shouldn't be strictly necessary but uv complains otherwise
 
 [tool.pyright]
 exclude = [
