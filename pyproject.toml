@@ -38,19 +38,19 @@ dependencies = [
   "matplotlib~=3.9.0",
   "numpy~=1.26.4",
   "sympy~=1.12.1",
-  "psutil~=5.9.8",
-  "pandas[excel]~=2.2.2",
+  "pandas[excel]~=2.3.3",
   "geopandas~=0.14.4",
-  "census~=0.8.22",
+  "pyproj~=3.6.1",
+  "shapely~=2.0.6",
   "jsonpickle~=3.2.1",
   "platformdirs~=4.2.2",
   "graphviz~=0.20.3",
   "typing_extensions~=4.12.2",
-  "ipython~=8.26.0",
   "rasterio~=1.3.11",
   "humanize~=4.10.0",
   "sparklines~=0.5.0",
   "scipy~=1.14.1",
+  "requests~=2.33.1",
 ]
 
 [dependency-groups]
@@ -81,6 +81,9 @@ Issues = "https://github.com/NAU-CCL/Epymorph/issues"
 [project.scripts]
 epymorph = "epymorph.__main__:main"
 
+[tool.uv]
+exclude-newer = "7 days"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
@@ -108,6 +111,8 @@ include = ["epymorph*"]
 
 [tool.pyright]
 exclude = [
+  ".venv",
+  "**/node_modules",
   "**/__pycache__",
   "**/.*",
   "build",
