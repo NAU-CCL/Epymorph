@@ -3,7 +3,7 @@
 from datetime import timedelta
 from itertools import cycle
 from pathlib import Path
-from typing import Callable, Literal, OrderedDict
+from typing import Callable, Literal, OrderedDict, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -400,7 +400,7 @@ class PlotRenderer:
             sorted(groups_df, key=sort_key),
             cycle(line_kwargs),
         ):
-            n_label, q_label_dis = group
+            n_label, q_label_dis = cast(tuple[str, str], group)
             q_label = q_mapping[q_label_dis]
             label = label_format.format(n=n_label, q=q_label)
             curr_kwargs = {"label": label, **kwargs}
