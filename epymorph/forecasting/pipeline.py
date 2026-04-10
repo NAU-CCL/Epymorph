@@ -36,6 +36,7 @@ from epymorph.initializer import Explicit
 from epymorph.rume import RUME
 from epymorph.simulation import Context
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
+from epymorph.simulator.basic.output import Output
 from epymorph.time import (
     Dim,
     GroupKeyType,
@@ -1424,22 +1425,20 @@ def munge_pipeline_output(
                 err = "Chosen time-axis grouping did not return a group for every row."
                 raise ValueError(err)
 
+        time_aggs = {}
+        for col, q in zip(q_mapping.keys(), quantity.selected):
+            if isinstance(q, CompartmentDef):
+                time_aggs[col] = time.aggregation.compartments
+            elif isinstance(q, UnknownParam):
+                time_aggs[col] = time.aggregation.parameters
+            else:
+                time_aggs[col] = time.aggregation.events
+
         data_df = (
             data_df.drop(columns=["tick", "date"])
             .assign(time=time_axis)
             .groupby(["realization", "time", "geo"], sort=False)
-            .agg(
-                {
-                    col: (
-                        time.aggregation.compartments
-                        if (
-                            isinstance(q, CompartmentDef) or isinstance(q, UnknownParam)
-                        )
-                        else time.aggregation.events
-                    )
-                    for col, q in zip(q_mapping.keys(), quantity.selected)
-                }
-            )
+            .agg(time_aggs)
             .reset_index()
         )
 
@@ -1451,6 +1450,157 @@ def munge_pipeline_output(
         value_cols = list(q_mapping.keys())
 
         agg_dict = {f"{col_name}": realization.aggregation for col_name in value_cols}
+
+        data_df = (
+            data_df.groupby(["time", "geo"], sort=False)[value_cols]
+            .agg(agg_dict)
+            .reset_index()
+        )
+
+    return data_df.rename(columns=q_mapping).reset_index(drop=True)
+
+def munge_combined(
+    output: PipelineOutput | Output,
+    geo: GeoSelection | GeoAggregation,
+    time: TimeSelection | TimeAggregation,
+    quantity: QuantityStrategy | ParameterStrategy,
+    realization: RealizationSelection | RealizationAggregation | None = None,
+) -> pd.DataFrame:
+
+    data_df = output.dataframe
+    NP = 1  # noqa: N806
+    P = 0  # noqa: N806
+    if isinstance(output,Output):
+        data_df.insert(0, 'realization', 0)
+        realization = RealizationSelector(NP).all()
+    else:
+        NP = output.num_realizations  # noqa: N806
+        P = output.num_unknown_parameters  # noqa: N806
+
+    N = output.rume.scope.nodes
+    S = output.rume.num_ticks
+    C = output.rume.ipm.num_compartments
+    E = output.rume.ipm.num_events
+    taus = output.rume.num_tau_steps
+
+    # Apply selections first so that aggregations operate on less data.
+    time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N), NP)
+    geo_mask = np.tile(np.tile(geo.selection, S), NP)
+
+    # columns are: ["realization","tick", "date", "node", *quantities]
+    columns = [True, True, True, True]
+    if isinstance(quantity, QuantityStrategy):
+        columns = np.concatenate(
+            (columns, quantity.selection, [False for _ in range(P)])
+        ).astype(bool)
+    else:
+        columns = np.concatenate(
+            (columns, [False for _ in range(C + E)], quantity.selection)
+        ).astype(bool)
+
+    data_df = data_df.loc[time_mask & geo_mask].loc[:, columns]
+    data_df = data_df.set_axis(
+        ["realization", "tick", "date", "geo", *data_df.columns[4:]], axis=1
+    )
+    data_df = data_df.loc[data_df["realization"].isin(realization.selection)] # type: ignore
+
+    if geo.aggregation is None:
+        # Without agg: use node IDs as the geo dimension.
+        pass
+    else:
+        # With agg:
+        agg_df = data_df
+        if geo.grouping is None:
+            # With no grouping: the geo dimension collapses.
+            geo_groups = "*"
+        else:
+            # With group: geo dimension comes from group.
+            geo_groups = geo.grouping.map(agg_df["geo"].to_numpy())
+
+        data_df = (
+            data_df.assign(geo=geo_groups)
+            .groupby(["realization", "tick", "date", "geo"], sort=False)
+            .agg(geo.aggregation)
+            .reset_index()
+        )
+
+    if quantity.aggregation is None:
+        # For the sake of aggregating and sorting, we need to ensure column names
+        # are not ambiguous. But we don't want to alter the names arbitrarily;
+        # so we'll rename the columns, do our munging, then restore the original names.
+        q_mapping = quantity.disambiguate()
+        data_df = data_df.set_axis([*data_df.columns[0:4], *q_mapping.keys()], axis=1)
+    else:
+        # currently only supported agg is "sum"
+        def agg(qty_indices: tuple[int, ...]) -> pd.Series:
+            offset = 4  # we have three leading columns before quantities start
+            col_indices = [i + offset for i in qty_indices]
+            return data_df.iloc[:, col_indices].sum(axis=1)
+
+        group_defs, group_indices = quantity.grouping.map(quantity.selected)  # type: ignore
+        group_names = [g.name.full for g in group_defs]
+        data_df = pd.DataFrame(
+            {
+                "realization": data_df["realization"],
+                "tick": data_df["tick"],
+                "date": data_df["date"],
+                "geo": data_df["geo"],
+                **{g: agg(xs) for g, xs in zip(group_names, group_indices)},
+            }
+        )
+        # When there is any grouping applied, it should not be possible to
+        # produce ambiguous quantity names; but to keep things simple we'll
+        # just provide a no-op map for this case.
+        q_mapping = dict(zip(group_names, group_names))
+
+    if time.aggregation is None:
+        # Without agg: drop date and use ticks as the time dimension.
+        data_df = data_df.drop(columns=["date"]).rename(columns={"tick": "time"})
+    else:
+        # With agg:
+        if time.grouping is None:
+            # Without group: time dimension collapses.
+            time_axis = "*"
+        else:
+            # With group: time dimension comes from grouping.
+            nodes = data_df["geo"].unique().shape[0]
+            sample_realizations = data_df["realization"].unique().shape[0]
+            days = data_df.shape[0] // (sample_realizations * nodes * taus)
+            time_axis = time.grouping.map(
+                Dim(nodes=nodes, days=days, tau_steps=taus),
+                data_df["tick"].to_numpy(),
+                data_df["date"].to_numpy(),
+            )
+
+            if time_axis.shape[0] != data_df.shape[0]:
+                err = "Chosen time-axis grouping did not return a group for every row."
+                raise ValueError(err)
+
+        time_aggs = {}
+        for col, q in zip(q_mapping.keys(), quantity.selected):
+            if isinstance(q, CompartmentDef):
+                time_aggs[col] = time.aggregation.compartments
+            elif isinstance(q, UnknownParam):
+                time_aggs[col] = time.aggregation.parameters
+            else:
+                time_aggs[col] = time.aggregation.events
+
+        data_df = (
+            data_df.drop(columns=["tick", "date"])
+            .assign(time=time_axis)
+            .groupby(["realization", "time", "geo"], sort=False)
+            .agg(time_aggs)
+            .reset_index()
+        )
+
+    if realization.aggregation is None: # type: ignore
+        # Without agg: use realization IDs as the realization dimension.
+        pass
+    else:
+        # This avoids adding aggregation over the realization column to the dataframe.
+        value_cols = list(q_mapping.keys())
+
+        agg_dict = {f"{col_name}": realization.aggregation for col_name in value_cols} # type: ignore
 
         data_df = (
             data_df.groupby(["time", "geo"], sort=False)[value_cols]
