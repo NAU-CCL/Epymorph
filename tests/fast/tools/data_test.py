@@ -141,7 +141,6 @@ def test_basic_pipeline_munge(rume, filter_output):
     geo = rume.scope.select.all()
     quantity = filter_output.param_select.by_name("test_0")
 
-
     # Test using munge on a parameter value
     actual = munge_pipeline_output(filter_output, realization, geo, time, quantity)
     expected = pd.DataFrame(
@@ -159,7 +158,6 @@ def test_basic_pipeline_munge(rume, filter_output):
     )
 
     pd.testing.assert_frame_equal(actual, expected)
-
 
     # Test using munge on a compartment value
     quantity = rume.ipm.select.compartments("S")
@@ -184,8 +182,8 @@ def test_basic_pipeline_munge(rume, filter_output):
 def test_aggregation_pipeline_munge(rume, filter_output):
     # Test specific aggregations across the realization axis
 
-    #Test aggregation for the mean
-    #This primarily makes sure the multi-index is there with the correct labels.
+    # Test aggregation for the mean
+    # This primarily makes sure the multi-index is there with the correct labels.
     realization = filter_output.select.all().agg(["mean"])
     time = rume.time_frame.select.days(0, 1)
     geo = rume.scope.select.all()
@@ -210,8 +208,8 @@ def test_aggregation_pipeline_munge(rume, filter_output):
 
     pd.testing.assert_frame_equal(actual, expected)
 
-    #Test aggregation for the std
-    #This primarily makes sure the multi-index is there with the correct labels.
+    # Test aggregation for the std
+    # This primarily makes sure the multi-index is there with the correct labels.
     realization = filter_output.select.all().agg(["std"])
     data["value"] = np.zeros(geo.scope.nodes * 2)
 

@@ -1459,6 +1459,7 @@ def munge_pipeline_output(
 
     return data_df.rename(columns=q_mapping).reset_index(drop=True)
 
+
 def munge_combined(
     output: PipelineOutput | Output,
     geo: GeoSelection | GeoAggregation,
@@ -1466,13 +1467,14 @@ def munge_combined(
     quantity: QuantityStrategy | ParameterStrategy,
     realization: RealizationSelection | RealizationAggregation | None = None,
 ) -> pd.DataFrame:
-
     data_df = output.dataframe
     NP = 1  # noqa: N806
     P = 0  # noqa: N806
-    if isinstance(output,Output):
-        data_df.insert(0, 'realization', 0)
-        realization = RealizationSelector(NP).all()
+    if isinstance(output, Output):
+        data_df.insert(0, "realization", 0)
+        realization = RealizationSelector(
+            NP
+        ).all()  # Mean just returns the values unchanged
     else:
         NP = output.num_realizations  # noqa: N806
         P = output.num_unknown_parameters  # noqa: N806
@@ -1502,7 +1504,7 @@ def munge_combined(
     data_df = data_df.set_axis(
         ["realization", "tick", "date", "geo", *data_df.columns[4:]], axis=1
     )
-    data_df = data_df.loc[data_df["realization"].isin(realization.selection)] # type: ignore
+    data_df = data_df.loc[data_df["realization"].isin(realization.selection)]  # type: ignore
 
     if geo.aggregation is None:
         # Without agg: use node IDs as the geo dimension.
@@ -1593,14 +1595,15 @@ def munge_combined(
             .reset_index()
         )
 
-    if realization.aggregation is None: # type: ignore
-        # Without agg: use realization IDs as the realization dimension.
-        pass
+    if realization.aggregation is None:  # type: ignore
+        # If there is only a single realization drop the realization column
+        if NP == 1:
+            data_df = data_df.drop(columns=["realization"])
     else:
         # This avoids adding aggregation over the realization column to the dataframe.
         value_cols = list(q_mapping.keys())
 
-        agg_dict = {f"{col_name}": realization.aggregation for col_name in value_cols} # type: ignore
+        agg_dict = {f"{col_name}": realization.aggregation for col_name in value_cols}  # type: ignore
 
         data_df = (
             data_df.groupby(["time", "geo"], sort=False)[value_cols]
