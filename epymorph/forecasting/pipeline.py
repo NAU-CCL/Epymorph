@@ -7,12 +7,7 @@ import dataclasses
 import datetime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from typing import (
-    Generic,
-    Mapping,
-    Self,
-    Sequence,
-)
+from typing import Generic, Mapping, Self, Sequence, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -716,36 +711,9 @@ class ForecastSimulator(PipelineSimulator):
         )
 
 
-@dataclass(frozen=True)
-class ParticleFilterOutput(PipelineOutput):
-    """
-    Output object for the particle filter which contains additional output and
-    diagnostic information.
-
-    Parameters
-    ----------
-    simulator :
-        The simulator used to produce the output.
-    posterior_values :
-        The posterior estimate of the observed data. The first dimension of the array is
-        the number of realizations, the second dimension is the number of observations.
-        The remaining dimensions depend on the shape of the observed data. These values
-        are constructed from resampling the observed data in the same way the
-        compartment and parameter values are resampled.
-    effective_sample_size :
-        The effective sample size, defined as the the reciprocal of the sum of the
-        squared weights, for each observation and each node.
-    """
-
-    simulator: "ParticleFilterSimulator"
-
-    posterior_values: NDArray[np.float64]
-    """The posterior estimate of the observed data."""
-
-    effective_sample_size: NDArray[np.float64]
-    """
-    The effective sample size for each observation and each node.
-    """
+###################
+# Abstract Filter #
+###################
 
 
 @dataclass(frozen=True)
@@ -826,29 +794,67 @@ class Observations(Generic[ValueT]):
             return self.source
 
 
+_FilterContextT = TypeVar("_FilterContextT")
+
+
 @dataclass(frozen=True)
-class ParticleFilterSimulator(PipelineSimulator):
-    """
-    A PipelineSimulator for using a particle filter to estimate the state and parameters
-    of a system based on observed data.
+class _FilterUpdateResult(Generic[_FilterContextT]):
+    """"""
 
-    Parameters
-    ----------
-    config :
-        The RUME, number of realization, initial (prior) compartment values, and unknown
-        parameters to estimate.
-    observations :
-        The observations used to estimate the compartment and parameter values.
-    """
+    current_compartments: NDArray
+    current_params: Mapping[NamePattern, NDArray]
+    posterior_values: np.ndarray
+    filter_context: _FilterContextT
 
+
+@dataclass(frozen=True)
+class _RunFilterResult(Generic[_FilterContextT]):
+    final_compartments: NDArray[SimDType]
+    final_params: Mapping[NamePattern, NDArray[np.float64]]
+    compartments: NDArray[SimDType]
+    events: NDArray[SimDType]
+    initial: NDArray[SimDType]
+    estimated_params: Mapping[NamePattern, NDArray[np.float64]]
+    posterior_values: NDArray
+    filter_context: _FilterContextT
+
+
+@dataclass(frozen=True)
+class FilterOutput(PipelineOutput):
+    posterior_values: NDArray[np.float64]
+
+
+@dataclass(frozen=True)
+class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
     config: PipelineConfig
     """The configuration for the simulation."""
 
     observations: Observations
     """The observations."""
 
-    @override
-    def run(self, rng: np.random.Generator) -> ParticleFilterOutput:
+    @abstractmethod
+    def _initialize_filter_context(
+        self,
+    ) -> _FilterContextT:
+        """"""
+
+    @abstractmethod
+    def run(self, rng: np.random.Generator) -> FilterOutput:
+        """"""
+
+    @abstractmethod
+    def _update(
+        self,
+        current_observation: NDArray,
+        current_predictions: NDArray,
+        prior_compartments: NDArray,
+        prior_params: Mapping[NamePattern, NDArray],
+        filter_context: _FilterContextT,
+        rng: np.random.Generator,
+    ) -> _FilterUpdateResult:
+        """"""
+
+    def _run_filter(self, rng: np.random.Generator) -> _RunFilterResult:
         """
         Run the particle filter simulation.
 
@@ -932,9 +938,7 @@ class ParticleFilterSimulator(PipelineSimulator):
 
         posterior_values = []
 
-        effective_sample_size = np.zeros(
-            shape=(len(time_frames), num_nodes), dtype=np.float64
-        )
+        filter_context = self._initialize_filter_context()
 
         day_idx = 0
         step_idx = 0
@@ -986,58 +990,33 @@ class ParticleFilterSimulator(PipelineSimulator):
             )
             current_observation = observations_array[time_frame_mask, :].reshape((-1,))
 
-            # posterior_value will be modified in-place.
-            posterior_value = current_predictions.copy()
-            prior_compartment_values = current_compartments.copy()
+            filter_update_result = self._update(
+                current_observation=current_observation,
+                current_predictions=current_predictions,
+                prior_compartments=current_compartments,
+                prior_params=current_params,
+                filter_context=filter_context,
+                rng=rng,
+            )
 
-            # Hard code localization
-            for i_node in range(num_nodes):
-                observation_is_missing = (
-                    current_observation.size == 0
-                ) or np.ma.is_masked(current_observation["value"][i_node])
-
-                if observation_is_missing:
-                    effective_sample_size[i_observation, i_node] = 1.0
-                else:
-                    log_likelihoods = observations.likelihood.compute_log(
-                        current_observation["value"][i_node],
-                        current_predictions[:, i_node],
-                    )
-                    weights = self._normalize_log_weights(log_likelihoods)
-
-                    resampled_idx = self._systematic_resampling(weights, rng)
-
-                    orig_idx = np.arange(0, num_realizations)
-                    current_compartments[orig_idx, i_node, ...] = (
-                        prior_compartment_values[resampled_idx, i_node, ...]
-                    )
-                    for name in current_params.keys():
-                        current_params[name][orig_idx, i_node] = current_params[name][
-                            resampled_idx, i_node
-                        ]
-
-                    posterior_value[orig_idx, i_node, ...] = posterior_value[
-                        resampled_idx, i_node, ...
-                    ]
-                    effective_sample_size[i_observation, i_node] = 1 / np.sum(
-                        weights**2
-                    )
-
+            current_compartments = filter_update_result.current_compartments
+            current_params = filter_update_result.current_params
+            posterior_value = filter_update_result.posterior_values
             posterior_values.append(posterior_value)
+            filter_context = filter_update_result.filter_context
 
             day_idx = day_right
             step_idx = step_right
 
-        return ParticleFilterOutput(
-            simulator=self,
+        return _RunFilterResult(
             final_compartments=current_compartments,
             final_params=current_params,
             compartments=compartments,
             events=events,
             initial=initial,
             posterior_values=np.stack(posterior_values, axis=1),
-            effective_sample_size=effective_sample_size,
             estimated_params=estimated_params,
+            filter_context=filter_context,
         )
 
     @staticmethod
@@ -1087,6 +1066,67 @@ class ParticleFilterSimulator(PipelineSimulator):
         time_frames.append(TimeFrame.range(start_date=start_date, end_date=end_date))
 
         return time_frames, values
+
+
+###################
+# Particle Filter #
+###################
+
+
+@dataclass(frozen=True)
+class _ParticleFilterContext:
+    effective_sample_size: np.ndarray
+
+
+@dataclass(frozen=True)
+class ParticleFilterOutput(FilterOutput):
+    """
+    Output object for the particle filter which contains additional output and
+    diagnostic information.
+
+    Parameters
+    ----------
+    simulator :
+        The simulator used to produce the output.
+    posterior_values :
+        The posterior estimate of the observed data. The first dimension of the array is
+        the number of realizations, the second dimension is the number of observations.
+        The remaining dimensions depend on the shape of the observed data. These values
+        are constructed from resampling the observed data in the same way the
+        compartment and parameter values are resampled.
+    effective_sample_size :
+        The effective sample size, defined as the the reciprocal of the sum of the
+        squared weights, for each observation and each node.
+    """
+
+    simulator: "ParticleFilterSimulator"
+
+    effective_sample_size: NDArray[np.float64]
+    """
+    The effective sample size for each observation and each node.
+    """
+
+
+@dataclass(frozen=True)
+class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
+    """
+    A PipelineSimulator for using a particle filter to estimate the state and parameters
+    of a system based on observed data.
+
+    Parameters
+    ----------
+    config :
+        The RUME, number of realization, initial (prior) compartment values, and unknown
+        parameters to estimate.
+    observations :
+        The observations used to estimate the compartment and parameter values.
+    """
+
+    config: PipelineConfig
+    """The configuration for the simulation."""
+
+    observations: Observations
+    """The observations."""
 
     @staticmethod
     def _normalize_log_weights(log_weights: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -1156,9 +1196,103 @@ class ParticleFilterSimulator(PipelineSimulator):
             resampled_idx.append(j)
         return np.array(resampled_idx)
 
+    def _initialize_filter_context(self):
+        return _ParticleFilterContext(
+            effective_sample_size=np.zeros(shape=(0, self.rume.scope.nodes))
+        )
+
+    def _update(
+        self,
+        current_observation: NDArray,
+        current_predictions: NDArray,
+        prior_compartments: NDArray,
+        prior_params: Mapping[NamePattern, NDArray],
+        filter_context: _ParticleFilterContext,
+        rng: np.random.Generator,
+    ) -> _FilterUpdateResult:
+        # posterior_value will be modified in-place.
+        posterior_value = current_predictions.copy()
+
+        num_nodes = self.rume.scope.nodes
+        num_realizations = self.num_realizations
+
+        current_compartments = prior_compartments.copy()
+        current_params = {k: prior_params[k].copy() for k in prior_params.keys()}
+
+        posterior_value = current_predictions.copy()
+        prior_compartment_values = current_compartments.copy()
+
+        effective_sample_size = np.zeros(shape=(1, num_nodes))
+
+        # Hard code localization
+        for i_node in range(num_nodes):
+            observation_is_missing = (current_observation.size == 0) or np.ma.is_masked(
+                current_observation["value"][i_node]
+            )
+
+            if observation_is_missing:
+                effective_sample_size[0, i_node] = 1.0
+            else:
+                log_likelihoods = self.observations.likelihood.compute_log(
+                    current_observation["value"][i_node],
+                    current_predictions[:, i_node],
+                )
+                weights = self._normalize_log_weights(log_likelihoods)
+
+                resampled_idx = self._systematic_resampling(weights, rng)
+
+                orig_idx = np.arange(0, num_realizations)
+                current_compartments[orig_idx, i_node, ...] = prior_compartment_values[
+                    resampled_idx, i_node, ...
+                ]
+                for name in current_params.keys():
+                    current_params[name][orig_idx, i_node] = current_params[name][
+                        resampled_idx, i_node
+                    ]
+
+                posterior_value[orig_idx, i_node, ...] = posterior_value[
+                    resampled_idx, i_node, ...
+                ]
+                effective_sample_size[0, i_node] = 1 / np.sum(weights**2)
+        return _FilterUpdateResult(
+            current_compartments=current_compartments,
+            current_params=current_params,
+            posterior_values=posterior_value,
+            filter_context=_ParticleFilterContext(
+                effective_sample_size=np.concatenate(
+                    [filter_context.effective_sample_size, effective_sample_size],
+                    axis=0,
+                )
+            ),
+        )
+
+    @override
+    def run(self, rng):
+        run_filter_result = self._run_filter(rng=rng)
+        return ParticleFilterOutput(
+            simulator=self,
+            final_compartments=run_filter_result.final_compartments,
+            final_params=run_filter_result.final_params,
+            compartments=run_filter_result.compartments,
+            events=run_filter_result.events,
+            initial=run_filter_result.initial,
+            estimated_params=run_filter_result.estimated_params,
+            posterior_values=run_filter_result.posterior_values,
+            effective_sample_size=run_filter_result.filter_context.effective_sample_size,
+        )
+
+
+##########################
+# Ensemble Kalman Filter #
+##########################
+
 
 @dataclass(frozen=True)
-class EnsembleKalmanFilterOutput(PipelineOutput):
+class _EnsembleKalmanFilterContext: ...
+
+
+@dataclass(frozen=True)
+class EnsembleKalmanFilterOutput(FilterOutput):
     """
     Output object for the ensemble Kalman filter which contains additional output and
     diagnostic information.
@@ -1183,7 +1317,7 @@ class EnsembleKalmanFilterOutput(PipelineOutput):
 
 
 @dataclass(frozen=True)
-class EnsembleKalmanFilterSimulator(PipelineSimulator):
+class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext]):
     """
     A PipelineSimulator for using an ensemble Kalman filter to estimate the state and
     parameters of a system based on observed data.
@@ -1208,215 +1342,109 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             )
             raise ValueError(msg)
 
-    @override
-    def run(self, rng: np.random.Generator) -> EnsembleKalmanFilterOutput:
-        rume = self.rume
+    def _initialize_filter_context(self):
+        return _EnsembleKalmanFilterContext()
+
+    def _update(
+        self,
+        current_observation: NDArray,
+        current_predictions: NDArray,
+        prior_compartments: NDArray,
+        prior_params: Mapping[NamePattern, NDArray],
+        filter_context: _EnsembleKalmanFilterContext | None,
+        rng: np.random.Generator,
+    ) -> _FilterUpdateResult:
+        posterior_value = current_predictions.copy()
+
+        if isinstance(self.observations.likelihood, GaussianLikelihood):
+            observation_cov = self.observations.likelihood.standard_deviation**2
+        else:
+            raise ValueError()
+
+        num_nodes = self.rume.scope.nodes
         num_realizations = self.num_realizations
-        initial_values = self.initial_values
-        unknown_params = self.unknown_params
-        observations = self.observations
-        rng = rng
 
-        if not isinstance(observations.likelihood, GaussianLikelihood):
-            msg = (
-                "The ensemble Kalman filter only supports a Gaussian "
-                "likelihood for observational data."
+        current_compartments = prior_compartments.copy()
+        current_params = {k: prior_params[k].copy() for k in prior_params.keys()}
+        # Hard code localization
+        for i_node in range(num_nodes):
+            observation_is_missing = (current_observation.size == 0) or np.ma.is_masked(
+                current_observation["value"][i_node]
             )
-            raise ValueError(msg)
 
-        # Precompute ADRIO values.
-        context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
-        new_params = {}
-        for name, param in rume.params.items():
-            if isinstance(param, ADRIO):
-                new_params[name] = param.with_context_internal(context).evaluate()
-            else:
-                new_params[name] = param
-
-        rume = dataclasses.replace(
-            rume,
-            params=new_params,
-        )
-
-        # Dimension of the system.
-        num_days = rume.time_frame.days
-        num_steps = num_days * rume.num_tau_steps
-        num_nodes = rume.scope.nodes
-        num_compartments = rume.ipm.num_compartments
-        num_events = rume.ipm.num_events
-
-        # Allocate return values.
-        initial = np.zeros(
-            shape=(num_realizations, num_nodes, num_compartments), dtype=np.int64
-        )
-        compartments = np.zeros(
-            shape=(num_realizations, num_steps, num_nodes, num_compartments),
-            dtype=np.int64,
-        )
-        events = np.zeros(
-            shape=(num_realizations, num_steps, num_nodes, num_events), dtype=np.int64
-        )
-        estimated_params = {
-            name: np.zeros(
-                shape=(num_realizations, num_days, num_nodes), dtype=np.float64
-            )
-            for name in unknown_params.keys()
-        }
-
-        # Initialize the initial compartment and parameter values. Note, the values
-        # within current_compartment_values will be modified in place!
-        current_compartments, current_params = _initialize_compartments_and_params(
-            rume=rume,
-            unknown_params=unknown_params,
-            num_realizations=num_realizations,
-            initial_values=initial_values,
-            rng=rng,
-        )
-
-        initial = current_compartments.copy()
-
-        # Determine the number of observations and their associated time frames.
-        time_frames, labels = ParticleFilterSimulator._observation_time_frames(
-            rume, observations.model_link.time.grouping
-        )
-
-        context = Context.of(
-            scope=rume.scope, time_frame=rume.time_frame, ipm=rume.ipm, rng=rng
-        )
-        observations_array = observations._get_observations_array(context)
-
-        posterior_values = []
-
-        day_idx = 0
-        step_idx = 0
-        for i_observation in range(len(time_frames)):
-            time_frame = time_frames[i_observation]
-
-            print(  # noqa: T201
-                (
-                    f"Observation: {i_observation}, "
-                    f"Label: {labels[i_observation]}, "
-                    f"Time Frame: {time_frame}"
+            if not observation_is_missing:
+                prior_compartments_mean = np.mean(
+                    current_compartments[:, i_node, :], axis=0
                 )
-            )
+                prior_params_mean = {
+                    k: np.mean(current_params[k][:, i_node])
+                    for k in current_params.keys()
+                }
 
-            result = _simulate_realizations(
-                rume_template=rume,
-                override_time_frame=time_frame,
-                num_realizations=num_realizations,
-                initial_values=current_compartments,
-                unknown_params=unknown_params,
-                param_values=current_params,
-                geo=observations.model_link.geo,
-                time=observations.model_link.time,
-                quantity=observations.model_link.quantity,
-                rng=rng,
-            )
-
-            day_right = day_idx + time_frame.days
-            step_right = step_idx + time_frame.days * rume.num_tau_steps
-            compartments[:, step_idx:step_right, ...] = result.compartments
-            events[:, step_idx:step_right, ...] = result.events
-
-            current_params = {}
-            for name in estimated_params.keys():
-                estimated_params[name][:, day_idx:day_right, ...] = (
-                    result.estimated_params[name]
+                # The double use of the term perturbation is unfortunate.
+                compartments_perturbation = (
+                    # Relies on numpy broadcasting rules, i.e. left padding shape.
+                    current_compartments[:, i_node, :] - prior_compartments_mean
                 )
-                current_params[name] = result.estimated_params[name][:, -1, ...].copy()
+                params_perturbation = {
+                    k: current_params[k][:, i_node] - prior_params_mean[k]
+                    for k in current_params.keys()
+                }
+                prediction_perturbation = (
+                    current_predictions[:, i_node]
+                    - current_predictions[:, i_node].mean()
+                )
 
-            current_compartments = result.compartments[:, -1, ...].copy()
-            current_predictions = np.stack(result.predictions).reshape(
-                (num_realizations, num_nodes)
-            )
+                prediction_cov = np.var(current_predictions[:, i_node])
+                residual_cov_inverse = 1 / (prediction_cov + observation_cov)
 
-            start = np.datetime64(time_frame.start_date.isoformat())
-            end = np.datetime64(time_frame.end_date.isoformat())
-            time_frame_mask = (observations_array["date"][:, 0] >= start) & (
-                observations_array["date"][:, 0] <= end
-            )
-            current_observation = observations_array[time_frame_mask, :].reshape((-1,))
+                # np.matmul behaves nicely with 1-D arrays.
+                # fmt: off
+                kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, prediction_perturbation) * residual_cov_inverse  # noqa: E501
+                kalman_gain_params = {
+                    k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
+                }
+                kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbation, prediction_perturbation) * residual_cov_inverse # noqa: E501
+                # fmt: on
 
-            # posterior_value will be modified in-place.
-            posterior_value = current_predictions.copy()
-
-            observation_cov = observations.likelihood.standard_deviation**2
-
-            # Hard code localization
-            for i_node in range(num_nodes):
-                observation_is_missing = (
-                    current_observation.size == 0
-                ) or np.ma.is_masked(current_observation["value"][i_node])
-
-                if not observation_is_missing:
-                    prior_compartments_mean = np.mean(
-                        current_compartments[:, i_node, :], axis=0
-                    )
-                    prior_params_mean = {
-                        k: np.mean(current_params[k][:, i_node])
-                        for k in current_params.keys()
-                    }
-
-                    # The double use of the term perturbation is unfortunate.
-                    compartments_perturbation = (
-                        # Relies on numpy broadcasting rules, i.e. left padding shape.
-                        current_compartments[:, i_node, :] - prior_compartments_mean
-                    )
-                    params_perturbation = {
-                        k: current_params[k][:, i_node] - prior_params_mean[k]
-                        for k in current_params.keys()
-                    }
-                    prediction_perturbation = (
-                        current_predictions[:, i_node]
-                        - current_predictions[:, i_node].mean()
-                    )
-
-                    prediction_cov = np.var(current_predictions[:, i_node])
-                    residual_cov_inverse = 1 / (prediction_cov + observation_cov)
-
-                    # np.matmul behaves nicely with 1-D arrays.
+                observation = current_observation["value"][i_node]
+                for i_realization in range(num_realizations):
+                    prediction = current_predictions[i_realization, i_node]
+                    perturbation = rng.normal(loc=0, scale=np.sqrt(observation_cov))
+                    innovation = observation - (prediction + perturbation)
                     # fmt: off
-                    kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, prediction_perturbation) * residual_cov_inverse  # noqa: E501
-                    kalman_gain_params = {
-                        k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
-                    }
-                    kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbation, prediction_perturbation) * residual_cov_inverse # noqa: E501
+                    current_compartments[i_realization, i_node, :] += np.rint(kalman_gain_compartments * innovation).astype(np.int64) # noqa: E501
+                    for name in kalman_gain_params.keys():
+                        current_params[name][i_realization, i_node] += kalman_gain_params[name] * innovation  # noqa: E501
+
+                    posterior_value[i_realization, i_node] += kalman_gain_prediction * innovation  # noqa: E501
                     # fmt: on
+                current_compartments[:, i_node, :] = np.clip(
+                    current_compartments[:, i_node, :], a_min=0, a_max=None
+                )
 
-                    observation = current_observation["value"][i_node]
-                    for i_realization in range(num_realizations):
-                        prediction = current_predictions[i_realization, i_node]
-                        perturbation = rng.normal(loc=0, scale=np.sqrt(observation_cov))
-                        innovation = observation - (prediction + perturbation)
-                        # fmt: off
-                        current_compartments[i_realization, i_node, :] += np.rint(kalman_gain_compartments * innovation).astype(np.int64) # noqa: E501
-                        for name in kalman_gain_params.keys():
-                            current_params[name][i_realization, i_node] += kalman_gain_params[name] * innovation  # noqa: E501
+                posterior_value[:, i_node] = np.clip(
+                    posterior_value[:, i_node], a_min=0, a_max=None
+                )
+        return _FilterUpdateResult(
+            current_compartments=current_compartments,
+            current_params=current_params,
+            posterior_values=posterior_value,
+            filter_context=_EnsembleKalmanFilterContext(),
+        )
 
-                        posterior_value[i_realization, i_node] += kalman_gain_prediction * innovation  # noqa: E501
-                        # fmt: on
-                    current_compartments[:, i_node, :] = np.clip(
-                        current_compartments[:, i_node, :], a_min=0, a_max=None
-                    )
-
-                    posterior_value[:, i_node] = np.clip(
-                        posterior_value[:, i_node], a_min=0, a_max=None
-                    )
-
-            posterior_values.append(posterior_value)
-
-            day_idx = day_right
-            step_idx = step_right
-
+    @override
+    def run(self, rng):
+        run_filter_result = self._run_filter(rng=rng)
         return EnsembleKalmanFilterOutput(
             simulator=self,
-            final_compartments=current_compartments,
-            final_params=current_params,
-            compartments=compartments,
-            events=events,
-            initial=initial,
-            posterior_values=np.stack(posterior_values, axis=1),
-            estimated_params=estimated_params,
+            final_compartments=run_filter_result.final_compartments,
+            final_params=run_filter_result.final_params,
+            compartments=run_filter_result.compartments,
+            events=run_filter_result.events,
+            initial=run_filter_result.initial,
+            estimated_params=run_filter_result.estimated_params,
+            posterior_values=run_filter_result.posterior_values,
         )
 
 
