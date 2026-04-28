@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
 from epymorph.data_type import CentroidType, SimDType
+from epymorph.error import DataAttributeError
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
 from epymorph.simulation import Tick, TickDelta, TickIndex
 from epymorph.util import pairwise_haversine, row_normalize
@@ -54,13 +55,26 @@ class CentroidsClause(MovementClause):
         """
         centroid = self.data("centroid")
         phi = self.data("phi")
+        if phi <= 0:
+            err = "Centroids movement model parameter 'phi' must be positive."
+            raise DataAttributeError(err)
+        # np.exp(-x) can overflow if x is too large, so we clip to a maximum of 700;
+        #   np.exp(-700) is approximately 5e-305, which is close to the smallest
+        #   possible positive float64 value.
         distance = pairwise_haversine(centroid)
-        prob = np.exp(-np.clip(distance / phi, a_min=None, a_max=100.0))
+        dist_over_phi = np.clip(distance / phi, a_min=None, a_max=700.0)
+        prob = np.exp(-dist_over_phi)
         return row_normalize(prob)
 
     def evaluate(self, tick: Tick) -> NDArray[np.int64]:
         pop = self.data("population")
         comm_prop = self.data("commuter_proportion")
+        if comm_prop < 0:
+            err = (
+                "Centroids movement model parameter 'commuter_proportion' must be "
+                "greater than or equal to zero."
+            )
+            raise DataAttributeError(err)
         n_commuters = np.floor(pop * comm_prop).astype(SimDType)
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
 
