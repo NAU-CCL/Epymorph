@@ -1351,7 +1351,7 @@ def munge_pipeline_output(
     data_df = data_df.set_axis(
         ["realization", "tick", "date", "geo", *data_df.columns[4:]], axis=1
     )
-    data_df = data_df.loc[data_df["realization"].isin(realization.selection)]
+    data_df = data_df[data_df['realization'].isin(realization.selection)]
 
     if geo.aggregation is None:
         # Without agg: use node IDs as the geo dimension.
@@ -1472,9 +1472,7 @@ def munge_combined(
     P = 0  # noqa: N806
     if isinstance(output, Output):
         data_df.insert(0, "realization", 0)
-        realization = RealizationSelector(
-            NP
-        ).all()  # Mean just returns the values unchanged
+        realization = RealizationSelector(NP).all()
     else:
         NP = output.num_realizations  # noqa: N806
         P = output.num_unknown_parameters  # noqa: N806
@@ -1592,7 +1590,6 @@ def munge_combined(
             .assign(time=time_axis)
             .groupby(["realization", "time", "geo"], sort=False)
             .agg(time_aggs)
-            .reset_index()
         )
 
     if realization.aggregation is None:  # type: ignore
@@ -1608,7 +1605,6 @@ def munge_combined(
         data_df = (
             data_df.groupby(["time", "geo"], sort=False)[value_cols]
             .agg(agg_dict)
-            .reset_index()
         )
 
     return data_df.rename(columns=q_mapping).reset_index(drop=True)
