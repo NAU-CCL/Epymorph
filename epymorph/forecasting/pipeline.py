@@ -851,6 +851,9 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
             scope=rume.scope, time_frame=rume.time_frame, ipm=rume.ipm, rng=rng
         )
         observations_array = observations._get_observations_array(context)
+        observations_array = observations_array.reshape(
+            (observations_array.shape[0], observations_array.shape[1], -1)
+        )
 
         posterior_values = []
 
@@ -896,15 +899,18 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
 
             current_compartments = result.compartments[:, -1, ...].copy()
             current_predictions = np.stack(result.predictions).reshape(
-                (num_realizations, num_nodes)
+                (num_realizations, num_nodes, -1)
             )
 
             start = np.datetime64(time_frame.start_date.isoformat())
             end = np.datetime64(time_frame.end_date.isoformat())
-            time_frame_mask = (observations_array["date"][:, 0] >= start) & (
-                observations_array["date"][:, 0] <= end
+            time_frame_mask = (observations_array["date"][:, 0, 0] >= start) & (
+                observations_array["date"][:, 0, 0] <= end
             )
-            current_observation = observations_array[time_frame_mask, :].reshape((-1,))
+
+            current_observation = observations_array[time_frame_mask, :].reshape(
+                (num_nodes, -1)
+            )
 
             filter_update_result = self._update(
                 current_observation=current_observation,
@@ -1143,15 +1149,15 @@ class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
         # Hard code localization
         for i_node in range(num_nodes):
             observation_is_missing = (current_observation.size == 0) or np.ma.is_masked(
-                current_observation["value"][i_node]
+                current_observation["value"][i_node, ...]
             )
 
             if observation_is_missing:
                 effective_sample_size[0, i_node] = 1.0
             else:
                 log_likelihoods = self.observations.likelihood.compute_log(
-                    current_observation["value"][i_node],
-                    current_predictions[:, i_node],
+                    current_observation["value"][i_node, ...],
+                    current_predictions[:, i_node, ...],
                 )
                 weights = self._normalize_log_weights(log_likelihoods)
 
@@ -1262,8 +1268,7 @@ class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext
         filter_context: _EnsembleKalmanFilterContext | None,
         rng: np.random.Generator,
     ) -> _FilterUpdateResult:
-        posterior_value = current_predictions.copy()
-
+        posterior_value = current_predictions.copy().astype(np.float64)
         num_nodes = self.rume.scope.nodes
         num_realizations = self.num_realizations
 
@@ -1272,7 +1277,7 @@ class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext
         # Hard code localization
         for i_node in range(num_nodes):
             observation_is_missing = (current_observation.size == 0) or np.ma.is_masked(
-                current_observation["value"][i_node]
+                current_observation["value"][i_node, ...]
             )
 
             if not observation_is_missing:
@@ -1295,44 +1300,53 @@ class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext
                 }
 
                 simulated_observations = self.observations.likelihood.sample(
-                    current_predictions[:, i_node], rng=rng
+                    current_predictions[:, i_node, ...], rng=rng
                 )
                 simulated_perturbations = (
-                    simulated_observations - simulated_observations.mean()
+                    simulated_observations
+                    - simulated_observations.mean(axis=0, keepdims=True)
                 )
 
-                prediction_perturbations = (
-                    current_predictions[:, i_node]
-                    - current_predictions[:, i_node].mean()
-                )
+                prediction_perturbations = current_predictions[
+                    :, i_node, ...
+                ] - current_predictions[:, i_node, ...].mean(axis=0, keepdims=True)
 
-                residual_cov_inverse = 1 / np.var(simulated_observations)
+                residual_cov = (
+                    1
+                    / (num_realizations - 1)
+                    * np.matmul(simulated_perturbations.T, simulated_perturbations)
+                )
+                # residual_cov_inverse = 1 / np.var(simulated_observations)
+                residual_cov_inverse = np.linalg.inv(residual_cov)
 
                 # np.matmul behaves nicely with 1-D arrays.
                 # fmt: off
-                kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, simulated_perturbations) * residual_cov_inverse  # noqa: E501
+                kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, simulated_perturbations) @ residual_cov_inverse  # noqa: E501
                 kalman_gain_params = {
-                    k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], simulated_perturbations) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
+                    k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], simulated_perturbations) @ residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
                 }
-                kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbations, simulated_perturbations) * residual_cov_inverse # noqa: E501
+                kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbations.T, simulated_perturbations) @ residual_cov_inverse # noqa: E501
                 # fmt: on
 
-                observation = current_observation["value"][i_node]
+                observation = current_observation["value"][i_node, ...]
                 for i_realization in range(num_realizations):
-                    innovation = observation - simulated_observations[i_realization]
-                    # fmt: off
-                    current_compartments[i_realization, i_node, :] += np.rint(kalman_gain_compartments * innovation).astype(np.int64) # noqa: E501
-                    for name in kalman_gain_params.keys():
-                        current_params[name][i_realization, i_node] += kalman_gain_params[name] * innovation  # noqa: E501
+                    innovation = (
+                        observation - simulated_observations[i_realization, ...]
+                    ).reshape((-1, 1))
 
-                    posterior_value[i_realization, i_node] += kalman_gain_prediction * innovation  # noqa: E501
+                    # fmt: off
+                    current_compartments[i_realization, i_node, :] += np.rint(kalman_gain_compartments @ innovation).astype(np.int64).squeeze() # noqa: E501
+                    for name in kalman_gain_params.keys():
+                        current_params[name][i_realization, i_node] += (kalman_gain_params[name] @ innovation).squeeze()  # noqa: E501
+
+                    posterior_value[i_realization, i_node, ...] += (kalman_gain_prediction @ innovation).squeeze()  # noqa: E501
                     # fmt: on
                 current_compartments[:, i_node, :] = np.clip(
                     current_compartments[:, i_node, :], a_min=0, a_max=None
                 )
 
-                posterior_value[:, i_node] = np.clip(
-                    posterior_value[:, i_node], a_min=0, a_max=None
+                posterior_value[:, i_node, ...] = np.clip(
+                    posterior_value[:, i_node, ...], a_min=0, a_max=None
                 )
         return _FilterUpdateResult(
             current_compartments=current_compartments,
