@@ -22,6 +22,7 @@ from epymorph.compartment_model import (
     QuantityAggregation,
     QuantitySelection,
     QuantityStrategy,
+    TransitionDef,
 )
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
 from epymorph.forecasting.likelihood import Gaussian, Likelihood
@@ -1351,7 +1352,10 @@ def munge_pipeline_output(
     data_df = data_df.set_axis(
         ["realization", "tick", "date", "geo", *data_df.columns[4:]], axis=1
     )
-    data_df = data_df[data_df['realization'].isin(realization.selection)]
+
+    # This is a potential pain point, a multi-index would be far more
+    # efficient, but would require reworking the selectors.
+    data_df = data_df[data_df["realization"].isin(realization.selection)]
 
     if geo.aggregation is None:
         # Without agg: use node IDs as the geo dimension.
@@ -1425,14 +1429,19 @@ def munge_pipeline_output(
                 err = "Chosen time-axis grouping did not return a group for every row."
                 raise ValueError(err)
 
+        # We need to perform different time aggregations based on the
+        # quantity of interest. Currently the aggregation for UnknownParam
+        # and TransitionDef is identical(but this may be subject to change).
         time_aggs = {}
         for col, q in zip(q_mapping.keys(), quantity.selected):
             if isinstance(q, CompartmentDef):
                 time_aggs[col] = time.aggregation.compartments
             elif isinstance(q, UnknownParam):
                 time_aggs[col] = time.aggregation.parameters
-            else:
+            elif isinstance(q, TransitionDef):
                 time_aggs[col] = time.aggregation.events
+            else:
+                raise ValueError(f"Invalid quantity selector {str(q)}")
 
         data_df = (
             data_df.drop(columns=["tick", "date"])
@@ -1602,9 +1611,6 @@ def munge_combined(
 
         agg_dict = {f"{col_name}": realization.aggregation for col_name in value_cols}  # type: ignore
 
-        data_df = (
-            data_df.groupby(["time", "geo"], sort=False)[value_cols]
-            .agg(agg_dict)
-        )
+        data_df = data_df.groupby(["time", "geo"], sort=False)[value_cols].agg(agg_dict)
 
     return data_df.rename(columns=q_mapping).reset_index(drop=True)
