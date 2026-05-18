@@ -1,6 +1,11 @@
+"""
+Simulators for performing multi-realization simulations such as forecasting and
+state/parameter fitting.
+"""
+
 import dataclasses
 import datetime
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import (
     Generic,
@@ -14,6 +19,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.adrio.adrio import ADRIO, ValueT
 from epymorph.attribute import NamePattern
@@ -24,6 +30,7 @@ from epymorph.compartment_model import (
     QuantityStrategy,
     TransitionDef,
 )
+from epymorph.data_type import SimDType
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
 from epymorph.forecasting.likelihood import Gaussian, Likelihood
 from epymorph.forecasting.parameter_strategy import ParameterSelector, ParameterStrategy
@@ -56,9 +63,16 @@ class UnknownParam:
     Contains the information for an unknown parameter. An unknown parameter is a
     parameter which can vary across realizations in a multi-realization simulation. Some
     simulators will try to estimate unknown parameters.
+
+    Parameters
+    ----------
+    prior :
+        The prior distribution or initial values of the parameter.
+    dynamics :
+        The dynamics of the parameter dictating how the parameter changes over time.
     """
 
-    prior: NDArray | Prior
+    prior: NDArray[np.float64] | Prior
     """
     The prior distribution or initial values of the parameter.
     """
@@ -75,6 +89,19 @@ class PipelineConfig:
     Contains the basic information needed to initialize a `PipelineSimulator`.
     Some simulators may require additional information provided in their respective
     constructor.
+
+    Parameters
+    ----------
+    rume :
+        The RUME used by the simulator.
+    num_realizations :
+        The number of realizations of the simulator.
+    initial_values :
+        The optional array of initial compartment values of the simulator. It has shape
+        (R, N, C) where R is the number of realizations, N is the number of nodes,
+        and C is the number of compartments.
+    unknown_params :
+        The dictionary of unknown paramters of the simulator.
     """
 
     rume: RUME
@@ -87,11 +114,9 @@ class PipelineConfig:
     The number of realizations of the simulator.
     """
 
-    initial_values: NDArray | None
+    initial_values: NDArray[SimDType] | None
     """
-    The optional array of initial compartment values of the simulator. It has shape
-    (R, N, C) where R is the number of realizations, N is the number of nodes,
-    and C is the number of compartments.
+    The optional array of initial compartment values of the simulator.
     """
 
     unknown_params: Mapping[NamePattern, UnknownParam]
@@ -104,13 +129,27 @@ class PipelineConfig:
         cls,
         rume: RUME,
         num_realizations: int,
-        initial_values: NDArray | None = None,
-        unknown_params: Mapping[NamePattern, UnknownParam]
+        initial_values: NDArray[SimDType] | None = None,
+        unknown_params: Mapping[str | NamePattern, UnknownParam]
         | Mapping[str, UnknownParam] = {},
-    ):
+    ) -> Self:
         """
         Creates a PipelineConfig from a RUME. Converts the keys of unknown_params into
         NamePattern's.
+
+        Parameters
+        ----------
+        rume :
+            The RUME used by the simulator.
+        num_realizations :
+            The number of realizations of the simulator.
+        initial_values :
+            The optional array of initial compartment values of the simulator. It has
+            shape (R, N, C) where R is the number of realizations, N is the number of
+            nodes, and C is the number of compartments.
+        unknown_params :
+            The dictionary of unknown paramters of the simulator. String names are
+            converted to NamePattern
         """
         return cls(
             rume=rume,
@@ -124,7 +163,7 @@ class PipelineConfig:
         cls,
         output: "PipelineOutput",
         extend_duration: int,
-        override_dynamics: Mapping[NamePattern, ParamFunctionDynamics]
+        override_dynamics: Mapping[str | NamePattern, ParamFunctionDynamics]
         | Mapping[str, ParamFunctionDynamics] = {},
     ) -> Self:
         """
@@ -134,12 +173,12 @@ class PipelineConfig:
 
         Parameters
         ----------
-        output : PipelineOutput
+        output :
             The output to extend.
-        extend_duration : int
+        extend_duration :
             The number of days to extend the simulation from the end of the previous
             output.
-        override_dynamics : Mapping[NamePattern, ParamFunctionDynamics]
+        override_dynamics :
             Override the dyanmics of any parameters from the previous output.
         """
         new_time_frame = TimeFrame.of(
@@ -180,7 +219,7 @@ class PipelineOutput:
     compartments were initialized.
     """
 
-    final_compartments: NDArray
+    final_compartments: NDArray[SimDType]
     """
     An array of shape (R, N, C) where R is the number of realizations, N is the number
     of nodes, and C is the number of compartments. Each realization is an array of
@@ -188,7 +227,7 @@ class PipelineOutput:
     interpretation of the array depends on the simulator used to produce the output.
     """
 
-    final_params: Mapping[NamePattern, NDArray]
+    final_params: Mapping[NamePattern, NDArray[np.float64]]
     """
     A dictionary where the keys are unknown parameters and the values are of arrays of
     shape (R, N) where R is the number of realizations and N is the number of nodes.
@@ -197,7 +236,7 @@ class PipelineOutput:
     the simulator used to produce the output.
     """
 
-    compartments: NDArray
+    compartments: NDArray[SimDType]
     """
     An array of shape (R, S, N, C) where R is the number of realizations, S is
     the number of tau steps, N is the number of nodes, and C is the number of
@@ -207,7 +246,7 @@ class PipelineOutput:
     values with no guarantees of the temporal structure.
     """
 
-    events: NDArray
+    events: NDArray[SimDType]
     """
     An array of shape (R, S, N, E) where R is the number of realizations, S is
     the number of tau steps, N is the number of nodes, and E is the number of
@@ -217,14 +256,14 @@ class PipelineOutput:
     values with no guarantees of the temporal structure.
     """
 
-    initial: NDArray
+    initial: NDArray[SimDType]
     """
     An array of shape (R, N, C) where R is the number of realizations, N is the
     number of nodes, and C is the number of compartments. The interpretation of this
     output depends on the simulator which produced it.
     """
 
-    estimated_params: Mapping[NamePattern, NDArray]
+    estimated_params: Mapping[NamePattern, NDArray[np.float64]]
     """
     A dictionary where the keys are unknown parameters and the values are
     arrays of shape (R, T, N) where R is the number of realizations, T is the number of
@@ -246,7 +285,7 @@ class PipelineOutput:
         return self.simulator.num_realizations
 
     @property
-    def initial_values(self) -> NDArray | None:
+    def initial_values(self) -> NDArray[SimDType] | None:
         return self.simulator.initial_values
 
     @property
@@ -323,7 +362,7 @@ class PipelineOutput:
 
 
 @dataclass(frozen=True)
-class PipelineSimulator:
+class PipelineSimulator(ABC):
     """
     A base class for multi-realization simulations.
     """
@@ -346,7 +385,7 @@ class PipelineSimulator:
         return self.config.num_realizations
 
     @property
-    def initial_values(self) -> NDArray | None:
+    def initial_values(self) -> NDArray[SimDType] | None:
         """
         An optional array of initial compartment values of shape (R, N, C) where R is
         the number of realizations, N is the number of nodes, and C is the number of
@@ -374,24 +413,24 @@ def _initialize_compartments_and_params(
     rume: RUME,
     unknown_params: Mapping[NamePattern, UnknownParam],
     num_realizations: int,
-    initial_values: NDArray | None,
+    initial_values: NDArray[SimDType] | None,
     rng: np.random.Generator,
-) -> Tuple[NDArray, Mapping[NamePattern, NDArray]]:
+) -> tuple[NDArray, Mapping[NamePattern, NDArray]]:
     """
     Parameters
     ----------
-    rume : RUME
+    rume :
         The RUME.
-    unknown_params : Mapping[NamePattern, UnknownParam]
+    unknown_params :
         The unknown parameters. The initial parameter values are based on the prior of
         each UnknownParam.
-    num_realizations : int
+    num_realizations :
         The number of realizations.
-    initial_values : NDArray | None
+    initial_values :
         An array of shape (R, N, C) containing the initial compartment values.
         If None then the RUME's intitializer is used to generate a single initial value
         for each compartment.
-    rng : np.random.Generator
+    rng :
         The random number generator.
 
     Returns
@@ -423,8 +462,8 @@ def _initialize_compartments_and_params(
     else:
         params_temp = {**rume.params}
         for i_realization in range(num_realizations):
-            for k in unknown_params.keys():
-                params_temp[k] = current_params[k][i_realization, ...]
+            for name in current_params.keys():
+                params_temp[name] = current_params[name][i_realization, ...]
             rume_temp = dataclasses.replace(rume, params=params_temp)
             data = rume_temp.evaluate_params(rng=rng)
             current_compartments[i_realization, ...] = rume.initialize(
@@ -435,14 +474,14 @@ def _initialize_compartments_and_params(
 
 @dataclass(frozen=True)
 class _SimulateRealizationsResult:
-    compartments: NDArray
+    compartments: NDArray[SimDType]
     """
     An array of shape (R, S, N, C) where R is the number of realizations, S is the
     number of tau steps, N is the number of nodes, and C is the number of compartments.
     Contains the compartment values of each realization over time.
     """
 
-    events: NDArray
+    events: NDArray[SimDType]
     """
     An array of shape (R, S, N, E) where R is the number of realizations, S is the
     number of tau steps, N is the number of nodes, and E is the number of events.
@@ -456,7 +495,7 @@ class _SimulateRealizationsResult:
     array contains the values of the unknown parameters over time.
     """
 
-    predictions: List[NDArray]
+    predictions: list[NDArray]
     """
     A list of arrays containing the predicted observation corresponding to each
     realization.
@@ -467,9 +506,9 @@ def _simulate_realizations(
     rume_template: RUME,
     override_time_frame: TimeFrame,
     num_realizations: int,
-    initial_values: NDArray,
+    initial_values: NDArray[SimDType],
     unknown_params: Mapping[NamePattern, UnknownParam],
-    param_values: Mapping[NamePattern, NDArray],
+    param_values: Mapping[NamePattern, NDArray[np.float64]],
     geo: GeoSelection | GeoAggregation,
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,
@@ -481,26 +520,30 @@ def _simulate_realizations(
 
     Parameters
     ----------
-    rume_template : RUME
+    rume_template :
         A partial RUME which will be filled out with the compartment and parameter
         values of each realization.
-    override_time_frame : TimeFrame
+    override_time_frame :
         An override of the time_frame of the RUME template.
-    num_realizations : int
+    num_realizations :
         The number of realizations.
-    initial_values : NDArray
+    initial_values :
         An array of shape (R, N, C) containing the compartment values of each
         realization.
-    unknown_params : Mapping[NamePattern, UnknownParam]
+    unknown_params :
         A dictionary containing the unknown parameters which are allowed to vary across
         realizations. The prior field of each UnknownParam is ingnored in favor of
         param_values.
-    param_values : Mapping[NamePattern, NDArray]
+    param_values :
         A dictionary containing the current parameter values.
-    geo : GeoSelection | GeoAggregation
-    time : TimeSelection | TimeAggregation
-    quantity : QuantitySelection | QuantityAggregation
-    rng : np.random.Generator
+    geo :
+        The geo strategy for munging the output.
+    time :
+        The time strategy for munging the output.
+    quantity :
+        The quantity strategy for munging the output.
+    rng :
+        The random number generator.
 
     Returns
     -------
@@ -580,8 +623,8 @@ def _simulate_realizations(
         compartments[i_realization, ...] = out_temp.compartments
         events[i_realization, ...] = out_temp.events
 
-        for k in unknown_params.keys():
-            estimated_params[k][i_realization, ...] = data.get_raw(k)
+        for name in estimated_params.keys():
+            estimated_params[name][i_realization, ...] = data.get_raw(name)
 
     return _SimulateRealizationsResult(
         compartments=compartments,
@@ -599,14 +642,16 @@ class ForecastSimulator(PipelineSimulator):
 
     Parameters
     ----------
-    config : PipelineConfig
+    config :
         Contains the rume, number of realizations, initial compartment values, and
         dictionary of unknown parameters.
     """
 
     config: PipelineConfig
+    """The configuration for the simulator."""
 
-    def run(self, rng) -> PipelineOutput:
+    @override
+    def run(self, rng: np.random.Generator) -> PipelineOutput:
         """
         Runs the multi-realization forecast.
 
@@ -662,7 +707,8 @@ class ForecastSimulator(PipelineSimulator):
             simulator=self,
             final_compartments=result.compartments[:, -1, ...],
             final_params={
-                k: result.estimated_params[k][:, -1, ...] for k in unknown_params.keys()
+                k: result.estimated_params[k][:, -1, ...]
+                for k in result.estimated_params.keys()
             },
             compartments=result.compartments,
             events=result.events,
@@ -676,20 +722,28 @@ class ParticleFilterOutput(PipelineOutput):
     """
     Output object for the particle filter which contains additional output and
     diagnostic information.
+
+    Parameters
+    ----------
+    simulator :
+        The simulator used to produce the output.
+    posterior_values :
+        The posterior estimate of the observed data. The first dimension of the array is
+        the number of realizations, the second dimension is the number of observations.
+        The remaining dimensions depend on the shape of the observed data. These values
+        are constructed from resampling the observed data in the same way the
+        compartment and parameter values are resampled.
+    effective_sample_size :
+        The effective sample size, defined as the the reciprocal of the sum of the
+        squared weights, for each observation and each node.
     """
 
     simulator: "ParticleFilterSimulator"
 
-    posterior_values: NDArray
-    """
-    The posterior estimate of the observed data. The first dimension of the array is the
-    number of realizations, the second dimension is the number of observations. The
-    remaining dimensions depend on the shape of the observed data. These values are
-    constructed from resampling the observed data in the same way the compartment and
-    parameter values are resampled.
-    """
+    posterior_values: NDArray[np.float64]
+    """The posterior estimate of the observed data."""
 
-    effective_sample_size: NDArray
+    effective_sample_size: NDArray[np.float64]
     """
     The effective sample size for each observation and each node.
     """
@@ -700,24 +754,49 @@ class ModelLink:
     """
     Contains the information needed to subselect, group, and aggregate model output in
     order to compare it to observed data.
+
+    Parameters
+    ----------
+    geo :
+        The strategy for processing the geo-axis of a single realization.
+    time :
+        The strategy for processing the time-axis of a single realization.
+    quantity :
+        The strategy for processing the quantity-axis of a single realization.
     """
 
     geo: GeoSelection | GeoAggregation
+    """The strategy for processing the geo-axis of a single realization."""
+
     time: TimeSelection | TimeAggregation
+    """The strategy for processing the time-axis of a single realization."""
+
     quantity: QuantitySelection | QuantityAggregation
+    """The strategy for processing the quantity-axis of a single realization."""
 
 
 @dataclass(frozen=True)
 class Observations(Generic[ValueT]):
     """
     The observed data used to estimate the state and parameters of a simulation.
+
+    Parameters
+    ----------
+    source :
+        The source of the observations which results in an (A, N) array where A is a
+        time axis of unknown length and N is the number of nodes. The entries of the
+        array are date-value pairs.
+    model_link :
+        Contains the information needed to generate a predicted observation from a
+        single realization of a simulation.
+    likelihood :
+        Contains a likelihood function used to compare a predicted observation to
+        observed data.
     """
 
     source: ADRIO[DateValueType, ValueT] | NDArray[DateValueType]
     """
-    The source of the observations which results in an (A, N) array where A is a time
-    axis of unknown length and N is the number of nodes. The entries of the array are
-    date-value pairs.
+    The source of the observations which results in an  array of observed values.
     """
 
     model_link: ModelLink
@@ -735,6 +814,11 @@ class Observations(Generic[ValueT]):
     def _get_observations_array(self, context: Context) -> NDArray[DateValueType]:
         """
         Get the arbitrary by node structured array of date value pairs.
+
+        Parameters
+        ----------
+        context :
+            The context for evaluating an ADRIO source of the observations.
         """
         if isinstance(self.source, ADRIO):
             inspect = self.source.with_context_internal(context).inspect()
@@ -751,17 +835,21 @@ class ParticleFilterSimulator(PipelineSimulator):
 
     Parameters
     ----------
-    config : PipelineConfig
+    config :
         The RUME, number of realization, initial (prior) compartment values, and unknown
         parameters to estimate.
-    observations : Observations
+    observations :
         The observations used to estimate the compartment and parameter values.
     """
 
     config: PipelineConfig
-    observations: Observations
+    """The configuration for the simulation."""
 
-    def run(self, rng) -> ParticleFilterOutput:
+    observations: Observations
+    """The observations."""
+
+    @override
+    def run(self, rng: np.random.Generator) -> ParticleFilterOutput:
         """
         Run the particle filter simulation.
 
@@ -881,7 +969,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             events[:, step_idx:step_right, ...] = result.events
 
             current_params = {}
-            for name in unknown_params.keys():
+            for name in estimated_params.keys():
                 estimated_params[name][:, day_idx:day_right, ...] = (
                     result.estimated_params[name]
                 )
@@ -948,7 +1036,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             compartments=compartments,
             events=events,
             initial=initial,
-            posterior_values=np.array(posterior_values),
+            posterior_values=np.stack(posterior_values, axis=1),
             effective_sample_size=effective_sample_size,
             estimated_params=estimated_params,
         )
@@ -956,7 +1044,7 @@ class ParticleFilterSimulator(PipelineSimulator):
     @staticmethod
     def _observation_time_frames(
         rume: RUME, time_grouping: TimeGrouping | None
-    ) -> Tuple[Sequence[TimeFrame], NDArray[GroupKeyType]]:
+    ) -> tuple[Sequence[TimeFrame], NDArray[GroupKeyType]]:
         """
         Find the sub time frames which correspond to each observation.
 
@@ -1002,7 +1090,7 @@ class ParticleFilterSimulator(PipelineSimulator):
         return time_frames, values
 
     @staticmethod
-    def _normalize_log_weights(log_weights):
+    def _normalize_log_weights(log_weights: NDArray[np.float64]) -> NDArray[np.float64]:
         """
         Calculate the normalized particle weights from the un-normalized natural
         logarithm of the weights. This method uses multiple techniques to mitigate
@@ -1034,7 +1122,9 @@ class ParticleFilterSimulator(PipelineSimulator):
         return weights
 
     @staticmethod
-    def _systematic_resampling(weights: NDArray, rng: np.random.Generator):
+    def _systematic_resampling(
+        weights: NDArray, rng: np.random.Generator
+    ) -> NDArray[np.int64]:
         """
         Performs systematic resampling as part of a particle filter update. It is used
         to take a weighted particle cloud and produce an equally-weighted particle cloud
@@ -1073,18 +1163,24 @@ class EnsembleKalmanFilterOutput(PipelineOutput):
     """
     Output object for the ensemble Kalman filter which contains additional output and
     diagnostic information.
+
+    Parameters
+    ----------
+    simulator :
+        The simulator used to produce the output.
+    posterior_values :
+        The posterior estimate of the observed data. The first dimension of the array is
+        the number of realizations, the second dimension is the number of observations.
+        The remaining dimensions depend on the shape of the observed data. These values
+        are constructed updating the observed data in the same way the compartment and
+        parameter values are updated.
     """
 
     simulator: "EnsembleKalmanFilterSimulator"
+    """The simulator used to produce the output."""
 
-    posterior_values: NDArray
-    """
-    The posterior estimate of the observed data. The first dimension of the array is the
-    number of realizations, the second dimension is the number of observations. The
-    remaining dimensions depend on the shape of the observed data. These values are
-    constructed updating the observed data in the same way the compartment and
-    parameter values are updated.
-    """
+    posterior_values: NDArray[np.float64]
+    """The posterior estimate of the observed data."""
 
 
 @dataclass(frozen=True)
@@ -1105,7 +1201,16 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
     config: PipelineConfig
     observations: Observations
 
-    def run(self, rng) -> EnsembleKalmanFilterOutput:
+    def __post_init__(self):
+        if not isinstance(self.observations.likelihood, GaussianLikelihood):
+            msg = (
+                "The ensemble Kalman filter only supports a Gaussian "
+                "likelihood for observational data."
+            )
+            raise ValueError(msg)
+
+    @override
+    def run(self, rng: np.random.Generator) -> EnsembleKalmanFilterOutput:
         rume = self.rume
         num_realizations = self.num_realizations
         initial_values = self.initial_values
@@ -1113,9 +1218,9 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
         observations = self.observations
         rng = rng
 
-        if not isinstance(observations.likelihood, Gaussian):
+        if not isinstance(observations.likelihood, GaussianLikelihood):
             msg = (
-                "The ensemble Kalman filter only supports a Gaussian"
+                "The ensemble Kalman filter only supports a Gaussian "
                 "likelihood for observational data."
             )
             raise ValueError(msg)
@@ -1215,7 +1320,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             events[:, step_idx:step_right, ...] = result.events
 
             current_params = {}
-            for name in unknown_params.keys():
+            for name in estimated_params.keys():
                 estimated_params[name][:, day_idx:day_right, ...] = (
                     result.estimated_params[name]
                 )
@@ -1236,7 +1341,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             # posterior_value will be modified in-place.
             posterior_value = current_predictions.copy()
 
-            observation_cov = observations.likelihood.variance
+            observation_cov = observations.likelihood.standard_deviation**2
 
             # Hard code localization
             for i_node in range(num_nodes):
@@ -1250,7 +1355,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     )
                     prior_params_mean = {
                         k: np.mean(current_params[k][:, i_node])
-                        for k in unknown_params.keys()
+                        for k in current_params.keys()
                     }
 
                     # The double use of the term perturbation is unfortunate.
@@ -1260,7 +1365,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     )
                     params_perturbation = {
                         k: current_params[k][:, i_node] - prior_params_mean[k]
-                        for k in unknown_params.keys()
+                        for k in current_params.keys()
                     }
                     prediction_perturbation = (
                         current_predictions[:, i_node]
@@ -1274,7 +1379,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                     # fmt: off
                     kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, prediction_perturbation) * residual_cov_inverse  # noqa: E501
                     kalman_gain_params = {
-                        k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in unknown_params.keys() # noqa: E501
+                        k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], prediction_perturbation) * residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
                     }
                     kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbation, prediction_perturbation) * residual_cov_inverse # noqa: E501
                     # fmt: on
@@ -1286,7 +1391,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
                         innovation = observation - (prediction + perturbation)
                         # fmt: off
                         current_compartments[i_realization, i_node, :] += np.rint(kalman_gain_compartments * innovation).astype(np.int64) # noqa: E501
-                        for name in unknown_params.keys():
+                        for name in kalman_gain_params.keys():
                             current_params[name][i_realization, i_node] += kalman_gain_params[name] * innovation  # noqa: E501
 
                         posterior_value[i_realization, i_node] += kalman_gain_prediction * innovation  # noqa: E501
@@ -1311,7 +1416,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             compartments=compartments,
             events=events,
             initial=initial,
-            posterior_values=np.array(posterior_values),
+            posterior_values=np.stack(posterior_values, axis=1),
             estimated_params=estimated_params,
         )
 
