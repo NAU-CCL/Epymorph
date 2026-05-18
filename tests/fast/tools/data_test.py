@@ -86,7 +86,12 @@ def filter_output(rume):
     T = rume.time_frame.duration_days
     compartments = np.ones((R, S, N, C))
     param_names = [NamePattern.of("test_0")]
-    simulator = PipelineSimulator(
+
+    class TestSimulator(PipelineSimulator):
+        def run(self, rng):  # type: ignore
+            pass
+
+    simulator = TestSimulator(
         config=PipelineConfig(
             rume=rume,
             num_realizations=R,
@@ -94,7 +99,7 @@ def filter_output(rume):
             unknown_params={
                 param_name: UnknownParam(
                     prior=GaussianPrior(mean=np.log(0.2), standard_deviation=0.5),
-                    dynamics=BrownianMotion(voliatility=0.1),
+                    dynamics=BrownianMotion(volatility=0.1),
                 )
                 for param_name in param_names
             },

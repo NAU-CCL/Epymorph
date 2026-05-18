@@ -32,7 +32,7 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_type import SimDType
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
-from epymorph.forecasting.likelihood import Gaussian, Likelihood
+from epymorph.forecasting.likelihood import GaussianLikelihood, Likelihood
 from epymorph.forecasting.parameter_strategy import ParameterSelector, ParameterStrategy
 from epymorph.forecasting.realization_strategy import (
     RealizationAggregation,
