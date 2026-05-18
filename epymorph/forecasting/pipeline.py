@@ -9,11 +9,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import (
     Generic,
-    List,
     Mapping,
     Self,
     Sequence,
-    Tuple,
 )
 
 import numpy as np
