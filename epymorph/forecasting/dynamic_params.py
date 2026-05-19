@@ -65,7 +65,7 @@ class UniformPrior(Prior):
     """
 
     def __post_init__(self):
-        if self.lower > self.upper:
+        if np.any(self.lower > self.upper):
             raise ValueError("The lower bound cannot be greater than the upper bound.")
 
     @override
@@ -180,11 +180,11 @@ class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
     requirements = ()
 
     def __init__(self, damping: float, mean: float, standard_deviation: float):
-        if damping <= 0:
+        if np.any(damping <= 0):
             raise ValueError("Damping must be positive.")
         self.damping = damping
         self.mean = mean
-        if standard_deviation < 0:
+        if np.any(standard_deviation < 0):
             raise ValueError("Standard deviation must be non-negative.")
         self.standard_deviation = standard_deviation
 
@@ -254,7 +254,7 @@ class BrownianMotion(ParamFunctionDynamics[np.float64]):
     requirements = ()
 
     def __init__(self, volatility: float):
-        if volatility < 0:
+        if np.any(volatility < 0):
             raise ValueError("The volatility must be non-negative.")
         self.volatility = volatility
 

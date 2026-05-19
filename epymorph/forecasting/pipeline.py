@@ -457,9 +457,13 @@ def _simulate_realizations(
     param_values :
         A dictionary containing the current parameter values.
     geo :
+        The geo strategy for munging the output.
     time :
+        The time strategy for munging the output.
     quantity :
+        The quantity strategy for munging the output.
     rng :
+        The random number generator.
 
     Returns
     -------
@@ -952,7 +956,7 @@ class ParticleFilterSimulator(PipelineSimulator):
             compartments=compartments,
             events=events,
             initial=initial,
-            posterior_values=np.array(posterior_values),
+            posterior_values=np.stack(posterior_values, axis=1),
             effective_sample_size=effective_sample_size,
             estimated_params=estimated_params,
         )
@@ -1332,7 +1336,7 @@ class EnsembleKalmanFilterSimulator(PipelineSimulator):
             compartments=compartments,
             events=events,
             initial=initial,
-            posterior_values=np.array(posterior_values),
+            posterior_values=np.stack(posterior_values, axis=1),
             estimated_params=estimated_params,
         )
 
