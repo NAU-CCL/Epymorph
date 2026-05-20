@@ -87,7 +87,7 @@ class ParameterSelection(ParameterStrategy):
     @property
     def labels(self) -> Sequence[str]:
         """Labels for the parameters in the result, after any grouping."""
-        return [str(k) for k, v in self.parameters]  # type: ignore
+        return [str(k) for k, v in self.parameters.items()]
 
 
 class ParameterSelector:

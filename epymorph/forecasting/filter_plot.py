@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from datetime import timedelta
 from itertools import cycle
 from math import ceil
@@ -5,6 +6,7 @@ from pathlib import Path
 from typing import (
     Callable,
     Literal,
+    Protocol,
 )
 
 import matplotlib.pyplot as plt
@@ -804,7 +806,7 @@ class PlotRendererPipeline:
             for quantity_name, kwargs in zip(quantity.labels, cycle(hist_kwargs)):
                 axes[plot_index].hist(
                     transform(gdf[quantity_name].to_frame()),
-                    label=f"Histogram of {quantity_name} at Time: {gdf['time'].iloc[0]}",
+                    label=f"{quantity_name} at : {gdf['time'].iloc[0]}",
                     **kwargs,
                 )
 
@@ -821,7 +823,7 @@ class PlotRendererPipeline:
         realization: RealizationAggregation,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         *,
         label_format: str = "{n}: {q}: {m}",
         legend: LegendOption = "auto",
@@ -968,7 +970,7 @@ class PlotRendererPipeline:
         realization: RealizationSelection | RealizationAggregation,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
-        quantity: QuantitySelection | QuantityAggregation,
+        quantity: QuantityStrategy | ParameterStrategy,
         *,
         label_format: str = "{n}: {q}: {m}",
         line_kwargs: list[dict] | None = None,
@@ -1028,13 +1030,3 @@ class PlotRendererPipeline:
                     line_index += 1
 
         return lines
-
-
-class PlotRendererPipelineMixin(PipelineOutput):
-    """Mixin class that adds a convenient method
-    for rendering plots from a pipeline output."""
-
-    @property
-    def plot(self) -> PlotRendererPipeline:
-        """Render a plot from this output."""
-        return PlotRendererPipeline(self)
