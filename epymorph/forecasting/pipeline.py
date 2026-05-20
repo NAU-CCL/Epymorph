@@ -33,6 +33,7 @@ from epymorph.forecasting.munge_realizations import (
     RealizationSelection,
     RealizationSelector,
 )
+from epymorph.forecasting.likelihood import Likelihood
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.initializer import Explicit
 from epymorph.rume import RUME
