@@ -37,7 +37,8 @@ class PlotRendererPipeline:
     """
     Provides methods for rendering an output in plot form.
 
-    Most commonly, you will use `PlotRendererFilter` starting from a filter output object
+    Most commonly, you will use `PlotRendererFilter` starting
+    from a filter output object
     that supports it:
 
     Parameters
@@ -257,7 +258,7 @@ class PlotRendererPipeline:
                 legend = "on" if len(quantity.labels) <= 4 else "off"
 
             # Call the spaghetti plot function, this returns the lines
-            lines = self.spaghetti_plt(
+            lines = self.spaghetti_plt(  # noqa: F841
                 axes,
                 realization,
                 geo,
