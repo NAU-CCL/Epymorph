@@ -1,4 +1,3 @@
-from abc import abstractmethod
 from datetime import timedelta
 from itertools import cycle
 from math import ceil
@@ -6,7 +5,6 @@ from pathlib import Path
 from typing import (
     Callable,
     Literal,
-    Protocol,
 )
 
 import matplotlib.pyplot as plt
@@ -18,8 +16,6 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 
 from epymorph.compartment_model import (
-    QuantityAggregation,
-    QuantitySelection,
     QuantityStrategy,
 )
 from epymorph.forecasting.munge_realizations import (
