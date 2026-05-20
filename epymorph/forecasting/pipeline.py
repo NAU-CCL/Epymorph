@@ -534,7 +534,11 @@ def _simulate_realizations(
         events[i_realization, ...] = out_temp.events
 
         for name in estimated_params.keys():
-            estimated_params[name][i_realization, ...] = data.get_raw(name)
+            matching_names = [x for x in data.raw_values if name.match(x)]
+            # We know that all the matching names have identical values.
+            estimated_params[name][i_realization, ...] = data.raw_values[
+                matching_names[0]
+            ]
 
     return _SimulateRealizationsResult(
         compartments=compartments,
@@ -1316,8 +1320,10 @@ class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext
                     / (num_realizations - 1)
                     * np.matmul(simulated_perturbations.T, simulated_perturbations)
                 )
+
                 # residual_cov_inverse = 1 / np.var(simulated_observations)
-                residual_cov_inverse = np.linalg.inv(residual_cov)
+                # residual_cov_inverse = np.linalg.inv(residual_cov)
+                residual_cov_inverse = np.linalg.pinv(residual_cov)
 
                 # np.matmul behaves nicely with 1-D arrays.
                 # fmt: off
