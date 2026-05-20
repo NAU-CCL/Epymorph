@@ -74,6 +74,7 @@ def output(rume: RUME[StateScope]) -> Output:
         ),
     )
 
+
 @pytest.fixture
 def filter_output(rume):
     """A mock filter output so we don't have to run a filter."""
@@ -94,7 +95,7 @@ def filter_output(rume):
         config=PipelineConfig(
             rume=rume,
             num_realizations=R,
-            initial_values=compartments[:, 0, :, :], # type: ignore
+            initial_values=compartments[:, 0, :, :],  # type: ignore
             unknown_params={
                 param_name: UnknownParam(
                     prior=GaussianPrior(mean=np.log(0.2), standard_deviation=0.5),
@@ -135,6 +136,7 @@ def test_basic_munge(rume, output):
     )
 
     pd.testing.assert_frame_equal(actual.reset_index(drop=True), expected)
+
 
 def test_basic_pipeline_munge(rume, filter_output):
     # Test with a selection in each axis
@@ -226,6 +228,7 @@ def test_aggregation_pipeline_munge(rume, filter_output):
     expected = expected.astype(
         {("time", ""): "int64", ("*::*::test_0", "std"): "float64"}
     )
+
 
 def test_munge_errors(rume, output):
     # Bad object correlation, geo
