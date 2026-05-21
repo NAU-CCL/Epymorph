@@ -25,7 +25,7 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_type import SimDType
 from epymorph.forecasting.dynamic_params import ParamFunctionDynamics, Prior
-from epymorph.forecasting.likelihood import GaussianLikelihood, Likelihood
+from epymorph.forecasting.likelihood import Likelihood
 from epymorph.forecasting.munge_realizations import (
     ParameterSelector,
     ParameterStrategy,
@@ -33,7 +33,6 @@ from epymorph.forecasting.munge_realizations import (
     RealizationSelection,
     RealizationSelector,
 )
-from epymorph.forecasting.likelihood import Likelihood
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.initializer import Explicit
 from epymorph.rume import RUME
@@ -181,8 +180,6 @@ class PipelineConfig:
             duration_days=extend_duration,
         )
         rume = replace(output.rume, time_frame=new_time_frame)
-        num_realizations = output.num_realizations
-        initial_values = output.final_compartments
         unknown_params = {
             k: UnknownParam(prior=output.final_params[k], dynamics=v.dynamics)
             for k, v in output.unknown_params.items()
@@ -195,8 +192,8 @@ class PipelineConfig:
             )
         return cls(
             rume=rume,
-            num_realizations=num_realizations,
-            initial_values=initial_values,
+            num_realizations=output.num_realizations,
+            initial_values=output.final_compartments,
             unknown_params=unknown_params,
         )
 
@@ -433,10 +430,9 @@ def _initialize_compartments_and_params(
     :
         The initial compartment values and the initial paramter values.
     """
-    num_nodes = rume.scope.nodes
     num_compartments = rume.ipm.num_compartments
     current_params = {
-        k: np.zeros(shape=(num_realizations, num_nodes), dtype=np.float64)
+        k: np.zeros(shape=(num_realizations, rume.scope.nodes), dtype=np.float64)
         for k in unknown_params.keys()
     }
     for i_realization in range(num_realizations):
@@ -444,13 +440,13 @@ def _initialize_compartments_and_params(
             prior = unknown_params[name].prior
             if isinstance(prior, Prior):
                 current_params[name][i_realization, ...] = prior.sample(
-                    size=(num_nodes,), rng=rng
+                    size=(rume.scope.nodes,), rng=rng
                 )
             else:
                 current_params[name][i_realization, ...] = prior[i_realization, ...]
 
     current_compartments = np.zeros(
-        shape=(num_realizations, num_nodes, num_compartments), dtype=np.int64
+        shape=(num_realizations, rume.scope.nodes, num_compartments), dtype=np.int64
     )
     if initial_values is not None:
         current_compartments = initial_values.copy()
@@ -545,21 +541,35 @@ def _simulate_realizations(
     :
         The result of the simulation.
     """
-    num_days = override_time_frame.days
-    taus = rume_template.num_tau_steps
-    num_steps = num_days * taus
-    num_nodes = rume_template.scope.nodes
-    num_compartments = rume_template.ipm.num_compartments
-    num_events = rume_template.ipm.num_events
+    num_steps = override_time_frame.days * rume_template.num_tau_steps
 
     compartments = np.zeros(
-        shape=(num_realizations, num_steps, num_nodes, num_compartments), dtype=np.int64
+        shape=(
+            num_realizations,
+            num_steps,
+            rume_template.scope.nodes,
+            rume_template.ipm.num_compartments,
+        ),
+        dtype=np.int64,
     )
     events = np.zeros(
-        shape=(num_realizations, num_steps, num_nodes, num_events), dtype=np.int64
+        shape=(
+            num_realizations,
+            num_steps,
+            rume_template.scope.nodes,
+            rume_template.ipm.num_events,
+        ),
+        dtype=np.int64,
     )
     estimated_params = {
-        k: np.zeros(shape=(num_realizations, num_days, num_nodes), dtype=np.float64)
+        k: np.zeros(
+            shape=(
+                num_realizations,
+                override_time_frame.days,
+                rume_template.scope.nodes,
+            ),
+            dtype=np.float64,
+        )
         for k in unknown_params.keys()
     }
 
@@ -664,37 +674,34 @@ class ForecastSimulator(PipelineSimulator):
         :
             The output of the forecast.
         """
-        rume = self.rume
-        num_realizations = self.num_realizations
-        initial_values = self.initial_values
-        unknown_params = self.unknown_params
-        rng = rng
 
         # Precompute ADRIO values.
-        context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+        context = Context.of(
+            scope=self.rume.scope, time_frame=self.rume.time_frame, rng=rng
+        )
         new_params = {}
-        for name, param in rume.params.items():
+        for name, param in self.rume.params.items():
             if isinstance(param, ADRIO):
                 new_params[name] = param.with_context_internal(context).evaluate()
             else:
                 new_params[name] = param
         rume = dataclasses.replace(
-            rume,
+            self.rume,
             params=new_params,
         )
 
         # Initialize the initial compartment and parameter values.
         current_compartments, current_params = _initialize_compartments_and_params(
-            rume, unknown_params, num_realizations, initial_values, rng
+            rume, self.unknown_params, self.num_realizations, self.initial_values, rng
         )
         initial = current_compartments
 
         result = _simulate_realizations(
             rume_template=rume,
             override_time_frame=rume.time_frame,
-            num_realizations=num_realizations,
+            num_realizations=self.num_realizations,
             initial_values=current_compartments,
-            unknown_params=unknown_params,
+            unknown_params=self.unknown_params,
             param_values=current_params,
             geo=rume.scope.select.all(),
             time=rume.time_frame.select.all(),
@@ -873,59 +880,63 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
         :
             The output of the particle filter.
         """
-        rume = self.rume
-        num_realizations = self.num_realizations
-        initial_values = self.initial_values
-        unknown_params = self.unknown_params
-        observations = self.observations
-        rng = rng
-
         # Precompute ADRIO values.
-        context = Context.of(scope=rume.scope, time_frame=rume.time_frame, rng=rng)
+        context = Context.of(
+            scope=self.rume.scope, time_frame=self.rume.time_frame, rng=rng
+        )
         new_params = {}
-        for name, param in rume.params.items():
+        for name, param in self.rume.params.items():
             if isinstance(param, ADRIO):
                 new_params[name] = param.with_context_internal(context).evaluate()
             else:
                 new_params[name] = param
 
         rume = dataclasses.replace(
-            rume,
+            self.rume,
             params=new_params,
         )
 
         # Dimension of the system.
-        num_days = rume.time_frame.days
-        num_steps = num_days * rume.num_tau_steps
-        num_nodes = rume.scope.nodes
-        num_compartments = rume.ipm.num_compartments
-        num_events = rume.ipm.num_events
+        num_steps = rume.time_frame.days * rume.num_tau_steps
 
         # Allocate return values.
         initial = np.zeros(
-            shape=(num_realizations, num_nodes, num_compartments), dtype=np.int64
+            shape=(self.num_realizations, rume.scope.nodes, rume.ipm.num_compartments),
+            dtype=np.int64,
         )
         compartments = np.zeros(
-            shape=(num_realizations, num_steps, num_nodes, num_compartments),
+            shape=(
+                self.num_realizations,
+                num_steps,
+                rume.scope.nodes,
+                rume.ipm.num_compartments,
+            ),
             dtype=np.int64,
         )
         events = np.zeros(
-            shape=(num_realizations, num_steps, num_nodes, num_events), dtype=np.int64
+            shape=(
+                self.num_realizations,
+                num_steps,
+                rume.scope.nodes,
+                rume.ipm.num_events,
+            ),
+            dtype=np.int64,
         )
         estimated_params = {
             name: np.zeros(
-                shape=(num_realizations, num_days, num_nodes), dtype=np.float64
+                shape=(self.num_realizations, rume.time_frame.days, rume.scope.nodes),
+                dtype=np.float64,
             )
-            for name in unknown_params.keys()
+            for name in self.unknown_params.keys()
         }
 
         # Initialize the initial compartment and parameter values. Note, the values
         # within current_compartment_values will be modified in place!
         current_compartments, current_params = _initialize_compartments_and_params(
             rume=rume,
-            unknown_params=unknown_params,
-            num_realizations=num_realizations,
-            initial_values=initial_values,
+            unknown_params=self.unknown_params,
+            num_realizations=self.num_realizations,
+            initial_values=self.initial_values,
             rng=rng,
         )
 
@@ -933,13 +944,13 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
 
         # Determine the number of observations and their associated time frames.
         time_frames, labels = self._observation_time_frames(
-            rume, observations.model_link.time.grouping
+            rume, self.observations.model_link.time.grouping
         )
 
         context = Context.of(
             scope=rume.scope, time_frame=rume.time_frame, ipm=rume.ipm, rng=rng
         )
-        observations_array = observations._get_observations_array(context)
+        observations_array = self.observations._get_observations_array(context)
         observations_array = observations_array.reshape(
             (observations_array.shape[0], observations_array.shape[1], -1)
         )
@@ -964,13 +975,13 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
             result = _simulate_realizations(
                 rume_template=rume,
                 override_time_frame=time_frame,
-                num_realizations=num_realizations,
+                num_realizations=self.num_realizations,
                 initial_values=current_compartments,
-                unknown_params=unknown_params,
+                unknown_params=self.unknown_params,
                 param_values=current_params,
-                geo=observations.model_link.geo,
-                time=observations.model_link.time,
-                quantity=observations.model_link.quantity,
+                geo=self.observations.model_link.geo,
+                time=self.observations.model_link.time,
+                quantity=self.observations.model_link.quantity,
                 rng=rng,
             )
 
@@ -988,7 +999,7 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
 
             current_compartments = result.compartments[:, -1, ...].copy()
             current_predictions = np.stack(result.predictions).reshape(
-                (num_realizations, num_nodes, -1)
+                (self.num_realizations, rume.scope.nodes, -1)
             )
 
             start = np.datetime64(time_frame.start_date.isoformat())
@@ -998,7 +1009,7 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
             )
 
             current_observation = observations_array[time_frame_mask, :].reshape(
-                (num_nodes, -1)
+                (rume.scope.nodes, -1)
             )
 
             filter_update_result = self._update(
@@ -1224,19 +1235,16 @@ class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
         # posterior_value will be modified in-place.
         posterior_value = current_predictions.copy()
 
-        num_nodes = self.rume.scope.nodes
-        num_realizations = self.num_realizations
-
         current_compartments = prior_compartments.copy()
         current_params = {k: prior_params[k].copy() for k in prior_params.keys()}
 
         posterior_value = current_predictions.copy()
         prior_compartment_values = current_compartments.copy()
 
-        effective_sample_size = np.zeros(shape=(1, num_nodes))
+        effective_sample_size = np.zeros(shape=(1, self.rume.scope.nodes))
 
         # Hard code localization
-        for i_node in range(num_nodes):
+        for i_node in range(self.rume.scope.nodes):
             observation_is_missing = (current_observation.size == 0) or np.ma.is_masked(
                 current_observation["value"][i_node, ...]
             )
@@ -1252,7 +1260,7 @@ class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
 
                 resampled_idx = self._systematic_resampling(weights, rng)
 
-                orig_idx = np.arange(0, num_realizations)
+                orig_idx = np.arange(0, self.num_realizations)
                 current_compartments[orig_idx, i_node, ...] = prior_compartment_values[
                     resampled_idx, i_node, ...
                 ]
@@ -1358,13 +1366,11 @@ class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext
         rng: np.random.Generator,
     ) -> _FilterUpdateResult:
         posterior_value = current_predictions.copy().astype(np.float64)
-        num_nodes = self.rume.scope.nodes
-        num_realizations = self.num_realizations
 
         current_compartments = prior_compartments.copy()
         current_params = {k: prior_params[k].copy() for k in prior_params.keys()}
         # Hard code localization
-        for i_node in range(num_nodes):
+        for i_node in range(self.rume.scope.nodes):
             observation_is_missing = (current_observation.size == 0) or np.ma.is_masked(
                 current_observation["value"][i_node, ...]
             )
@@ -1402,25 +1408,23 @@ class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext
 
                 residual_cov = (
                     1
-                    / (num_realizations - 1)
+                    / (self.num_realizations - 1)
                     * np.matmul(simulated_perturbations.T, simulated_perturbations)
                 )
 
-                # residual_cov_inverse = 1 / np.var(simulated_observations)
-                # residual_cov_inverse = np.linalg.inv(residual_cov)
                 residual_cov_inverse = np.linalg.pinv(residual_cov)
 
                 # np.matmul behaves nicely with 1-D arrays.
                 # fmt: off
-                kalman_gain_compartments = 1 / (num_realizations - 1) * np.matmul(compartments_perturbation.T, simulated_perturbations) @ residual_cov_inverse  # noqa: E501
+                kalman_gain_compartments = 1 / (self.num_realizations - 1) * np.matmul(compartments_perturbation.T, simulated_perturbations) @ residual_cov_inverse  # noqa: E501
                 kalman_gain_params = {
-                    k: 1 / (num_realizations - 1) * np.matmul(params_perturbation[k], simulated_perturbations) @ residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
+                    k: 1 / (self.num_realizations - 1) * np.matmul(params_perturbation[k], simulated_perturbations) @ residual_cov_inverse for k in params_perturbation.keys() # noqa: E501
                 }
-                kalman_gain_prediction = 1 / (num_realizations - 1) * np.matmul(prediction_perturbations.T, simulated_perturbations) @ residual_cov_inverse # noqa: E501
+                kalman_gain_prediction = 1 / (self.num_realizations - 1) * np.matmul(prediction_perturbations.T, simulated_perturbations) @ residual_cov_inverse # noqa: E501
                 # fmt: on
 
                 observation = current_observation["value"][i_node, ...]
-                for i_realization in range(num_realizations):
+                for i_realization in range(self.num_realizations):
                     innovation = (
                         observation - simulated_observations[i_realization, ...]
                     ).reshape((-1, 1))
