@@ -39,17 +39,13 @@ class Likelihood(ABC):
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        """
-        Computes the log of the likelihood of the observed data given the data expected
-        by a model.
+        raise NotImplementedError("Subclasses should implement this method.")
 
-        Parameters
-        ----------
-        observed : int
-            The observational data.
-        expected : int
-            The data predicted by the model.
-        """
+    @abstractmethod
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        raise NotImplementedError("Subclasses should implement this method.")
 
 
 @dataclass(frozen=True)
@@ -86,6 +82,11 @@ class PoissonLikelihood(Likelihood):
             expected + self.jitter,
         )
 
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        return np.array(poisson.rvs(expected + self.jitter, random_state=rng))
+
 
 @dataclass(frozen=True)
 class NegativeBinomialLikelihood(Likelihood):
@@ -99,10 +100,10 @@ class NegativeBinomialLikelihood(Likelihood):
         positive.
     """
 
-    r: float
+    r: int
 
     def __post_init__(self):
-        if np.any(self.r <= 0):
+        if self.r <= 0:
             raise ValueError("The overdispersion parameter, r, must be positive.")
 
     @override
@@ -123,6 +124,14 @@ class NegativeBinomialLikelihood(Likelihood):
             observed,
             n=self.r,
             p=1 / (1 + expected / self.r),
+        )
+
+    @override
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        return np.array(
+            nbinom.rvs(n=self.r, p=1 / (1 + expected / self.r), random_state=rng)
         )
 
 
@@ -154,3 +163,11 @@ class GaussianLikelihood(Likelihood):
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
         return norm.logpdf(observed, loc=expected, scale=self.standard_deviation)
+
+    @override
+    def sample(
+        self, expected: NDArray[np.float64], rng: np.random.Generator
+    ) -> NDArray[np.float64]:
+        return np.array(
+            norm.rvs(loc=expected, scale=self.standard_deviation, random_state=rng)
+        )
