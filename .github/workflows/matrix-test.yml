@@ -29,6 +29,7 @@ jobs:
         with:
           enable-cache: true
           version: ${{ vars.UV_VERSION }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Setup cache folder (bash)
         if: runner.os != 'Windows'
