@@ -267,7 +267,7 @@ def _simulate_realizations(
                 matching_names[0]
             ]
 
-        _events.on_pipeline_progress.publish(OnPipelineProgress(1))
+        _events.on_pipeline_progress.publish(OnPipelineProgress(progress=1))
 
     return _SimulateRealizationsResult(
         compartments=compartments,
