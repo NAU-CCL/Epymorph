@@ -161,7 +161,10 @@ class CensusGranularity(ABC):
         if (m := self._extract_pattern.match(geoid)) is not None:
             return m[1]
         else:
-            msg = f"Unable to extract {self._name} info from ID {id}; check its format."
+            msg = (
+                f"Unable to extract {self._name} info from ID {geoid}; "
+                "check its format."
+            )
             raise GeographyError(msg)
 
     def truncate(self, geoid: str) -> str:
@@ -218,7 +221,8 @@ class CensusGranularity(ABC):
         match = self._decompose_pattern.match(geoid)
         if match is None:
             msg = (
-                f"Unable to decompose {self.name} info from ID {id}; check its format."
+                f"Unable to decompose {self.name} info from ID {geoid}; "
+                "check its format."
             )
             raise GeographyError(msg)
         return match
