@@ -12,7 +12,14 @@ import humanize
 from humanize import naturalsize
 
 from epymorph.attribute import NAME_PLACEHOLDER
-from epymorph.event import ADRIOProgress, EventBus, OnPipelineProgress, OnPipelineStart, OnStart, OnTick
+from epymorph.event import (
+    ADRIOProgress,
+    EventBus,
+    OnPipelineProgress,
+    OnPipelineStart,
+    OnStart,
+    OnTick,
+)
 from epymorph.settings import declare_setting, env_flag
 from epymorph.util import progress, subscriptions
 
@@ -208,6 +215,26 @@ def pipeline_messaging(
     live: bool | None = None,
 ) -> Generator[None, None, None]:
     """
+    Run pipeline simulations in this context manager to output (print) progress messages
+    during simulation activity.
+
+    Parameters
+    ----------
+    adrio :
+        True to include ADRIO progress updates.
+    live :
+        An optional override for the rendering style to use in the output.
+        Leave this as `None` to use the default "liveness" logic.
+        Specify `True` or `False` to override the default.
+        See the `is_live_messaging()` function for more information.
+
+    Examples
+    --------
+    ```python
+    with pipeline_messaging():
+        sim = ForecastSimulator(PipelineConfig.fromRume(rume, num_realizations=100))
+        my_results = sim.run()
+    ```
     """
 
     live = is_live_messaging(live)
