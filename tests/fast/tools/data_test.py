@@ -11,6 +11,7 @@ from epymorph.adrio.validation import ResultFormat
 from epymorph.attribute import NamePattern
 from epymorph.data import ipm, mm
 from epymorph.data_shape import Shapes
+from epymorph.data_type import SimDType
 from epymorph.forecasting.dynamic_params import BrownianMotion, GaussianPrior
 from epymorph.forecasting.pipeline import (
     PipelineConfig,
@@ -84,7 +85,7 @@ def filter_output(rume):
     E = rume.ipm.num_events
     S = rume.num_ticks
     T = rume.time_frame.duration_days
-    compartments = np.ones((R, S, N, C))
+    compartments = np.ones((R, S, N, C), dtype=SimDType)
     param_names = [NamePattern.of("test_0")]
 
     class TestSimulator(PipelineSimulator):
@@ -95,7 +96,7 @@ def filter_output(rume):
         config=PipelineConfig(
             rume=rume,
             num_realizations=R,
-            initial_values=compartments[:, 0, :, :],  # type: ignore
+            initial_values=compartments[:, 0, :, :],
             unknown_params={
                 param_name: UnknownParam(
                     prior=GaussianPrior(mean=np.log(0.2), standard_deviation=0.5),
@@ -110,7 +111,7 @@ def filter_output(rume):
         final_compartments=compartments[:, -1, :, :],
         final_params={param_name: np.ones((R, N)) for param_name in param_names},
         compartments=compartments,
-        events=np.ones((R, S, N, E)),
+        events=np.ones((R, S, N, E), dtype=SimDType),
         initial=compartments[:, 0, :, :],
         estimated_params={param_name: np.ones((R, T, N)) for param_name in param_names},
     )

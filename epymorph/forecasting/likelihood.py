@@ -28,24 +28,58 @@ class Likelihood(ABC):
 
         Parameters
         ----------
-        observed : int
+        observed :
             The observational data.
-        expected : int
+        expected :
             The data predicted by the model.
+
+        Returns
+        -------
+        :
+            An array of likelihoods.
         """
-        raise NotImplementedError("Subclasses should implement this method.")
 
     @abstractmethod
     def compute_log(
         self, observed: NDArray[np.float64], expected: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        raise NotImplementedError("Subclasses should implement this method.")
+        """
+        Calculated the logarithm of the likelihood of the observed value according to
+        the expected value. This is primarily used to avoid underflow issues.
+
+        Parameters
+        ----------
+        observed :
+            The observed data.
+        expected :
+            The data predicted by the model.
+
+        Returns
+        -------
+        :
+            An array of the logarithm of the likelihoods.
+        """
 
     @abstractmethod
     def sample(
         self, expected: NDArray[np.float64], rng: np.random.Generator
     ) -> NDArray[np.float64]:
-        raise NotImplementedError("Subclasses should implement this method.")
+        """
+        Sample from the distribution of the observed data according to the expected
+        value.
+
+        Parameters
+        ----------
+        observed :
+            The observed data.
+        expected :
+            The data predicted by the model.
+
+        Returns
+        -------
+        :
+            The sampled values from the distribution.
+        """
 
 
 @dataclass(frozen=True)
@@ -82,6 +116,7 @@ class PoissonLikelihood(Likelihood):
             expected + self.jitter,
         )
 
+    @override
     def sample(
         self, expected: NDArray[np.float64], rng: np.random.Generator
     ) -> NDArray[np.float64]:

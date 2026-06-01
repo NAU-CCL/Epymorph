@@ -54,12 +54,12 @@ class UniformPrior(Prior):
         the lower bound.
     """
 
-    lower: float
+    lower: float | NDArray[np.float64]
     """
     The lower bound of the uniform distribution.
     """
 
-    upper: float
+    upper: float | NDArray[np.float64]
     """
     The upper bound of the uniform distribution.
     """
@@ -88,18 +88,18 @@ class GaussianPrior(Prior):
         The standard deviation of the Gaussian distribution. Must be non-negative.
     """
 
-    mean: float
+    mean: float | NDArray[np.float64]
     """
     The mean of the Gaussian distribution.
     """
 
-    standard_deviation: float
+    standard_deviation: float | NDArray[np.float64]
     """
     The standard deviation of the Gaussian distribution.
     """
 
     def __post_init__(self):
-        if self.standard_deviation < 0:
+        if np.any(self.standard_deviation < 0):
             raise ValueError("The standard deviation must be non-negative.")
 
     @override
@@ -173,9 +173,9 @@ class OrnsteinUhlenbeck(ParamFunctionDynamics[np.float64]):
         The standard deviation of the stationary distribution. Must be non-negative.
     """
 
-    damping: float
-    mean: float
-    standard_deviation: float
+    damping: float | NDArray[np.float64]
+    mean: float | NDArray[np.float64]
+    standard_deviation: float | NDArray[np.float64]
 
     requirements = ()
 
@@ -248,7 +248,7 @@ class BrownianMotion(ParamFunctionDynamics[np.float64]):
         The volatility of the Brownian motion. Must be non-negative.
     """
 
-    volatility: float
+    volatility: float | NDArray[np.float64]
     """The volatility of the Brownian motion."""
 
     requirements = ()
