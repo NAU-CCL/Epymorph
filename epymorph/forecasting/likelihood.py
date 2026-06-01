@@ -65,7 +65,8 @@ class Likelihood(ABC):
         self, expected: NDArray[np.float64], rng: np.random.Generator
     ) -> NDArray[np.float64]:
         """
-        Sample from the distribution of the observed data according to the expected value.
+        Sample from the distribution of the observed data according to the expected
+        value.
 
         Parameters
         ----------
