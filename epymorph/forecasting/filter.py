@@ -20,15 +20,13 @@ from epymorph.compartment_model import (
 )
 from epymorph.data_type import SimDType
 from epymorph.event import EventBus, OnPipelineStart
-from epymorph.forecasting.forecast import (
-    _initialize_compartments_and_params,
-    _simulate_realizations,
-)
 from epymorph.forecasting.likelihood import Likelihood
 from epymorph.forecasting.pipeline import (
     PipelineConfig,
     PipelineOutput,
     PipelineSimulator,
+    _initialize_compartments_and_params,
+    _simulate_realizations,
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.rume import RUME
