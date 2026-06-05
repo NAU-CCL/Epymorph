@@ -1,5 +1,5 @@
 from datetime import timedelta
-from itertools import cycle
+from itertools import chain, cycle
 from math import ceil
 from pathlib import Path
 from typing import (
@@ -144,12 +144,12 @@ class PlotRendererPipeline:
         sharex: bool = True,
         ncols: int = 3,
         legend: LegendOption = "auto",
-        line_kwargs: list[dict] | None = None,
+        qline_kwargs: list[dict] | None = [{}],
         time_format: TimeFormatOption = "auto",
         label_format: str = "{q}",
         title: str | None = None,
         to_file: str | Path | None = None,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = identity,
     ) -> None:
         """
         Produces a spaghetti plot of a filter output. This is a plot where
@@ -175,7 +175,7 @@ class PlotRendererPipeline:
             The number of columns in the resulting subplot matrix. The
             number of rows is set dynamically.
 
-        line_kwargs :
+        qline_kwargs :
             A list of dictionaries of keyword arguments to be passed to the matplotlib
             function that draws each line. Each dictionary corresponds
             to a single quantity.
@@ -240,12 +240,6 @@ class PlotRendererPipeline:
                 layout="constrained",
             )
 
-            if line_kwargs is None:
-                line_kwargs = [{}]
-
-            if transform is None:
-                transform = identity
-
             # Y-axis
             fig.supylabel("count")
 
@@ -264,8 +258,9 @@ class PlotRendererPipeline:
                 geo,
                 time,
                 quantity,
+                "quantity",
                 legend,
-                line_kwargs,
+                qline_kwargs,
                 time_format,
                 label_format,
                 transform,
@@ -288,11 +283,12 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
+        kwarg_type: str = "quantity",
         legend: LegendOption = "auto",
-        line_kwargs: list[dict] | None = None,
+        line_kwargs: list[dict] | None = [{}],
         time_format: TimeFormatOption = "auto",
-        label_format: str = "{q}",
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+        label_format: str = "{n}: {q}",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = identity,
     ) -> list[Line2D]:
         data_df = munge_pipeline_output(self.output, realizations, geo, time, quantity)
 
@@ -315,16 +311,13 @@ class PlotRendererPipeline:
         ).groupby("geo")
 
         # Plotting
-        axes = axes.flatten()
+        axes = axes.flatten() if len(axes.shape) > 1 else axes
 
         _time_format, _ = self._time_format(time, time_format)
 
         lines = list[Line2D]()
         plot_index = 0
-        for geo_group_name, gdf in groups_df:
-            axes[plot_index].set_title(f"{geo_group_name}")
-            axes[plot_index].tick_params(axis="x", labelrotation=45)
-
+        for (geo_group_name, gdf), gkwargs in zip(groups_df, cycle(line_kwargs)):
             quantity_groups = gdf.melt(
                 id_vars=["realization", "time", "geo"], var_name="quantity"
             ).groupby("quantity")
@@ -335,8 +328,11 @@ class PlotRendererPipeline:
                 quantity_groups,
                 cycle(line_kwargs),  # type: ignore
             ):
+                if kwarg_type == "geo":
+                    kwargs = gkwargs
+
                 q_name = q_mapping[quantity_group_name]  # type: ignore
-                label = label_format.format(q=q_name)
+                label = label_format.format(n=geo_group_name, q=q_name)
                 curr_kwargs = {"label": label, **kwargs}
 
                 realization_groups = qdf.groupby("realization")
@@ -357,6 +353,7 @@ class PlotRendererPipeline:
                     lines.extend(ls)
 
             ##Labels and Legend
+            axes[plot_index].tick_params(axis="x", labelrotation=45)
             if legend == "on":
                 axes[plot_index].legend()
             elif legend == "outside":
@@ -382,6 +379,7 @@ class PlotRendererPipeline:
                     axes[plot_index].set_xlabel("time")
 
             plot_index += 1
+            plot_index = plot_index % len(axes)
 
         return lines
 
@@ -395,12 +393,12 @@ class PlotRendererPipeline:
         sharex: bool = True,
         ncols: int = 3,
         legend: LegendOption = "auto",
-        fill_kwargs: list[dict] | None = None,
-        line_kwargs: list[dict] | None = None,
+        fill_kwargs: list[dict] | None = [{}],
+        line_kwargs: list[dict] | None = [{}],
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = identity,
     ):
         """
         Produces a quantile plot of a filter output. This is a plot where
@@ -479,14 +477,8 @@ class PlotRendererPipeline:
                 layout="constrained",
             )
 
-            if transform is None:
-                transform = identity
-
-            if fill_kwargs is None:
-                fill_kwargs = [{}]
-
-            if line_kwargs is None:
-                line_kwargs = [{}]
+            # Convert to array to keep the type consistent
+            axes = np.array([axes]) if ncols == 1 else axes
 
             # Y-axis
             fig.supylabel("count")
@@ -506,6 +498,7 @@ class PlotRendererPipeline:
                 quantity,
                 credible_intervals,
                 legend,
+                "quantity",
                 fill_kwargs,
                 line_kwargs,
                 time_format,
@@ -528,21 +521,22 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        credible_intervals: list[float],
-        legend: LegendOption,
-        fill_kwargs: list[dict],
-        line_kwargs: list[dict],
-        time_format: TimeFormatOption,
-        transform: Callable[[pd.DataFrame], pd.DataFrame],
+        credible_intervals: list[float] = [95.0],
+        legend: LegendOption = "on",
+        kwarg_type: str = "quantity",
+        fill_kwargs: list[dict] | None = [{}],
+        line_kwargs: list[dict] | None = [{}],
+        time_format: TimeFormatOption = "auto",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = identity,
     ):
+        # Generate list of quantiles from the CIs
         quantile_list = list(list())
         for interval in sorted(credible_intervals, reverse=True):
             lower, upper = self._compute_quantile_range(interval)
             quantile_list.append([f"quantile_{lower}", f"quantile_{upper}"])
 
-        flat_quantile_list = [
-            quantile for sublist in quantile_list for quantile in sublist
-        ]
+        # Flatten and append the median
+        flat_quantile_list = list(chain.from_iterable(quantile_list))
         flat_quantile_list.append("quantile_50.0")
         realizations_agg = self.output.select.all().agg(flat_quantile_list)
 
@@ -560,28 +554,25 @@ class PlotRendererPipeline:
             geo_map = dict(zip(result_scope.node_ids, labels))
             data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
 
+        # Group the data
         groups_df = data_df.groupby("geo")
 
         # Plotting
-        axes = axes.flatten()
-
+        axes = axes.flatten() if len(axes.shape) > 1 else axes
         _time_format, _ = self._time_format(time, time_format)
 
         plot_index = 0
-        for geo_group_name, gdf in groups_df:
-            axes[plot_index].set_title(f"{geo_group_name}")
-            axes[plot_index].tick_params(axis="x", labelrotation=45)
+        for (geo_group_name, gdf), gl_kwargs, gf_kwargs in zip(
+            groups_df, cycle(line_kwargs), cycle(fill_kwargs)
+        ):
+            for quantity_name, l_kwargs, f_kwargs in zip(
+                quantity.labels, cycle(line_kwargs), cycle(fill_kwargs)
+            ):
+                if kwarg_type == "geo":
+                    l_kwargs = gl_kwargs
+                    f_kwargs = gf_kwargs
 
-            for quantity_name, l_kwargs in zip(quantity.labels, cycle(line_kwargs)):
-                for (ci_index, (upper, lower)), f_kwargs in zip(
-                    enumerate(quantile_list), cycle(fill_kwargs)
-                ):
-                    ci_label = (
-                        ""
-                        if len(fill_kwargs) == 1
-                        else f"{credible_intervals[ci_index]}% CI of {quantity_name}"
-                    )
-
+                for ci_index, (upper, lower) in enumerate(quantile_list):
                     data_lower = transform(
                         pd.DataFrame({"value": gdf[quantity_name][lower]})
                     )
@@ -589,11 +580,17 @@ class PlotRendererPipeline:
                         pd.DataFrame({"value": gdf[quantity_name][upper]})
                     )
 
+                    label = ""
+                    if ci_index == (len(quantile_list) - 1):
+                        label = (
+                            f"{geo_group_name}: {quantity_name}: {credible_intervals}"
+                        )
+
                     axes[plot_index].fill_between(
                         gdf["time"],
                         data_lower["value"],
                         data_upper["value"],
-                        label=ci_label,
+                        label=label,
                         **f_kwargs,
                     )
                 data_median = transform(
@@ -607,6 +604,8 @@ class PlotRendererPipeline:
                     zorder=100,
                     **l_kwargs,
                 )
+
+            axes[plot_index].tick_params(axis="x", labelrotation=45)
 
             ##Labels and Legend
             if legend == "on":
@@ -634,6 +633,7 @@ class PlotRendererPipeline:
                     axes[plot_index].set_xlabel("time")
 
             plot_index += 1
+            plot_index = plot_index % len(axes)
 
     def histogram(
         self,
@@ -641,13 +641,14 @@ class PlotRendererPipeline:
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        hist_kwargs: list[dict] | None = None,
+        hist_kwargs: list[dict] | None = [{}],
         ncols: int = 3,
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
+        label_format: str = "{q}",
         to_file: str | Path | None = None,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = identity,
     ):
         """
         Produces a histogram plot of a filter output. This is a plot where
@@ -723,12 +724,6 @@ class PlotRendererPipeline:
                 layout="constrained",
             )
 
-            if hist_kwargs is None:
-                hist_kwargs = [{}]
-
-            if transform is None:
-                transform = identity
-
             # Y-axis
             fig.supylabel("Density")
 
@@ -748,8 +743,10 @@ class PlotRendererPipeline:
                 geo,
                 time,
                 quantity,
-                legend,
                 hist_kwargs,
+                "quantity",
+                label_format,
+                legend,
                 time_format,
                 transform,  # type: ignore
             )
@@ -770,10 +767,12 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        legend: LegendOption,
-        hist_kwargs,
-        time_format: TimeFormatOption,
-        transform: Callable[[pd.DataFrame], pd.DataFrame],
+        hist_kwargs: list[dict] | None = [{}],
+        kwarg_type="quantity",
+        label_format="{n}: {q}: {t}",
+        legend: LegendOption = "auto",
+        time_format: TimeFormatOption = "auto",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = identity,
     ):
         realizations_agg = self.output.select.all()
         data_df = munge_pipeline_output(
@@ -793,18 +792,24 @@ class PlotRendererPipeline:
         groups_df = data_df.groupby("geo")
 
         # Plotting
-        axes = axes.flatten()
+        axes = axes.flatten() if len(axes.shape) > 1 else axes
 
         plot_index = 0
-        for geo_group_name, gdf in groups_df:
-            axes[plot_index].set_title(f"{geo_group_name}")
+        for (geo_group_name, gdf), gwargs in zip(groups_df, cycle(hist_kwargs)):
             axes[plot_index].tick_params(axis="x", labelrotation=45)
 
             for quantity_name, kwargs in zip(quantity.labels, cycle(hist_kwargs)):
+                if kwarg_type == "geo":
+                    kwargs = gwargs
+
+                label = label_format.format(
+                    n=geo_group_name, q=quantity_name, t=time.date_bounds
+                )
+                curr_kwargs = {"label": label, **kwargs}
+
                 axes[plot_index].hist(
                     transform(gdf[quantity_name].to_frame()),
-                    label=f"{quantity_name} at : {gdf['time'].iloc[0]}",
-                    **kwargs,
+                    **curr_kwargs,
                 )
 
             ##Labels and Legend
@@ -814,6 +819,7 @@ class PlotRendererPipeline:
                 axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
             plot_index += 1
+            plot_index = plot_index % len(axes)
 
     def line(
         self,

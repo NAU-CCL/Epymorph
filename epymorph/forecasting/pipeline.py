@@ -835,6 +835,65 @@ class _RunFilterResult(Generic[_FilterContextT]):
 class FilterOutput(PipelineOutput):
     posterior_values: NDArray[np.float64]
 
+    @property
+    @override
+    def dataframe(self):
+
+        NP = self.num_realizations  # noqa: N806
+        C = self.rume.ipm.num_compartments
+        E = self.rume.ipm.num_events
+        N = self.rume.scope.nodes
+        S = self.rume.num_ticks
+        P = len(self.unknown_params.keys())  # noqa: N806
+        tau_steps = self.rume.num_tau_steps
+
+        states_np = np.concatenate(
+            (self.compartments, self.events),
+            axis=3,
+        )
+
+        ### Extract the parameter data
+        param_np = np.concatenate(
+            [
+                np.repeat(val[..., np.newaxis], tau_steps, axis=1)
+                for val in self.estimated_params.values()
+            ],
+            axis=3,
+        )
+
+        data_np = np.concatenate((states_np, param_np), axis=-1).reshape(
+            (-1, P + E + C)
+        )
+
+        # Here I'm concatting two DFs sideways so that the index columns come first.
+        # Could use insert, but this is nicer.
+        return pd.concat(
+            (
+                # A dataframe for the various indices
+                pd.DataFrame(
+                    {
+                        "realization": np.repeat(np.arange(NP), S * N),
+                        "tick": np.tile(np.repeat(np.arange(S), N), NP),
+                        "date": np.tile(
+                            np.repeat(self.rume.time_frame.to_numpy(), N * tau_steps),
+                            NP,
+                        ),
+                        "node": np.tile(self.rume.scope.node_ids, S * NP),
+                    }
+                ),
+                # A dataframe for the data columns
+                pd.DataFrame(
+                    data=data_np,
+                    columns=[
+                        *(c.name.full for c in self.rume.ipm.compartments),
+                        *(e.name.full for e in self.rume.ipm.events),
+                        *(str(key) for key in self.unknown_params.keys()),
+                    ],
+                ),
+            ),
+            axis=1,  # stick them together side-by-side
+        )
+
 
 @dataclass(frozen=True)
 class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
