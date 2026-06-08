@@ -144,7 +144,7 @@ class PlotRendererPipeline:
         sharex: bool = True,
         ncols: int = 3,
         legend: LegendOption = "auto",
-        qline_kwargs: list[dict] | None = [{}],
+        line_kwargs: list[dict] | None = [{}],
         time_format: TimeFormatOption = "auto",
         label_format: str = "{q}",
         title: str | None = None,
@@ -175,7 +175,7 @@ class PlotRendererPipeline:
             The number of columns in the resulting subplot matrix. The
             number of rows is set dynamically.
 
-        qline_kwargs :
+        line_kwargs :
             A list of dictionaries of keyword arguments to be passed to the matplotlib
             function that draws each line. Each dictionary corresponds
             to a single quantity.
@@ -260,7 +260,7 @@ class PlotRendererPipeline:
                 quantity,
                 "quantity",
                 legend,
-                qline_kwargs,
+                line_kwargs,
                 time_format,
                 label_format,
                 transform,
@@ -312,7 +312,6 @@ class PlotRendererPipeline:
 
         # Plotting
         axes = axes.flatten() if len(axes.shape) > 1 else axes
-
         _time_format, _ = self._time_format(time, time_format)
 
         lines = list[Line2D]()
@@ -521,7 +520,7 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        credible_intervals: list[float] = [95.0],
+        credible_intervals: list[float] = [95],
         legend: LegendOption = "on",
         kwarg_type: str = "quantity",
         fill_kwargs: list[dict] | None = [{}],
