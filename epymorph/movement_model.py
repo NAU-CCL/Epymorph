@@ -267,7 +267,7 @@ class MovementModelClass(ABCMeta):
         dct: dict[str, Any],
     ) -> _TypeT:
         # Skip these checks for known base classes:
-        if name in ("MovementModel",):
+        if name == "MovementModel":
             return super().__new__(cls, name, bases, dct)
 
         # Check tau steps.

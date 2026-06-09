@@ -398,7 +398,7 @@ class InspectResult(Generic[ResultT, ValueT]):
                 minimum = vs.min()
                 maximum = vs.max()
                 spark = sparklines(
-                    np.histogram(vs, bins=20, range=(minimum, maximum))[0],
+                    np.histogram(vs, bins=20, range=(minimum, maximum))[0],  # type: ignore
                     num_lines=1,
                 )[0]
                 histogram = f"{minimum} {spark} {maximum}"

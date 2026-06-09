@@ -44,7 +44,7 @@ class SimulateTest(unittest.TestCase):
         # We don't want to use real ADRIOs here because they could fail
         # and cause these tests to spuriously fail.
         # So instead, hard-code some values. They don't need to be real.
-        t = np.arange(start=0, stop=2 * np.pi, step=2 * np.pi / 365)
+        t = np.arange(start=0.0, stop=2 * np.pi, step=2 * np.pi / 365)
         return {
             "*::population": np.array(
                 [18811310, 9687653, 5773552, 9535483, 4625364, 8001024]
