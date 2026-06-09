@@ -160,6 +160,7 @@ class FilterOutput(PipelineOutput):
     Output for a FilterSimulator.
     """
 
+    simulator: "FilterSimulator"
     posterior_values: NDArray[np.float64]
 
 
