@@ -892,7 +892,7 @@ class PlotRendererPipeline:
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
             The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contain                print(gdf[quantity_name].to_frame().shape)s just the data for that group.
+            essentially -- with a dataframe that contains just the data for that group.
             The dataframe given as the argument is the result of applying
             all selections and the projection if specified.
             You should return a dataframe with the same format, where the
@@ -1103,7 +1103,8 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         line_kwargs: list[dict] = [{}],
         kwarg_type: str = "quantity",
-        bandwidth: float|str = "scott",
+        bandwidth: float | str = "scott",
+        delta_t: float = 1.0,
         label_format="{n}: {q}: {t}",
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
@@ -1124,6 +1125,17 @@ class PlotRendererPipeline:
             geo_map = dict(zip(result_scope.node_ids, labels))
             data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
 
+        # Before melting, disambiguate any quantities with the same name.
+        q_mapping = quantity.disambiguate_groups()
+
+        data_df = data_df.rename(
+            columns={
+                "time": "time",
+                "geo": "geo",
+                **{v: k for k, v in q_mapping.items()},
+            }
+        )
+
         groups_df = data_df.groupby("geo")
 
         # Plotting
@@ -1133,20 +1145,25 @@ class PlotRendererPipeline:
         for (geo_group_name, gdf), gwargs in zip(groups_df, cycle(line_kwargs)):
             axes[plot_index].tick_params(axis="x", labelrotation=45)
 
-            for quantity_name, kwargs in zip(quantity.labels, cycle(line_kwargs)):
+            for (quantity_dis_label, quantity_label), kwargs in zip(
+                q_mapping.items(), cycle(line_kwargs)
+            ):
                 if kwarg_type == "geo":
                     kwargs = gwargs
 
                 label = label_format.format(
-                    n=geo_group_name, q=quantity_name, t=time.date_bounds
+                    n=geo_group_name, q=quantity_label, t=time.date_bounds
                 )
                 curr_kwargs = {"label": label, **kwargs}
 
-                data = transform(gdf[quantity_name].to_frame()).to_numpy().squeeze()
+                data = (
+                    transform(pd.DataFrame({"value": gdf[quantity_dis_label]}))
+                    .to_numpy()
+                    .squeeze()
+                )
 
-                delta_t = 0.01
-                eval_range = np.arange(data.min(),data.max() + delta_t ,delta_t)
-                kde = gaussian_kde(data,bw_method = bandwidth)
+                eval_range = np.arange(data.min(), data.max() + delta_t, delta_t)
+                kde = gaussian_kde(data, bw_method=bandwidth)
                 axes[plot_index].plot(
                     eval_range,
                     kde.evaluate(eval_range),
