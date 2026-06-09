@@ -55,10 +55,19 @@ def main() -> None:
         if not module == project  # we don't use relative imports
     )
 
+    ignored_deps = {
+        # openpyxl is used indirectly so pandas can read Excel files;
+        # normally you'd use the pandas[excel] extra instead of declaring openpyxl,
+        # but I don't want to pull in the rest of the packages in that extra.
+        "openpyxl",
+    }
+
     builtins, external = classify_modules(external_imports)
     declared_deps = set(extract_dependencies(Path.cwd() / "pyproject.toml"))
     used_but_not_declared = {m for m in external if m.lower() not in declared_deps}
-    declared_but_not_used = {d for d in declared_deps if d not in external}
+    declared_but_not_used = {
+        d for d in declared_deps if d not in external and d not in ignored_deps
+    }
 
     verbose = "--verbose" in sys.argv
 

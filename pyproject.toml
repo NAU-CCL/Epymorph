@@ -23,6 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: OS Independent",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
@@ -31,58 +32,47 @@ classifiers = [
 ]
 
 dependencies = [
-  "matplotlib~=3.9.0",
-  "numpy~=1.26.4",
-  "sympy~=1.12.1",
-  "pandas[excel]~=2.3.3",
-  "geopandas~=0.14.4",
-  "pyproj~=3.6.1",
-  "shapely~=2.0.6",
-  "jsonpickle~=3.2.1",
-  "platformdirs~=4.2.2",
-  "graphviz~=0.20.3",
-  "typing_extensions~=4.12.2",
-  "rasterio~=1.3.11",
-  "humanize~=4.10.0",
-  "sparklines~=0.5.0",
-  "scipy~=1.14.1",
-  "requests~=2.33.1",
+  "matplotlib",
+  "numpy>=1.26.4,<2",
+  "sympy",
+  "pandas>=2,<3",
+  "openpyxl",
+  "geopandas",
+  "pyproj",
+  "shapely",
+  "jsonpickle",
+  "platformdirs",
+  "graphviz",
+  "typing_extensions",
+  "rasterio",
+  "humanize",
+  "sparklines",
+  "scipy>=1,<2",
+  "requests",
 ]
 
 [dependency-groups]
-# Version pinning for transitive dependencies.
-# We don't directly depend on these, but there are known CVEs
-# with versions prior to these. Pinning them here protects us
-# from vulnerabilities and cleans up `uv audit`.
-transitive_pin = [
-  "pillow~=12.1.1", # from matplotlib
-  "fonttools~=4.62.1", # from matplotlib
-  "urllib3~=2.6.3", # from requests
-  "setuptools==82.0.1", # from setuptools-scm
-]
-
 dev = [
   # Jupyter
-  "ipykernel>=6.29.5",
+  "ipykernel>7",
   # Linting/formatting
-  "ruff>=0.9.0",
+  "ruff~=0.15.15",
   # Testing
-  "pytest>=8.3.4",
-  "pytest-cov>=6.0.0",
-  "vcrpy>=7.0.0",
+  "pytest~=9.0.3",
+  "pytest-cov~=7.1.0",
+  "vcrpy~=8.1.1",
   # Build
-  "setuptools-scm==10.0.5",
+  "setuptools-scm~=10.0.5",
   # Documentation
-  "mkdocs>=1.6.1",
-  "mkdocs-material>=9.6.12",
-  "mkdocs-gen-files>=0.5.0",
-  "mkdocstrings[python]>=0.29.1",
-  "griffe-inherited-docstrings>=1.1.1",
+  "mkdocs~=1.6.1",
+  "mkdocs-material~=9.7.6",
+  "mkdocs-gen-files~=0.6.1",
+  "mkdocstrings[python]~=1.0.4",
+  "griffe-inherited-docstrings==1.1.2",
 ]
 
 [tool.uv]
-exclude-newer = "7 days" # supply chain attack mitigation
-default-groups = ["dev", "transitive_pin"]
+exclude-newer = "7 days" # supply chain attack mitigationuv audit
 
 [project.urls]
 Homepage = "https://docs.www.epimorph.org"
@@ -100,7 +90,7 @@ addopts = [
 ]
 
 [build-system]
-requires = ["setuptools==82.0.1", "setuptools-scm[simple]==10.0.5"]
+requires = ["setuptools>=82.0.1", "setuptools-scm[simple]>=10.0.5"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
