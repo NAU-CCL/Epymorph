@@ -6,6 +6,7 @@ from epymorph.adrio.adrio import ADRIOContextError
 from epymorph.geography.us_census import CountyScope
 
 
+@pytest.mark.vcr
 def test_commuters_values():
     # values retrieved manually from ACS commuting flows table1 for 2020
     expected = np.array(
