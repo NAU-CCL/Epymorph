@@ -5,8 +5,8 @@ state/parameter fitting.
 
 import datetime
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
-from typing import Mapping, Self
+from dataclasses import dataclass, field, replace
+from typing import Literal, Mapping, Self
 
 import numpy as np
 import pandas as pd
@@ -210,7 +210,8 @@ class PipelineOutput:
     """
     An array of shape (R, N, C) where R is the number of realizations, N is the number
     of nodes, and C is the number of compartments. Each realization is an array of
-    compartment values suitable for intializing another simulation. The precise
+    compartment values suitable for intializing another simulation. For movement models,
+    this is always at the home node, regardless of the `movement_data_mode`. The precise
     interpretation of the array depends on the simulator used to produce the output.
     """
 
@@ -257,6 +258,15 @@ class PipelineOutput:
     days and N is the number of nodes. Each realization of a parameter is an array of
     parameter values suitable for intializing another simulation. The precise
     interpretation of the array depends on the simulator used to produce the output.
+    """
+
+    movement_data_mode: Literal["visit", "home"] = field(kw_only=True, default="visit")
+    """
+    Indicates whether the `compartments` and `events` properties correspond to the visit
+    node or the home node. This can be set with the corresponding `movement_data_node`
+    property in `PipelineSimulator`. This does not affect `final_compartments`.
+    Note that this property cannot be changed after the simulation, in contrast to
+    `epymorph.simulator.basic.output.Output`.
     """
 
     @property
@@ -355,6 +365,16 @@ class PipelineSimulator(ABC):
     """
 
     config: PipelineConfig
+    """
+    The basic information needed to run a pipeline simulation.
+    """
+
+    movement_data_mode: Literal["visit", "home"] = field(kw_only=True, default="visit")
+    """
+    Indicates whether the `compartments` and `events` properties in the output
+    correspond to the visit node or the home node. This does not affect the
+    `final_compartments` property in the output.
+    """
 
     @property
     def rume(self) -> RUME:
@@ -487,6 +507,13 @@ class _SimulateRealizationsResult:
     realization.
     """
 
+    final_compartments: NDArray[SimDType]
+    """
+    An array of shape (R, N, C) where R is the number of realizations, N is the number
+    of nodes, and C is the number of compartments. Contains the final compartment values
+    at the home location.
+    """
+
 
 def _simulate_realizations(
     rume_template: RUME,
@@ -499,6 +526,7 @@ def _simulate_realizations(
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,
     rng: np.random.Generator,
+    movement_data_mode: Literal["visit", "home"] = "visit",
 ) -> _SimulateRealizationsResult:
     """
     A helper function used by ForecastSimulator and ParticleFilterSimulator to propagate
@@ -530,6 +558,9 @@ def _simulate_realizations(
         The quantity strategy for munging the output.
     rng :
         The random number generator.
+    movement_data_mode:
+        Whether the compartments and events should correspond to the visit node or the
+        home node for movement.
 
     Returns
     -------
@@ -567,6 +598,14 @@ def _simulate_realizations(
         )
         for k in unknown_params.keys()
     }
+    final_compartments = np.zeros(
+        shape=(
+            num_realizations,
+            rume_template.scope.nodes,
+            rume_template.ipm.num_compartments,
+        ),
+        dtype=np.int64,
+    )
 
     current_predictions = []
     for i_realization in range(num_realizations):
@@ -603,6 +642,8 @@ def _simulate_realizations(
         sim = BasicSimulator(rume_temp)
         out_temp = sim.run(rng_factory=lambda: rng)
 
+        out_temp = out_temp._with_data_mode(movement_data_mode)
+
         temp_time_agg = out_temp.rume.time_frame.select.all().agg()
         new_time_agg = replace(
             temp_time_agg,
@@ -630,6 +671,10 @@ def _simulate_realizations(
                 matching_names[0]
             ]
 
+        final_compartments[i_realization, ...] = out_temp.home_compartments[
+            -1, ...
+        ].copy()
+
         _events.on_pipeline_progress.publish(OnPipelineProgress(progress=1))
 
     return _SimulateRealizationsResult(
@@ -637,6 +682,7 @@ def _simulate_realizations(
         events=events,
         estimated_params=estimated_params,
         predictions=current_predictions,
+        final_compartments=final_compartments,
     )
 
 

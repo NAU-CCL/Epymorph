@@ -6,7 +6,7 @@ algorithms for state/parameter estimation.
 import dataclasses
 import datetime
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generic, Mapping, Sequence, TypeVar
 
 import numpy as np
@@ -161,7 +161,7 @@ class FilterOutput(PipelineOutput):
     """
 
     simulator: "FilterSimulator"
-    posterior_values: NDArray[np.float64]
+    posterior_values: NDArray[np.float64] = field(kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -174,7 +174,7 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
     config: PipelineConfig
     """The configuration for the simulation."""
 
-    observations: Observations
+    observations: Observations = field(kw_only=True)
     """The observations."""
 
     @abstractmethod
@@ -318,6 +318,7 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
                 time=self.observations.model_link.time,
                 quantity=self.observations.model_link.quantity,
                 rng=rng,
+                movement_data_mode=self.movement_data_mode,
             )
 
             day_right = day_idx + time_frame.days
@@ -332,7 +333,7 @@ class FilterSimulator(PipelineSimulator, Generic[_FilterContextT]):
                 )
                 current_params[name] = result.estimated_params[name][:, -1, ...].copy()
 
-            current_compartments = result.compartments[:, -1, ...].copy()
+            current_compartments = result.final_compartments.copy()
             current_predictions = np.stack(result.predictions).reshape(
                 (self.num_realizations, rume.scope.nodes, -1)
             )

@@ -3,7 +3,7 @@ Simulator and utility classes for running a particle filter for state and
 parameter estimation.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Mapping
 
 import numpy as np
@@ -14,10 +14,8 @@ from epymorph.attribute import NamePattern
 from epymorph.forecasting.filter import (
     FilterOutput,
     FilterSimulator,
-    Observations,
     _FilterUpdateResult,
 )
-from epymorph.forecasting.pipeline import PipelineConfig
 
 
 @dataclass(frozen=True)
@@ -51,7 +49,7 @@ class ParticleFilterOutput(FilterOutput):
 
     simulator: "ParticleFilterSimulator"
 
-    effective_sample_size: NDArray[np.float64]
+    effective_sample_size: NDArray[np.float64] = field(kw_only=True)
     """
     The effective sample size for each observation and each node.
     """
@@ -71,12 +69,6 @@ class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
     observations :
         The observations used to estimate the compartment and parameter values.
     """
-
-    config: PipelineConfig
-    """The configuration for the simulation."""
-
-    observations: Observations
-    """The observations."""
 
     @staticmethod
     def _normalize_log_weights(log_weights: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -233,4 +225,5 @@ class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
             estimated_params=run_filter_result.estimated_params,
             posterior_values=run_filter_result.posterior_values,
             effective_sample_size=run_filter_result.filter_context.effective_sample_size,
+            movement_data_mode=self.movement_data_mode,
         )

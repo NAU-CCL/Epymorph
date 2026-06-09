@@ -87,13 +87,14 @@ class ForecastSimulator(PipelineSimulator):
             time=rume.time_frame.select.all(),
             quantity=rume.ipm.select.all(),
             rng=rng,
+            movement_data_mode=self.movement_data_mode,
         )
 
         _events.on_pipeline_finish.publish(None)
 
         return PipelineOutput(
             simulator=self,
-            final_compartments=result.compartments[:, -1, ...],
+            final_compartments=result.final_compartments.copy(),
             final_params={
                 k: result.estimated_params[k][:, -1, ...]
                 for k in result.estimated_params.keys()
@@ -102,4 +103,5 @@ class ForecastSimulator(PipelineSimulator):
             events=result.events,
             initial=initial,
             estimated_params=result.estimated_params,
+            movement_data_mode=self.movement_data_mode,
         )

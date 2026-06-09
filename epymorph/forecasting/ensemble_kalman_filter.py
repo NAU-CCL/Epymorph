@@ -187,4 +187,5 @@ class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext
             initial=run_filter_result.initial,
             estimated_params=run_filter_result.estimated_params,
             posterior_values=run_filter_result.posterior_values,
+            movement_data_mode=self.movement_data_mode,
         )
