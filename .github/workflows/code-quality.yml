@@ -41,7 +41,8 @@ jobs:
         run: |
           mkdir -p .cache
           echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
-          aws s3 sync s3://epymorph-gha-cache .cache
+          # sync just the geography summary files, which should be sufficient for fast tests
+          aws s3 sync s3://epymorph-gha-cache .cache --exclude "*" --include "geography/us_tiger/*.tgz"
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev

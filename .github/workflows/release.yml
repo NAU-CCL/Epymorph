@@ -66,7 +66,9 @@ jobs:
 
       - name: Download cache files from S3
         if: vars.SIDELOAD_CACHE == 'true'
-        run: aws s3 sync s3://epymorph-gha-cache .cache
+        run: |
+          # sync just the geography summary files, which should be sufficient for fast tests
+          aws s3 sync s3://epymorph-gha-cache .cache --exclude "*" --include "geography/us_tiger/*.tgz"
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
