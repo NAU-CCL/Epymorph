@@ -149,6 +149,7 @@ class PlotRendererPipeline:
         time_format: TimeFormatOption = "auto",
         label_format: str = "{q}",
         title: str | None = None,
+        ax_title: str = "{n}",
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ) -> None:
@@ -260,6 +261,7 @@ class PlotRendererPipeline:
                 time,
                 quantity,
                 "quantity",
+                ax_title,
                 legend,
                 line_kwargs,
                 time_format,
@@ -285,6 +287,7 @@ class PlotRendererPipeline:
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         kwarg_type: str = "quantity",
+        ax_title: str = "{n}",
         legend: LegendOption = "auto",
         line_kwargs: list[dict] = [{}],
         time_format: TimeFormatOption = "auto",
@@ -352,6 +355,9 @@ class PlotRendererPipeline:
                     )
                     lines.extend(ls)
 
+            ax_title_str = ax_title.format(n=geo_group_name)
+
+            axes[plot_index].set_title(ax_title_str)
             ##Labels and Legend
             axes[plot_index].tick_params(axis="x", labelrotation=45)
             if legend == "on":
@@ -397,6 +403,7 @@ class PlotRendererPipeline:
         line_kwargs: list[dict] = [{}],
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
+        ax_title: str = "{n}",
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ):
@@ -499,6 +506,7 @@ class PlotRendererPipeline:
                 credible_intervals,
                 legend,
                 "quantity",
+                ax_title,
                 fill_kwargs,
                 line_kwargs,
                 time_format,
@@ -524,6 +532,7 @@ class PlotRendererPipeline:
         credible_intervals: list[float] = [95],
         legend: LegendOption = "on",
         kwarg_type: str = "quantity",
+        ax_title: str = "{n}",
         fill_kwargs: list[dict] = [{}],
         line_kwargs: list[dict] = [{}],
         time_format: TimeFormatOption = "auto",
@@ -554,6 +563,17 @@ class PlotRendererPipeline:
             geo_map = dict(zip(result_scope.node_ids, labels))
             data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
 
+        # Before melting, disambiguate any quantities with the same name.
+        q_mapping = quantity.disambiguate_groups()
+
+        data_df = data_df.rename(
+            columns={
+                "time": "time",
+                "geo": "geo",
+                **{v: k for k, v in q_mapping.items()},
+            }
+        )
+
         # Group the data
         groups_df = data_df.groupby("geo")
 
@@ -565,8 +585,8 @@ class PlotRendererPipeline:
         for (geo_group_name, gdf), gl_kwargs, gf_kwargs in zip(
             groups_df, cycle(line_kwargs), cycle(fill_kwargs)
         ):
-            for quantity_name, l_kwargs, f_kwargs in zip(
-                quantity.labels, cycle(line_kwargs), cycle(fill_kwargs)
+            for (quantity_dis_label, quantity_label), l_kwargs, f_kwargs in zip(
+                q_mapping.items(), cycle(line_kwargs), cycle(fill_kwargs)
             ):
                 if kwarg_type == "geo":
                     l_kwargs = gl_kwargs
@@ -574,16 +594,16 @@ class PlotRendererPipeline:
 
                 for ci_index, (upper, lower) in enumerate(quantile_list):
                     data_lower = transform(
-                        pd.DataFrame({"value": gdf[quantity_name][lower]})
+                        pd.DataFrame({"value": gdf[quantity_dis_label][lower]})
                     )
                     data_upper = transform(
-                        pd.DataFrame({"value": gdf[quantity_name][upper]})
+                        pd.DataFrame({"value": gdf[quantity_dis_label][upper]})
                     )
 
                     label = ""
                     if ci_index == (len(quantile_list) - 1):
                         label = (
-                            f"{geo_group_name}: {quantity_name}: {credible_intervals}"
+                            f"{geo_group_name}: {quantity_label}: {credible_intervals}"
                         )
 
                     axes[plot_index].fill_between(
@@ -594,24 +614,30 @@ class PlotRendererPipeline:
                         **f_kwargs,
                     )
                 data_median = transform(
-                    pd.DataFrame({"value": gdf[quantity_name]["quantile_50.0"]})
+                    pd.DataFrame({"value": gdf[quantity_dis_label]["quantile_50.0"]})
                 )
 
                 axes[plot_index].plot(
                     gdf["time"],
                     data_median["value"],
-                    label=f"Median of {quantity_name}",
+                    label=f"Median of {quantity_label}",
                     zorder=100,
                     **l_kwargs,
                 )
 
+            ax_title_str = ax_title.format(n=geo_group_name, t=time.date_bounds)
+            axes[plot_index].set_title(ax_title_str)
             axes[plot_index].tick_params(axis="x", labelrotation=45)
 
             ##Labels and Legend
             if legend == "on":
-                axes[plot_index].legend()
+                leg = axes[plot_index].legend()
+                leg.set_zorder(2e10)
             elif legend == "outside":
-                axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                leg = axes[plot_index].legend(
+                    loc="center left", bbox_to_anchor=(1.0, 0.5)
+                )
+                leg.set_zorder(2e10)
 
             if axes[plot_index].get_subplotspec().is_last_row():
                 if _time_format == "date":
@@ -646,6 +672,7 @@ class PlotRendererPipeline:
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
+        ax_title: str = "{n}",
         label_format: str = "{q}: {t}",
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
@@ -725,10 +752,10 @@ class PlotRendererPipeline:
             )
 
             # Y-axis
-            fig.supylabel("Density")
+            fig.supylabel("Count")
 
             # X-axis
-            fig.supxlabel("Count")
+            fig.supxlabel("Value")
 
             # Title
             fig.suptitle(t=title)  # type: ignore
@@ -745,6 +772,7 @@ class PlotRendererPipeline:
                 quantity,
                 hist_kwargs,
                 "quantity",
+                ax_title,
                 label_format,
                 legend,
                 time_format,
@@ -769,6 +797,7 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         hist_kwargs: list[dict] = [{}],
         kwarg_type="quantity",
+        ax_title: str = "{n}",
         label_format="{n}: {q}: {t}",
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
@@ -789,6 +818,17 @@ class PlotRendererPipeline:
             geo_map = dict(zip(result_scope.node_ids, labels))
             data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
 
+        # Before melting, disambiguate any quantities with the same name.
+        q_mapping = quantity.disambiguate_groups()
+
+        data_df = data_df.rename(
+            columns={
+                "time": "time",
+                "geo": "geo",
+                **{v: k for k, v in q_mapping.items()},
+            }
+        )
+
         groups_df = data_df.groupby("geo")
 
         # Plotting
@@ -798,20 +838,24 @@ class PlotRendererPipeline:
         for (geo_group_name, gdf), gwargs in zip(groups_df, cycle(hist_kwargs)):
             axes[plot_index].tick_params(axis="x", labelrotation=45)
 
-            for quantity_name, kwargs in zip(quantity.labels, cycle(hist_kwargs)):
+            for (quantity_dis_label, quantity_label), kwargs in zip(
+                q_mapping.items(), cycle(hist_kwargs)
+            ):
                 if kwarg_type == "geo":
                     kwargs = gwargs
 
                 label = label_format.format(
-                    n=geo_group_name, q=quantity_name, t=time.date_bounds
+                    n=geo_group_name, q=quantity_label, t=time.date_bounds
                 )
                 curr_kwargs = {"label": label, **kwargs}
 
                 axes[plot_index].hist(
-                    transform(gdf[quantity_name].to_frame()),
+                    transform(pd.DataFrame({"value": gdf[quantity_dis_label]})),
                     **curr_kwargs,
                 )
 
+            ax_title_str = ax_title.format(n=geo_group_name, t=time.date_bounds)
+            axes[plot_index].set_title(ax_title_str)
             ##Labels and Legend
             if legend == "on":
                 axes[plot_index].legend()
