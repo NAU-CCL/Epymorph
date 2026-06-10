@@ -114,8 +114,9 @@ class ParameterSelection(ParameterStrategy):
 
 class ParameterSelector:
     """
-    A utility class for selecting a subset of the estimated parameters. Most of the time you
-    obtain one of these using `FilterOutput's` `param_select` property.
+    A utility class for selecting a subset of the estimated parameters.
+    Most of the time you obtain one of these
+    using `FilterOutput's` `param_select` property.
     """
 
     parameters: Mapping[NamePattern, UnknownParam]
