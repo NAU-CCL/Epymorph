@@ -705,7 +705,7 @@ def munge_pipeline_output(
     time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N), NP)
     geo_mask = np.tile(np.tile(geo.selection, S), NP)
 
-    # columns are: ["realization","tick", "date", "node", *quantities]
+    # columns are: ["realization","tick", "date", "node", *quantities, *parameters]
 
     columns = [True, True, True, True]
     if isinstance(quantity, QuantityStrategy):

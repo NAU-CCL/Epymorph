@@ -5,16 +5,25 @@ over an additional axis, the realizations.
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Literal, OrderedDict, Sequence
+from typing import List, Literal, Mapping, OrderedDict, Protocol, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
+
+from epymorph.attribute import NamePattern
 
 RealizationAggMethod = Literal["mean", "std", "quantiles"]
 """The supported methods for aggregating realizations."""
 
 
+class UnknownParam(Protocol):
+    """Dummy class for typing purposes.
+    The implementation of UnknownParam is in pipeline.py."""
+
+
 def quantile_method(q_val: float):
+    """Returns a function that evaluates the given quantile."""
+
     def method(x):
         return x.quantile(q_val)
 
@@ -40,7 +49,18 @@ for q_val in _every_025:
 
 @dataclass(frozen=True)
 class ParameterStrategy:
-    parameters: dict
+    """
+    A strategy for selecting estimated parameters from the output of a filtering run.
+
+    Parameters
+    ----------
+    parameters:
+        A mapping of NamePatterns to UnknownParam objects.
+    selection:
+        A boolean mask for parameter selection.
+    """
+
+    parameters: Mapping[NamePattern, UnknownParam]
     """A dictionary of unknown parameters."""
     selection: NDArray[np.bool_]
     """A boolean mask for selection of a subset of parameters."""
@@ -50,6 +70,8 @@ class ParameterStrategy:
     """Aggregation for parameters (unimplemented)."""
 
     def disambiguate(self) -> OrderedDict[str, str]:
+        """Disambiguates parameter names to avoid any potential duplicates.
+        Returns a dictionary from new names to original names."""
         selected = [
             (i, q) for i, q in enumerate(self.parameters.keys()) if self.selection[i]
         ]
@@ -75,8 +97,8 @@ class ParameterStrategy:
 
 @dataclass(frozen=True)
 class ParameterSelection(ParameterStrategy):
-    parameters: dict
-    """A list of estimated parameter names."""
+    parameters: Mapping[NamePattern, UnknownParam]
+    """A dictionary of unknown parameters."""
     selection: NDArray[np.bool_]
     """A boolean mask for selection of a subset of parameters."""
     grouping: None = field(init=False, default=None)
@@ -91,16 +113,22 @@ class ParameterSelection(ParameterStrategy):
 
 
 class ParameterSelector:
-    """A list of estimated parameters."""
+    """
+    A utility class for selecting a subset of the estimated parameters. Most of the time you
+    obtain one of these using `FilterOutput's` `param_select` property.
+    """
 
-    def __init__(self, parameters):
+    parameters: Mapping[NamePattern, UnknownParam]
+    """A dictionary of unknown parameters."""
+
+    def __init__(self, parameters: Mapping[NamePattern, UnknownParam]):
         self.parameters = parameters
 
     def _mask(
         self,
         parameters_boolean: bool | list[bool] = False,
     ) -> NDArray[np.bool_]:
-        m = np.zeros(shape=len(self.parameters.keys()), dtype=np.bool_)
+        m = np.zeros(shape=len(self.parameters), dtype=np.bool_)
         if parameters_boolean is not False:
             m[:] = parameters_boolean
 
@@ -130,17 +158,16 @@ class ParameterSelector:
         if len(patterns) == 0:
             mask = self._mask(parameters_boolean=True)
         else:
-            param_str = "*::*::{n}"
             mask = self._mask()
             for p in patterns:
+                p = NamePattern.of(p)
                 curr = self._mask(
                     parameters_boolean=[
-                        (param_str.format(n=p) == str(name))
-                        for name in self.parameters.keys()
+                        (p.match(name)) for name in self.parameters.keys()
                     ]
                 )
                 if not np.any(curr):
-                    err = f"Pattern '{p}' did not match any parameters."
+                    err = f"Pattern '{str(p)}' did not match any parameters."
                     raise ValueError(err)
                 mask |= curr
 
@@ -233,7 +260,7 @@ class RealizationSelection(RealizationStrategy):
 class RealizationSelector:
     """
     A utility class for selecting a subset of the realizations. Most of the time you
-    obtain one of these using `ParticleFilterOutput's` `select` property.
+    obtain one of these using `FilterOutput's` `select` property.
     """
 
     _num_realizations: int
