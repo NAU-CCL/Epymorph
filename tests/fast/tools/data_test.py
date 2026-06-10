@@ -11,7 +11,6 @@ from epymorph.adrio.validation import ResultFormat
 from epymorph.attribute import NamePattern
 from epymorph.data import ipm, mm
 from epymorph.data_shape import Shapes
-from epymorph.data_type import SimDType
 from epymorph.geography.us_census import StateScope
 from epymorph.rume import RUME, SingleStrataRUME
 from epymorph.simulation import Context
