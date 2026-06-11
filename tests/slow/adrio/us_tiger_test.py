@@ -117,7 +117,6 @@ def calculate_expected_values():
     # load in shapefile data for use in centroid caclulations
     gdf = read_file(
         "https://www2.census.gov/geo/tiger/TIGER2020/COUNTY/tl_2020_us_county.zip",
-        engine="fiona",
         ignore_geometry=False,
     )
     gdf = gdf[gdf["GEOID"].isin(node_ids)]

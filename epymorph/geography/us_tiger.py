@@ -177,7 +177,6 @@ def _load_tiger_data(
         for i, u in enumerate(urls):
             u_df = gp_read_file(
                 load_or_fetch_url(u, _url_to_cache_path(u)),
-                engine="fiona",
                 ignore_geometry=ignore_geometry,
                 include_fields=[c for c, _ in columns],
             )
