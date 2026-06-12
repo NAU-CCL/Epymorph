@@ -145,7 +145,7 @@ class PlotRendererPipeline:
         sharex: bool = True,
         ncols: int = 3,
         legend: LegendOption = "auto",
-        line_kwargs: list[dict] = [{}],
+        line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
         label_format: str = "{q}",
         title: str | None = None,
@@ -289,11 +289,14 @@ class PlotRendererPipeline:
         kwarg_type: str = "quantity",
         ax_title: str = "{n}",
         legend: LegendOption = "auto",
-        line_kwargs: list[dict] = [{}],
+        line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
         label_format: str = "{n}: {q}",
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ) -> list[Line2D]:
+        if line_kwargs is None:
+            line_kwargs = [{}]
+
         data_df = munge_pipeline_output(self.output, realizations, geo, time, quantity)
 
         # Map time labels:
@@ -325,8 +328,6 @@ class PlotRendererPipeline:
                 id_vars=["realization", "time", "geo"], var_name="quantity"
             ).groupby("quantity")
 
-            # Line kwargs cycle over the quantity axis,
-            # not setting colors for individual lines!
             for (quantity_group_name, qdf), kwargs in zip(
                 quantity_groups,
                 cycle(line_kwargs),  # type: ignore
@@ -399,8 +400,8 @@ class PlotRendererPipeline:
         sharex: bool = True,
         ncols: int = 3,
         legend: LegendOption = "auto",
-        fill_kwargs: list[dict] = [{}],
-        line_kwargs: list[dict] = [{}],
+        fill_kwargs: list[dict] | None = None,
+        line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         ax_title: str = "{n}",
@@ -533,11 +534,16 @@ class PlotRendererPipeline:
         legend: LegendOption = "on",
         kwarg_type: str = "quantity",
         ax_title: str = "{n}",
-        fill_kwargs: list[dict] = [{}],
-        line_kwargs: list[dict] = [{}],
+        fill_kwargs: list[dict] | None = None,
+        line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ):
+        if fill_kwargs is None:
+            fill_kwargs = [{}]
+        if line_kwargs is None:
+            line_kwargs = [{}]
+
         # Generate list of quantiles from the CIs
         quantile_list = list(list())
         for interval in sorted(credible_intervals, reverse=True):
@@ -667,7 +673,7 @@ class PlotRendererPipeline:
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        hist_kwargs: list[dict] = [{}],
+        hist_kwargs: list[dict] | None = None,
         ncols: int = 3,
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
@@ -795,14 +801,17 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        hist_kwargs: list[dict] = [{}],
+        hist_kwargs: list[dict] | None = None,
         kwarg_type="quantity",
-        ax_title: str = "{n}",
+        ax_title: str = "{n}: {t}",
         label_format="{n}: {q}: {t}",
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ):
+        if hist_kwargs is None:
+            hist_kwargs = [{}]
+
         realizations_agg = self.output.select.all()
         data_df = munge_pipeline_output(
             self.output, realizations_agg, geo, time, quantity
@@ -1021,13 +1030,10 @@ class PlotRendererPipeline:
         label_format: str = "{n}: {q}: {m}",
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ) -> list[Line2D]:
-        if line_kwargs is None or len(line_kwargs) == 0:
+        if line_kwargs is None:
             line_kwargs = [{}]
-
-        if transform is None:
-            transform = identity
 
         data_df = munge_pipeline_output(self.output, realization, geo, time, quantity)
 
