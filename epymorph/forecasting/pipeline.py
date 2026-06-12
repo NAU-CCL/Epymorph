@@ -838,7 +838,6 @@ class FilterOutput(PipelineOutput):
     @property
     @override
     def dataframe(self):
-
         NP = self.num_realizations  # noqa: N806
         C = self.rume.ipm.num_compartments
         E = self.rume.ipm.num_events

@@ -403,6 +403,7 @@ class PlotRendererPipeline:
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
+        label_format: str = "{n}: {q}: {c}",
         title: str | None = None,
         ax_title: str = "{n}",
         to_file: str | Path | None = None,
@@ -511,6 +512,7 @@ class PlotRendererPipeline:
                 fill_kwargs,
                 line_kwargs,
                 time_format,
+                label_format,
                 transform,
             )
 
@@ -537,6 +539,7 @@ class PlotRendererPipeline:
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
+        label_format: str = "{n}: {q}: {c}",
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ):
         if fill_kwargs is None:
@@ -608,8 +611,8 @@ class PlotRendererPipeline:
 
                     label = ""
                     if ci_index == (len(quantile_list) - 1):
-                        label = (
-                            f"{geo_group_name}: {quantity_label}: {credible_intervals}"
+                        label = label_format.format(
+                            n=geo_group_name, q=quantity_label, c=credible_intervals
                         )
 
                     axes[plot_index].fill_between(
@@ -623,10 +626,11 @@ class PlotRendererPipeline:
                     pd.DataFrame({"value": gdf[quantity_dis_label]["quantile_50.0"]})
                 )
 
+                median_label = f"{geo_group_name}: {quantity_label}: Median"
                 axes[plot_index].plot(
                     gdf["time"],
                     data_median["value"],
-                    label=f"Median of {quantity_label}",
+                    label=median_label,
                     zorder=100,
                     **l_kwargs,
                 )
@@ -678,8 +682,8 @@ class PlotRendererPipeline:
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
-        ax_title: str = "{n}",
-        label_format: str = "{q}: {t}",
+        ax_title: str = "{n}: {t}",
+        label_format: str = "{q}",
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ):
@@ -817,6 +821,14 @@ class PlotRendererPipeline:
             self.output, realizations_agg, geo, time, quantity
         )
 
+        if len(data_df["time"].unique()) > 1:
+            err = (
+                "When drawing a histogram plot, please ensure that you choose a "
+                "time aggregation strategy that reduces the time series to a "
+                "single point (scalar)."
+            )
+            raise ValueError(err)
+
         # Map time labels:
         _, map_time_axis = self._time_format(time, time_format)
         data_df["time"] = map_time_axis(data_df["time"])
@@ -844,8 +856,16 @@ class PlotRendererPipeline:
         axes = axes.flatten() if len(axes.shape) > 1 else axes
 
         plot_index = 0
+        ax_time_str = (
+            f"{time.date_bounds[0].isoformat()}/{time.date_bounds[1].isoformat()}"
+        )
         for (geo_group_name, gdf), gwargs in zip(groups_df, cycle(hist_kwargs)):
             axes[plot_index].tick_params(axis="x", labelrotation=45)
+            ax_title_str = ax_title.format(
+                n=geo_group_name,
+                t=ax_time_str,
+            )
+            axes[plot_index].set_title(ax_title_str)
 
             for (quantity_dis_label, quantity_label), kwargs in zip(
                 q_mapping.items(), cycle(hist_kwargs)
@@ -854,7 +874,9 @@ class PlotRendererPipeline:
                     kwargs = gwargs
 
                 label = label_format.format(
-                    n=geo_group_name, q=quantity_label, t=time.date_bounds
+                    n=geo_group_name,
+                    q=quantity_label,
+                    t=ax_time_str,
                 )
                 curr_kwargs = {"label": label, **kwargs}
 
@@ -863,8 +885,6 @@ class PlotRendererPipeline:
                     **curr_kwargs,
                 )
 
-            ax_title_str = ax_title.format(n=geo_group_name, t=time.date_bounds)
-            axes[plot_index].set_title(ax_title_str)
             ##Labels and Legend
             if legend == "on":
                 axes[plot_index].legend()
@@ -1089,12 +1109,14 @@ class PlotRendererPipeline:
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        line_kwargs: list[dict] = [{}],
+        line_kwargs: list[dict] | None = None,
         ncols: int = 3,
         legend: LegendOption = "auto",
+        delta_t: float | None = None,
+        ax_title: str = "{n}: {t}",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
-        label_format: str = "{q}: {t}",
+        label_format: str = "{q}",
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ):
@@ -1112,7 +1134,7 @@ class PlotRendererPipeline:
             fig.supylabel("Density")
 
             # X-axis
-            fig.supxlabel("Count")
+            fig.supxlabel("Value")
 
             # Title
             fig.suptitle(t=title)  # type: ignore
@@ -1127,12 +1149,14 @@ class PlotRendererPipeline:
                 geo,
                 time,
                 quantity,
-                line_kwargs,
-                "quantity",
-                label_format,
-                legend,
-                time_format,
-                transform,  # type: ignore
+                line_kwargs=line_kwargs,
+                ax_title=ax_title,
+                kwarg_type="quantity",
+                delta_t=delta_t,
+                label_format=label_format,
+                legend=legend,
+                time_format=time_format,
+                transform=transform,  # type: ignore
             )
 
             if to_file is None:
@@ -1151,10 +1175,11 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        line_kwargs: list[dict] = [{}],
+        line_kwargs: list[dict] | None = None,
+        ax_title: str = "{n}: {t}",
         kwarg_type: str = "quantity",
         bandwidth: float | str = "scott",
-        delta_t: float = 1.0,
+        delta_t: float | None = None,
         label_format="{n}: {q}: {t}",
         legend: LegendOption = "auto",
         time_format: TimeFormatOption = "auto",
@@ -1164,6 +1189,17 @@ class PlotRendererPipeline:
         data_df = munge_pipeline_output(
             self.output, realizations_agg, geo, time, quantity
         )
+
+        if len(data_df["time"].unique()) > 1:
+            err = (
+                "When drawing a KDE plot, please ensure that you choose a "
+                "time aggregation strategy that reduces the time series to a "
+                "single point (scalar)."
+            )
+            raise ValueError(err)
+
+        if line_kwargs is None:
+            line_kwargs = [{}]
 
         # Map time labels:
         _, map_time_axis = self._time_format(time, time_format)
@@ -1190,10 +1226,18 @@ class PlotRendererPipeline:
 
         # Plotting
         axes = axes.flatten() if len(axes.shape) > 1 else axes
+        ax_time_str = (
+            f"{time.date_bounds[0].isoformat()}/{time.date_bounds[1].isoformat()}"
+        )
 
         plot_index = 0
         for (geo_group_name, gdf), gwargs in zip(groups_df, cycle(line_kwargs)):
             axes[plot_index].tick_params(axis="x", labelrotation=45)
+            ax_title_str = ax_title.format(
+                n=geo_group_name,
+                t=ax_time_str,
+            )
+            axes[plot_index].set_title(ax_title_str)
 
             for (quantity_dis_label, quantity_label), kwargs in zip(
                 q_mapping.items(), cycle(line_kwargs)
@@ -1202,7 +1246,9 @@ class PlotRendererPipeline:
                     kwargs = gwargs
 
                 label = label_format.format(
-                    n=geo_group_name, q=quantity_label, t=time.date_bounds
+                    n=geo_group_name,
+                    q=quantity_label,
+                    t=f"{time.date_bounds[0].isoformat()}:{time.date_bounds[1].isoformat()}",
                 )
                 curr_kwargs = {"label": label, **kwargs}
 
@@ -1212,7 +1258,12 @@ class PlotRendererPipeline:
                     .squeeze()
                 )
 
-                eval_range = np.arange(data.min(), data.max() + delta_t, delta_t)
+                d_max = data.max()
+                d_min = data.min()
+                if delta_t is None:
+                    delta_t = (d_max - d_min) / 100
+
+                eval_range = np.arange(d_min, d_max + delta_t, delta_t)
                 kde = gaussian_kde(data, bw_method=bandwidth)
                 axes[plot_index].plot(
                     eval_range,
