@@ -1,8 +1,8 @@
-# ruff: noqa: PT009,PT027,N806
-import unittest
+# ruff: noqa: N806
 import warnings
 from typing import Sequence
 
+import pytest
 from sympy import Max
 from sympy import symbols as sympy_symbols
 
@@ -25,9 +25,98 @@ from epymorph.error import IPMValidationError
 from epymorph.sympy_shim import to_symbol
 from epymorph.util import are_instances
 
+###############################
+# IPM subclass creation tests #
+###############################
 
-class CompartmentModelTest(unittest.TestCase):
-    def test_create_01(self):
+
+def test_create_01():
+    class MyIpm(CompartmentModel):
+        compartments = [
+            compartment("S", tags=["test_tag"]),
+            compartment("I"),
+            compartment("R"),
+        ]
+
+        requirements = [
+            AttributeDef("beta", float, Shapes.N),
+            AttributeDef("gamma", float, Shapes.N),
+        ]
+
+        def edges(self, symbols):
+            S, I, R = symbols.compartments("S", "I", "R")
+            beta, gamma = symbols.requirements("beta", "gamma")
+            return [
+                edge(S, I, rate=beta * S * I),
+                edge(I, R, rate=gamma * I),
+            ]
+
+    model = MyIpm()
+
+    assert model.num_compartments == 3
+    assert model.num_events == 2
+
+    assert list(model.compartments) == [
+        compartment("S", ["test_tag"]),
+        compartment("I", []),
+        compartment("R", []),
+    ]
+    assert list(model.requirements_dict.keys()) == [
+        AbsoluteName("gpm:all", "ipm", "beta"),
+        AbsoluteName("gpm:all", "ipm", "gamma"),
+    ]
+    assert list(model.requirements_dict.values()) == [
+        AttributeDef("beta", type=float, shape=Shapes.N),
+        AttributeDef("gamma", type=float, shape=Shapes.N),
+    ]
+
+    S, I, R = model.symbols.all_compartments
+    beta, gamma = model.symbols.all_requirements
+    assert list(model.transitions) == [
+        edge(S, I, rate=beta * S * I),
+        edge(I, R, rate=gamma * I),
+    ]
+
+
+def test_create_02():
+    class MyIpm(CompartmentModel):
+        compartments = [
+            compartment("S"),
+            compartment("I"),
+            compartment("R"),
+        ]
+        requirements = [
+            AttributeDef("beta", float, Shapes.N),
+            AttributeDef("gamma", float, Shapes.N),
+            AttributeDef("b", float, Shapes.N),  # birth rate
+            AttributeDef("d", float, Shapes.N),  # death rate
+        ]
+
+        def edges(self, symbols):
+            S, I, R = symbols.all_compartments
+            beta, gamma, b, d = symbols.all_requirements
+            return [
+                edge(S, I, rate=beta * S * I),
+                edge(BIRTH, S, rate=b),
+                edge(I, R, rate=gamma * I),
+                edge(S, DEATH, rate=d * S),
+                edge(I, DEATH, rate=d * I),
+                edge(R, DEATH, rate=d * R),
+            ]
+
+    model = MyIpm()
+
+    assert model.num_compartments == 3
+    assert model.num_events == 6
+
+
+def test_create_03():
+    # Test for error: Reference an undeclared compartment in a transition.
+    with pytest.raises(
+        IPMValidationError,
+        match="(?i)missing compartments: bad_compartment",
+    ):
+
         class MyIpm(CompartmentModel):
             compartments = [
                 compartment("S", tags=["test_tag"]),
@@ -41,282 +130,57 @@ class CompartmentModelTest(unittest.TestCase):
             ]
 
             def edges(self, symbols):
-                S, I, R = symbols.compartments("S", "I", "R")
-                beta, gamma = symbols.requirements("beta", "gamma")
+                S, I, R = symbols.all_compartments
+                beta, gamma = symbols.all_requirements
                 return [
                     edge(S, I, rate=beta * S * I),
                     edge(I, R, rate=gamma * I),
+                    edge(I, to_symbol("bad_compartment"), rate=gamma * I),
                 ]
 
-        model = MyIpm()
 
-        self.assertEqual(model.num_compartments, 3)
-        self.assertEqual(model.num_events, 2)
+def test_create_04():
+    # Test for error: Reference an undeclared requirement in a transition.
+    with pytest.raises(
+        IPMValidationError, match="(?i)missing requirements: bad_symbol"
+    ):
 
-        self.assertEqual(
-            list(model.compartments),
-            [
-                compartment("S", ["test_tag"]),
-                compartment("I", []),
-                compartment("R", []),
-            ],
-        )
-        self.assertEqual(
-            list(model.requirements_dict.keys()),
-            [
-                AbsoluteName("gpm:all", "ipm", "beta"),
-                AbsoluteName("gpm:all", "ipm", "gamma"),
-            ],
-        )
-        self.assertEqual(
-            list(model.requirements_dict.values()),
-            [
-                AttributeDef("beta", type=float, shape=Shapes.N),
-                AttributeDef("gamma", type=float, shape=Shapes.N),
-            ],
-        )
-
-        S, I, R = model.symbols.all_compartments
-        beta, gamma = model.symbols.all_requirements
-        self.assertEqual(
-            list(model.transitions),
-            [
-                edge(S, I, rate=beta * S * I),
-                edge(I, R, rate=gamma * I),
-            ],
-        )
-
-    def test_create_02(self):
         class MyIpm(CompartmentModel):
             compartments = [
-                compartment("S"),
+                compartment("S", tags=["test_tag"]),
                 compartment("I"),
                 compartment("R"),
             ]
+
             requirements = [
                 AttributeDef("beta", float, Shapes.N),
                 AttributeDef("gamma", float, Shapes.N),
-                AttributeDef("b", float, Shapes.N),  # birth rate
-                AttributeDef("d", float, Shapes.N),  # death rate
             ]
 
             def edges(self, symbols):
                 S, I, R = symbols.all_compartments
-                beta, gamma, b, d = symbols.all_requirements
+                beta, gamma = symbols.all_requirements
+
                 return [
                     edge(S, I, rate=beta * S * I),
-                    edge(BIRTH, S, rate=b),
-                    edge(I, R, rate=gamma * I),
-                    edge(S, DEATH, rate=d * S),
-                    edge(I, DEATH, rate=d * I),
-                    edge(R, DEATH, rate=d * R),
+                    edge(I, R, rate=gamma * to_symbol("bad_symbol") * I),
                 ]
 
-        model = MyIpm()
 
-        self.assertEqual(model.num_compartments, 3)
-        self.assertEqual(model.num_events, 6)
+def test_create_05():
+    # Test for error: Source and destination are both exogenous!
+    with pytest.raises(IPMValidationError, match="(?i)both source and destination"):
 
-    def test_create_03(self):
-        # Test for error: Reference an undeclared compartment in a transition.
-        with self.assertRaises(IPMValidationError) as e:
-
-            class MyIpm(CompartmentModel):
-                compartments = [
-                    compartment("S", tags=["test_tag"]),
-                    compartment("I"),
-                    compartment("R"),
-                ]
-
-                requirements = [
-                    AttributeDef("beta", float, Shapes.N),
-                    AttributeDef("gamma", float, Shapes.N),
-                ]
-
-                def edges(self, symbols):
-                    S, I, R = symbols.all_compartments
-                    beta, gamma = symbols.all_requirements
-                    return [
-                        edge(S, I, rate=beta * S * I),
-                        edge(I, R, rate=gamma * I),
-                        edge(I, to_symbol("bad_compartment"), rate=gamma * I),
-                    ]
-
-        self.assertIn("missing compartments: bad_compartment", str(e.exception).lower())
-
-    def test_create_04(self):
-        # Test for error: Reference an undeclared requirement in a transition.
-        with self.assertRaises(IPMValidationError) as e:
-
-            class MyIpm(CompartmentModel):
-                compartments = [
-                    compartment("S", tags=["test_tag"]),
-                    compartment("I"),
-                    compartment("R"),
-                ]
-
-                requirements = [
-                    AttributeDef("beta", float, Shapes.N),
-                    AttributeDef("gamma", float, Shapes.N),
-                ]
-
-                def edges(self, symbols):
-                    S, I, R = symbols.all_compartments
-                    beta, gamma = symbols.all_requirements
-
-                    return [
-                        edge(S, I, rate=beta * S * I),
-                        edge(I, R, rate=gamma * to_symbol("bad_symbol") * I),
-                    ]
-
-        self.assertIn("missing requirements: bad_symbol", str(e.exception).lower())
-
-    def test_create_05(self):
-        # Test for error: Source and destination are both exogenous!
-        with self.assertRaises(IPMValidationError) as e:
-
-            class MyIpm(CompartmentModel):
-                compartments = [
-                    compartment("S", tags=["test_tag"]),
-                    compartment("I"),
-                    compartment("R"),
-                ]
-
-                requirements = [
-                    AttributeDef("beta", float, Shapes.N),
-                    AttributeDef("gamma", float, Shapes.N),
-                ]
-
-                def edges(self, symbols):
-                    S, I, R = symbols.all_compartments
-                    beta, gamma = symbols.all_requirements
-                    return [
-                        edge(S, I, rate=beta * S * I),
-                        edge(I, R, rate=gamma * I),
-                        edge(BIRTH, DEATH, rate=100),
-                    ]
-
-        self.assertIn("both source and destination", str(e.exception).lower())
-
-    def test_create_06(self):
-        # Test for error: model with no compartments.
-        with self.assertRaises(IPMValidationError) as e:
-
-            class MyIpm(CompartmentModel):
-                compartments = []
-                requirements = [
-                    AttributeDef("beta", float, Shapes.N),
-                    AttributeDef("gamma", float, Shapes.N),
-                ]
-
-                def edges(self, symbols):
-                    return []
-
-        self.assertIn("invalid compartments", str(e.exception).lower())
-
-    def test_create_07(self):
-        # Test for warning: unused requirements.
-        with self.assertWarns(Warning) as w:
-
-            class MyIpm(CompartmentModel):
-                compartments = [
-                    compartment("S", tags=["test_tag"]),
-                    compartment("I"),
-                    compartment("R"),
-                ]
-                requirements = [
-                    AttributeDef("beta", float, Shapes.N),
-                    AttributeDef("gamma", float, Shapes.N),
-                    AttributeDef("extraneous", float, Shapes.N),
-                ]
-
-                def edges(self, symbols):
-                    S, I, R = symbols.all_compartments
-                    beta, gamma, extraneous = symbols.all_requirements
-                    return [
-                        edge(S, I, rate=beta * S * I),
-                        edge(I, R, rate=gamma * I),
-                    ]
-
-        self.assertIn("extra requirements: extraneous", str(w.warning).lower())
-
-    def test_create_08(self):
-        # Test for warning: unused compartments.
-        with self.assertWarns(Warning) as w:
-
-            class MyIpm(CompartmentModel):
-                compartments = [
-                    compartment("S", tags=["test_tag"]),
-                    compartment("I"),
-                    compartment("R"),
-                    # Q is defined, but not used anywhere
-                    compartment("Q"),
-                ]
-                requirements = [
-                    AttributeDef("beta", float, Shapes.N),
-                    AttributeDef("gamma", float, Shapes.N),
-                ]
-
-                def edges(self, symbols):
-                    S, I, R, Q = symbols.all_compartments
-                    beta, gamma = symbols.all_requirements
-                    return [
-                        edge(S, I, rate=beta * S * I),
-                        edge(I, R, rate=gamma * I),
-                    ]
-
-        self.assertIn("extra compartments: q", str(w.warning).lower())
-
-    def test_create_09(self):
-        # This is a valid IPM.
-        # Don't raise warnings or errors.
-        with warnings.catch_warnings(action="error"):
-
-            class TwoSpeciesIPM(CompartmentModel):
-                compartments = [
-                    compartment("S"),
-                    compartment("I"),
-                    compartment("R"),
-                    # X has no trxs itself, but it is used in a trx expr
-                    compartment("X"),
-                ]
-
-                requirements = [
-                    AttributeDef("beta", float, Shapes.N),
-                    AttributeDef("gamma", float, Shapes.N),
-                ]
-
-                def edges(self, symbols):
-                    S, I, R, X = symbols.all_compartments
-                    beta, gamma = symbols.all_requirements
-                    return [
-                        # infection of S is proportional to the number of X
-                        # but there is no edge for X
-                        edge(S, I, rate=beta * S * X),
-                        edge(I, R, rate=gamma * I),
-                    ]
-
-    def test_compartment_name(self):
-        # Test for compartment names that include spaces.
-        with self.assertRaises(ValueError):
-            compartment("some people")
-
-    def test_attribute_name(self):
-        # Test for attribute names that include spaces.
-        with self.assertRaises(ValueError):
-            AttributeDef("some attribute", float, Shapes.N)
-
-    def test_combined_01(self):
-        class Sir(CompartmentModel):
+        class MyIpm(CompartmentModel):
             compartments = [
-                compartment("S"),
+                compartment("S", tags=["test_tag"]),
                 compartment("I"),
                 compartment("R"),
             ]
 
             requirements = [
-                AttributeDef("beta", float, Shapes.TxN),
-                AttributeDef("gamma", float, Shapes.TxN),
+                AttributeDef("beta", float, Shapes.N),
+                AttributeDef("gamma", float, Shapes.N),
             ]
 
             def edges(self, symbols):
@@ -325,358 +189,540 @@ class CompartmentModelTest(unittest.TestCase):
                 return [
                     edge(S, I, rate=beta * S * I),
                     edge(I, R, rate=gamma * I),
+                    edge(BIRTH, DEATH, rate=100),
                 ]
 
-        sir = Sir()
 
-        def meta_edges(sym: MultiStrataModelSymbols):
-            [S_aaa, I_aaa, R_aaa] = sym.strata_compartments("aaa")
-            [S_bbb, I_bbb, R_bbb] = sym.strata_compartments("bbb")
-            [beta_bbb_aaa] = sym.all_meta_requirements
-            N_aaa = Max(1, S_aaa + I_aaa + R_aaa)
-            return [
-                edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
+def test_create_06():
+    # Test for error: model with no compartments.
+    with pytest.raises(IPMValidationError, match="(?i)invalid compartments"):
+
+        class MyIpm(CompartmentModel):
+            compartments = []
+            requirements = [
+                AttributeDef("beta", float, Shapes.N),
+                AttributeDef("gamma", float, Shapes.N),
             ]
 
-        model = CombinedCompartmentModel(
-            strata=[("aaa", sir), ("bbb", sir)],
-            meta_requirements=[
-                AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
-            ],
-            meta_edges=meta_edges,
-        )
+            def edges(self, symbols):
+                return []
 
-        self.assertEqual(model.num_compartments, 6)
-        self.assertEqual(model.num_events, 5)
 
-        # Check compartment mapping
-        self.assertEqual(
-            [c.name.full for c in model.compartments],
-            ["S_aaa", "I_aaa", "R_aaa", "S_bbb", "I_bbb", "R_bbb"],
-        )
+def test_create_07():
+    # Test for warning: unused requirements.
+    with pytest.warns(Warning, match="(?i)extra requirements: extraneous"):
 
-        self.assertEqual(
-            model.symbols.all_compartments,
-            list(sympy_symbols("S_aaa I_aaa R_aaa S_bbb I_bbb R_bbb")),
-        )
+        class MyIpm(CompartmentModel):
+            compartments = [
+                compartment("S", tags=["test_tag"]),
+                compartment("I"),
+                compartment("R"),
+            ]
+            requirements = [
+                AttributeDef("beta", float, Shapes.N),
+                AttributeDef("gamma", float, Shapes.N),
+                AttributeDef("extraneous", float, Shapes.N),
+            ]
 
-        self.assertEqual(
-            model.symbols.strata_compartments("aaa"),
-            list(sympy_symbols("S_aaa I_aaa R_aaa")),
-        )
+            def edges(self, symbols):
+                S, I, R = symbols.all_compartments
+                beta, gamma, extraneous = symbols.all_requirements
+                return [
+                    edge(S, I, rate=beta * S * I),
+                    edge(I, R, rate=gamma * I),
+                ]
 
-        self.assertEqual(
-            model.symbols.strata_compartments("bbb"),
-            list(sympy_symbols("S_bbb I_bbb R_bbb")),
-        )
 
-        # Check requirement mapping
-        self.assertEqual(
-            model.symbols.all_requirements,
-            list(
-                sympy_symbols("beta_aaa gamma_aaa beta_bbb gamma_bbb beta_bbb_aaa_meta")
-            ),
-        )
+def test_create_08():
+    # Test for warning: unused compartments.
+    with pytest.warns(Warning, match="(?i)extra compartments: q"):
 
-        self.assertEqual(
-            model.symbols.strata_requirements("aaa"),
-            list(sympy_symbols("beta_aaa gamma_aaa")),
-        )
+        class MyIpm(CompartmentModel):
+            compartments = [
+                compartment("S", tags=["test_tag"]),
+                compartment("I"),
+                compartment("R"),
+                # Q is defined, but not used anywhere
+                compartment("Q"),
+            ]
+            requirements = [
+                AttributeDef("beta", float, Shapes.N),
+                AttributeDef("gamma", float, Shapes.N),
+            ]
 
-        self.assertEqual(
-            model.symbols.strata_requirements("bbb"),
-            list(sympy_symbols("beta_bbb gamma_bbb")),
-        )
+            def edges(self, symbols):
+                S, I, R, Q = symbols.all_compartments
+                beta, gamma = symbols.all_requirements
+                return [
+                    edge(S, I, rate=beta * S * I),
+                    edge(I, R, rate=gamma * I),
+                ]
 
-        self.assertEqual(
-            model.symbols.all_meta_requirements,
-            [sympy_symbols("beta_bbb_aaa_meta")],
-        )
 
-        self.assertEqual(
-            list(model.requirements_dict.keys()),
-            [
-                AbsoluteName("gpm:aaa", "ipm", "beta"),
-                AbsoluteName("gpm:aaa", "ipm", "gamma"),
-                AbsoluteName("gpm:bbb", "ipm", "beta"),
-                AbsoluteName("gpm:bbb", "ipm", "gamma"),
-                AbsoluteName("meta", "ipm", "beta_bbb_aaa"),
-            ],
-        )
+def test_create_09():
+    # This is a valid IPM.
+    # Don't raise warnings or errors.
+    with warnings.catch_warnings(action="error"):
 
-        self.assertEqual(
-            list(model.requirements_dict.values()),
-            [
-                AttributeDef("beta", float, Shapes.TxN),
-                AttributeDef("gamma", float, Shapes.TxN),
-                AttributeDef("beta", float, Shapes.TxN),
-                AttributeDef("gamma", float, Shapes.TxN),
-                AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
-            ],
-        )
+        class TwoSpeciesIPM(CompartmentModel):
+            compartments = [
+                compartment("S"),
+                compartment("I"),
+                compartment("R"),
+                # X has no trxs itself, but it is used in a trx expr
+                compartment("X"),
+            ]
 
-        [S_aaa, I_aaa, R_aaa, S_bbb, I_bbb, R_bbb] = model.symbols.all_compartments
-        [beta_aaa, gamma_aaa, beta_bbb, gamma_bbb, beta_bbb_aaa] = (
-            model.symbols.all_requirements
-        )
+            requirements = [
+                AttributeDef("beta", float, Shapes.N),
+                AttributeDef("gamma", float, Shapes.N),
+            ]
 
-        s_to_i = EdgeName(
-            CompartmentName("S", None, None),
-            CompartmentName("I", None, None),
-        )
-        i_to_r = EdgeName(
-            CompartmentName("I", None, None),
-            CompartmentName("R", None, None),
-        )
+            def edges(self, symbols):
+                S, I, R, X = symbols.all_compartments
+                beta, gamma = symbols.all_requirements
+                return [
+                    # infection of S is proportional to the number of X
+                    # but there is no edge for X
+                    edge(S, I, rate=beta * S * X),
+                    edge(I, R, rate=gamma * I),
+                ]
 
-        self.assertEqual(
-            model.transitions,
-            [
-                EdgeDef(
-                    s_to_i.with_strata("aaa"),
-                    beta_aaa * S_aaa * I_aaa,
-                    S_aaa,
-                    I_aaa,
-                ),
-                EdgeDef(
-                    i_to_r.with_strata("aaa"),
-                    gamma_aaa * I_aaa,
-                    I_aaa,
-                    R_aaa,
-                ),
-                EdgeDef(
-                    s_to_i.with_strata("bbb"),
-                    beta_bbb * S_bbb * I_bbb,
-                    S_bbb,
-                    I_bbb,
-                ),
-                EdgeDef(
-                    i_to_r.with_strata("bbb"),
-                    gamma_bbb * I_bbb,
-                    I_bbb,
-                    R_bbb,
-                ),
-                EdgeDef(
-                    s_to_i.with_strata("bbb"),
-                    beta_bbb_aaa * S_bbb * I_aaa / Max(1, S_aaa + I_aaa + R_aaa),
-                    S_bbb,
-                    I_bbb,
-                ),
-            ],
-        )
 
-    def test_combined_02(self):
-        # Test a combined model using exogenous classes.
-        class SirsBirthDeath(CompartmentModel):
+def test_create_10():
+    # Test invalid compartments field.
+    with pytest.raises(IPMValidationError, match="(?i)please specify as an iterable"):
+
+        class MyIpm(CompartmentModel):
+            compartments = 123  # type: ignore
+            requirements = []
+
+            def edges(self, symbols):
+                return []
+
+
+def test_create_11():
+    # Test compartments are not `CopmartmentDef` instances.
+    with pytest.raises(
+        IPMValidationError,
+        match="(?i)must be instances of CompartmentDef",
+    ):
+
+        class MyIpm(CompartmentModel):
+            compartments = ["S", "I", "R"]  # type: ignore (should be [compartment("S"), ...])
+            requirements = []
+
+            def edges(self, symbols):
+                return []
+
+
+def test_create_12():
+    # Test compartment names must be unique.
+    with pytest.raises(IPMValidationError, match="(?i)names must be unique"):
+
+        class MyIpm(CompartmentModel):
+            compartments = [compartment("S"), compartment("S")]
+            requirements = []
+
+            def edges(self, symbols):
+                return []
+
+
+def test_create_13():
+    # Test abstract child class of CompartmentModel.
+    class MyAbstractIpm(CompartmentModel):
+        compartments = [
+            compartment("S"),
+            compartment("I"),
+            compartment("R"),
+        ]
+
+    class MyConcreteIpm(MyAbstractIpm):
+        requirements = [
+            AttributeDef("beta", float, Shapes.N),
+            AttributeDef("gamma", float, Shapes.N),
+        ]
+
+        def edges(self, symbols):
+            S, I, R = symbols.all_compartments
+            beta, gamma = symbols.all_requirements
+            return [
+                edge(S, I, rate=beta * S * I),
+                edge(I, R, rate=gamma * I),
+            ]
+
+    ipm = MyConcreteIpm()  # should not raise
+    assert [c.name.full for c in ipm.compartments] == ["S", "I", "R"]
+    assert [r.name for r in ipm.requirements] == ["beta", "gamma"]
+
+
+def test_create_14():
+    # Test abstract child class of CompartmentModel.
+    class ParentIpm(CompartmentModel):
+        compartments = [
+            compartment("W"),
+            compartment("X"),
+            compartment("Y"),
+            compartment("Z"),
+        ]
+
+        requirements = [
+            AttributeDef("beta", float, Shapes.N),
+            AttributeDef("gamma", float, Shapes.N),
+        ]
+
+        def edges(self, symbols):
+            W, X, Y, Z = symbols.all_compartments
+            beta, gamma = symbols.all_requirements
+            return [
+                edge(W, Y, rate=beta * W * Y),
+                edge(X, Y, rate=beta * X * Y),
+                edge(Y, Z, rate=gamma * Y),
+            ]
+
+    with pytest.raises(Exception):  # noqa: PT011
+        # This won't succeed because the child redefines compartments
+        # in a way that is incompatible with the inherited `edges()`;
+        # this is caught during validation.
+        class ChildIpm(ParentIpm):
             compartments = [
                 compartment("S"),
                 compartment("I"),
                 compartment("R"),
             ]
 
-            requirements = [
-                AttributeDef("beta", type=float, shape=Shapes.TxN),
-                AttributeDef("gamma", type=float, shape=Shapes.TxN),
-                AttributeDef("xi", type=float, shape=Shapes.TxN),
-                AttributeDef("birth_rate", type=float, shape=Shapes.TxN),
-                AttributeDef("death_rate", type=float, shape=Shapes.TxN),
-            ]
 
-            def edges(self, symbols):
-                [S, I, R] = symbols.all_compartments
-                [b, g, x, br, dr] = symbols.all_requirements
-                N = Max(1, S + I + R)
-                return [
-                    edge(S, I, rate=b * S * I / N),
-                    edge(I, R, rate=g * I),
-                    edge(R, S, rate=x * R),
-                    edge(BIRTH, S, rate=br * N),
-                    edge(S, DEATH, rate=dr * S),
-                    edge(I, DEATH, rate=dr * I),
-                    edge(R, DEATH, rate=dr * R),
-                ]
-
-        strata = [("one", SirsBirthDeath()), ("two", SirsBirthDeath())]
-        meta_requirements = ()
-
-        def meta_edges(symbols: MultiStrataModelSymbols) -> Sequence[TransitionDef]:
-            [S1, I1, R1] = symbols.strata_compartments("one")
-            [S2, I2, R2] = symbols.strata_compartments("two")
-            [b1, *_] = symbols.strata_requirements("one")
-            [b2, *_] = symbols.strata_requirements("two")
-            N1 = Max(1, S1 + I1 + R1)
-            N2 = Max(1, S2 + I2 + R2)
-            return [
-                edge(S1, I1, rate=b1 * S1 * I2 / N2),
-                edge(S2, I2, rate=b2 * S2 * I1 / N1),
-            ]
-
-        multi_ipm = CombinedCompartmentModel(strata, meta_requirements, meta_edges)
-
-        self.assertEqual(
-            [x.name.full for x in multi_ipm.compartments],
-            ["S_one", "I_one", "R_one", "S_two", "I_two", "R_two"],
-        )
-
-        n = CompartmentName
-        self.assertTrue(are_instances([*multi_ipm.transitions], EdgeDef))
-        self.assertEqual(
-            [
-                (x.name.compartment_from, x.name.compartment_to)
-                for x in multi_ipm.transitions
-                if isinstance(x, EdgeDef)
-            ],
-            [
-                # base model for one
-                (n("S", None, "one"), n("I", None, "one")),
-                (n("I", None, "one"), n("R", None, "one")),
-                (n("R", None, "one"), n("S", None, "one")),
-                (n("birth", "exogenous", None), n("S", None, "one")),
-                (n("S", None, "one"), n("death", "exogenous", None)),
-                (n("I", None, "one"), n("death", "exogenous", None)),
-                (n("R", None, "one"), n("death", "exogenous", None)),
-                # base model for two
-                (n("S", None, "two"), n("I", None, "two")),
-                (n("I", None, "two"), n("R", None, "two")),
-                (n("R", None, "two"), n("S", None, "two")),
-                (n("birth", "exogenous", None), n("S", None, "two")),
-                (n("S", None, "two"), n("death", "exogenous", None)),
-                (n("I", None, "two"), n("death", "exogenous", None)),
-                (n("R", None, "two"), n("death", "exogenous", None)),
-                # meta edges
-                (n("S", None, "one"), n("I", None, "one")),
-                (n("S", None, "two"), n("I", None, "two")),
-            ],
-        )
+def test_compartment_name():
+    # Test for compartment names that include spaces.
+    with pytest.raises(ValueError, match="(?i)invalid compartment name: some people"):
+        compartment("some people")
 
 
-class _TestSir(CompartmentModel):
-    compartments = [
-        compartment("S", tags=["test_tag"]),
-        compartment("I"),
-        compartment("R"),
-    ]
+def test_attribute_name():
+    # Test for attribute names that include spaces.
+    with pytest.raises(ValueError, match="(?i)invalid attribute name: some attribute"):
+        AttributeDef("some attribute", float, Shapes.N)
 
-    requirements = [
-        AttributeDef("beta", float, Shapes.N),
-        AttributeDef("gamma", float, Shapes.N),
-    ]
 
-    def edges(self, symbols):
-        S, I, R = symbols.compartments("S", "I", "R")
-        beta, gamma = symbols.requirements("beta", "gamma")
-        return [
-            edge(S, I, rate=beta * S * I),
-            edge(I, R, rate=gamma * I),
+def test_combined_01():
+    class Sir(CompartmentModel):
+        compartments = [
+            compartment("S"),
+            compartment("I"),
+            compartment("R"),
         ]
 
+        requirements = [
+            AttributeDef("beta", float, Shapes.TxN),
+            AttributeDef("gamma", float, Shapes.TxN),
+        ]
 
-class QuantityStrategyTest(unittest.TestCase):
-    def test_select_compartments(self):
-        ipm = _TestSir()
-        self.assertEqual(
-            ipm.select.compartments().labels,
-            ["S", "I", "R"],
-        )
-        self.assertEqual(
-            ipm.select.compartments("S").labels,
-            ["S"],
-        )
-        self.assertEqual(
-            ipm.select.compartments("S*").labels,
-            ["S"],
-        )
-        self.assertEqual(
-            ipm.select.compartments("S", "R").labels,
-            ["S", "R"],
-        )
-        self.assertEqual(
-            ipm.select.compartments("*").labels,
-            ["S", "I", "R"],
-        )
+        def edges(self, symbols):
+            S, I, R = symbols.all_compartments
+            beta, gamma = symbols.all_requirements
+            return [
+                edge(S, I, rate=beta * S * I),
+                edge(I, R, rate=gamma * I),
+            ]
 
-    def test_select_nonmatching_compartment(self):
-        ipm = _TestSir()
-        with self.assertRaises(ValueError):
-            ipm.select.compartments("S", "X")
+    sir = Sir()
 
-    def test_select_events(self):
-        ipm = _TestSir()
-        self.assertEqual(
-            ipm.select.events().labels,
-            ["S → I", "I → R"],
-        )
-        self.assertEqual(
-            ipm.select.events("S->I").labels,
-            ["S → I"],
-        )
-        self.assertEqual(
-            ipm.select.events("*->I").labels,
-            ["S → I"],
-        )
-        self.assertEqual(
-            ipm.select.events("S->*").labels,
-            ["S → I"],
-        )
-        self.assertEqual(
-            ipm.select.events("*->*").labels,
-            ["S → I", "I → R"],
-        )
-        self.assertEqual(
-            ipm.select.events("S->I*").labels,
-            ["S → I"],
-        )
-        self.assertEqual(
-            ipm.select.events("S*->*").labels,
-            ["S → I"],
-        )
+    def meta_edges(sym: MultiStrataModelSymbols):
+        [S_aaa, I_aaa, R_aaa] = sym.strata_compartments("aaa")
+        [S_bbb, I_bbb, R_bbb] = sym.strata_compartments("bbb")
+        [beta_bbb_aaa] = sym.all_meta_requirements
+        N_aaa = Max(1, S_aaa + I_aaa + R_aaa)
+        return [
+            edge(S_bbb, I_bbb, beta_bbb_aaa * S_bbb * I_aaa / N_aaa),
+        ]
 
-    def test_select_nonmatching_event(self):
-        ipm = _TestSir()
-        with self.assertRaises(ValueError):
-            ipm.select.events("S->X")
+    model = CombinedCompartmentModel(
+        strata=[("aaa", sir), ("bbb", sir)],
+        meta_requirements=[
+            AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
+        ],
+        meta_edges=meta_edges,
+    )
 
-    def test_select_by(self):
-        ipm = _TestSir()
-        self.assertEqual(
-            ipm.select.by(compartments="S", events="S->I").labels,
-            ["S", "S → I"],
-        )
-        self.assertEqual(
-            ipm.select.by(compartments="S").labels,
-            ["S"],
-        )
-        self.assertEqual(
-            ipm.select.by(events="S->I").labels,
-            ["S → I"],
-        )
-        self.assertEqual(
-            ipm.select.by(compartments=["S", "I"], events=["S->I", "I->R"]).labels,
-            ["S", "I", "S → I", "I → R"],
-        )
+    assert model.num_compartments == 6
+    assert model.num_events == 5
+
+    # Check compartment mapping
+    assert [c.name.full for c in model.compartments] == [
+        "S_aaa",
+        "I_aaa",
+        "R_aaa",
+        "S_bbb",
+        "I_bbb",
+        "R_bbb",
+    ]
+
+    assert model.symbols.all_compartments == list(
+        sympy_symbols("S_aaa I_aaa R_aaa S_bbb I_bbb R_bbb")
+    )
+
+    assert model.symbols.strata_compartments("aaa") == list(
+        sympy_symbols("S_aaa I_aaa R_aaa")
+    )
+
+    assert model.symbols.strata_compartments("bbb") == list(
+        sympy_symbols("S_bbb I_bbb R_bbb")
+    )
+
+    # Check requirement mapping
+    assert model.symbols.all_requirements == list(
+        sympy_symbols("beta_aaa gamma_aaa beta_bbb gamma_bbb beta_bbb_aaa_meta")
+    )
+
+    assert model.symbols.strata_requirements("aaa") == list(
+        sympy_symbols("beta_aaa gamma_aaa")
+    )
+
+    assert model.symbols.strata_requirements("bbb") == list(
+        sympy_symbols("beta_bbb gamma_bbb")
+    )
+
+    assert model.symbols.all_meta_requirements == [sympy_symbols("beta_bbb_aaa_meta")]
+
+    assert list(model.requirements_dict.keys()) == [
+        AbsoluteName("gpm:aaa", "ipm", "beta"),
+        AbsoluteName("gpm:aaa", "ipm", "gamma"),
+        AbsoluteName("gpm:bbb", "ipm", "beta"),
+        AbsoluteName("gpm:bbb", "ipm", "gamma"),
+        AbsoluteName("meta", "ipm", "beta_bbb_aaa"),
+    ]
+
+    assert list(model.requirements_dict.values()) == [
+        AttributeDef("beta", float, Shapes.TxN),
+        AttributeDef("gamma", float, Shapes.TxN),
+        AttributeDef("beta", float, Shapes.TxN),
+        AttributeDef("gamma", float, Shapes.TxN),
+        AttributeDef("beta_bbb_aaa", float, Shapes.TxN),
+    ]
+
+    [S_aaa, I_aaa, R_aaa, S_bbb, I_bbb, R_bbb] = model.symbols.all_compartments
+    [beta_aaa, gamma_aaa, beta_bbb, gamma_bbb, beta_bbb_aaa] = (
+        model.symbols.all_requirements
+    )
+
+    s_to_i = EdgeName(
+        CompartmentName("S", None, None),
+        CompartmentName("I", None, None),
+    )
+    i_to_r = EdgeName(
+        CompartmentName("I", None, None),
+        CompartmentName("R", None, None),
+    )
+
+    assert model.transitions == [
+        EdgeDef(
+            s_to_i.with_strata("aaa"),
+            beta_aaa * S_aaa * I_aaa,
+            S_aaa,
+            I_aaa,
+        ),
+        EdgeDef(
+            i_to_r.with_strata("aaa"),
+            gamma_aaa * I_aaa,
+            I_aaa,
+            R_aaa,
+        ),
+        EdgeDef(
+            s_to_i.with_strata("bbb"),
+            beta_bbb * S_bbb * I_bbb,
+            S_bbb,
+            I_bbb,
+        ),
+        EdgeDef(
+            i_to_r.with_strata("bbb"),
+            gamma_bbb * I_bbb,
+            I_bbb,
+            R_bbb,
+        ),
+        EdgeDef(
+            s_to_i.with_strata("bbb"),
+            beta_bbb_aaa * S_bbb * I_aaa / Max(1, S_aaa + I_aaa + R_aaa),
+            S_bbb,
+            I_bbb,
+        ),
+    ]
 
 
-class QuantitySelectionTest(unittest.TestCase):
-    def test_compartment_index(self):
-        ipm = _TestSir()
-        self.assertEqual(1, ipm.select.compartments("I").compartment_index)
-        with self.assertRaises(ValueError):
-            ipm.select.compartments("I", "R").compartment_index
-        with self.assertRaises(ValueError):
-            ipm.select.compartments().compartment_index
+def test_combined_02():
+    # Test a combined model using exogenous classes.
+    class SirsBirthDeath(CompartmentModel):
+        compartments = [
+            compartment("S"),
+            compartment("I"),
+            compartment("R"),
+        ]
 
-    def test_compartment_indices(self):
-        ipm = _TestSir()
-        self.assertEqual((0, 2), ipm.select.compartments("S", "R").compartment_indices)
+        requirements = [
+            AttributeDef("beta", type=float, shape=Shapes.TxN),
+            AttributeDef("gamma", type=float, shape=Shapes.TxN),
+            AttributeDef("xi", type=float, shape=Shapes.TxN),
+            AttributeDef("birth_rate", type=float, shape=Shapes.TxN),
+            AttributeDef("death_rate", type=float, shape=Shapes.TxN),
+        ]
 
-    def test_event_index(self):
-        ipm = _TestSir()
-        self.assertEqual(0, ipm.select.events("S->I").event_index)
-        with self.assertRaises(ValueError):
-            ipm.select.events("S->I", "I->R").event_index
-        with self.assertRaises(ValueError):
-            ipm.select.events().event_index
+        def edges(self, symbols):
+            [S, I, R] = symbols.all_compartments
+            [b, g, x, br, dr] = symbols.all_requirements
+            N = Max(1, S + I + R)
+            return [
+                edge(S, I, rate=b * S * I / N),
+                edge(I, R, rate=g * I),
+                edge(R, S, rate=x * R),
+                edge(BIRTH, S, rate=br * N),
+                edge(S, DEATH, rate=dr * S),
+                edge(I, DEATH, rate=dr * I),
+                edge(R, DEATH, rate=dr * R),
+            ]
 
-    def test_event_indices(self):
-        ipm = _TestSir()
-        self.assertEqual((0, 1), ipm.select.events("S->I", "I->R").event_indices)
+    strata = [("one", SirsBirthDeath()), ("two", SirsBirthDeath())]
+    meta_requirements = ()
+
+    def meta_edges(symbols: MultiStrataModelSymbols) -> Sequence[TransitionDef]:
+        [S1, I1, R1] = symbols.strata_compartments("one")
+        [S2, I2, R2] = symbols.strata_compartments("two")
+        [b1, *_] = symbols.strata_requirements("one")
+        [b2, *_] = symbols.strata_requirements("two")
+        N1 = Max(1, S1 + I1 + R1)
+        N2 = Max(1, S2 + I2 + R2)
+        return [
+            edge(S1, I1, rate=b1 * S1 * I2 / N2),
+            edge(S2, I2, rate=b2 * S2 * I1 / N1),
+        ]
+
+    multi_ipm = CombinedCompartmentModel(strata, meta_requirements, meta_edges)
+
+    assert [x.name.full for x in multi_ipm.compartments] == [
+        "S_one",
+        "I_one",
+        "R_one",
+        "S_two",
+        "I_two",
+        "R_two",
+    ]
+
+    n = CompartmentName
+    assert are_instances([*multi_ipm.transitions], EdgeDef)
+    assert [
+        (x.name.compartment_from, x.name.compartment_to)
+        for x in multi_ipm.transitions
+        if isinstance(x, EdgeDef)
+    ] == [
+        # base model for one
+        (n("S", None, "one"), n("I", None, "one")),
+        (n("I", None, "one"), n("R", None, "one")),
+        (n("R", None, "one"), n("S", None, "one")),
+        (n("birth", "exogenous", None), n("S", None, "one")),
+        (n("S", None, "one"), n("death", "exogenous", None)),
+        (n("I", None, "one"), n("death", "exogenous", None)),
+        (n("R", None, "one"), n("death", "exogenous", None)),
+        # base model for two
+        (n("S", None, "two"), n("I", None, "two")),
+        (n("I", None, "two"), n("R", None, "two")),
+        (n("R", None, "two"), n("S", None, "two")),
+        (n("birth", "exogenous", None), n("S", None, "two")),
+        (n("S", None, "two"), n("death", "exogenous", None)),
+        (n("I", None, "two"), n("death", "exogenous", None)),
+        (n("R", None, "two"), n("death", "exogenous", None)),
+        # meta edges
+        (n("S", None, "one"), n("I", None, "one")),
+        (n("S", None, "two"), n("I", None, "two")),
+    ]
+
+
+#######################
+# IPM selection tests #
+#######################
+
+
+@pytest.fixture
+def sir_ipm():
+    class _TestSir(CompartmentModel):
+        compartments = [
+            compartment("S", tags=["test_tag"]),
+            compartment("I"),
+            compartment("R"),
+        ]
+
+        requirements = [
+            AttributeDef("beta", float, Shapes.N),
+            AttributeDef("gamma", float, Shapes.N),
+        ]
+
+        def edges(self, symbols):
+            S, I, R = symbols.compartments("S", "I", "R")
+            beta, gamma = symbols.requirements("beta", "gamma")
+            return [
+                edge(S, I, rate=beta * S * I),
+                edge(I, R, rate=gamma * I),
+            ]
+
+    return _TestSir()
+
+
+def test_select_compartments(sir_ipm):
+    assert sir_ipm.select.compartments().labels == ["S", "I", "R"]
+    assert sir_ipm.select.compartments("S").labels == ["S"]
+    assert sir_ipm.select.compartments("S*").labels == ["S"]
+    assert sir_ipm.select.compartments("S", "R").labels == ["S", "R"]
+    assert sir_ipm.select.compartments("*").labels == ["S", "I", "R"]
+
+
+def test_select_nonmatching_compartment(sir_ipm):
+    with pytest.raises(
+        ValueError,
+        match="(?i)pattern 'X' did not match any compartments",
+    ):
+        sir_ipm.select.compartments("S", "X")
+
+
+def test_select_events(sir_ipm):
+    assert sir_ipm.select.events().labels == ["S → I", "I → R"]
+    assert sir_ipm.select.events("S->I").labels == ["S → I"]
+    assert sir_ipm.select.events("*->I").labels == ["S → I"]
+    assert sir_ipm.select.events("S->*").labels == ["S → I"]
+    assert sir_ipm.select.events("*->*").labels == ["S → I", "I → R"]
+    assert sir_ipm.select.events("S->I*").labels == ["S → I"]
+    assert sir_ipm.select.events("S*->*").labels == ["S → I"]
+
+
+def test_select_nonmatching_event(sir_ipm):
+    with pytest.raises(ValueError, match="(?i)pattern 'S->X' did not match any events"):
+        sir_ipm.select.events("S->X")
+
+
+def test_select_by(sir_ipm):
+    assert sir_ipm.select.by(compartments="S", events="S->I").labels == ["S", "S → I"]
+    assert sir_ipm.select.by(compartments="S").labels == ["S"]
+    assert sir_ipm.select.by(events="S->I").labels == ["S → I"]
+    assert (
+        sir_ipm.select.by(compartments=["S", "I"], events=["S->I", "I->R"]).labels
+    ) == ["S", "I", "S → I", "I → R"]
+
+
+def test_compartment_index(sir_ipm):
+    assert sir_ipm.select.compartments("I").compartment_index == 1
+    with pytest.raises(ValueError, match="(?i)must contain exactly one compartment"):
+        sir_ipm.select.compartments("I", "R").compartment_index
+    with pytest.raises(ValueError, match="(?i)must contain exactly one compartment"):
+        sir_ipm.select.compartments().compartment_index
+
+
+def test_compartment_indices(sir_ipm):
+    assert sir_ipm.select.compartments("S", "R").compartment_indices == (0, 2)
+
+
+def test_event_index(sir_ipm):
+    assert sir_ipm.select.events("S->I").event_index == 0
+    with pytest.raises(ValueError, match="(?i)must contain exactly one event"):
+        sir_ipm.select.events("S->I", "I->R").event_index
+    with pytest.raises(ValueError, match="(?i)must contain exactly one event"):
+        sir_ipm.select.events().event_index
+
+
+def test_event_indices(sir_ipm):
+    assert sir_ipm.select.events("S->I", "I->R").event_indices == (0, 1)
