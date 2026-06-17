@@ -65,6 +65,37 @@ def test_csv_n_01(tmp_path, rng):
     assert np.array_equal(actual, expected["Adult"].to_numpy())
 
 
+def test_csv_n_01b(tmp_path, rng):
+    # CSVFileN successful case
+    # - Uses state_abbrev as the geo key
+    # - There are some invalid geographies in the data that should be ignored
+    nodes = ["AZ", "FL", "GA", "XX", "YY", "ZZ"]
+
+    tmp_file = tmp_path / "population.csv"
+    data_df = _generate_n_data(rng, nodes)
+    # scramble row order when writing file
+    data_df.sample(frac=1, random_state=rng).to_csv(tmp_file, header=False, index=False)
+
+    # NOTE: to test filtering, load a geographic subset of the original data
+    # this scope is the same as above but minus AZ and NY
+    subset_nodes = ["FL", "GA"]
+    actual = (
+        csv.CSVFileN(
+            file_path=tmp_file,
+            dtype=np.int64,
+            key_col=1,
+            key_type="state_abbrev",
+            data_col=3,
+        )
+        .with_context(scope=StateScope.in_states(subset_nodes, year=2015))
+        .evaluate()
+    )
+
+    expected = data_df[data_df["Node"].isin(subset_nodes)]
+
+    assert np.array_equal(actual, expected["Adult"].to_numpy())
+
+
 def test_csv_n_02(tmp_path, rng):
     # CSVFileN successful case
     # - Data has a header and multiple data columns
