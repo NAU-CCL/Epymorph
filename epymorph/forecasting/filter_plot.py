@@ -907,7 +907,7 @@ class PlotRendererPipeline:
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+        transform: Callable[[pd.DataFrame], pd.DataFrame] = identity,
     ) -> None:
         """
         Produces a line plot of a filter output. This is a plot where
@@ -1114,6 +1114,7 @@ class PlotRendererPipeline:
         legend: LegendOption = "auto",
         delta_t: float | None = None,
         ax_title: str = "{n}: {t}",
+        bandwidth: float | str = "scott",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         label_format: str = "{q}",
@@ -1155,6 +1156,7 @@ class PlotRendererPipeline:
                 delta_t=delta_t,
                 label_format=label_format,
                 legend=legend,
+                bandwidth=bandwidth,
                 time_format=time_format,
                 transform=transform,  # type: ignore
             )
