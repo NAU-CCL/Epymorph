@@ -1,8 +1,7 @@
 # ruff: noqa: PT009,PT027
 import math
 import unittest
-from functools import wraps
-from typing import Callable, ParamSpec, TypeVar
+from typing import TypeVar
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -414,36 +413,6 @@ AD = AttributeDef
 AN = AbsoluteName.parse
 NP = NamePattern.parse
 
-ParamT = ParamSpec("ParamT")
-ReturnT = TypeVar("ReturnT")
-FunctionType = Callable[ParamT, ReturnT]
-
-
-def count_calls(f):
-    # NOTE: this is a count per class-method, not instance-method
-    # That's preferable here because epymorph clones the instances anyway
-    # so the func instance we pass in isn't exactly the one that's used.
-    n = 0
-
-    @wraps(f)
-    def g(*args, **kwargs):
-        nonlocal n
-        n += 1
-        return f(*args, **kwargs)
-
-    def get_calls():
-        nonlocal n
-        return n
-
-    setattr(g, "__calls__", get_calls)
-    return g
-
-
-def calls(f):
-    if (calls := getattr(f, "__calls__", None)) is not None:
-        return calls()
-    raise ValueError("This function was not wrapped with @count_calls")
-
 
 class ParamEvalTest(unittest.TestCase):
     time_frame = TimeFrame.of("2020-01-01", 3)
@@ -457,14 +426,17 @@ class ParamEvalTest(unittest.TestCase):
         return np.broadcast_to(value, shape=(self.time_frame.days, self.scope.nodes))
 
     def test_eval_01(self):
+        eval_calls = 0
+
         # Test that a function can be used for multiple strata
         # but will only be evaluated once if all of its dependencies
         # do not vary by strata.
         class F(ParamFunction):
             requirements = (AD("gamma", float, Shapes.TxN),)
 
-            @count_calls
             def evaluate(self):
+                nonlocal eval_calls
+                eval_calls += 1
                 return 2.0 * self.data("gamma")
 
         reqs = ReqTree.of(
@@ -485,20 +457,23 @@ class ParamEvalTest(unittest.TestCase):
         )
 
         # F evaluated once; beta is 1.4 for both strata
-        self.assertEqual(1, calls(F.evaluate))
+        self.assertEqual(1, eval_calls)
         exp = self._to_txn(1.4)
         np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
         np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
 
     def test_eval_02(self):
+        eval_calls = 0
+
         # Test that a function declared "randomized" will be evaluated
         # every time it's referenced, even if it otherwise wouldn't need to be.
         class F(ParamFunction):
             requirements = (AD("gamma", float, Shapes.TxN),)
             randomized = True
 
-            @count_calls
             def evaluate(self):
+                nonlocal eval_calls
+                eval_calls += 1
                 return 2.0 * self.data("gamma")
 
         reqs = ReqTree.of(
@@ -520,19 +495,22 @@ class ParamEvalTest(unittest.TestCase):
 
         # F evaluated twice, even though it produces the same value each time
         # beta is 1.4 for both strata
-        self.assertEqual(2, calls(F.evaluate))
+        self.assertEqual(2, eval_calls)
         exp = self._to_txn(1.4)
         np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
         np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
 
     def test_eval_03(self):
+        eval_calls = 0
+
         # Test a single function resolving to different values
         # due to dependencies that differ between strata.
         class F(ParamFunction):
             requirements = (AD("gamma", float, Shapes.TxN),)
 
-            @count_calls
             def evaluate(self):
+                nonlocal eval_calls
+                eval_calls += 1
                 return 2.0 * self.data("gamma")
 
         reqs = ReqTree.of(
@@ -556,17 +534,20 @@ class ParamEvalTest(unittest.TestCase):
         # F evaluated twice
         # beta is 0.6 for strata a
         # and 1.4 for strata b
-        self.assertEqual(2, calls(F.evaluate))
+        self.assertEqual(2, eval_calls)
         np.testing.assert_array_equal(self._to_txn(0.6), values["gpm:a::ipm::beta"])
         np.testing.assert_array_equal(self._to_txn(1.4), values["gpm:b::ipm::beta"])
 
     def test_eval_04(self):
+        eval_calls = 0
+
         # Test a single shared random value when a single instance is used.
         class F(ParamFunction):
             requirements = (AD("gamma", float, Shapes.TxN),)
 
-            @count_calls
             def evaluate(self):
+                nonlocal eval_calls
+                eval_calls += 1
                 return 2.0 * self.data("gamma") * self.rng.random()
 
         reqs = ReqTree.of(
@@ -588,19 +569,22 @@ class ParamEvalTest(unittest.TestCase):
 
         # F evaluated once
         # beta is random, but the same value is shared between strata
-        self.assertEqual(1, calls(F.evaluate))
+        self.assertEqual(1, eval_calls)
         np.testing.assert_array_equal(
             values["gpm:a::ipm::beta"],
             values["gpm:b::ipm::beta"],
         )
 
     def test_eval_05(self):
+        eval_calls = 0
+
         # Test unique random values by virtue of providing different instances.
         class F(ParamFunction):
             requirements = (AD("gamma", float, Shapes.TxN),)
 
-            @count_calls
             def evaluate(self):
+                nonlocal eval_calls
+                eval_calls += 1
                 return 2.0 * self.data("gamma") * self.rng.random()
 
         reqs = ReqTree.of(
@@ -623,7 +607,7 @@ class ParamEvalTest(unittest.TestCase):
 
         # Fs evaluated once each
         # beta is two unique random numbers
-        self.assertEqual(2, calls(F.evaluate))
+        self.assertEqual(2, eval_calls)
         self.assertFalse(
             np.array_equal(
                 values["gpm:a::ipm::beta"],
@@ -680,20 +664,25 @@ class ParamEvalTest(unittest.TestCase):
         self.assertEqual(values["gpm:b::ipm::beta"].shape, (T, N))
 
     def test_eval_07(self):
+        f_eval_calls = 0
+        g_eval_calls = 0
+
         # Test when a dependent function is not randomized,
         # it and its parent will only be evaluated once.
         class F(ParamFunction):
             requirements = (AD("gamma", float, Shapes.TxN),)
 
-            @count_calls
             def evaluate(self):
+                nonlocal f_eval_calls
+                f_eval_calls += 1
                 return 2.0 * self.data("gamma")
 
         class G(ParamFunction):
             randomized = False
 
-            @count_calls
             def evaluate(self):
+                nonlocal g_eval_calls
+                g_eval_calls += 1
                 return np.asarray(3.0 * self.rng.random())
 
         reqs = ReqTree.of(
@@ -715,8 +704,8 @@ class ParamEvalTest(unittest.TestCase):
 
         # F and G(randomized=False) evaluated once
         # same random values for both strata
-        self.assertEqual(1, calls(F.evaluate))
-        self.assertEqual(1, calls(G.evaluate))
+        self.assertEqual(1, f_eval_calls)
+        self.assertEqual(1, g_eval_calls)
         np.testing.assert_array_equal(
             values["gpm:a::ipm::beta"],
             values["gpm:b::ipm::beta"],
@@ -727,20 +716,25 @@ class ParamEvalTest(unittest.TestCase):
         )
 
     def test_eval_08(self):
+        f_eval_calls = 0
+        g_eval_calls = 0
+
         # Test when a dependent function is randomized,
         # it and its parent will be evaluated every time.
         class F(ParamFunction):
             requirements = (AD("gamma", float, Shapes.TxN),)
 
-            @count_calls
             def evaluate(self):
+                nonlocal f_eval_calls
+                f_eval_calls += 1
                 return 2.0 * self.data("gamma")
 
         class G(ParamFunction):
             randomized = True
 
-            @count_calls
             def evaluate(self):
+                nonlocal g_eval_calls
+                g_eval_calls += 1
                 return np.asarray(3.0 * self.rng.random())
 
         reqs = ReqTree.of(
@@ -762,8 +756,8 @@ class ParamEvalTest(unittest.TestCase):
 
         # F and G(randomized=True) evaluated twice
         # different random values for the strata
-        self.assertEqual(2, calls(F.evaluate))
-        self.assertEqual(2, calls(G.evaluate))
+        self.assertEqual(2, f_eval_calls)
+        self.assertEqual(2, g_eval_calls)
         self.assertFalse(
             np.array_equal(
                 values["gpm:a::ipm::beta"],
