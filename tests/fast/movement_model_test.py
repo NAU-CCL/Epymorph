@@ -1,6 +1,4 @@
 # ruff: noqa: PT009,PT027
-import unittest
-
 import numpy as np
 import pytest
 from numpy.typing import NDArray
@@ -37,109 +35,7 @@ def test_parse_day_of_week(input_str, expected):
     assert parse_days_of_week(input_str) == expected
 
 
-class MovementClauseTest(unittest.TestCase):
-    def test_create_01(self):
-        # Successful clause!
-        class MyClause(MovementClause):
-            leaves = TickIndex(step=0)
-            returns = TickDelta(days=0, step=1)
-            predicate = EveryDay()
-
-            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                return np.array([0])
-
-        clause = MyClause()
-        self.assertEqual(clause.leaves, TickIndex(step=0))
-        self.assertEqual(clause.returns, TickDelta(days=0, step=1))
-
-    def test_create_02(self):
-        # Test for error: forgot 'leaves'
-        with self.assertRaises(TypeError) as e:
-
-            class MyClause(MovementClause):
-                # leaves = TickIndex(step=0)  # noqa: ERA001
-                returns = TickDelta(days=0, step=1)
-                predicate = EveryDay()
-
-                def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                    return np.array([0])
-
-        self.assertIn("invalid leaves in myclause", str(e.exception).lower())
-
-    def test_create_03(self):
-        # Test for error: forgot 'returns'
-        with self.assertRaises(TypeError) as e:
-
-            class MyClause(MovementClause):
-                leaves = TickIndex(step=0)
-                # returns = TickDelta(days=0, step=1)  # noqa: ERA001
-                predicate = EveryDay()
-
-                def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                    return np.array([0])
-
-        self.assertIn("invalid returns in myclause", str(e.exception).lower())
-
-    def test_create_04(self):
-        # Test for error: forgot 'predicate'
-        with self.assertRaises(TypeError) as e:
-
-            class MyClause(MovementClause):
-                leaves = TickIndex(step=0)
-                returns = TickDelta(days=0, step=1)
-                # predicate = EveryDay()  # noqa: ERA001
-
-                def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                    return np.array([0])
-
-        self.assertIn("invalid predicate in myclause", str(e.exception).lower())
-
-    def test_create_05(self):
-        # Test for error: invalid 'leaves' index
-        with self.assertRaises(TypeError) as e:
-
-            class MyClause(MovementClause):
-                leaves = TickIndex(step=-23)
-                returns = TickDelta(days=0, step=1)
-                predicate = EveryDay()
-
-                def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                    return np.array([0])
-
-        self.assertIn("step indices cannot be less than zero", str(e.exception).lower())
-
-    def test_create_06(self):
-        # Test for error: invalid 'returns' index
-        with self.assertRaises(TypeError) as e:
-
-            class MyClause(MovementClause):
-                leaves = TickIndex(step=0)
-                returns = TickDelta(days=0, step=-23)
-                predicate = EveryDay()
-
-                def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                    return np.array([0])
-
-        self.assertIn("step indices cannot be less than zero", str(e.exception).lower())
-
-    def test_create_07(self):
-        # Successful clause with a NEVER returns policy.
-        class MyClause(MovementClause):
-            leaves = TickIndex(step=0)
-            returns = NEVER
-            predicate = EveryDay()
-
-            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                return np.array([0])
-
-        clause = MyClause()
-        self.assertEqual(clause.leaves, TickIndex(step=0))
-        self.assertEqual(
-            clause.returns, TickDelta(days=-1, step=-1)
-        )  # equivalent to NEVER
-
-
-class MovementModelTest(unittest.TestCase):
+def test_movement_clause_create_01():
     class MyClause(MovementClause):
         leaves = TickIndex(step=0)
         returns = TickDelta(days=0, step=1)
@@ -148,79 +44,157 @@ class MovementModelTest(unittest.TestCase):
         def evaluate(self, tick: Tick) -> NDArray[SimDType]:
             return np.array([0])
 
-    def test_create_01(self):
+    clause = MyClause()
+    assert clause.leaves == TickIndex(step=0)
+    assert clause.returns == TickDelta(days=0, step=1)
+
+
+def test_movement_clause_create_02_missing_leaves():
+    with pytest.raises(TypeError, match=r"(?i)invalid leaves in myclause"):
+
+        class MyClause(MovementClause):
+            # leaves = TickIndex(step=0)  # noqa: ERA001
+            returns = TickDelta(days=0, step=1)
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+                return np.array([0])
+
+
+def test_movement_clause_create_03_missing_returns():
+    with pytest.raises(TypeError, match=r"(?i)invalid returns in myclause"):
+
+        class MyClause(MovementClause):
+            leaves = TickIndex(step=0)
+            # returns = TickDelta(days=0, step=1)  # noqa: ERA001
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+                return np.array([0])
+
+
+def test_movement_clause_create_04_missing_predicate():
+    with pytest.raises(TypeError, match=r"(?i)invalid predicate in myclause"):
+
+        class MyClause(MovementClause):
+            leaves = TickIndex(step=0)
+            returns = TickDelta(days=0, step=1)
+            # predicate = EveryDay()  # noqa: ERA001
+
+            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+                return np.array([0])
+
+
+def test_movement_clause_create_05_invalid_leaves_index():
+    with pytest.raises(TypeError, match=r"(?i)step indices cannot be less than zero"):
+
+        class MyClause(MovementClause):
+            leaves = TickIndex(step=-23)
+            returns = TickDelta(days=0, step=1)
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+                return np.array([0])
+
+
+def test_movement_clause_create_06_invalid_returns_index():
+    with pytest.raises(TypeError, match=r"(?i)step indices cannot be less than zero"):
+
+        class MyClause(MovementClause):
+            leaves = TickIndex(step=0)
+            returns = TickDelta(days=0, step=-23)
+            predicate = EveryDay()
+
+            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+                return np.array([0])
+
+
+def test_movement_clause_create_07_never_returns():
+    class MyClause(MovementClause):
+        leaves = TickIndex(step=0)
+        returns = NEVER
+        predicate = EveryDay()
+
+        def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+            return np.array([0])
+
+    clause = MyClause()
+    assert clause.leaves == TickIndex(step=0)
+    assert clause.returns == TickDelta(days=-1, step=-1)
+
+
+class MyClause(MovementClause):
+    leaves = TickIndex(step=0)
+    returns = TickDelta(days=0, step=1)
+    predicate = EveryDay()
+
+    def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+        return np.array([0])
+
+
+def test_movement_model_create_01():
+    class MyModel(MovementModel):
+        steps = [1 / 3, 2 / 3]
+        clauses = [MyClause()]
+
+    model = MyModel()
+    assert model.steps == (1 / 3, 2 / 3)
+    assert len(model.clauses) == 1
+    assert model.clauses[0].__class__.__name__ == "MyClause"
+
+
+def test_movement_model_create_02_missing_steps():
+    with pytest.raises(TypeError, match=r"(?i)invalid steps in mymodel"):
+
+        class MyModel(MovementModel):
+            # steps = [1 / 3, 2 / 3]  # noqa: ERA001
+            clauses = [MyClause()]
+
+
+def test_movement_model_create_03_steps_sum_error():
+    with pytest.raises(TypeError, match=r"(?i)steps must sum to 1"):
+
+        class MyModel1(MovementModel):
+            steps = [1 / 3, 1 / 3]
+            clauses = [MyClause()]
+
+    with pytest.raises(TypeError, match=r"(?i)steps must sum to 1"):
+
+        class MyModel2(MovementModel):
+            steps = [0.1, 0.75, 0.3, 0.2]
+            clauses = [MyClause()]
+
+
+def test_movement_model_create_04_steps_positive_check():
+    with pytest.raises(TypeError, match=r"(?i)steps must all be greater than 0"):
+
+        class MyModel(MovementModel):
+            steps = [1 / 3, -1 / 3, 1 / 3, 2 / 3]
+            clauses = [MyClause()]
+
+
+def test_movement_model_create_05_missing_clauses():
+    with pytest.raises(TypeError, match=r"(?i)invalid clauses"):
+
         class MyModel(MovementModel):
             steps = [1 / 3, 2 / 3]
-            clauses = [MovementModelTest.MyClause()]
+            # clauses = [MyClause()]  # noqa: ERA001
 
-        model = MyModel()
-        self.assertEqual(model.steps, (1 / 3, 2 / 3))
-        self.assertEqual(len(model.clauses), 1)
-        self.assertEqual(model.clauses[0].__class__.__name__, "MyClause")
 
-    def test_create_02(self):
-        # Test for error: forgot 'steps'
-        with self.assertRaises(TypeError) as e:
+def test_movement_model_create_06_clause_references_invalid_step():
+    class MyClauseLocal(MovementClause):
+        leaves = TickIndex(0)
+        returns = TickDelta(days=0, step=9)
+        predicate = EveryDay()
 
-            class MyModel(MovementModel):
-                # steps = [1 / 3, 2 / 3]  # noqa: ERA001
-                clauses = [MovementModelTest.MyClause()]
+        def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+            return np.array([0])
 
-        self.assertIn("invalid steps in mymodel", str(e.exception).lower())
+    with pytest.raises(
+        TypeError,
+        match=r"(?i)return step \(9\) which is not a valid index",
+    ):
 
-    def test_create_03(self):
-        # Test for error: 'steps' don't sum to 1
-        with self.assertRaises(TypeError) as e:
-
-            class MyModel1(MovementModel):
-                steps = [1 / 3, 1 / 3]
-                clauses = [MovementModelTest.MyClause()]
-
-        self.assertIn("steps must sum to 1", str(e.exception).lower())
-
-        with self.assertRaises(TypeError) as e:
-
-            class MyModel2(MovementModel):
-                steps = [0.1, 0.75, 0.3, 0.2]
-                clauses = [MovementModelTest.MyClause()]
-
-        self.assertIn("steps must sum to 1", str(e.exception).lower())
-
-    def test_create_04(self):
-        # Test for error: 'steps' aren't all greater than zero
-        with self.assertRaises(TypeError) as e:
-
-            class MyModel(MovementModel):
-                steps = [1 / 3, -1 / 3, 1 / 3, 2 / 3]
-                clauses = [MovementModelTest.MyClause()]
-
-        self.assertIn("steps must all be greater than 0", str(e.exception).lower())
-
-    def test_create_05(self):
-        # Test for error: forgot 'clauses'
-        with self.assertRaises(TypeError) as e:
-
-            class MyModel(MovementModel):
-                steps = [1 / 3, 2 / 3]
-                # clauses = [MovementModelTest.MyClause()]  # noqa: ERA001
-
-        self.assertIn("invalid clauses", str(e.exception).lower())
-
-    def test_create_06(self):
-        # Test for error: clauses reference steps which don't exist
-        with self.assertRaises(TypeError) as e:
-
-            class MyClause(MovementClause):
-                leaves = TickIndex(0)
-                returns = TickDelta(days=0, step=9)
-                predicate = EveryDay()
-
-                def evaluate(self, tick: Tick) -> NDArray[SimDType]:
-                    return np.array([0])
-
-            class MyModel(MovementModel):
-                steps = (1 / 3, 2 / 3)
-                clauses = (MyClause(),)
-
-        self.assertIn("return step (9)", str(e.exception).lower())
-        self.assertIn("not a valid index", str(e.exception).lower())
+        class MyModel(MovementModel):
+            steps = (1 / 3, 2 / 3)
+            clauses = (MyClauseLocal(),)

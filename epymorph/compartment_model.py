@@ -6,11 +6,10 @@ as groupings of integer-numbered individuals.
 
 import dataclasses
 import re
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
-    Any,
     Callable,
     Iterable,
     Iterator,
@@ -19,9 +18,7 @@ from typing import (
     OrderedDict,
     Self,
     Sequence,
-    Type,
     TypeVar,
-    final,
 )
 from warnings import warn
 
@@ -638,10 +635,6 @@ class BaseCompartmentModel(ABC):
     # And to avoid requiring users to call the initializer, the rest
     # of the attributes are cached_properties which initialize lazily.
 
-    # These private attributes will be computed during instance initialization
-    # by the metaclass. It's better to do eager evaluation of these things
-    # so that issues in model construction pop up sooner than later.
-
     @property
     def quantities(self) -> Iterator[CompartmentDef | EdgeDef]:
         """All quantities in the model, compartments then edges, in definition order."""
@@ -715,26 +708,157 @@ class BaseCompartmentModel(ABC):
         render_diagram(ipm=self, file=file, figsize=figsize)
 
 
-def validate_compartment_model(model: BaseCompartmentModel) -> None:
+####################################
+# Single-strata Compartment Models #
+####################################
+
+
+class CompartmentModel(BaseCompartmentModel, ABC):
     """
-    Validate an IPM definition.
+    A compartment model definition and its corresponding metadata.
+    Effectively, a collection of compartments, transitions between compartments,
+    and the data parameters which are required to compute the transitions.
 
-    Parameters
-    ----------
-    model :
-        The IPM to validate.
-
-    Raises
-    ------
-    IPMValidationError
-        If there are structural issues in the IPM.
+    Examples
+    --------
+    --8<-- "docs/_examples/compartment_model_CompartmentModel.md"
     """
-    name = model.__class__.__name__
 
-    # we need a sneaky way to suppress IPM validation warnings sometimes
-    suppress_warnings = getattr(model, "_suppress_ipm_validation_warnings", False)
+    @classmethod
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        _validate_compartment_model(cls)
 
-    # transitions cannot have the source and destination both be exogenous;
+    _symbols: ModelSymbols
+    _transitions: Sequence[TransitionDef]
+    _events: Sequence[EdgeDef]
+    _requirements_dict: OrderedDict[AbsoluteName, AttributeDef]
+
+    def __init__(self) -> None:
+        super().__init__()
+        # epymorph's initialization logic, invoked by __init__
+        self._symbols = ModelSymbols(
+            [(c.name.full, c.name.full) for c in self.compartments],
+            [(r.name, r.name) for r in self.requirements],
+        )
+        self._transitions = self.edges(self._symbols)
+        self._events = list(_as_events(self._transitions))
+        self._requirements_dict = OrderedDict(
+            [
+                (AbsoluteName(gpm_strata(DEFAULT_STRATA), "ipm", r.name), r)
+                for r in self.requirements
+            ]
+        )
+
+    @abstractmethod
+    def edges(self, symbols: ModelSymbols) -> Sequence[TransitionDef]:
+        """
+        When implementing a `CompartmentModel`, override this method
+        to define the transition edges between compartments.
+
+        Parameters
+        ----------
+        symbols :
+            An object containing the symbols in the model for use in
+            declaring edges. These include compartments and data requirements.
+
+        Returns
+        -------
+        :
+            The transitions for the model.
+        """
+
+    @property
+    @override
+    def symbols(self) -> ModelSymbols:
+        return self._symbols
+
+    @property
+    @override
+    def transitions(self) -> Sequence[TransitionDef]:
+        return self._transitions
+
+    @property
+    @override
+    def events(self) -> Sequence[EdgeDef]:
+        return self._events
+
+    @property
+    @override
+    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
+        return self._requirements_dict
+
+    @property
+    @override
+    def strata(self) -> Sequence[str]:
+        return ["all"]
+
+    @property
+    @override
+    def is_multistrata(self) -> bool:
+        return False
+
+
+def _check_field_def(
+    model_cls: type,
+    field_name: str,
+    expected_type: type,
+    at_least_one: bool,
+) -> None:
+    err_prefix = f"Invalid {field_name} in {model_cls.__name__}"
+    # only validate fields that are defined on the class itself, not from a parent
+    field_value = model_cls.__dict__.get(field_name)
+    if field_value is None:
+        return
+    try:
+        iter(field_value)
+    except TypeError:
+        err = f"{err_prefix}: please specify as an iterable, like a list or tuple."
+        raise IPMValidationError(err)
+    if at_least_one and len(field_value) == 0:
+        err = f"{err_prefix}: please specify at least one value."
+        raise IPMValidationError(err)
+    if not are_instances(field_value, expected_type):
+        err = f"{err_prefix}: must be instances of {expected_type.__name__}."
+        raise IPMValidationError(err)
+    if not are_unique(str(x) for x in field_value):
+        err = f"{err_prefix}: names must be unique."
+        raise IPMValidationError(err)
+
+
+def _get_concrete_method_from_mro(cls: type, member_name: str) -> object | None:
+    """Return the closest non-abstract method from the class's MRO (or None)."""
+    for current in cls.mro():
+        member = current.__dict__.get(member_name, None)
+        if member is None:
+            continue
+        if getattr(member, "__isabstractmethod__", False):
+            continue
+        return member
+    else:
+        return None
+
+
+def _validate_compartment_model(model_cls: type[CompartmentModel]) -> None:
+    """Validate an IPM definition."""
+    _check_field_def(model_cls, "compartments", CompartmentDef, at_least_one=True)
+    _check_field_def(model_cls, "requirements", AttributeDef, at_least_one=False)
+    # Make compartments and requirements immutable.
+    model_cls.compartments = tuple(model_cls.compartments)
+    model_cls.requirements = tuple(model_cls.requirements)
+
+    # Skip any further validation for abstract classes.
+    # A simple way to check, in this case, is to see if the `edges` method
+    # has been conceretely defined here or in a parent class.
+    # (Relying on ABC to raise TypeError for abstract classes doesn't work in this case,
+    #  since this runs in __init_subclass__, possibly before ABC does its work.)
+    if _get_concrete_method_from_mro(model_cls, "edges") is None:
+        return
+
+    name = model_cls.__name__
+    model = model_cls()
+
+    # Transitions cannot have the source and destination both be exogenous;
     # this would be madness.
     if any(
         edge.compartment_from in exogenous_states
@@ -784,15 +908,14 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
 
     # declared compartments minus used compartments is ideally empty,
     # otherwise raise a warning
-    if not suppress_warnings:
-        extra_comps = set(model.symbols.all_compartments).difference(trx_symbols)
-        if len(extra_comps) > 0:
-            msg = (
-                f"Possible issue in {name}: "
-                "not all declared compartments are being used in transitions.\n"
-                f"Extra compartments: {', '.join(map(str, extra_comps))}"
-            )
-            warn(msg)
+    extra_comps = set(model.symbols.all_compartments).difference(trx_symbols)
+    if len(extra_comps) > 0:
+        msg = (
+            f"Possible issue in {name}: "
+            "not all declared compartments are being used in transitions.\n"
+            f"Extra compartments: {', '.join(map(str, extra_comps))}"
+        )
+        warn(msg)
 
     # transition requirements minus declared requirements should be empty
     missing_reqs = trx_reqs.difference(model.symbols.all_requirements)
@@ -806,154 +929,14 @@ def validate_compartment_model(model: BaseCompartmentModel) -> None:
 
     # declared requirements minus used requirements is ideally empty,
     # otherwise raise a warning
-    if not suppress_warnings:
-        extra_reqs = set(model.symbols.all_requirements).difference(trx_reqs)
-        if len(extra_reqs) > 0:
-            msg = (
-                f"Possible issue in {name}: "
-                "not all declared requirements are being used in transitions.\n"
-                f"Extra requirements: {', '.join(map(str, extra_reqs))}"
-            )
-            warn(msg)
-
-
-####################################
-# Single-strata Compartment Models #
-####################################
-
-
-class CompartmentModelClass(ABCMeta):
-    """`CompartmentModel` metaclass; enforces proper implementation."""
-
-    def __new__(
-        cls: Type["CompartmentModelClass"],
-        name: str,
-        bases: tuple[type, ...],
-        dct: dict[str, Any],
-    ) -> "CompartmentModelClass":
-        # Skip these checks for abstract classes:
-        cls0 = super().__new__(cls, name, bases, dct)
-        if getattr(cls0, "__abstractmethods__", False):
-            return cls0
-
-        # Check model compartments.
-        cmps = dct.get("compartments")
-        if cmps is None or not isinstance(cmps, (list, tuple)):
-            err = f"Invalid compartments in {name}: please specify as a list or tuple."
-            raise IPMValidationError(err)
-        if len(cmps) == 0:
-            err = (
-                f"Invalid compartments in {name}: "
-                "please specify at least one compartment."
-            )
-            raise IPMValidationError(err)
-        if not are_instances(cmps, CompartmentDef):
-            err = (
-                f"Invalid compartments in {name}: must be instances of CompartmentDef."
-            )
-            raise IPMValidationError(err)
-        if not are_unique(c.name for c in cmps):
-            err = f"Invalid compartments in {name}: compartment names must be unique."
-            raise IPMValidationError(err)
-        # Make compartments immutable.
-        dct["compartments"] = tuple(cmps)
-
-        # Check transitions... we have to instantiate the class.
-        new_cls = super().__new__(cls, name, bases, dct)
-        instance = new_cls()
-        validate_compartment_model(instance)
-        return new_cls
-
-    def __call__(cls, *args, **kwargs):
-        # Perform our initialization on all newly created instances.
-        # This allows us to bypass writing an __init__ function, which
-        # end users would then have to remember to call when subclassing.
-        # This should make implementations easier to write.
-        instance = super().__call__(*args, **kwargs)
-        instance._construct_model()
-        return instance
-
-
-class CompartmentModel(BaseCompartmentModel, ABC, metaclass=CompartmentModelClass):
-    """
-    A compartment model definition and its corresponding metadata.
-    Effectively, a collection of compartments, transitions between compartments,
-    and the data parameters which are required to compute the transitions.
-
-    Examples
-    --------
-    --8<-- "docs/_examples/compartment_model_CompartmentModel.md"
-    """
-
-    @abstractmethod
-    def edges(self, symbols: ModelSymbols) -> Sequence[TransitionDef]:
-        """
-        When implementing a `CompartmentModel`, override this method
-        to define the transition edges between compartments.
-
-        Parameters
-        ----------
-        symbols :
-            An object containing the symbols in the model for use in
-            declaring edges. These include compartments and data requirements.
-
-        Returns
-        -------
-        :
-            The transitions for the model.
-        """
-
-    _symbols: ModelSymbols
-    _transitions: Sequence[TransitionDef]
-    _events: Sequence[EdgeDef]
-    _requirements_dict: OrderedDict[AbsoluteName, AttributeDef]
-
-    @final
-    def _construct_model(self):
-        # epymorph's initialization logic, invoked by the metaclass
-        # (see metaclass __call__ for more info)
-        self._symbols = ModelSymbols(
-            [(c.name.full, c.name.full) for c in self.compartments],
-            [(r.name, r.name) for r in self.requirements],
+    extra_reqs = set(model.symbols.all_requirements).difference(trx_reqs)
+    if len(extra_reqs) > 0:
+        msg = (
+            f"Possible issue in {name}: "
+            "not all declared requirements are being used in transitions.\n"
+            f"Extra requirements: {', '.join(map(str, extra_reqs))}"
         )
-        self._transitions = self.edges(self.symbols)
-        self._events = list(_as_events(self._transitions))
-        self._requirements_dict = OrderedDict(
-            [
-                (AbsoluteName(gpm_strata(DEFAULT_STRATA), "ipm", r.name), r)
-                for r in self.requirements
-            ]
-        )
-
-    @property
-    @override
-    def symbols(self) -> ModelSymbols:
-        return self._symbols
-
-    @property
-    @override
-    def transitions(self) -> Sequence[TransitionDef]:
-        return self._transitions
-
-    @property
-    @override
-    def events(self) -> Sequence[EdgeDef]:
-        return self._events
-
-    @property
-    @override
-    def requirements_dict(self) -> OrderedDict[AbsoluteName, AttributeDef]:
-        return self._requirements_dict
-
-    @property
-    @override
-    def strata(self) -> Sequence[str]:
-        return ["all"]
-
-    @property
-    @override
-    def is_multistrata(self) -> bool:
-        return False
+        warn(msg)
 
 
 ###################################

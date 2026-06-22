@@ -1,8 +1,7 @@
 """General simulation requisites and utility functions."""
 
-import functools
 import re
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from copy import deepcopy
 from datetime import date, timedelta
 from typing import (
@@ -15,7 +14,6 @@ from typing import (
     Never,
     Self,
     Sequence,
-    Type,
     TypeGuard,
     TypeVar,
     Union,
@@ -23,7 +21,6 @@ from typing import (
 )
 
 import numpy as np
-from jsonpickle.util import is_picklable
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
 from sympy import Expr
@@ -527,76 +524,6 @@ def validate_context_for_shape(context: Context, shape: DataShape) -> None:
 
 _EMPTY_CONTEXT = Context.of(NAME_PLACEHOLDER)
 
-_TypeT = TypeVar("_TypeT")
-
-
-class SimulationFunctionClass(ABCMeta):
-    """`SimulationFunction` metaclass; enforces proper implementation."""
-
-    def __new__(
-        cls: Type[_TypeT],
-        name: str,
-        bases: tuple[type, ...],
-        dct: dict[str, Any],
-    ) -> _TypeT:
-        # Check requirements if this class overrides it.
-        # (Otherwise class will inherit from parent.)
-        if (reqs := dct.get("requirements")) is not None:
-            # The user may specify requirements as a property, in which case we
-            # can't validate much about the implementation.
-            if not isinstance(reqs, property):
-                # But if it's a static value, check types:
-                if not isinstance(reqs, (list, tuple)):
-                    raise TypeError(
-                        f"Invalid requirements in {name}: "
-                        "please specify as a list or tuple."
-                    )
-                if not are_instances(reqs, AttributeDef):
-                    raise TypeError(
-                        f"Invalid requirements in {name}: "
-                        "must be instances of AttributeDef."
-                    )
-                if not are_unique(r.name for r in reqs):
-                    raise TypeError(
-                        f"Invalid requirements in {name}: "
-                        "requirement names must be unique."
-                    )
-                # Make requirements list immutable
-                dct["requirements"] = tuple(reqs)
-
-        # Check serializable
-        if not is_picklable(name, cls):
-            raise TypeError(
-                f"Invalid simulation function {name}: "
-                "classes must be serializable (using jsonpickle)."
-            )
-
-        # NOTE: is_picklable() is misleading here; it does not guarantee that instances
-        # of a class are picklable, nor (if you called it against an instance) that all
-        # of the instance's attributes are picklable. jsonpickle simply ignores
-        # unpicklable fields, decoding objects into attribute swiss cheese.
-        # It will be more effective to check that all of the attributes of an object
-        # are picklable before we try to serialize it...
-        # Thus I don't think we can guarantee picklability at class definition time.
-        # Something like:
-        #   [(n, is_picklable(n, x)) for n, x in obj.__dict__.items()]  # noqa: ERA001
-        # Why worry? Lambda functions are probably the most likely problem;
-        # they're not picklable by default.
-        # But a simple workaround is to use a def function and,
-        # if needed, partial function application.
-
-        if (orig_evaluate := dct.get("evaluate")) is not None:
-
-            @functools.wraps(orig_evaluate)
-            def evaluate(self, *args, **kwargs):
-                result = orig_evaluate(self, *args, **kwargs)
-                self.validate(result)
-                return result
-
-            dct["evaluate"] = evaluate
-
-        return super().__new__(cls, name, bases, dct)
-
 
 ResultT = TypeVar("ResultT")
 """The result type of a `SimulationFunction`."""
@@ -607,7 +534,7 @@ DeferFunctionT = TypeVar("DeferFunctionT", bound="BaseSimulationFunction")
 """The type of a `SimulationFunction` during deference."""
 
 
-class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunctionClass):
+class BaseSimulationFunction(ABC, Generic[ResultT]):
     """
     A function which runs in the context of a simulation to produce a value
     (as a numpy array).
@@ -627,6 +554,11 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
     [epymorph.simulation.SimulationFunction][] and
     [epymorph.simulation.SimulationTickFunction][] for more concrete subclasses.
     """
+
+    @classmethod
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        _validate_simulation_function(cls)
 
     # NOTE: this base class exists so that we don't limit the signature of `evaluate`.
     # `SimulationTickFunction` evaluates using the current tick, while
@@ -857,6 +789,51 @@ class BaseSimulationFunction(ABC, Generic[ResultT], metaclass=SimulationFunction
         in other context elements, like the geo scope.
         """
         return self._ctx.dim
+
+
+def _validate_simulation_function(function_cls: type[BaseSimulationFunction]) -> None:
+    """Validate a SimulationFunction definition."""
+    name = function_cls.__name__
+
+    # Validate requirements.
+    reqs = function_cls.__dict__.get("requirements")
+    if reqs is not None and not isinstance(reqs, property):
+        err_prefix = f"Invalid requirements in {name}"
+        # The function may not override requirements in this class,
+        # in which case we can assume the parent's requirements were already validated.
+        # Also the user may specify requirements as a property,
+        # in which case we can't validate much about the implementation.
+        # But if it's a static value, check types:
+        try:
+            iter(reqs)
+        except TypeError:
+            err = f"{err_prefix}: please specify as an iterable, like a list or tuple."
+            raise TypeError(err)
+        if not are_instances(reqs, AttributeDef):
+            err = f"{err_prefix}: must be instances of AttributeDef."
+            raise TypeError(err)
+        if not are_unique(r.name for r in reqs):
+            err = f"{err_prefix}: requirement names must be unique."
+            raise TypeError(err)
+
+        # Make requirements list immutable
+        function_cls.requirements = tuple(reqs)
+
+    def is_concrete_method(method) -> TypeGuard[Callable]:
+        return method is not None and not getattr(method, "__isabstractmethod__", False)
+
+    # Wrap evaluate() with validate() if both are defined concretely.
+    orig_evaluate = getattr(function_cls, "evaluate", None)
+    validate = getattr(function_cls, "validate", None)
+
+    if is_concrete_method(orig_evaluate) and is_concrete_method(validate):
+
+        def evaluate(self, *args, **kwargs):
+            result = orig_evaluate(self, *args, **kwargs)
+            validate(self, result)
+            return result
+
+        setattr(function_cls, "evaluate", evaluate)
 
 
 @is_recursive_value.register
