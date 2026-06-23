@@ -57,7 +57,7 @@ dev = [
   # Testing
   "pytest~=9.0.3",
   "pytest-cov~=7.1.0",
-  "vcrpy~=8.1.1",
+  "vcrpy~=8.2.1",
   # Build
   "setuptools-scm~=10.0.5",
   # Documentation
