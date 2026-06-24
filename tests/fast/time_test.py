@@ -301,3 +301,187 @@ class TestNBins(unittest.TestCase):
             expected_bins=10,
             expected_ticks_per_bin=2,
         )
+
+
+#####################
+# TimeSelector.days #
+#####################
+
+
+@pytest.fixture
+def ten_day_frame():
+    return TimeFrame.of("2022-09-15", 10)
+
+
+def test_selector_days_valid_full_range(ten_day_frame):
+    sel = ten_day_frame.select.days(0, 9)
+    day_slice, step = sel.selection
+    assert day_slice == slice(0, 10)
+    assert step is None
+
+
+def test_selector_days_valid_partial_range(ten_day_frame):
+    sel = ten_day_frame.select.days(2, 5)
+    day_slice, _ = sel.selection
+    assert day_slice == slice(2, 6)
+
+
+def test_selector_days_valid_single_day(ten_day_frame):
+    sel = ten_day_frame.select.days(4, 4)
+    day_slice, _ = sel.selection
+    assert day_slice == slice(4, 5)
+
+
+def test_selector_days_out_of_range_to_day(ten_day_frame):
+    with pytest.raises(ValueError, match="out of range"):
+        ten_day_frame.select.days(0, 10)
+
+
+def test_selector_days_out_of_range_both(ten_day_frame):
+    with pytest.raises(ValueError, match="out of range"):
+        ten_day_frame.select.days(80, 80)
+
+
+def test_selector_days_out_of_range_from_day(ten_day_frame):
+    with pytest.raises(ValueError, match="out of range"):
+        ten_day_frame.select.days(10, 10)
+
+
+def test_selector_days_negative_from_day(ten_day_frame):
+    with pytest.raises(ValueError, match="must be non-negative"):
+        ten_day_frame.select.days(-1, 5)
+
+
+def test_selector_days_negative_to_day(ten_day_frame):
+    with pytest.raises(ValueError, match="must be non-negative"):
+        ten_day_frame.select.days(0, -1)
+
+
+def test_selector_days_from_day_after_to_day(ten_day_frame):
+    with pytest.raises(ValueError, match="from_day must be less than or equal"):
+        ten_day_frame.select.days(5, 3)
+
+
+####################
+# TimeSelector.all #
+####################
+
+
+def test_selector_all(ten_day_frame):
+    sel = ten_day_frame.select.all()
+    day_slice, step = sel.selection
+    assert day_slice == slice(None)
+    assert step is None
+
+
+def test_selector_all_with_step(ten_day_frame):
+    sel = ten_day_frame.select.all(step=1)
+    day_slice, step = sel.selection
+    assert day_slice == slice(None)
+    assert step == 1
+
+
+######################
+# TimeSelector.range #
+######################
+
+
+def test_selector_range_full(ten_day_frame):
+    sel = ten_day_frame.select.range("2022-09-15", "2022-09-24")
+    day_slice, step = sel.selection
+    assert day_slice == slice(0, 10)
+    assert step is None
+
+
+def test_selector_range_partial(ten_day_frame):
+    sel = ten_day_frame.select.range("2022-09-17", "2022-09-21")
+    day_slice, _ = sel.selection
+    assert day_slice == slice(2, 7)
+
+
+def test_selector_range_date_objects(ten_day_frame):
+    sel = ten_day_frame.select.range(date(2022, 9, 17), date(2022, 9, 21))
+    day_slice, _ = sel.selection
+    assert day_slice == slice(2, 7)
+
+
+def test_selector_range_with_step(ten_day_frame):
+    sel = ten_day_frame.select.range("2022-09-17", "2022-09-21", step=0)
+    _, step = sel.selection
+    assert step == 0
+
+
+def test_selector_range_out_of_bounds(ten_day_frame):
+    with pytest.raises(ValueError, match="must specify a subset"):
+        ten_day_frame.select.range("2022-09-15", "2022-09-30")
+
+
+def test_selector_range_before_start(ten_day_frame):
+    with pytest.raises(ValueError, match="must specify a subset"):
+        ten_day_frame.select.range("2022-09-01", "2022-09-20")
+
+
+#######################
+# TimeSelector.rangex #
+#######################
+
+
+def test_selector_rangex_full(ten_day_frame):
+    # exclusive: "2022-09-25" is the day after the last day
+    sel = ten_day_frame.select.rangex("2022-09-15", "2022-09-25")
+    day_slice, step = sel.selection
+    assert day_slice == slice(0, 10)
+    assert step is None
+
+
+def test_selector_rangex_partial(ten_day_frame):
+    sel = ten_day_frame.select.rangex("2022-09-17", "2022-09-22")
+    day_slice, _ = sel.selection
+    assert day_slice == slice(2, 7)
+
+
+def test_selector_rangex_with_step(ten_day_frame):
+    sel = ten_day_frame.select.rangex("2022-09-17", "2022-09-22", step=1)
+    _, step = sel.selection
+    assert step == 1
+
+
+def test_selector_rangex_out_of_bounds(ten_day_frame):
+    with pytest.raises(ValueError, match="must specify a subset"):
+        ten_day_frame.select.rangex("2022-09-15", "2022-09-30")
+
+
+#####################
+# TimeSelector.year #
+#####################
+
+
+@pytest.fixture
+def year_2022_frame():
+    return TimeFrame.year(2022)
+
+
+def test_selector_year_valid(year_2022_frame):
+    sel = year_2022_frame.select.year(2022)
+    day_slice, step = sel.selection
+    assert day_slice == slice(0, 365)
+    assert step is None
+
+
+def test_selector_year_valid_multi_year():
+    multi_year_frame = TimeFrame.rangex("2021-01-01", "2024-01-01")
+    sel = multi_year_frame.select.year(2022)
+    day_slice, step = sel.selection
+    assert day_slice == slice(365, 730)
+    assert step is None
+
+
+def test_selector_year_with_step(year_2022_frame):
+    sel = year_2022_frame.select.year(2022, step=0)
+    _, step = sel.selection
+    assert step == 0
+
+
+def test_selector_year_out_of_bounds(year_2022_frame):
+    with pytest.raises(ValueError, match="must specify a subset"):
+        year_2022_frame.select.year(2023)

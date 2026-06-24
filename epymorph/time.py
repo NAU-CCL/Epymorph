@@ -1115,6 +1115,16 @@ class TimeSelector:
         :
             The selection strategy object.
         """
+        max_day = self.time_frame.duration_days - 1
+        if from_day < 0 or to_day < 0:
+            err = "from_day and to_day must be non-negative."
+            raise ValueError(err)
+        if from_day > to_day:
+            err = "from_day must be less than or equal to to_day."
+            raise ValueError(err)
+        if from_day > max_day or to_day > max_day:
+            err = f"Day indices out of range for time frame selection (max {max_day})."
+            raise ValueError(err)
         return TimeSelection(self.time_frame, (slice(from_day, to_day + 1), step))
 
     def range(
