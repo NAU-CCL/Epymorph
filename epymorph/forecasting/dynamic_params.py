@@ -2,11 +2,11 @@
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Self, final
 
 import numpy as np
 import scipy as sp
-from attr import dataclass
 from numpy.typing import NDArray
 from typing_extensions import override
 
