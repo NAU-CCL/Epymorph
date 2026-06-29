@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import (
     Callable,
     Literal,
+    Sequence,
 )
 
 import matplotlib.pyplot as plt
@@ -159,7 +160,7 @@ class PlotRendererPipeline:
         ----------
         realization:
             A realization selection to make on the output data,
-            you can either select all vthe realizations or a random subset.
+            you can either select all the realizations or a random subset.
 
         geo :
             The geographic selection to make on the output data.
@@ -232,7 +233,7 @@ class PlotRendererPipeline:
             # Initialize subplots and info
             num_nodes = self.output.rume.scope.nodes
             nrows = ceil(num_nodes / ncols)
-            fig, axes = plt.subplots(
+            fig, axs = plt.subplots(
                 nrows,
                 ncols,
                 figsize=(ncols * 5, nrows * 3),
@@ -240,7 +241,7 @@ class PlotRendererPipeline:
                 layout="constrained",
             )
 
-            if line_kwargs is None:
+            if line_kwargs is None or len(line_kwargs) == 0:
                 line_kwargs = [{}]
 
             if transform is None:
@@ -250,7 +251,8 @@ class PlotRendererPipeline:
             fig.supylabel("count")
 
             # Title
-            fig.suptitle(t=title)  # type: ignore
+            if title is not None:
+                fig.suptitle(t=title)
 
             # Legend
             if legend == "auto":
@@ -258,17 +260,17 @@ class PlotRendererPipeline:
                 legend = "on" if len(quantity.labels) <= 4 else "off"
 
             # Call the spaghetti plot function, this returns the lines
-            lines = self.spaghetti_plt(  # noqa: F841
-                axes,
+            _ = self.spaghetti_plt(
+                axs,
                 realization,
                 geo,
                 time,
                 quantity,
-                legend,
-                line_kwargs,
-                time_format,
-                label_format,
-                transform,
+                legend=legend,
+                line_kwargs=line_kwargs,
+                time_format=time_format,
+                label_format=label_format,
+                transform=transform,
             )
 
             if to_file is None:
@@ -283,17 +285,62 @@ class PlotRendererPipeline:
 
     def spaghetti_plt(
         self,
-        axes: NDArray[Axes],  # type: ignore
+        axs: Axes | NDArray[np.object_],
         realizations: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
+        *,
         legend: LegendOption = "auto",
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
         label_format: str = "{q}",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
+        """
+        Draw spaghetti plots onto the array of matplotlib `Axes`, such as what is
+        returned by matplotlib `subplots()`. This is a variant of the method
+        `spaghetti`.
+
+        Parameters
+        ----------
+        axs:
+            The array of matplotlib `Axes` on which to draw the plots.
+        realization:
+            A realization selection to make on the output data.
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        legend :
+            Whether and how to draw the plot legend.
+        line_kwargs :
+            A list of dictionaries of keyword arguments to be passed to the matplotlib
+            function that draws each line.
+        time_format :
+            Controls the formatting of the time axis (the horizontal axis).
+        label_format :
+            A format for the items displayed in the legend.
+        transform :
+            Allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it.
+
+        Returns
+        -------
+        :
+            The list of `Line2D` objects for each line drawn.
+        """
+        if isinstance(axs, Axes):
+            axs = np.array([axs])
+
+        if line_kwargs is None or len(line_kwargs) == 0:
+            line_kwargs = [{}]
+
+        if transform is None:
+            transform = identity
+
         data_df = munge_pipeline_output(self.output, realizations, geo, time, quantity)
 
         # Map time labels:
@@ -315,15 +362,15 @@ class PlotRendererPipeline:
         ).groupby("geo")
 
         # Plotting
-        axes = axes.flatten()
+        axs = axs.flatten()
 
         _time_format, _ = self._time_format(time, time_format)
 
         lines = list[Line2D]()
         plot_index = 0
         for geo_group_name, gdf in groups_df:
-            axes[plot_index].set_title(f"{geo_group_name}")
-            axes[plot_index].tick_params(axis="x", labelrotation=45)
+            axs[plot_index].set_title(f"{geo_group_name}")
+            axs[plot_index].tick_params(axis="x", labelrotation=45)
 
             quantity_groups = gdf.melt(
                 id_vars=["realization", "time", "geo"], var_name="quantity"
@@ -333,9 +380,9 @@ class PlotRendererPipeline:
             # not setting colors for individual lines!
             for (quantity_group_name, qdf), kwargs in zip(
                 quantity_groups,
-                cycle(line_kwargs),  # type: ignore
+                cycle(line_kwargs),
             ):
-                q_name = q_mapping[quantity_group_name]  # type: ignore
+                q_name = q_mapping[str(quantity_group_name)]
                 label = label_format.format(q=q_name)
                 curr_kwargs = {"label": label, **kwargs}
 
@@ -350,36 +397,32 @@ class PlotRendererPipeline:
                         label if realization_index == 1 else "_nolegend_"
                     )
                     rdf = rdf.sort_values("time")
-                    data = transform(rdf.assign(quantity=q_name))  # type: ignore
-                    ls = axes[plot_index].plot(
-                        rdf["time"], data["value"], **plot_kwargs
-                    )
+                    data = transform(rdf.assign(quantity=q_name))
+                    ls = axs[plot_index].plot(rdf["time"], data["value"], **plot_kwargs)
                     lines.extend(ls)
 
             ##Labels and Legend
             if legend == "on":
-                axes[plot_index].legend()
+                axs[plot_index].legend()
             elif legend == "outside":
-                axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                axs[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
-            if axes[plot_index].get_subplotspec().is_last_row():  # type: ignore
+            if axs[plot_index].get_subplotspec().is_last_row():
                 if _time_format == "date":
-                    axes[plot_index].set_xlabel("date")
-                    axes[plot_index].xaxis.set_major_formatter(
-                        DateFormatter("%Y-%m-%d")
-                    )
-                    axes[plot_index].xaxis.set_major_locator(
+                    axs[plot_index].set_xlabel("date")
+                    axs[plot_index].xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                    axs[plot_index].xaxis.set_major_locator(
                         AutoDateLocator(
                             minticks=6, maxticks=12, interval_multiples=True
                         )
                     )
 
                 elif _time_format == "day":
-                    axes[plot_index].set_xlabel("day")
+                    axs[plot_index].set_xlabel("day")
                 elif _time_format == "tick":
-                    axes[plot_index].set_xlabel("tick")
+                    axs[plot_index].set_xlabel("tick")
                 else:
-                    axes[plot_index].set_xlabel("time")
+                    axs[plot_index].set_xlabel("time")
 
             plot_index += 1
 
@@ -390,7 +433,7 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        credible_intervals: list[float] = [95.0],
+        credible_intervals: Sequence[float] = [95.0],
         *,
         sharex: bool = True,
         ncols: int = 3,
@@ -471,7 +514,7 @@ class PlotRendererPipeline:
         try:
             num_nodes = self.output.rume.scope.nodes
             nrows = ceil(num_nodes / ncols)
-            fig, axes = plt.subplots(
+            fig, axs = plt.subplots(
                 nrows,
                 ncols,
                 figsize=(ncols * 5, nrows * 3),
@@ -482,17 +525,18 @@ class PlotRendererPipeline:
             if transform is None:
                 transform = identity
 
-            if fill_kwargs is None:
+            if fill_kwargs is None or len(fill_kwargs) == 0:
                 fill_kwargs = [{}]
 
-            if line_kwargs is None:
+            if line_kwargs is None or len(line_kwargs) == 0:
                 line_kwargs = [{}]
 
             # Y-axis
             fig.supylabel("count")
 
             # Title
-            fig.suptitle(t=title)  # type: ignore
+            if title is not None:
+                fig.suptitle(t=title)
 
             # Legend
             if legend == "auto":
@@ -500,16 +544,16 @@ class PlotRendererPipeline:
                 legend = "on" if len(quantity.labels) <= 4 else "off"
 
             self.quantiles_plt(
-                axes,
+                axs,
                 geo,
                 time,
                 quantity,
                 credible_intervals,
-                legend,
-                fill_kwargs,
-                line_kwargs,
-                time_format,
-                transform,
+                legend=legend,
+                fill_kwargs=fill_kwargs,
+                line_kwargs=line_kwargs,
+                time_format=time_format,
+                transform=transform,
             )
 
             if to_file is None:
@@ -524,17 +568,59 @@ class PlotRendererPipeline:
 
     def quantiles_plt(
         self,
-        axes: NDArray[Axes],  # type: ignore
+        axs: Axes | NDArray[np.object_],
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        credible_intervals: list[float],
-        legend: LegendOption,
-        fill_kwargs: list[dict],
-        line_kwargs: list[dict],
-        time_format: TimeFormatOption,
-        transform: Callable[[pd.DataFrame], pd.DataFrame],
+        credible_intervals: Sequence[float],
+        *,
+        legend: LegendOption = "auto",
+        fill_kwargs: list[dict] | None = None,
+        line_kwargs: list[dict] | None = None,
+        time_format: TimeFormatOption = "auto",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
+        """
+        Draw quantile plots onto the array of matplotlib `Axes`, such as what is
+        returned by matplotlib `subplots`. This is a variant of the method
+        `quantile`.
+
+        Parameters
+        ----------
+        axs:
+            The array of matplotlib `Axes` on which to draw the plots.
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        credible_intervals :
+            A list of credible intervals you wish to plot.
+        legend :
+            Whether and how to draw the plot legend.
+        fill_kwargs :
+            A list of dictionaries corresponding to each credible interval.
+        line_kwargs :
+            A list of dictionaries correspondng to each credible interval's median.
+        time_format :
+            Controls the formatting of the time axis (the horizontal axis).
+        transform :
+            Allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it.
+        """
+        if isinstance(axs, Axes):
+            axs = np.array([axs])
+
+        if line_kwargs is None or len(line_kwargs) == 0:
+            line_kwargs = [{}]
+
+        if fill_kwargs is None or len(fill_kwargs) == 0:
+            fill_kwargs = [{}]
+
+        if transform is None:
+            transform = identity
+
         quantile_list = list(list())
         for interval in sorted(credible_intervals, reverse=True):
             lower, upper = self._compute_quantile_range(interval)
@@ -563,14 +649,14 @@ class PlotRendererPipeline:
         groups_df = data_df.groupby("geo")
 
         # Plotting
-        axes = axes.flatten()
+        axs = axs.flatten()
 
         _time_format, _ = self._time_format(time, time_format)
 
         plot_index = 0
         for geo_group_name, gdf in groups_df:
-            axes[plot_index].set_title(f"{geo_group_name}")
-            axes[plot_index].tick_params(axis="x", labelrotation=45)
+            axs[plot_index].set_title(f"{geo_group_name}")
+            axs[plot_index].tick_params(axis="x", labelrotation=45)
 
             for quantity_name, l_kwargs in zip(quantity.labels, cycle(line_kwargs)):
                 for (ci_index, (upper, lower)), f_kwargs in zip(
@@ -589,7 +675,7 @@ class PlotRendererPipeline:
                         pd.DataFrame({"value": gdf[quantity_name][upper]})
                     )
 
-                    axes[plot_index].fill_between(
+                    axs[plot_index].fill_between(
                         gdf["time"],
                         data_lower["value"],
                         data_upper["value"],
@@ -600,7 +686,7 @@ class PlotRendererPipeline:
                     pd.DataFrame({"value": gdf[quantity_name]["quantile_50.0"]})
                 )
 
-                axes[plot_index].plot(
+                axs[plot_index].plot(
                     gdf["time"],
                     data_median["value"],
                     label=f"Median of {quantity_name}",
@@ -608,30 +694,28 @@ class PlotRendererPipeline:
                     **l_kwargs,
                 )
 
-            ##Labels and Legend
+            # Labels and Legend
             if legend == "on":
-                axes[plot_index].legend()
+                axs[plot_index].legend()
             elif legend == "outside":
-                axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                axs[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
-            if axes[plot_index].get_subplotspec().is_last_row():
+            if axs[plot_index].get_subplotspec().is_last_row():
                 if _time_format == "date":
-                    axes[plot_index].set_xlabel("date")
-                    axes[plot_index].xaxis.set_major_formatter(
-                        DateFormatter("%Y-%m-%d")
-                    )
-                    axes[plot_index].xaxis.set_major_locator(
+                    axs[plot_index].set_xlabel("date")
+                    axs[plot_index].xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                    axs[plot_index].xaxis.set_major_locator(
                         AutoDateLocator(
                             minticks=6, maxticks=12, interval_multiples=True
                         )
                     )
 
                 elif _time_format == "day":
-                    axes[plot_index].set_xlabel("day")
+                    axs[plot_index].set_xlabel("day")
                 elif _time_format == "tick":
-                    axes[plot_index].set_xlabel("tick")
+                    axs[plot_index].set_xlabel("tick")
                 else:
-                    axes[plot_index].set_xlabel("time")
+                    axs[plot_index].set_xlabel("time")
 
             plot_index += 1
 
@@ -710,20 +794,19 @@ class PlotRendererPipeline:
             - "geo": the node ID (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
-        ```
         """
 
         try:
             num_nodes = self.output.rume.scope.nodes
             nrows = ceil(num_nodes / ncols)
-            fig, axes = plt.subplots(
+            fig, axs = plt.subplots(
                 nrows,
                 ncols,
                 figsize=(ncols * 5, nrows * 3),
                 layout="constrained",
             )
 
-            if hist_kwargs is None:
+            if hist_kwargs is None or len(hist_kwargs) == 0:
                 hist_kwargs = [{}]
 
             if transform is None:
@@ -736,7 +819,8 @@ class PlotRendererPipeline:
             fig.supxlabel("Count")
 
             # Title
-            fig.suptitle(t=title)  # type: ignore
+            if title is not None:
+                fig.suptitle(t=title)
 
             # Legend
             if legend == "auto":
@@ -744,14 +828,14 @@ class PlotRendererPipeline:
                 legend = "on" if len(quantity.labels) <= 4 else "off"
 
             self.histogram_plt(
-                axes,
+                axs,
                 geo,
                 time,
                 quantity,
-                legend,
-                hist_kwargs,
-                time_format,
-                transform,  # type: ignore
+                legend=legend,
+                hist_kwargs=hist_kwargs,
+                time_format=time_format,
+                transform=transform,
             )
 
             if to_file is None:
@@ -766,15 +850,49 @@ class PlotRendererPipeline:
 
     def histogram_plt(
         self,
-        axes: NDArray[Axes],  # type: ignore
+        axs: NDArray[np.object_],
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        legend: LegendOption,
-        hist_kwargs,
-        time_format: TimeFormatOption,
-        transform: Callable[[pd.DataFrame], pd.DataFrame],
+        *,
+        legend: LegendOption = "auto",
+        hist_kwargs: list[dict] | None = None,
+        time_format: TimeFormatOption = "auto",
+        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
+        """
+        Draw histogram plots onto the array of matplotlib `Axes`, such as what is
+        returned by matplotlib `subplots()`. This is a variant of the method
+        `histogram`.
+
+        Parameters
+        ----------
+        axs:
+            The array of matplotlib `Axes` on which to draw the plots.
+                Produces a histogram plot of a filter output. This is a plot where
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        hist_kwargs :
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws the bin plot.
+        legend :
+            Whether and how to draw the plot legend.
+        time_format :
+            Controls the formatting of the time axis (the horizontal axis).
+        transform :
+            Allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it.
+        """
+        if hist_kwargs is None or len(hist_kwargs) == 0:
+            hist_kwargs = [{}]
+
+        if transform is None:
+            transform = identity
+
         realizations_agg = self.output.select.all()
         data_df = munge_pipeline_output(
             self.output, realizations_agg, geo, time, quantity
@@ -793,25 +911,25 @@ class PlotRendererPipeline:
         groups_df = data_df.groupby("geo")
 
         # Plotting
-        axes = axes.flatten()
+        axs = axs.flatten()
 
         plot_index = 0
         for geo_group_name, gdf in groups_df:
-            axes[plot_index].set_title(f"{geo_group_name}")
-            axes[plot_index].tick_params(axis="x", labelrotation=45)
+            axs[plot_index].set_title(f"{geo_group_name}")
+            axs[plot_index].tick_params(axis="x", labelrotation=45)
 
             for quantity_name, kwargs in zip(quantity.labels, cycle(hist_kwargs)):
-                axes[plot_index].hist(
+                axs[plot_index].hist(
                     transform(gdf[quantity_name].to_frame()),
                     label=f"{quantity_name} at : {gdf['time'].iloc[0]}",
                     **kwargs,
                 )
 
-            ##Labels and Legend
+            # Labels and Legend
             if legend == "on":
-                axes[plot_index].legend()
+                axs[plot_index].legend()
             elif legend == "outside":
-                axes[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                axs[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
             plot_index += 1
 
@@ -898,7 +1016,6 @@ class PlotRendererPipeline:
             - "geo": the node ID (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
-
         """
 
         if not isinstance(realization, RealizationAggregation):
@@ -974,6 +1091,43 @@ class PlotRendererPipeline:
         time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
+        """
+        Draw lines onto the matplotlib `Axes`. This is a variant of the method
+        `histogram`.
+
+        Parameters
+        ----------
+        ax:
+            The `Axes` on which to draw.
+        realization :
+            A realization aggregation which returns some number of lines per
+            location in the GeoStrategy.
+        geo :
+            The geographic selection to make on the output data.
+        time :
+            The time selection to make on the output data.
+        quantity :
+            The quantity selection to make on the output data.
+        legend :
+            Whether and how to draw the plot legend.
+        line_kwargs :
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each line.
+        time_format :
+            Controls the formatting of the time axis (the horizontal axis).
+        label_format :
+            A format for the items displayed in the legend.
+        transform :
+            Allows you to specify an arbitrary transform function for the source
+            dataframe before we plot it, e.g., to rescale the values.
+
+        Returns
+        -------
+        :
+            The `Line2D` object for each line drawn; you can use this to have finer
+            control over the presentation of the lines.
+
+        """
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
 
