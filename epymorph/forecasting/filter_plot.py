@@ -3,7 +3,9 @@ from itertools import cycle
 from math import ceil
 from pathlib import Path
 from typing import (
+    Any,
     Callable,
+    Iterable,
     Literal,
     Sequence,
 )
@@ -285,7 +287,7 @@ class PlotRendererPipeline:
 
     def spaghetti_plt(
         self,
-        axs: Axes | NDArray[np.object_],
+        axs: Axes | Iterable[Axes] | NDArray[Any],
         realizations: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
@@ -299,7 +301,7 @@ class PlotRendererPipeline:
     ) -> list[Line2D]:
         """
         Draw spaghetti plots onto the array of matplotlib `Axes`, such as what is
-        returned by matplotlib `subplots()`. This is a variant of the method
+        returned by matplotlib `subplots`. This is a variant of the method
         `spaghetti`.
 
         Parameters
@@ -332,8 +334,13 @@ class PlotRendererPipeline:
         :
             The list of `Line2D` objects for each line drawn.
         """
-        if isinstance(axs, Axes):
-            axs = np.array([axs])
+
+        if isinstance(axs, np.ndarray):
+            ax_list = list(axs.flat)
+        elif isinstance(axs, Axes):
+            ax_list = [axs]
+        else:
+            ax_list = list(axs)
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
@@ -361,16 +368,14 @@ class PlotRendererPipeline:
             ["realization", "time", "geo", *q_mapping.keys()], axis=1
         ).groupby("geo")
 
-        # Plotting
-        axs = axs.flatten()
-
         _time_format, _ = self._time_format(time, time_format)
 
         lines = list[Line2D]()
         plot_index = 0
         for geo_group_name, gdf in groups_df:
-            axs[plot_index].set_title(f"{geo_group_name}")
-            axs[plot_index].tick_params(axis="x", labelrotation=45)
+            ax = ax_list[plot_index]
+            ax.set_title(f"{geo_group_name}")
+            ax.tick_params(axis="x", labelrotation=45)
 
             quantity_groups = gdf.melt(
                 id_vars=["realization", "time", "geo"], var_name="quantity"
@@ -398,31 +403,32 @@ class PlotRendererPipeline:
                     )
                     rdf = rdf.sort_values("time")
                     data = transform(rdf.assign(quantity=q_name))
-                    ls = axs[plot_index].plot(rdf["time"], data["value"], **plot_kwargs)
+                    ls = ax.plot(rdf["time"], data["value"], **plot_kwargs)
                     lines.extend(ls)
 
             ##Labels and Legend
             if legend == "on":
-                axs[plot_index].legend()
+                ax.legend()
             elif legend == "outside":
-                axs[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
-            if axs[plot_index].get_subplotspec().is_last_row():
+            subplotspec = ax.get_subplotspec()
+            if subplotspec is not None and subplotspec.is_last_row():
                 if _time_format == "date":
-                    axs[plot_index].set_xlabel("date")
-                    axs[plot_index].xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                    axs[plot_index].xaxis.set_major_locator(
+                    ax.set_xlabel("date")
+                    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                    ax.xaxis.set_major_locator(
                         AutoDateLocator(
                             minticks=6, maxticks=12, interval_multiples=True
                         )
                     )
 
                 elif _time_format == "day":
-                    axs[plot_index].set_xlabel("day")
+                    ax.set_xlabel("day")
                 elif _time_format == "tick":
-                    axs[plot_index].set_xlabel("tick")
+                    ax.set_xlabel("tick")
                 else:
-                    axs[plot_index].set_xlabel("time")
+                    ax.set_xlabel("time")
 
             plot_index += 1
 
@@ -568,7 +574,7 @@ class PlotRendererPipeline:
 
     def quantiles_plt(
         self,
-        axs: Axes | NDArray[np.object_],
+        axs: Axes | Iterable[Axes] | NDArray[Any],
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
@@ -609,8 +615,12 @@ class PlotRendererPipeline:
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it.
         """
-        if isinstance(axs, Axes):
-            axs = np.array([axs])
+        if isinstance(axs, np.ndarray):
+            ax_list = list(axs.flat)
+        elif isinstance(axs, Axes):
+            ax_list = [axs]
+        else:
+            ax_list = list(axs)
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
@@ -648,15 +658,13 @@ class PlotRendererPipeline:
 
         groups_df = data_df.groupby("geo")
 
-        # Plotting
-        axs = axs.flatten()
-
         _time_format, _ = self._time_format(time, time_format)
 
         plot_index = 0
         for geo_group_name, gdf in groups_df:
-            axs[plot_index].set_title(f"{geo_group_name}")
-            axs[plot_index].tick_params(axis="x", labelrotation=45)
+            ax = ax_list[plot_index]
+            ax.set_title(f"{geo_group_name}")
+            ax.tick_params(axis="x", labelrotation=45)
 
             for quantity_name, l_kwargs in zip(quantity.labels, cycle(line_kwargs)):
                 for (ci_index, (upper, lower)), f_kwargs in zip(
@@ -675,7 +683,7 @@ class PlotRendererPipeline:
                         pd.DataFrame({"value": gdf[quantity_name][upper]})
                     )
 
-                    axs[plot_index].fill_between(
+                    ax.fill_between(
                         gdf["time"],
                         data_lower["value"],
                         data_upper["value"],
@@ -686,7 +694,7 @@ class PlotRendererPipeline:
                     pd.DataFrame({"value": gdf[quantity_name]["quantile_50.0"]})
                 )
 
-                axs[plot_index].plot(
+                ax.plot(
                     gdf["time"],
                     data_median["value"],
                     label=f"Median of {quantity_name}",
@@ -696,26 +704,27 @@ class PlotRendererPipeline:
 
             # Labels and Legend
             if legend == "on":
-                axs[plot_index].legend()
+                ax.legend()
             elif legend == "outside":
-                axs[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
-            if axs[plot_index].get_subplotspec().is_last_row():
+            subplotspec = ax.get_subplotspec()
+            if subplotspec is not None and subplotspec.is_last_row():
                 if _time_format == "date":
-                    axs[plot_index].set_xlabel("date")
-                    axs[plot_index].xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                    axs[plot_index].xaxis.set_major_locator(
+                    ax.set_xlabel("date")
+                    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                    ax.xaxis.set_major_locator(
                         AutoDateLocator(
                             minticks=6, maxticks=12, interval_multiples=True
                         )
                     )
 
                 elif _time_format == "day":
-                    axs[plot_index].set_xlabel("day")
+                    ax.set_xlabel("day")
                 elif _time_format == "tick":
-                    axs[plot_index].set_xlabel("tick")
+                    ax.set_xlabel("tick")
                 else:
-                    axs[plot_index].set_xlabel("time")
+                    ax.set_xlabel("time")
 
             plot_index += 1
 
@@ -850,7 +859,7 @@ class PlotRendererPipeline:
 
     def histogram_plt(
         self,
-        axs: NDArray[np.object_],
+        axs: Axes | Iterable[Axes] | NDArray[Any],
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
@@ -862,14 +871,13 @@ class PlotRendererPipeline:
     ):
         """
         Draw histogram plots onto the array of matplotlib `Axes`, such as what is
-        returned by matplotlib `subplots()`. This is a variant of the method
+        returned by matplotlib `subplots`. This is a variant of the method
         `histogram`.
 
         Parameters
         ----------
         axs:
             The array of matplotlib `Axes` on which to draw the plots.
-                Produces a histogram plot of a filter output. This is a plot where
         geo :
             The geographic selection to make on the output data.
         time :
@@ -887,6 +895,12 @@ class PlotRendererPipeline:
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it.
         """
+        if isinstance(axs, np.ndarray):
+            ax_list = list(axs.flat)
+        elif isinstance(axs, Axes):
+            ax_list = [axs]
+        else:
+            ax_list = list(axs)
         if hist_kwargs is None or len(hist_kwargs) == 0:
             hist_kwargs = [{}]
 
@@ -910,16 +924,14 @@ class PlotRendererPipeline:
 
         groups_df = data_df.groupby("geo")
 
-        # Plotting
-        axs = axs.flatten()
-
         plot_index = 0
         for geo_group_name, gdf in groups_df:
-            axs[plot_index].set_title(f"{geo_group_name}")
-            axs[plot_index].tick_params(axis="x", labelrotation=45)
+            ax = ax_list[plot_index]
+            ax.set_title(f"{geo_group_name}")
+            ax.tick_params(axis="x", labelrotation=45)
 
             for quantity_name, kwargs in zip(quantity.labels, cycle(hist_kwargs)):
-                axs[plot_index].hist(
+                ax.hist(
                     transform(gdf[quantity_name].to_frame()),
                     label=f"{quantity_name} at : {gdf['time'].iloc[0]}",
                     **kwargs,
@@ -927,9 +939,9 @@ class PlotRendererPipeline:
 
             # Labels and Legend
             if legend == "on":
-                axs[plot_index].legend()
+                ax.legend()
             elif legend == "outside":
-                axs[plot_index].legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
             plot_index += 1
 
