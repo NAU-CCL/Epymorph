@@ -63,7 +63,7 @@ class EpymorphSimulation:
         state : np.ndarray
             Initial state of the system (e.g., SIRH compartments)
             to be used in the simulation.
-        observations : dict)
+        parameters : dict
             A dictionary containing the parameter values
             (such as beta, gamma, etc.) to update in the simulation.
         rume : Rume
@@ -75,6 +75,8 @@ class EpymorphSimulation:
         model_link : ModelLink
             Specifies which model output to return, either from
             compartments or events.
+        rng : Generator
+            The random number generator to use.
 
         Returns
         -------
