@@ -155,8 +155,6 @@ class ParticleFilter(BaseFilter):
             The parameters to estimate and the methods to estimate them.
         model_link : ModelLink
             Link to the model used for simulations.
-        index : int
-            Index of the parameter to estimate.
         dates : Any
             Dates for which observations are available.
         cases : List[int]

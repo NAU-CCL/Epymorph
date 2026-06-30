@@ -142,6 +142,26 @@ class ADRIOProgress(NamedTuple):
     """If complete, how long did the ADRIO take overall (in seconds)?"""
 
 
+###################
+# Pipeline Events #
+###################
+
+
+class OnPipelineStart(NamedTuple):
+    name: str
+    """Name of the simulator class."""
+
+    rume: RUME
+
+    num_realizations: int
+
+    total_progress: int
+
+
+class OnPipelineProgress(NamedTuple):
+    progress: int
+
+
 ############
 # EventBus #
 ############
@@ -183,6 +203,15 @@ class EventBus(metaclass=Singleton):
     on_adrio_progress: Event[ADRIOProgress]
     """Event fires when an ADRIO is fetching data."""
 
+    # Pipeline Events
+    on_pipeline_start: Event[OnPipelineStart]
+    """Event fires at the start of a PipelineSimulator."""
+
+    on_pipeline_progress: Event[OnPipelineProgress]
+
+    on_pipeline_finish: Event[None]
+    """Event fires after a PipelineSimulator is complete."""
+
     def __init__(self):
         # SimulationEvents
         self.on_start = Event()
@@ -194,3 +223,7 @@ class EventBus(metaclass=Singleton):
         self.on_movement_finish = Event()
         # AdrioEvents
         self.on_adrio_progress = Event()
+        # PipelineEvents
+        self.on_pipeline_start = Event()
+        self.on_pipeline_progress = Event()
+        self.on_pipeline_finish = Event()

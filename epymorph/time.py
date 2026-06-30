@@ -733,11 +733,13 @@ class TimeAggMethod(NamedTuple):
     """The method for aggregating compartment values."""
     events: AggMethod
     """The method for aggregating event values."""
+    parameters: AggMethod
+    """The method for aggregating unknown parameter values."""
 
 
-DEFAULT_TIME_AGG = TimeAggMethod("last", "sum")
-"""By default, time series should be aggregated using 'last' for compartments
-and 'sum' for events."""
+DEFAULT_TIME_AGG = TimeAggMethod("last", "sum", "last")
+"""By default, time series should be aggregated using 'last'
+for compartments and parameters and 'sum' for events."""
 
 
 @dataclass(frozen=True)
@@ -859,6 +861,7 @@ class _CanAggregate(TimeStrategy):
         self,
         compartments: AggMethod = "last",
         events: AggMethod = "sum",
+        parameters: AggMethod = "last",
     ) -> "TimeAggregation":
         """
         Aggregate the time series using the specified methods.
@@ -869,6 +872,8 @@ class _CanAggregate(TimeStrategy):
             The method to use to aggregate compartment values.
         events :
             The method to use to aggregate event values.
+            parameters :
+                The method to use to aggregate parameter values.
 
         Returns
         -------
@@ -879,7 +884,7 @@ class _CanAggregate(TimeStrategy):
             self.time_frame,
             self.selection,
             self.grouping,
-            TimeAggMethod(compartments, events),
+            TimeAggMethod(compartments, events, parameters),
         )
 
 
