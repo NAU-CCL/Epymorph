@@ -77,10 +77,10 @@ def save_data(observations: Dict[str, List[float]] | List, quantiles: bool) -> N
 
     Parameters
     ----------
-    observations_quantiles : Dict[str, List[float]]
-        Quantiles of the predicted data.
-    observations_values : Dict[str, List[float]]
-        Average of the predicted data
+    observations : Dict[str, List[float]] | List
+        The observations.
+    quantiles : bool
+        Whether the observations are quantiles.
     """
     if isinstance(observations, dict):
         for key in observations.keys():

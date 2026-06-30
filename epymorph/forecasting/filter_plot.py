@@ -48,7 +48,6 @@ class PlotRendererPipeline:
     ----------
     output : PipelineOutput
         The PipelineOutput the renderer will use.
-    ```
     """
 
     output: PipelineOutput
@@ -163,27 +162,22 @@ class PlotRendererPipeline:
         realization:
             A realization selection to make on the output data,
             you can either select all the realizations or a random subset.
-
         geo :
             The geographic selection to make on the output data.
         time :
             The time selection to make on the output data.
         quantity :
             The quantity selection to make on the output data.
-
         sharex :
             Whether or not the subplots should share the x-axis ticks.
-
         ncols :
             The number of columns in the resulting subplot matrix. The
             number of rows is set dynamically.
-
         line_kwargs :
             A list of dictionaries of keyword arguments to be passed to the matplotlib
             function that draws each line. Each dictionary corresponds
             to a single quantity.
             See matplotlib documentation for the supported options.
-
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
             "auto" will use the format defined by the grouping of the `time` parameter,
@@ -192,20 +186,17 @@ class PlotRendererPipeline:
             simulation with the first day being 0.
             If the system cannot convert to the requested time format, this argument
             may be ignored.
-
         label_format :
             A format for the items displayed in the legend;
             the string will be used in a call to `format()`
             with the replacement variable {q}` for the name of the quantity.
         legend :
             Whether and how to draw the plot legend.
-
             - "auto" will draw the legend unless it would be too large
             - "on" forces the legend to be drawn
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-
         title :
             A title to draw on the plot.
         to_file :
@@ -242,12 +233,6 @@ class PlotRendererPipeline:
                 sharex=sharex,
                 layout="constrained",
             )
-
-            if line_kwargs is None or len(line_kwargs) == 0:
-                line_kwargs = [{}]
-
-            if transform is None:
-                transform = identity
 
             # Y-axis
             fig.supylabel("count")
@@ -288,7 +273,7 @@ class PlotRendererPipeline:
     def spaghetti_plt(
         self,
         axs: Axes | Iterable[Axes] | NDArray[Any],
-        realizations: RealizationSelection,
+        realization: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
@@ -348,7 +333,7 @@ class PlotRendererPipeline:
         if transform is None:
             transform = identity
 
-        data_df = munge_pipeline_output(self.output, realizations, geo, time, quantity)
+        data_df = munge_pipeline_output(self.output, realization, geo, time, quantity)
 
         # Map time labels:
         _, map_time_axis = self._time_format(time, time_format)
@@ -471,7 +456,7 @@ class PlotRendererPipeline:
             Whether or not the subplots should share the x-axis ticks.
         ncols :
             The number of columns in the resulting subplot matrix. The
-        number of rows is set dynamically.
+            number of rows is set dynamically.
         legend :
             Whether and how to draw the plot legend.
 
@@ -482,11 +467,11 @@ class PlotRendererPipeline:
             (instead of inside it)
         fill_kwargs :
             A list of dictionaries corresponding to each CI.
-        This tells the plotting function how to fill the interior of the CI.
-        See matplotlib documentation for the supported options.
+            This tells the plotting function how to fill the interior of the CI.
+            See matplotlib documentation for the supported options.
         line_kwargs :
             A list of dictionaries correspondng to each CI's median.
-        See matplotlib documentation for the supported options.
+            See matplotlib documentation for the supported options.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
             "auto" will use the format defined by the grouping of the `time` parameter,
@@ -527,15 +512,6 @@ class PlotRendererPipeline:
                 sharex=sharex,
                 layout="constrained",
             )
-
-            if transform is None:
-                transform = identity
-
-            if fill_kwargs is None or len(fill_kwargs) == 0:
-                fill_kwargs = [{}]
-
-            if line_kwargs is None or len(line_kwargs) == 0:
-                line_kwargs = [{}]
 
             # Y-axis
             fig.supylabel("count")
@@ -758,8 +734,6 @@ class PlotRendererPipeline:
             to create a histogram corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
-        sharex :
-            Whether or not the subplots should share the x-axis ticks.
         ncols :
             The number of columns in the resulting subplot matrix. The
             number of rows is set dynamically.
@@ -814,12 +788,6 @@ class PlotRendererPipeline:
                 figsize=(ncols * 5, nrows * 3),
                 layout="constrained",
             )
-
-            if hist_kwargs is None or len(hist_kwargs) == 0:
-                hist_kwargs = [{}]
-
-            if transform is None:
-                transform = identity
 
             # Y-axis
             fig.supylabel("Density")
@@ -968,18 +936,13 @@ class PlotRendererPipeline:
         ----------
         realization :
             A realization aggregation which returns some number of lines per
-        location in the GeoStrategy.
+            location in the GeoStrategy.
         geo :
             The geographic selection to make on the output data.
         time :
             The time selection to make on the output data.
         quantity :
             The quantity selection to make on the output data.
-        sharex :
-            Whether or not the subplots should share the x-axis ticks.
-        ncols :
-            The number of columns in the resulting subplot matrix. The
-            number of rows is set dynamically.
         legend :
             Whether and how to draw the plot legend.
 
@@ -1120,8 +1083,6 @@ class PlotRendererPipeline:
             The time selection to make on the output data.
         quantity :
             The quantity selection to make on the output data.
-        legend :
-            Whether and how to draw the plot legend.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each line.

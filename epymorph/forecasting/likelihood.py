@@ -70,8 +70,6 @@ class Likelihood(ABC):
 
         Parameters
         ----------
-        observed :
-            The observed data.
         expected :
             The data predicted by the model.
 
