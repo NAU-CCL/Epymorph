@@ -65,6 +65,7 @@ dev = [
   "mkdocs-material~=9.7.6",
   "mkdocs-gen-files~=0.6.1",
   "mkdocstrings[python]~=1.0.4",
+  "griffe<2.0.0",
   "griffe-inherited-docstrings==1.1.2",
 ]
 
