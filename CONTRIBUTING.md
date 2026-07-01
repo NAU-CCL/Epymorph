@@ -49,3 +49,34 @@ CENSUS_API_KEY=abcd1234
 ```
 
 You may need to reload VS Code first, but otherwise the values in this file will be used automatically. Of course you can set other environment variables here as well.
+
+## Version release checklist
+
+Pre-release tasks:
+
+- Ensure all intended PRs/commits are merged to `main`
+- Ensure your local main is up to date: `git pull origin main`
+- Check for linting issues: `uv run ruff check --no-fix .`
+- Check for formatting issues: `uv run ruff format --check`
+- Check for data export issues: `uv run scripts/data_exports.py`
+- Check for dependency issues: `uv run scripts/dep_check.py`
+- Check fast tests: `uv run pytest tests/fast`
+- Check slow tests: `uv run pytest tests/slow`
+- Review docstrings for accuracy (especially anything new)
+- Check for doc build issues: `uv run mkdocs build`
+- Run numerical consistency checks including the release candidate branch
+
+Release process:
+
+- Create the version tag, e.g.: `git tag v1.2.0`
+- Push the tag (to trigger the release workflow), e.g.: `git push origin v1.2.0`
+- Monitor GitHub Actions release workflow (`release.yml`)
+- Confirm the GitHub Release appears at https://github.com/NAU-CCL/Epymorph/releases
+- Confirm the PyPI release appears at https://pypi.org/project/epymorph/
+- Verify pip install epymorph==1.2.0 works in a clean environment (or trigger the installation matrix workflow)
+
+Post release tasks:
+
+- Edit the GitHub Release notes; the auto-generated notes are just a starting point
+- Trigger a build and deploy of the documentation site to bring in the new API reference docs
+- Announce the release!
