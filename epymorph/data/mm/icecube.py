@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
@@ -28,7 +29,13 @@ class IcecubeClause(MovementClause):
     leaves = TickIndex(step=0)
     returns = TickDelta(step=1, days=0)
 
-    def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+    @override
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[np.int64]:
         N = self.scope.nodes
         pop = self.data("population")
         comm_prop = self.data("commuter_proportion")

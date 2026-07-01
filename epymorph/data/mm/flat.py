@@ -2,6 +2,7 @@ from functools import cached_property
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
@@ -43,7 +44,13 @@ class FlatClause(MovementClause):
         np.fill_diagonal(ones, 0)
         return row_normalize(ones)
 
-    def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+    @override
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[SimDType]:
         pop = self.data("population")
         comm_prop = self.data("commuter_proportion")
         n_commuters = np.floor(pop * comm_prop).astype(SimDType)

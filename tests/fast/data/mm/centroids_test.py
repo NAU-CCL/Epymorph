@@ -42,7 +42,7 @@ def _make_clause(phi: float, commuter_proportion: float = 0.1) -> CentroidsClaus
 def test_evaluate():
     commuter_proportion = 0.1
     clause = _make_clause(phi=40.0, commuter_proportion=commuter_proportion)
-    result = clause.evaluate(_TICK)
+    result = clause.evaluate(_TICK, available=_POPULATION)
 
     assert result.shape == (3, 3)
     assert np.all(result >= 0)
@@ -56,19 +56,19 @@ def test_evaluate():
 def test_phi_zero_error():
     clause = _make_clause(phi=0.0)
     with pytest.raises(DataAttributeError, match="phi"):
-        clause.evaluate(_TICK)
+        clause.evaluate(_TICK, available=_POPULATION)
 
 
 def test_phi_negative_error():
     clause = _make_clause(phi=-5.0)
     with pytest.raises(DataAttributeError, match="phi"):
-        clause.evaluate(_TICK)
+        clause.evaluate(_TICK, available=_POPULATION)
 
 
 def test_commuter_proportion_negative_error():
     clause = _make_clause(phi=40.0, commuter_proportion=-0.1)
     with pytest.raises(DataAttributeError, match="commuter_proportion"):
-        clause.evaluate(_TICK)
+        clause.evaluate(_TICK, available=_POPULATION)
 
 
 def test_small_phi_no_underflow():

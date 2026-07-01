@@ -2,6 +2,7 @@ from functools import cached_property
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
@@ -66,8 +67,13 @@ class CentroidsClause(MovementClause):
         prob = np.exp(-dist_over_phi)
         return row_normalize(prob)
 
-    def evaluate(self, tick: Tick) -> NDArray[np.int64]:
-        pop = self.data("population")
+    @override
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[np.int64]:
         comm_prop = self.data("commuter_proportion")
         if comm_prop < 0:
             err = (
@@ -75,7 +81,7 @@ class CentroidsClause(MovementClause):
                 "greater than or equal to zero."
             )
             raise DataAttributeError(err)
-        n_commuters = np.floor(pop * comm_prop).astype(SimDType)
+        n_commuters = np.floor(available * comm_prop).astype(SimDType)
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
 
 

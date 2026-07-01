@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.data_type import SimDType
 from epymorph.movement_model import EveryDay, MovementClause, MovementModel
@@ -14,7 +15,13 @@ class NoClause(MovementClause):
     leaves = TickIndex(step=0)
     returns = TickDelta(step=0, days=0)
 
-    def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+    @override
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[np.int64]:
         N = self.scope.nodes
         return np.zeros((N, N), dtype=SimDType)
 

@@ -23,7 +23,7 @@ from epymorph.attribute import AttributeDef
 from epymorph.data_type import SimDType
 from epymorph.simulation import (
     NEVER,
-    SimulationTickFunction,
+    BaseSimulationFunction,
     Tick,
     TickDelta,
     TickIndex,
@@ -129,7 +129,7 @@ class DayIs(MovementPredicate):
 ##################
 
 
-class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC):
+class MovementClause(BaseSimulationFunction[NDArray[SimDType]], ABC):
     """
     A movement clause is basically a function which calculates _how many_ individuals
     should move between all of the geo nodes.
@@ -179,7 +179,12 @@ class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC):
         return self.__class__.__name__
 
     @abstractmethod
-    def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[SimDType]:
         """
         Implement this method to provide logic for the clause.
         Use self methods and properties to access the simulation context or defer
@@ -189,6 +194,12 @@ class MovementClause(SimulationTickFunction[NDArray[SimDType]], ABC):
         ----------
         tick :
             The simulation tick being evaluated.
+        available :
+            The number of individuals currently at each location which are available to
+            move, as an N-shaped array. Note: it's not necessary that movement clauses
+            take this into account (e.g., to return requested movement numbers which are
+            less than the available number of individuals.) But it is provided for
+            clauses that wish to take this into account.
 
         Returns
         -------

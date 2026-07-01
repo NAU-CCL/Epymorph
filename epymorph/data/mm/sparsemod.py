@@ -2,6 +2,7 @@ from functools import cached_property
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
@@ -58,7 +59,13 @@ class SparsemodClause(MovementClause):
         distance = pairwise_haversine(centroid)
         return row_normalize(1 / np.exp(distance / phi))
 
-    def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+    @override
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[np.int64]:
         return self.rng.multinomial(self.commuters_by_node, self.dispersal_kernel)
 
 

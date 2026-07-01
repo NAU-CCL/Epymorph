@@ -186,9 +186,13 @@ class MovementExecutor:
         for strata, clause in self._clauses:
             if not clause.is_active(tick):
                 continue
+            available_movers = self._world.get_local_array()
 
             try:
-                requested_movers = clause.evaluate(tick)
+                requested_movers = clause.evaluate(
+                    tick,
+                    available=available_movers.sum(axis=1, dtype=SimDType),
+                )
                 np.fill_diagonal(requested_movers, 0)
             except Exception as e:
                 # NOTE: catching exceptions here is necessary to get nice error messages
@@ -200,7 +204,6 @@ class MovementExecutor:
                 )
                 raise MMSimError(msg) from e
 
-            available_movers = self._world.get_local_array()
             clause_event = calculate_travelers(
                 clause.clause_name,
                 self._rume.compartment_mobility[strata],

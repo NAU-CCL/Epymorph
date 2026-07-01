@@ -2,6 +2,7 @@ from functools import cached_property
 
 import numpy as np
 from numpy.typing import NDArray
+from typing_extensions import override
 
 from epymorph.attribute import AttributeDef
 from epymorph.data_shape import Shapes
@@ -52,7 +53,13 @@ class Commuters(MovementClause):
         commuters = self.data("commuters")
         return row_normalize(commuters)
 
-    def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+    @override
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[np.int64]:
         move_control = self.data("move_control")
         actual = self.rng.binomial(self.commuters_by_node, move_control)
         return self.rng.multinomial(actual, self.commuting_probability)
@@ -87,7 +94,13 @@ class Dispersers(MovementClause):
         commuters = self.data("commuters")
         return (commuters + commuters.T) // 2
 
-    def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+    @override
+    def evaluate(
+        self,
+        tick: Tick,
+        *,
+        available: NDArray[SimDType],
+    ) -> NDArray[SimDType]:
         theta = self.data("theta")
         return self.rng.poisson(theta * self.commuters_average)
 
