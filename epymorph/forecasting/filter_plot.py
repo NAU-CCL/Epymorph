@@ -220,7 +220,11 @@ class PlotRendererPipeline:
 
         try:
             # Initialize subplots and info
-            num_nodes = self.output.rume.scope.nodes
+            num_nodes = (
+                self.output.rume.scope.nodes
+                if geo.grouping is None
+                else len(np.unique(geo.grouping.map(geo.scope.node_ids)))
+            )
             nrows = ceil(num_nodes / ncols)
             fig, axs = plt.subplots(
                 nrows,
@@ -304,7 +308,7 @@ class PlotRendererPipeline:
         kwarg_type :
             Whether to iterate the kwargs over the quantities or the geos.
             Options are "geo", default is quantity iteration.
-        ax_title "
+        ax_title :
             A format string to display as the title for each subplot.
             Defaults to displaying the geo.
         line_kwargs :
@@ -409,25 +413,47 @@ class PlotRendererPipeline:
                 ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
             subplotspec = ax.get_subplotspec()
-            if subplotspec is not None and subplotspec.is_last_row():
-                if _time_format == "date":
-                    ax.set_xlabel("date")
-                    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                    ax.xaxis.set_major_locator(
-                        AutoDateLocator(
-                            minticks=6, maxticks=12, interval_multiples=True
+            if subplotspec is not None:
+                if subplotspec.is_last_row():
+                    if _time_format == "date":
+                        ax.set_xlabel("date")
+                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                        ax.xaxis.set_major_locator(
+                            AutoDateLocator(
+                                minticks=6, maxticks=12, interval_multiples=True
+                            )
                         )
-                    )
 
-                elif _time_format == "day":
-                    ax.set_xlabel("day")
-                elif _time_format == "tick":
-                    ax.set_xlabel("tick")
-                else:
-                    ax.set_xlabel("time")
+                    elif _time_format == "day":
+                        ax.set_xlabel("day")
+                    elif _time_format == "tick":
+                        ax.set_xlabel("tick")
+                    else:
+                        ax.set_xlabel("time")
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
+
+        for cleanup_index in range(plot_index + 1, len(ax_list)):
+            ax = ax_list[cleanup_index]
+            subplotspec = ax.get_subplotspec()
+            if subplotspec is not None:
+                if subplotspec.is_last_row():
+                    if _time_format == "date":
+                        ax.set_xlabel("date")
+                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                        ax.xaxis.set_major_locator(
+                            AutoDateLocator(
+                                minticks=6, maxticks=12, interval_multiples=True
+                            )
+                        )
+
+                    elif _time_format == "day":
+                        ax.set_xlabel("day")
+                    elif _time_format == "tick":
+                        ax.set_xlabel("tick")
+                    else:
+                        ax.set_xlabel("time")
 
         return lines
 
@@ -515,8 +541,21 @@ class PlotRendererPipeline:
         """
 
         try:
-            num_nodes = self.output.rume.scope.nodes
+            geo_indices = np.array(geo.indices)
+
+            if geo.grouping is None:
+                if geo.aggregation is None:
+                    num_nodes = self.output.rume.scope.nodes
+                else:
+                    num_nodes = 1
+
+            else:
+                num_nodes = len(
+                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
+                )
+
             nrows = ceil(num_nodes / ncols)
+
             fig, axs = plt.subplots(
                 nrows,
                 ncols,
@@ -734,25 +773,50 @@ class PlotRendererPipeline:
                 leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
                 leg.set_zorder(2e10)
 
-            if ax.get_subplotspec().is_last_row():
-                if _time_format == "date":
-                    ax.set_xlabel("date")
-                    ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                    ax.xaxis.set_major_locator(
-                        AutoDateLocator(
-                            minticks=6, maxticks=12, interval_multiples=True
+            subplotspec = ax.get_subplotspec()
+            if subplotspec is not None:
+                if subplotspec.is_last_row():
+                    if _time_format == "date":
+                        ax.set_xlabel("date")
+                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                        ax.xaxis.set_major_locator(
+                            AutoDateLocator(
+                                minticks=6, maxticks=12, interval_multiples=True
+                            )
                         )
-                    )
 
-                elif _time_format == "day":
-                    ax.set_xlabel("day")
-                elif _time_format == "tick":
-                    ax.set_xlabel("tick")
-                else:
-                    ax.set_xlabel("time")
+                    elif _time_format == "day":
+                        ax.set_xlabel("day")
+                    elif _time_format == "tick":
+                        ax.set_xlabel("tick")
+                    else:
+                        ax.set_xlabel("time")
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
+
+        for cleanup_index in range(plot_index, len(ax_list)):
+            ax = ax_list[cleanup_index]
+            ax.tick_params(axis="x", labelrotation=45)
+            ax.set_yticks([])
+            subplotspec = ax.get_subplotspec()
+            if subplotspec is not None:
+                if subplotspec.is_last_row():
+                    if _time_format == "date":
+                        ax.set_xlabel("date")
+                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                        ax.xaxis.set_major_locator(
+                            AutoDateLocator(
+                                minticks=6, maxticks=12, interval_multiples=True
+                            )
+                        )
+
+                    elif _time_format == "day":
+                        ax.set_xlabel("day")
+                    elif _time_format == "tick":
+                        ax.set_xlabel("tick")
+                    else:
+                        ax.set_xlabel("time")
 
     def histogram(
         self,
@@ -830,7 +894,18 @@ class PlotRendererPipeline:
         """
 
         try:
-            num_nodes = self.output.rume.scope.nodes
+            geo_indices = np.array(geo.indices)
+
+            if geo.grouping is None:
+                if geo.aggregation is None:
+                    num_nodes = self.output.rume.scope.nodes
+                else:
+                    num_nodes = 1
+
+            else:
+                num_nodes = len(
+                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
+                )
             nrows = ceil(num_nodes / ncols)
             fig, axs = plt.subplots(
                 nrows,
@@ -840,7 +915,7 @@ class PlotRendererPipeline:
             )
 
             # Y-axis
-            fig.supylabel("Density")
+            fig.supylabel("Value")
 
             # X-axis
             fig.supxlabel("Count")
@@ -1014,6 +1089,11 @@ class PlotRendererPipeline:
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
+
+        for cleanup_index in range(plot_index, len(ax_list)):
+            ax = ax_list[cleanup_index]
+            ax.tick_params(axis="x", labelrotation=45)
+            ax.set_yticks([])
 
     def line(
         self,
@@ -1191,8 +1271,6 @@ class PlotRendererPipeline:
             Controls the formatting of the time axis (the horizontal axis).
         label_format :
             A format for the items displayed in the legend.
-        to_file :
-            Specify a path to save the plot to a file instead of calling `plt.show()`.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1345,7 +1423,19 @@ class PlotRendererPipeline:
 
         """
         try:
-            num_nodes = self.output.rume.scope.nodes
+            geo_indices = np.array(geo.indices)
+
+            if geo.grouping is None:
+                if geo.aggregation is None:
+                    num_nodes = self.output.rume.scope.nodes
+                else:
+                    num_nodes = 1
+
+            else:
+                num_nodes = len(
+                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
+                )
+
             nrows = ceil(num_nodes / ncols)
             fig, axes = plt.subplots(
                 nrows,
@@ -1560,3 +1650,8 @@ class PlotRendererPipeline:
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
+
+        for cleanup_index in range(plot_index, len(ax_list)):
+            ax = ax_list[cleanup_index]
+            ax.tick_params(axis="x", labelrotation=45)
+            ax.set_yticks([])
