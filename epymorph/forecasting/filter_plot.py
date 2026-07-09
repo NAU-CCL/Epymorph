@@ -219,12 +219,19 @@ class PlotRendererPipeline:
             raise ValueError("Spaghetti plots only support RealizationSelection.")
 
         try:
-            # Initialize subplots and info
-            num_nodes = (
-                self.output.rume.scope.nodes
-                if geo.grouping is None
-                else len(np.unique(geo.grouping.map(geo.scope.node_ids)))
-            )
+            geo_indices = np.array(geo.indices)
+
+            if geo.grouping is None:
+                if geo.aggregation is None:
+                    num_nodes = self.output.rume.scope.nodes
+                else:
+                    num_nodes = 1
+
+            else:
+                num_nodes = len(
+                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
+                )
+
             nrows = ceil(num_nodes / ncols)
             fig, axs = plt.subplots(
                 nrows,
@@ -434,26 +441,27 @@ class PlotRendererPipeline:
             plot_index += 1
             plot_index = plot_index % len(ax_list)
 
-        # for cleanup_index in range(plot_index + 1, len(ax_list)):
-        #     ax = ax_list[cleanup_index]
-        #     subplotspec = ax.get_subplotspec()
-        #     if subplotspec is not None:
-        #         if subplotspec.is_last_row():
-        #             if _time_format == "date":
-        #                 ax.set_xlabel("date")
-        #                 ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-        #                 ax.xaxis.set_major_locator(
-        #                     AutoDateLocator(
-        #                         minticks=6, maxticks=12, interval_multiples=True
-        #                     )
-        #                 )
+        for cleanup_index in range(plot_index, len(ax_list)):
+            ax = ax_list[cleanup_index]
+            ax.tick_params(axis="x", labelrotation=45)
+            subplotspec = ax.get_subplotspec()
+            if subplotspec is not None:
+                if subplotspec.is_last_row():
+                    if _time_format == "date":
+                        ax.set_xlabel("date")
+                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                        ax.xaxis.set_major_locator(
+                            AutoDateLocator(
+                                minticks=6, maxticks=12, interval_multiples=True
+                            )
+                        )
 
-        #             elif _time_format == "day":
-        #                 ax.set_xlabel("day")
-        #             elif _time_format == "tick":
-        #                 ax.set_xlabel("tick")
-        #             else:
-        #                 ax.set_xlabel("time")
+                    elif _time_format == "day":
+                        ax.set_xlabel("day")
+                    elif _time_format == "tick":
+                        ax.set_xlabel("tick")
+                    else:
+                        ax.set_xlabel("time")
 
         return lines
 
