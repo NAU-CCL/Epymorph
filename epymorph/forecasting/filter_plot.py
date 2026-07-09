@@ -434,26 +434,26 @@ class PlotRendererPipeline:
             plot_index += 1
             plot_index = plot_index % len(ax_list)
 
-        for cleanup_index in range(plot_index + 1, len(ax_list)):
-            ax = ax_list[cleanup_index]
-            subplotspec = ax.get_subplotspec()
-            if subplotspec is not None:
-                if subplotspec.is_last_row():
-                    if _time_format == "date":
-                        ax.set_xlabel("date")
-                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                        ax.xaxis.set_major_locator(
-                            AutoDateLocator(
-                                minticks=6, maxticks=12, interval_multiples=True
-                            )
-                        )
+        # for cleanup_index in range(plot_index + 1, len(ax_list)):
+        #     ax = ax_list[cleanup_index]
+        #     subplotspec = ax.get_subplotspec()
+        #     if subplotspec is not None:
+        #         if subplotspec.is_last_row():
+        #             if _time_format == "date":
+        #                 ax.set_xlabel("date")
+        #                 ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+        #                 ax.xaxis.set_major_locator(
+        #                     AutoDateLocator(
+        #                         minticks=6, maxticks=12, interval_multiples=True
+        #                     )
+        #                 )
 
-                    elif _time_format == "day":
-                        ax.set_xlabel("day")
-                    elif _time_format == "tick":
-                        ax.set_xlabel("tick")
-                    else:
-                        ax.set_xlabel("time")
+        #             elif _time_format == "day":
+        #                 ax.set_xlabel("day")
+        #             elif _time_format == "tick":
+        #                 ax.set_xlabel("tick")
+        #             else:
+        #                 ax.set_xlabel("time")
 
         return lines
 
@@ -798,7 +798,6 @@ class PlotRendererPipeline:
         for cleanup_index in range(plot_index, len(ax_list)):
             ax = ax_list[cleanup_index]
             ax.tick_params(axis="x", labelrotation=45)
-            ax.set_yticks([])
             subplotspec = ax.get_subplotspec()
             if subplotspec is not None:
                 if subplotspec.is_last_row():
@@ -1093,7 +1092,6 @@ class PlotRendererPipeline:
         for cleanup_index in range(plot_index, len(ax_list)):
             ax = ax_list[cleanup_index]
             ax.tick_params(axis="x", labelrotation=45)
-            ax.set_yticks([])
 
     def line(
         self,
@@ -1654,4 +1652,3 @@ class PlotRendererPipeline:
         for cleanup_index in range(plot_index, len(ax_list)):
             ax = ax_list[cleanup_index]
             ax.tick_params(axis="x", labelrotation=45)
-            ax.set_yticks([])
