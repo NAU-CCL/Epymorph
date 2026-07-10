@@ -413,30 +413,30 @@ class PlotRendererPipeline:
                     ls = ax.plot(rdf["time"], data["value"], **plot_kwargs)
                     lines.extend(ls)
 
+            leg = None
             ##Labels and Legend
             if legend == "on":
-                ax.legend()
+                leg = ax.legend()
             elif legend == "outside":
-                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
-            subplotspec = ax.get_subplotspec()
-            if subplotspec is not None:
-                if subplotspec.is_last_row():
-                    if _time_format == "date":
-                        ax.set_xlabel("date")
-                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                        ax.xaxis.set_major_locator(
-                            AutoDateLocator(
-                                minticks=6, maxticks=12, interval_multiples=True
-                            )
-                        )
+            if _time_format == "date":
+                ax.set_xlabel("date")
+                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_locator(
+                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
+                )
 
-                    elif _time_format == "day":
-                        ax.set_xlabel("day")
-                    elif _time_format == "tick":
-                        ax.set_xlabel("tick")
-                    else:
-                        ax.set_xlabel("time")
+            elif _time_format == "day":
+                ax.set_xlabel("day")
+            elif _time_format == "tick":
+                ax.set_xlabel("tick")
+            else:
+                ax.set_xlabel("time")
+
+            if leg is not None:
+                for lh in leg.legend_handles:
+                    lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
@@ -444,24 +444,20 @@ class PlotRendererPipeline:
         for cleanup_index in range(plot_index, len(ax_list)):
             ax = ax_list[cleanup_index]
             ax.tick_params(axis="x", labelrotation=45)
-            subplotspec = ax.get_subplotspec()
-            if subplotspec is not None:
-                if subplotspec.is_last_row():
-                    if _time_format == "date":
-                        ax.set_xlabel("date")
-                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                        ax.xaxis.set_major_locator(
-                            AutoDateLocator(
-                                minticks=6, maxticks=12, interval_multiples=True
-                            )
-                        )
 
-                    elif _time_format == "day":
-                        ax.set_xlabel("day")
-                    elif _time_format == "tick":
-                        ax.set_xlabel("tick")
-                    else:
-                        ax.set_xlabel("time")
+            if _time_format == "date":
+                ax.set_xlabel("date")
+                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_locator(
+                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
+                )
+
+            elif _time_format == "day":
+                ax.set_xlabel("day")
+            elif _time_format == "tick":
+                ax.set_xlabel("tick")
+            else:
+                ax.set_xlabel("time")
 
         return lines
 
@@ -774,6 +770,7 @@ class PlotRendererPipeline:
             ax.tick_params(axis="x", labelrotation=45)
 
             ##Labels and Legend
+            leg = None
             if legend == "on":
                 leg = ax.legend()
                 leg.set_zorder(2e10)
@@ -781,24 +778,23 @@ class PlotRendererPipeline:
                 leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
                 leg.set_zorder(2e10)
 
-            subplotspec = ax.get_subplotspec()
-            if subplotspec is not None:
-                if subplotspec.is_last_row():
-                    if _time_format == "date":
-                        ax.set_xlabel("date")
-                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                        ax.xaxis.set_major_locator(
-                            AutoDateLocator(
-                                minticks=6, maxticks=12, interval_multiples=True
-                            )
-                        )
+            if _time_format == "date":
+                ax.set_xlabel("date")
+                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_locator(
+                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
+                )
 
-                    elif _time_format == "day":
-                        ax.set_xlabel("day")
-                    elif _time_format == "tick":
-                        ax.set_xlabel("tick")
-                    else:
-                        ax.set_xlabel("time")
+            elif _time_format == "day":
+                ax.set_xlabel("day")
+            elif _time_format == "tick":
+                ax.set_xlabel("tick")
+            else:
+                ax.set_xlabel("time")
+
+            if leg is not None:
+                for lh in leg.legend_handles:
+                    lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
@@ -806,24 +802,20 @@ class PlotRendererPipeline:
         for cleanup_index in range(plot_index, len(ax_list)):
             ax = ax_list[cleanup_index]
             ax.tick_params(axis="x", labelrotation=45)
-            subplotspec = ax.get_subplotspec()
-            if subplotspec is not None:
-                if subplotspec.is_last_row():
-                    if _time_format == "date":
-                        ax.set_xlabel("date")
-                        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                        ax.xaxis.set_major_locator(
-                            AutoDateLocator(
-                                minticks=6, maxticks=12, interval_multiples=True
-                            )
-                        )
 
-                    elif _time_format == "day":
-                        ax.set_xlabel("day")
-                    elif _time_format == "tick":
-                        ax.set_xlabel("tick")
-                    else:
-                        ax.set_xlabel("time")
+            if _time_format == "date":
+                ax.set_xlabel("date")
+                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_locator(
+                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
+                )
+
+            elif _time_format == "day":
+                ax.set_xlabel("day")
+            elif _time_format == "tick":
+                ax.set_xlabel("tick")
+            else:
+                ax.set_xlabel("time")
 
     def histogram(
         self,
@@ -933,7 +925,7 @@ class PlotRendererPipeline:
 
             # Legend
             if legend == "auto":
-                # auto: show a legend if there are at most 5 realizations.
+                # auto: show a legend if there are at most 4 quantities.
                 legend = "on" if len(quantity.labels) <= 4 else "off"
 
             self.histogram_plt(
@@ -1089,10 +1081,15 @@ class PlotRendererPipeline:
                     **curr_kwargs,
                 )
             # Labels and Legend
+            leg = None
             if legend == "on":
                 ax.legend()
             elif legend == "outside":
                 ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if leg is not None:
+                for lh in leg.legend_handles:
+                    lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
@@ -1219,14 +1216,19 @@ class PlotRendererPipeline:
                 plt.xlabel("time")
 
             # Legend
+            leg = None
             if legend == "auto":
                 # auto: show a legend if there are at most 12 lines.
                 legend = "on" if len(lines) <= 12 else "off"
 
             if legend == "on":
-                plt.legend()
+                leg = plt.legend()
             elif legend == "outside":
-                plt.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                leg = plt.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if leg is not None:
+                for lh in leg.legend_handles:
+                    lh.set_alpha(1)
 
             if title is not None:
                 plt.title(title)
@@ -1461,8 +1463,8 @@ class PlotRendererPipeline:
 
             # Legend
             if legend == "auto":
-                # auto: show a legend if there are at most 5 realizations.
-                legend = "on" if len(quantity.labels) <= 4 else "off"
+                # auto: show a legend if there are at most 12 lines.
+                legend = "on" if len(quantity.labels) <= 12 else "off"
 
             self.kde_plt(
                 axes,
@@ -1649,10 +1651,15 @@ class PlotRendererPipeline:
                 )
 
             ##Labels and Legend
+            leg = None
             if legend == "on":
-                ax.legend()
+                leg = ax.legend()
             elif legend == "outside":
-                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if leg is not None:
+                for lh in leg.legend_handles:
+                    lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
