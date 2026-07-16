@@ -366,7 +366,7 @@ class PlotRendererPipeline:
         # Group by geo location
         groups_df = data_df.set_axis(
             ["realization", "time", "geo", *q_mapping.keys()], axis=1
-        ).groupby("geo")
+        ).groupby("geo", sort=False)
 
         _time_format, _ = self._time_format(time, time_format)
 
@@ -617,6 +617,7 @@ class PlotRendererPipeline:
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
         label_format: str = "{n}: {q}: {c}",
+        median_label_format: str = "{n}: {q}",
         ax_title: str = "{n}",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
@@ -714,7 +715,7 @@ class PlotRendererPipeline:
             }
         )
 
-        groups_df = data_df.groupby("geo")
+        groups_df = data_df.groupby("geo", sort=False)
 
         _time_format, _ = self._time_format(time, time_format)
 
@@ -744,7 +745,6 @@ class PlotRendererPipeline:
                         label = label_format.format(
                             n=geo_group_name, q=quantity_label, c=credible_intervals
                         )
-
                     ax.fill_between(
                         gdf["time"],
                         data_lower["value"],
@@ -755,12 +755,14 @@ class PlotRendererPipeline:
                 data_median = transform(
                     pd.DataFrame({"value": gdf[quantity_dis_label]["quantile_50.0"]})
                 )
-
-                median_label = f"{geo_group_name}: {quantity_label}: Median"
+                label_med = median_label_format.format(
+                    n=geo_group_name, q=quantity_label
+                )
+                label_med = f"{label_med}: Median"
                 ax.plot(
                     gdf["time"],
                     data_median["value"],
-                    label=median_label,
+                    label=label_med,
                     zorder=100,
                     **l_kwargs,
                 )
@@ -1048,7 +1050,7 @@ class PlotRendererPipeline:
             }
         )
 
-        groups_df = data_df.groupby("geo")
+        groups_df = data_df.groupby("geo", sort=False)
 
         plot_index = 0
         ax_time_str = (
@@ -1303,6 +1305,7 @@ class PlotRendererPipeline:
             control over the presentation of the lines.
 
         """
+
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
 
@@ -1334,7 +1337,7 @@ class PlotRendererPipeline:
 
         lines = list[Line2D]()
 
-        geo_groups = data_df.groupby("geo")
+        geo_groups = data_df.groupby("geo", sort=False)
 
         line_index = 0
         for group_name, gdf in geo_groups:
@@ -1601,7 +1604,7 @@ class PlotRendererPipeline:
             }
         )
 
-        groups_df = data_df.groupby("geo")
+        groups_df = data_df.groupby("geo", sort=False)
 
         # Plotting
         ax_time_str = (
