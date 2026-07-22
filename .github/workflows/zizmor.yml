@@ -1,0 +1,32 @@
+# Runs zizmor checks on our GitHub Actions workflows.
+#
+# Verifies that we are following best practices. Of course you can and should
+# run these checks on your development machine before committing, simply:
+# > uvx zizmor .
+
+name: Zizmor (Static Analysis for GHA)
+
+on:
+  push:
+    paths:
+      - '.github/workflows/*.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/*.yml'
+
+permissions: {}
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # for actions/checkout
+      security-events: write  # for actions/zizmor-action
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor 🌈
+        uses: zizmorcore/zizmor-action@6599ee8b7a49aef6a770f63d261d214911a7ce02  # v0.6.0
