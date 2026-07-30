@@ -137,6 +137,42 @@ class PlotRendererPipeline:
                 # Any other combo doesn't need to be or can't be mapped.
                 return actual, identity
 
+    def _check_num_nodes(self, geo):
+        """
+        Figures out how many unique geo nodes remain after applying munge.
+        Used for determining how many subplots are needed for plotting.
+        """
+
+        geo_indices = np.array(geo.indices)
+
+        if geo.grouping is None:
+            if geo.aggregation is None:
+                num_nodes = self.output.rume.scope.nodes
+            else:
+                num_nodes = 1
+
+        else:
+            num_nodes = len(
+                np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
+            )
+
+        return num_nodes
+
+    def _promote_axs(self, axs):
+        """
+        Takes an axs object provided by the user
+        and ensures it is appropriately broadcast into a list.
+        """
+
+        if isinstance(axs, np.ndarray):
+            ax_list = list(axs.flat)
+        elif isinstance(axs, Axes):
+            ax_list = [axs]
+        else:
+            ax_list = list(axs)
+
+        return ax_list
+
     def spaghetti(
         self,
         realization: RealizationSelection,
@@ -180,10 +216,13 @@ class PlotRendererPipeline:
             See matplotlib documentation for the supported options.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
-            "auto" will use the format defined by the grouping of the `time` parameter,
-            "date" attempts to display calendar dates,
-            "day" attempts to display days numerically indexed from the start of the
+            - "auto" will use the format defined by the grouping of the
+            `time` parameter,legend :
+            Whether and how to draw the plot legend.
+            - "date" attempts to display calendar dates,
+            - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
+
             If the system cannot convert to the requested time format, this argument
             may be ignored.
         legend :
@@ -219,18 +258,7 @@ class PlotRendererPipeline:
             raise ValueError("Spaghetti plots only support RealizationSelection.")
 
         try:
-            geo_indices = np.array(geo.indices)
-
-            if geo.grouping is None:
-                if geo.aggregation is None:
-                    num_nodes = self.output.rume.scope.nodes
-                else:
-                    num_nodes = 1
-
-            else:
-                num_nodes = len(
-                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
-                )
+            num_nodes = self._check_num_nodes(geo)
 
             nrows = ceil(num_nodes / ncols)
             fig, axs = plt.subplots(
@@ -286,7 +314,7 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         *,
         legend: LegendOption = "auto",
-        kwarg_type: str = "quantity",
+        kwarg_type: Literal["quantity", "geo"] = "quantity",
         ax_title: str = "{n}",
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
@@ -314,17 +342,23 @@ class PlotRendererPipeline:
             Whether and how to draw the plot legend.
         kwarg_type :
             Whether to iterate the kwargs over the quantities or the geos.
-            Options are "geo", default is quantity iteration.
+
+            - "geo" will iterate the kwargs over the geos, cycling as needed.
+
+            - "quantity" will iterate the kwargs over the quantities, cycling as needed.
         ax_title :
             A format string to display as the title for each subplot.
-            Defaults to displaying the geo.
+            The string will be used in a call to format() with the
+            replacement variable {n} for the name of the geo node.
         line_kwargs :
             A list of dictionaries of keyword arguments to be passed to the matplotlib
             function that draws each line.
         time_format :
             Controls the formatting of the time axis (the horizontal axis).
         label_format :
-            A format for the items displayed in the legend.
+            A format for the items displayed in the legend. The string will be used in
+              a call to format() with the replacement variables {n} for
+              the name of the geo node and {q} for the name of the quantity.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it.
@@ -335,12 +369,7 @@ class PlotRendererPipeline:
             The list of `Line2D` objects for each line drawn.
         """
 
-        if isinstance(axs, np.ndarray):
-            ax_list = list(axs.flat)
-        elif isinstance(axs, Axes):
-            ax_list = [axs]
-        else:
-            ax_list = list(axs)
+        ax_list = self._promote_axs(axs)
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
@@ -420,6 +449,11 @@ class PlotRendererPipeline:
             elif legend == "outside":
                 leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
+            if leg is not None:
+                for lh in leg.legend_handles:
+                    if lh is not None:
+                        lh.set_alpha(1)
+
             if _time_format == "date":
                 ax.set_xlabel("date")
                 ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
@@ -433,10 +467,6 @@ class PlotRendererPipeline:
                 ax.set_xlabel("tick")
             else:
                 ax.set_xlabel("time")
-
-            if leg is not None:
-                for lh in leg.legend_handles:
-                    lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
@@ -545,18 +575,7 @@ class PlotRendererPipeline:
         """
 
         try:
-            geo_indices = np.array(geo.indices)
-
-            if geo.grouping is None:
-                if geo.aggregation is None:
-                    num_nodes = self.output.rume.scope.nodes
-                else:
-                    num_nodes = 1
-
-            else:
-                num_nodes = len(
-                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
-                )
+            num_nodes = self._check_num_nodes(geo)
 
             nrows = ceil(num_nodes / ncols)
 
@@ -612,7 +631,7 @@ class PlotRendererPipeline:
         *,
         credible_intervals: Sequence[float] | None = None,
         legend: LegendOption = "auto",
-        kwarg_type: str = "quantity",
+        kwarg_type: Literal["quantity", "geo"] = "quantity",
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
         time_format: TimeFormatOption = "auto",
@@ -642,7 +661,9 @@ class PlotRendererPipeline:
             Whether and how to draw the plot legend.
         kwarg_type :
             Whether to iterate the kwargs over the quantities or the geos.
-            Options are "geo", default is quantity iteration.
+            - "geo" iterates over the geo nodes, cycling as needed.
+
+            - "quantity iterates over the quantities, cycling as need.
         fill_kwargs :
             A list of dictionaries corresponding to each credible interval.
         line_kwargs :
@@ -660,12 +681,7 @@ class PlotRendererPipeline:
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it.
         """
-        if isinstance(axs, np.ndarray):
-            ax_list = list(axs.flat)
-        elif isinstance(axs, Axes):
-            ax_list = [axs]
-        else:
-            ax_list = list(axs)
+        ax_list = self._promote_axs(axs)
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{"color": "black"}]
@@ -780,6 +796,11 @@ class PlotRendererPipeline:
                 leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
                 leg.set_zorder(2e10)
 
+            if leg is not None:
+                for lh in leg.legend_handles:
+                    if lh is not None:
+                        lh.set_alpha(1)
+
             if _time_format == "date":
                 ax.set_xlabel("date")
                 ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
@@ -793,10 +814,6 @@ class PlotRendererPipeline:
                 ax.set_xlabel("tick")
             else:
                 ax.set_xlabel("time")
-
-            if leg is not None:
-                for lh in leg.legend_handles:
-                    lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
@@ -866,9 +883,10 @@ class PlotRendererPipeline:
             (instead of inside it)
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
-            "auto" will use the format defined by the grouping of the `time` parameter,
-            "date" attempts to display calendar dates,
-            "day" attempts to display days numerically indexed from the start of the
+            - "auto" will use the format defined by the grouping of the
+            `time` parameter,
+            - "date" attempts to display calendar dates,
+            - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
             If the system cannot convert to the requested time format, this argument
             may be ignored.
@@ -895,18 +913,8 @@ class PlotRendererPipeline:
         """
 
         try:
-            geo_indices = np.array(geo.indices)
+            num_nodes = self._check_num_nodes(geo)
 
-            if geo.grouping is None:
-                if geo.aggregation is None:
-                    num_nodes = self.output.rume.scope.nodes
-                else:
-                    num_nodes = 1
-
-            else:
-                num_nodes = len(
-                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
-                )
             nrows = ceil(num_nodes / ncols)
             fig, axs = plt.subplots(
                 nrows,
@@ -961,7 +969,7 @@ class PlotRendererPipeline:
         *,
         legend: LegendOption = "auto",
         hist_kwargs: list[dict] | None = None,
-        kwarg_type="quantity",
+        kwarg_type: Literal["quantity", "geo"] = "quantity",
         ax_title: str = "{n}: {t}",
         label_format="{n}: {q}: {t}",
         time_format: TimeFormatOption = "auto",
@@ -991,7 +999,8 @@ class PlotRendererPipeline:
             for geo iteration.
         ax_title :
             Specifies the format of the title for the subplots.
-            Defaults to {n}: {t} where n is the geo and t is the time.
+            The string is supplied to a call to format() with replacement variables {n}
+            and {t} where n is the geo and t is the time.
         label_format :
             Specifies the label format for the legend.
             Defaults to {n}: {q}: {t} where n is the geo, q is the
@@ -1004,12 +1013,8 @@ class PlotRendererPipeline:
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it.
         """
-        if isinstance(axs, np.ndarray):
-            ax_list = list(axs.flat)
-        elif isinstance(axs, Axes):
-            ax_list = [axs]
-        else:
-            ax_list = list(axs)
+        ax_list = self._promote_axs(axs)
+
         if hist_kwargs is None or len(hist_kwargs) == 0:
             hist_kwargs = [{}]
 
@@ -1091,7 +1096,8 @@ class PlotRendererPipeline:
 
             if leg is not None:
                 for lh in leg.legend_handles:
-                    lh.set_alpha(1)
+                    if lh is not None:
+                        lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
@@ -1145,9 +1151,10 @@ class PlotRendererPipeline:
             See matplotlib documentation for the supported options.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
-            "auto" will use the format defined by the grouping of the `time` parameter,
-            "date" attempts to display calendar dates,
-            "day" attempts to display days numerically indexed from the start of the
+            - "auto" will use the format defined by the grouping of the
+            `time` parameter,
+            - "date" attempts to display calendar dates,
+            - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
             If the system cannot convert to the requested time format, this argument
             may be ignored.
@@ -1230,7 +1237,8 @@ class PlotRendererPipeline:
 
             if leg is not None:
                 for lh in leg.legend_handles:
-                    lh.set_alpha(1)
+                    if lh is not None:
+                        lh.set_alpha(1)
 
             if title is not None:
                 plt.title(title)
@@ -1400,6 +1408,12 @@ class PlotRendererPipeline:
             that draws the kde plot.
         legend :
             Whether and how to draw the plot legend.
+
+            - "auto" will draw the legend unless it would be too large
+            - "on" forces the legend to be drawn
+            - "off" forces the legend to not be drawn
+            - "outside" forces the legend to be drawn next to the plot area
+            (instead of inside it)
         delta_t :
             Specifies the interval at which to sample the kernelized density.
             Defaults to 1/100.
@@ -1409,9 +1423,10 @@ class PlotRendererPipeline:
             Defaults to "scott". See scipy.stats.gaussian_kde for details.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
-            "auto" will use the format defined by the grouping of the `time` parameter,
-            "date" attempts to display calendar dates,
-            "day" attempts to display days numerically indexed from the start of the
+             - "auto" will use the format defined by the grouping of the
+            `time` parameter,
+             - "date" attempts to display calendar dates,
+             - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
             If the system cannot convert to the requested time format, this argument
             may be ignored.
@@ -1434,18 +1449,7 @@ class PlotRendererPipeline:
 
         """
         try:
-            geo_indices = np.array(geo.indices)
-
-            if geo.grouping is None:
-                if geo.aggregation is None:
-                    num_nodes = self.output.rume.scope.nodes
-                else:
-                    num_nodes = 1
-
-            else:
-                num_nodes = len(
-                    np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
-                )
+            num_nodes = self._check_num_nodes(geo)
 
             nrows = ceil(num_nodes / ncols)
             fig, axes = plt.subplots(
@@ -1550,6 +1554,12 @@ class PlotRendererPipeline:
             quantity, and t is the time.
         legend :
             Whether and how to draw the plot legend.
+
+            - "auto" will draw the legend unless it would be too large
+            - "on" forces the legend to be drawn
+            - "off" forces the legend to not be drawn
+            - "outside" forces the legend to be drawn next to the plot area
+            (instead of inside it)
         time_format :
             Controls the formatting of the time axis (the horizontal axis).
         transform :
@@ -1570,12 +1580,7 @@ class PlotRendererPipeline:
             )
             raise ValueError(err)
 
-        if isinstance(axs, np.ndarray):
-            ax_list = list(axs.flat)
-        elif isinstance(axs, Axes):
-            ax_list = [axs]
-        else:
-            ax_list = list(axs)
+        ax_list = self._promote_axs(axs)
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
@@ -1662,7 +1667,8 @@ class PlotRendererPipeline:
 
             if leg is not None:
                 for lh in leg.legend_handles:
-                    lh.set_alpha(1)
+                    if lh is not None:
+                        lh.set_alpha(1)
 
             plot_index += 1
             plot_index = plot_index % len(ax_list)
