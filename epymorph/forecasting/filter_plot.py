@@ -216,6 +216,7 @@ class PlotRendererPipeline:
             See matplotlib documentation for the supported options.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
+
             - "auto" will use the format defined by the grouping of the
             `time` parameter,legend :
             Whether and how to draw the plot legend.
@@ -344,12 +345,11 @@ class PlotRendererPipeline:
             Whether to iterate the kwargs over the quantities or the geos.
 
             - "geo" will iterate the kwargs over the geos, cycling as needed.
-
             - "quantity" will iterate the kwargs over the quantities, cycling as needed.
         ax_title :
             A format string to display as the title for each subplot.
-            The string will be used in a call to format() with the
-            replacement variable {n} for the name of the geo node.
+            The string will be used in a call to `format()` with the
+            replacement variable `{n}` for the name of the geo node.
         line_kwargs :
             A list of dictionaries of keyword arguments to be passed to the matplotlib
             function that draws each line.
@@ -357,8 +357,8 @@ class PlotRendererPipeline:
             Controls the formatting of the time axis (the horizontal axis).
         label_format :
             A format for the items displayed in the legend. The string will be used in
-              a call to format() with the replacement variables {n} for
-              the name of the geo node and {q} for the name of the quantity.
+              a call to `format()` with the replacement variables `{n}` for
+              the name of the geo node and `{q}` for the name of the quantity.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it.
@@ -546,6 +546,7 @@ class PlotRendererPipeline:
             See matplotlib documentation for the supported options.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
+
             "auto" will use the format defined by the grouping of the `time` parameter,
             "date" attempts to display calendar dates,
             "day" attempts to display days numerically indexed from the start of the
@@ -661,9 +662,9 @@ class PlotRendererPipeline:
             Whether and how to draw the plot legend.
         kwarg_type :
             Whether to iterate the kwargs over the quantities or the geos.
-            - "geo" iterates over the geo nodes, cycling as needed.
 
-            - "quantity iterates over the quantities, cycling as need.
+            - "geo" iterates over the geo nodes, cycling as needed.
+            - "quantity" iterates over the quantities, cycling as need.
         fill_kwargs :
             A list of dictionaries corresponding to each credible interval.
         line_kwargs :
@@ -671,12 +672,12 @@ class PlotRendererPipeline:
         time_format :
             Controls the formatting of the time axis (the horizontal axis).
         label_format :
-            A format string describing the labels in the legend. Defaults to
-            {n} : {q} : {c}, with n the geo, q the quantity,
-            and c the list of credible intervals.
+            A format string describing the labels in the legend. The string will be used
+            in a call to `format()` with replacement variables `{n}` for the geo, `{q}`
+            for the quantity, and `{c}` the list of credible intervals.
         ax_title :
-            A format string for the title of each subplot. Defaults to
-            {n}, with n the geo.
+            A format string for the title of each subplot. The string will be used in a
+            call for `format()` with replacement variables `{n}` for the geo.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it.
@@ -883,8 +884,8 @@ class PlotRendererPipeline:
             (instead of inside it)
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
-            - "auto" will use the format defined by the grouping of the
-            `time` parameter,
+
+            - "auto" will use the format defined by the grouping of the `time` parameter,
             - "date" attempts to display calendar dates,
             - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
@@ -994,17 +995,18 @@ class PlotRendererPipeline:
             A list of keyword arguments to be passed to the matplotlib function
             that draws the bin plot.
         kwarg_type :
-            A string describing whether hist_kwargs should iterate over
-            the geo or quantity axis. Default is "quantity", specify "geo"
-            for geo iteration.
+            Whether to iterate the kwargs over the quantities or the geos.
+
+            - "geo" iterates over the geo nodes, cycling as needed.
+            - "quantity" iterates over the quantities, cycling as need.
         ax_title :
             Specifies the format of the title for the subplots.
-            The string is supplied to a call to format() with replacement variables {n}
-            and {t} where n is the geo and t is the time.
+            The string is supplied to a call to `format()` with replacement variables
+            `{n}` for the geo and `{t}` for the time.
         label_format :
-            Specifies the label format for the legend.
-            Defaults to {n}: {q}: {t} where n is the geo, q is the
-            quantity, and t is the time.
+            Specifies the label format for the legend; the string will be used in a call
+            to `format()` with replacement variables `{n}` for the geo, `{q}` for the
+            quantity, and `{t}` for the time.
         legend :
             Whether and how to draw the plot legend.
         time_format :
@@ -1151,6 +1153,7 @@ class PlotRendererPipeline:
             See matplotlib documentation for the supported options.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
+
             - "auto" will use the format defined by the grouping of the
             `time` parameter,
             - "date" attempts to display calendar dates,
@@ -1416,18 +1419,20 @@ class PlotRendererPipeline:
             (instead of inside it)
         delta_t :
             Specifies the interval at which to sample the kernelized density.
-            Defaults to 1/100.
+            If `None` will be `1/100` of the range of the data.
         bandwidth :
             The bandwidth for the convolution kernel. Specify either a float or
             a string for an adaptive scheme. Options are "scott", "silverman".
-            Defaults to "scott". See scipy.stats.gaussian_kde for details.
+            See scipy.stats.gaussian_kde for details.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
+
              - "auto" will use the format defined by the grouping of the
             `time` parameter,
              - "date" attempts to display calendar dates,
              - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
+
             If the system cannot convert to the requested time format, this argument
             may be ignored.
         transform :
@@ -1505,7 +1510,7 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         line_kwargs: list[dict] | None = None,
         ax_title: str = "{n}: {t}",
-        kwarg_type: str = "quantity",
+        kwarg_type: Literal["quantity", "geo"] = "quantity",
         bandwidth: float | str = "scott",
         delta_t: float | None = None,
         label_format: str = "{n}: {q}: {t}",
@@ -1532,26 +1537,29 @@ class PlotRendererPipeline:
             A list of keyword arguments to be passed to the matplotlib function
             that draws the lines.
         ax_title :
-            A format string specifying the format of the title.
-            Defaults to "{n}: {t}", where n is the geo and t is the time.
+            A format string specifying the format of the title. The string will be used
+            in a call to `format()` with replacement variables `{n}` for the geo and
+            `{t}` for the time.
         kwarg_type :
-            A string describing whether hist_kwargs should iterate over
-            the geo or quantity axis. Default is "quantity", specify "geo"
-            for geo iteration.
+            Whether to iterate the kwargs over the quantities or the geos.
+
+            - "geo" iterates over the geo nodes, cycling as needed.
+            - "quantity" iterates over the quantities, cycling as need.
         bandwidth :
             The bandwidth for the convolution kernel. Specify either a float or
-            a string for an adaptive scheme. Options are "scott", "silverman".
-            Defaults to "scott". See scipy.stats.gaussian_kde for details.
+            a string for an adaptive scheme. Options are "scott" or "silverman".
+            See scipy.stats.gaussian_kde for details.
         delta_t :
             Specifies the interval at which to sample the kernelized density.
-            Defaults to 1/100.
+            If `None` will be `1/100` of the range of the data.
         ax_title :
-            Specifies the format of the title for the subplots.
-            Defaults to {n}: {t} where n is the geo and t is the time.
+            Specifies the format of the title for the subplots. The string will be used
+            in a call to `format()` with replacement variables `{n}` for the geo and
+            `{t}` for the time.
         label_format :
-            Specifies the label format for the legend.
-            Defaults to {n}: {q}: {t} where n is the geo, q is the
-            quantity, and t is the time.
+            Specifies the label format for the legend. The string will be used in a
+            call to `format()` with replacement variables `{n}` for the geo, `{q}`
+            for the quantity, and `{t}` for the time.
         legend :
             Whether and how to draw the plot legend.
 
