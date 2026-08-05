@@ -885,8 +885,9 @@ class PlotRendererPipeline:
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
-            - "auto" will use the format defined by the grouping of the `time` parameter,
-            - "date" attempts to display calendar dates,
+            - "auto" will use the format defined by the grouping of the `time`
+            parameter.
+            - "date" attempts to display calendar dates.
             - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
             If the system cannot convert to the requested time format, this argument
@@ -1092,9 +1093,9 @@ class PlotRendererPipeline:
             # Labels and Legend
             leg = None
             if legend == "on":
-                ax.legend()
+                leg = ax.legend()
             elif legend == "outside":
-                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
 
             if leg is not None:
                 for lh in leg.legend_handles:
