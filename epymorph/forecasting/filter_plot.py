@@ -240,15 +240,16 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
-            You should return a dataframe with the same format, where the
-            values of the data column have been modified for your purposes.
+            The function will be called once per realization per geo/quantity group
+            -- once per line, essentially -- with a dataframe that contains just the
+            data for that realization and group. The dataframe given as the argument
+            is the result of applying all selections. You should return a dataframe
+            with the same format, where the values of the data column have been modified
+            for your purposes.
 
             Dataframe columns:
 
+            - "realization": the realization index (same value per group)
             - "time": the time series column
             - "geo": the node ID (same value per group)
             - "quantity": the label of the quantity (same value per group)
@@ -361,7 +362,21 @@ class PlotRendererPipeline:
               the name of the geo node and `{q}` for the name of the quantity.
         transform :
             Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it.
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per realization per geo/quantity group
+            -- once per line, essentially -- with a dataframe that contains just the
+            data for that realization and group. The dataframe given as the argument
+            is the result of applying all selections. You should return a dataframe
+            with the same format, where the values of the data column have been modified
+            for your purposes.
+
+            Dataframe columns:
+
+            - "realization": the realization index (same value per group)
+            - "time": the time series column
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
+            - "value": the data column
 
         Returns
         -------
@@ -560,18 +575,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per quantile per geo/quantity group
+            -- once per line, essentially -- with a dataframe that contains just the
+            data for that group. The dataframe given as the argument is the result of
+            applying all selections.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
-            - "time": the time series column
-            - "geo": the node ID (same value per group)
-            - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
 
@@ -680,7 +692,17 @@ class PlotRendererPipeline:
             call for `format()` with replacement variables `{n}` for the geo.
         transform :
             Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it.
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per quantile per geo/quantity group
+            -- once per line, essentially -- with a dataframe that contains just the
+            data for that group. The dataframe given as the argument is the result of
+            applying all selections.
+            You should return a dataframe with the same format, where the
+            values of the data column have been modified for your purposes.
+
+            Dataframe columns:
+
+            - "value": the data column
         """
         ax_list = self._promote_axs(axs)
 
@@ -899,18 +921,14 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per geo/quantity group with a dataframe
+            that contains just the data for that group. The dataframe given as the
+            argument is the result of applying all selections.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
-            - "time": the time series column
-            - "geo": the node ID (same value per group)
-            - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
 
@@ -1014,7 +1032,16 @@ class PlotRendererPipeline:
             Controls the formatting of the time axis (the horizontal axis).
         transform :
             Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it.
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per geo/quantity group with a dataframe
+            that contains just the data for that group. The dataframe given as the
+            argument is the result of applying all selections.
+            You should return a dataframe with the same format, where the
+            values of the data column have been modified for your purposes.
+
+            Dataframe columns:
+
+            - "value": the data column
         """
         ax_list = self._promote_axs(axs)
 
@@ -1175,18 +1202,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
-            You should return a dataframe with the same format, where the
-            values of the data column have been modified for your purposes.
+            The function will be called once per realization per geo/quantity group
+            -- once per line, essentially -- with a dataframe that contains just the
+            data for that group. The dataframe given as the argument is the result of
+            applying all selections. You should return a dataframe with the same format,
+            where the values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
-            - "time": the time series column
-            - "geo": the node ID (same value per group)
-            - "quantity": the label of the quantity (same value per group)
+            - "metric": the aggregation method for the realizations
             - "value": the data column
         """
 
@@ -1296,18 +1320,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
-            You should return a dataframe with the same format, where the
-            values of the data column have been modified for your purposes.
+            The function will be called once per realization per geo/quantity group
+            -- once per line, essentially -- with a dataframe that contains just the
+            data for that group. The dataframe given as the argument is the result of
+            applying all selections. You should return a dataframe with the same format,
+            where the values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
-            - "time": the time series column
-            - "geo": the node ID (same value per group)
-            - "quantity": the label of the quantity (same value per group)
+            - "metric": the aggregation method for the realizations
             - "value": the data column
 
         Returns
@@ -1439,20 +1460,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per geo/quantity group with a dataframe
+            that contains just the data for that group. The dataframe given as the
+            argument is the result of applying all selections.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
-            - "time": the time series column
-            - "geo": the node ID (same value per group)
-            - "quantity": the label of the quantity (same value per group)
             - "value": the data column
-
         """
         try:
             num_nodes = self._check_num_nodes(geo)
@@ -1573,7 +1589,16 @@ class PlotRendererPipeline:
             Controls the formatting of the time axis (the horizontal axis).
         transform :
             Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it.
+            dataframe before we plot it, e.g., to rescale the values.
+            The function will be called once per geo/quantity group with a dataframe
+            that contains just the data for that group. The dataframe given as the
+            argument is the result of applying all selections.
+            You should return a dataframe with the same format, where the
+            values of the data column have been modified for your purposes.
+
+            Dataframe columns:
+
+            - "value": the data column
         """
 
         realizations_agg = self.output.select.all()
