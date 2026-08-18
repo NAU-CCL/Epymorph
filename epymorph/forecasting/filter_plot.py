@@ -41,10 +41,6 @@ class PlotRendererPipeline:
     """
     Provides methods for rendering an output in plot form.
 
-    Most commonly, you will use `PlotRendererFilter` starting
-    from a filter output object
-    that supports it:
-
     Parameters
     ----------
     output : PipelineOutput
@@ -209,6 +205,14 @@ class PlotRendererPipeline:
         ncols :
             The number of columns in the resulting subplot matrix. The
             number of rows is set dynamically.
+        legend :
+            Whether and how to draw the plot legend.
+
+            - "auto" will draw the legend unless it would be too large
+            - "on" forces the legend to be drawn
+            - "off" forces the legend to not be drawn
+            - "outside" forces the legend to be drawn next to the plot area
+            (instead of inside it)
         line_kwargs :
             A list of dictionaries of keyword arguments to be passed to the matplotlib
             function that draws each line. Each dictionary corresponds
@@ -218,21 +222,13 @@ class PlotRendererPipeline:
             Controls the formatting of the time axis (the horizontal axis);
 
             - "auto" will use the format defined by the grouping of the
-            `time` parameter,legend :
-            Whether and how to draw the plot legend.
-            - "date" attempts to display calendar dates,
+            `time` parameter
+            - "date" attempts to display calendar dates
             - "day" attempts to display days numerically indexed from the start of the
-            simulation with the first day being 0.
+            simulation with the first day being 0
 
             If the system cannot convert to the requested time format, this argument
             may be ignored.
-        legend :
-            Whether and how to draw the plot legend.
-            - "auto" will draw the legend unless it would be too large
-            - "on" forces the legend to be drawn
-            - "off" forces the legend to not be drawn
-            - "outside" forces the legend to be drawn next to the plot area
-            (instead of inside it)
         title :
             A title to draw on the plot.
         to_file :
@@ -330,9 +326,9 @@ class PlotRendererPipeline:
 
         Parameters
         ----------
-        axs:
+        axs :
             The array of matplotlib `Axes` on which to draw the plots.
-        realization:
+        realization :
             A realization selection to make on the output data.
         geo :
             The geographic selection to make on the output data.
@@ -342,6 +338,12 @@ class PlotRendererPipeline:
             The quantity selection to make on the output data.
         legend :
             Whether and how to draw the plot legend.
+
+            - "auto" will draw the legend unless it would be too large
+            - "on" forces the legend to be drawn
+            - "off" forces the legend to not be drawn
+            - "outside" forces the legend to be drawn next to the plot area
+            (instead of inside it)
         kwarg_type :
             Whether to iterate the kwargs over the quantities or the geos.
 
@@ -353,9 +355,20 @@ class PlotRendererPipeline:
             replacement variable `{n}` for the name of the geo node.
         line_kwargs :
             A list of dictionaries of keyword arguments to be passed to the matplotlib
-            function that draws each line.
+            function that draws each line. Each dictionary corresponds
+            to a single quantity.
+            See matplotlib documentation for the supported options.
         time_format :
-            Controls the formatting of the time axis (the horizontal axis).
+            Controls the formatting of the time axis (the horizontal axis);
+
+            - "auto" will use the format defined by the grouping of the
+            `time` parameter
+            - "date" attempts to display calendar dates
+            - "day" attempts to display days numerically indexed from the start of the
+            simulation with the first day being 0
+
+            If the system cannot convert to the requested time format, this argument
+            may be ignored.
         label_format :
             A format for the items displayed in the legend. The string will be used in
               a call to `format()` with the replacement variables `{n}` for
@@ -524,8 +537,7 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
         """
-        Produces a quantile plot of a filter output. This is a plot where
-        each realization corresponds to a specific line on a plot.
+        Produces a quantile plot of a filter output.
 
         Parameters
         ----------
@@ -562,10 +574,12 @@ class PlotRendererPipeline:
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
-            "auto" will use the format defined by the grouping of the `time` parameter,
-            "date" attempts to display calendar dates,
-            "day" attempts to display days numerically indexed from the start of the
+            - "auto" will use the format defined by the grouping of the
+            `time` parameter,
+            - "date" attempts to display calendar dates,
+            - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
+
             If the system cannot convert to the requested time format, this argument
             may be ignored.
         title :
@@ -574,13 +588,13 @@ class PlotRendererPipeline:
             Specify a path to save the plot to a file instead of calling `plt.show()`.
         transform :
             Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it, e.g., to rescale the values.
+            dataframe before we plot it, e.g., to rescale the quantiles.
             The function will be called once per quantile per geo/quantity group
             -- once per line, essentially -- with a dataframe that contains just the
-            data for that group. The dataframe given as the argument is the result of
-            applying all selections.
-            You should return a dataframe with the same format, where the
-            values of the data column have been modified for your purposes.
+            data for that group. The dataframe given as the argument is the result
+            of applying all selections and computing the quantiles. You should return a
+            dataframe with the same format, where the values of the data column have
+            been modified for your purposes.
 
             Dataframe columns:
 
@@ -641,8 +655,8 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
-        *,
         credible_intervals: Sequence[float] | None = None,
+        *,
         legend: LegendOption = "auto",
         kwarg_type: Literal["quantity", "geo"] = "quantity",
         fill_kwargs: list[dict] | None = None,
@@ -660,7 +674,7 @@ class PlotRendererPipeline:
 
         Parameters
         ----------
-        axs:
+        axs :
             The array of matplotlib `Axes` on which to draw the plots.
         geo :
             The geographic selection to make on the output data.
@@ -670,35 +684,59 @@ class PlotRendererPipeline:
             The quantity selection to make on the output data.
         credible_intervals :
             A list of credible intervals you wish to plot.
+            This argument only accepts CI's in 2.5% increments,
+            i.e. 2.5,5.0,7.5,...,97.5,100.0.
         legend :
             Whether and how to draw the plot legend.
+
+            - "auto" will draw the legend unless it would be too large
+            - "on" forces the legend to be drawn
+            - "off" forces the legend to not be drawn
+            - "outside" forces the legend to be drawn next to the plot area
+            (instead of inside it)
         kwarg_type :
             Whether to iterate the kwargs over the quantities or the geos.
 
             - "geo" iterates over the geo nodes, cycling as needed.
             - "quantity" iterates over the quantities, cycling as need.
         fill_kwargs :
-            A list of dictionaries corresponding to each credible interval.
+            A list of dictionaries corresponding to each CI.
+            This tells the plotting function how to fill the interior of the CI.
+            See matplotlib documentation for the supported options.
         line_kwargs :
-            A list of dictionaries correspondng to each credible interval's median.
+            A list of dictionaries correspondng to each CI's median.
+            See matplotlib documentation for the supported options.
         time_format :
-            Controls the formatting of the time axis (the horizontal axis).
+            Controls the formatting of the time axis (the horizontal axis);
+
+            - "auto" will use the format defined by the grouping of the
+            `time` parameter,
+            - "date" attempts to display calendar dates,
+            - "day" attempts to display days numerically indexed from the start of the
+            simulation with the first day being 0.
+
+            If the system cannot convert to the requested time format, this argument
+            may be ignored.
         label_format :
             A format string describing the labels in the legend. The string will be used
             in a call to `format()` with replacement variables `{n}` for the geo, `{q}`
             for the quantity, and `{c}` the list of credible intervals.
+        median_label_format :
+            A format string describing the label of the median in the legend. The string
+            will be used in a call to `format()` with replacement variables `{n}` for
+            the geo and `{q}` for the quantity.
         ax_title :
             A format string for the title of each subplot. The string will be used in a
             call for `format()` with replacement variables `{n}` for the geo.
         transform :
             Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it, e.g., to rescale the values.
+            dataframe before we plot it, e.g., to rescale the quantiles.
             The function will be called once per quantile per geo/quantity group
             -- once per line, essentially -- with a dataframe that contains just the
-            data for that group. The dataframe given as the argument is the result of
-            applying all selections.
-            You should return a dataframe with the same format, where the
-            values of the data column have been modified for your purposes.
+            data for that group. The dataframe given as the argument is the result
+            of applying all selections and computing the quantiles. You should return a
+            dataframe with the same format, where the values of the data column have
+            been modified for your purposes.
 
             Dataframe columns:
 
@@ -884,18 +922,18 @@ class PlotRendererPipeline:
         time :
             The time selection to make on the output data. For
             this plot the time selection must be a single time instant.
-            for instance you could use
-            'rume.time_frame.select.days(100, 100).group("day").agg()'
+            For instance you could use
+            `rume.time_frame.select.days(100, 100).group("day").agg()`
             to create a histogram corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
-        ncols :
-            The number of columns in the resulting subplot matrix. The
-            number of rows is set dynamically.
         hist_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws the bin plot.
             See matplotlib documentation for the supported options.
+        ncols :
+            The number of columns in the resulting subplot matrix. The
+            number of rows is set dynamically.
         legend :
             Whether and how to draw the plot legend.
 
@@ -912,6 +950,7 @@ class PlotRendererPipeline:
             - "date" attempts to display calendar dates.
             - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
+
             If the system cannot convert to the requested time format, this argument
             may be ignored.
         title :
@@ -1002,17 +1041,30 @@ class PlotRendererPipeline:
 
         Parameters
         ----------
-        axs:
+        axs :
             The array of matplotlib `Axes` on which to draw the plots.
         geo :
             The geographic selection to make on the output data.
         time :
-            The time selection to make on the output data.
+            The time selection to make on the output data. For
+            this plot the time selection must be a single time instant.
+            For instance you could use
+            `rume.time_frame.select.days(100, 100).group("day").agg()`
+            to create a histogram corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
+        legend :
+            Whether and how to draw the plot legend.
+
+            - "auto" will draw the legend unless it would be too large
+            - "on" forces the legend to be drawn
+            - "off" forces the legend to not be drawn
+            - "outside" forces the legend to be drawn next to the plot area
+            (instead of inside it)
         hist_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws the bin plot.
+            See matplotlib documentation for the supported options.
         kwarg_type :
             Whether to iterate the kwargs over the quantities or the geos.
 
@@ -1026,10 +1078,18 @@ class PlotRendererPipeline:
             Specifies the label format for the legend; the string will be used in a call
             to `format()` with replacement variables `{n}` for the geo, `{q}` for the
             quantity, and `{t}` for the time.
-        legend :
-            Whether and how to draw the plot legend.
+
         time_format :
-            Controls the formatting of the time axis (the horizontal axis).
+            Controls the formatting of the time axis (the horizontal axis);
+
+            - "auto" will use the format defined by the grouping of the `time`
+            parameter.
+            - "date" attempts to display calendar dates.
+            - "day" attempts to display days numerically indexed from the start of the
+            simulation with the first day being 0.
+
+            If the system cannot convert to the requested time format, this argument
+            may be ignored.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1166,6 +1226,12 @@ class PlotRendererPipeline:
             The time selection to make on the output data.
         quantity :
             The quantity selection to make on the output data.
+        label_format :
+            A format for the items displayed in the legend;
+            the string will be used in a call to `format()`
+            with the replacement variables `{n}` for the name of the geo node,
+            `{q}` for the name of the quantity, and `{m}` for the aggregation name
+            corresponding to the realization aggregation.
         legend :
             Whether and how to draw the plot legend.
 
@@ -1187,14 +1253,9 @@ class PlotRendererPipeline:
             - "date" attempts to display calendar dates,
             - "day" attempts to display days numerically indexed from the start of the
             simulation with the first day being 0.
+
             If the system cannot convert to the requested time format, this argument
             may be ignored.
-        label_format :
-            A format for the items displayed in the legend;
-            the string will be used in a call to `format()`
-            with the replacement variables `{n}` for the name of the geo node,
-            `{q}` for the name of the quantity, and '{m}' for the aggregation name
-            corresponding to the realization aggregation.
         title :
             A title to draw on the plot.
         to_file :
@@ -1299,7 +1360,7 @@ class PlotRendererPipeline:
 
         Parameters
         ----------
-        ax:
+        ax :
             The `Axes` on which to draw.
         realization :
             A realization aggregation which returns some number of lines per
@@ -1310,13 +1371,28 @@ class PlotRendererPipeline:
             The time selection to make on the output data.
         quantity :
             The quantity selection to make on the output data.
+        label_format :
+            A format for the items displayed in the legend;
+            the string will be used in a call to `format()`
+            with the replacement variables `{n}` for the name of the geo node,
+            `{q}` for the name of the quantity, and `{m}` for the aggregation name
+            corresponding to the realization aggregation.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each line.
+            that draws each line. If the list contains less items than there are lines,
+            we will cycle through the list as many times as needed.
+            See matplotlib documentation for the supported options.
         time_format :
-            Controls the formatting of the time axis (the horizontal axis).
-        label_format :
-            A format for the items displayed in the legend.
+            Controls the formatting of the time axis (the horizontal axis);
+
+            - "auto" will use the format defined by the grouping of the
+            `time` parameter,
+            - "date" attempts to display calendar dates,
+            - "day" attempts to display days numerically indexed from the start of the
+            simulation with the first day being 0.
+
+            If the system cannot convert to the requested time format, this argument
+            may be ignored.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1420,17 +1496,17 @@ class PlotRendererPipeline:
         time :
             The time selection to make on the output data. For
             this plot the time selection must be a single time instant.
-            for instance you could use
-            'rume.time_frame.select.days(100, 100).group("day").agg()'
+            For instance you could use
+            `rume.time_frame.select.days(100, 100).group("day").agg()`
             to create a histogram corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
-        ncols :
-            The number of columns in the resulting subplot matrix. The
-            number of rows is set dynamically.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws the kde plot.
+        ncols :
+            The number of columns in the resulting subplot matrix. The
+            number of rows is set dynamically.
         legend :
             Whether and how to draw the plot legend.
 
@@ -1445,7 +1521,9 @@ class PlotRendererPipeline:
         bandwidth :
             The bandwidth for the convolution kernel. Specify either a float or
             a string for an adaptive scheme. Options are "scott", "silverman".
-            See scipy.stats.gaussian_kde for details.
+            See
+            [https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html)
+            for details.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -1457,6 +1535,10 @@ class PlotRendererPipeline:
 
             If the system cannot convert to the requested time format, this argument
             may be ignored.
+        title :
+            A title to draw on the plot.
+        to_file :
+            Specify a path to save the plot to a file instead of calling `plt.show()`.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1525,6 +1607,7 @@ class PlotRendererPipeline:
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
+        *,
         line_kwargs: list[dict] | None = None,
         ax_title: str = "{n}: {t}",
         kwarg_type: Literal["quantity", "geo"] = "quantity",
@@ -1542,17 +1625,21 @@ class PlotRendererPipeline:
 
         Parameters
         ----------
-        axs:
+        axs :
             The array of matplotlib `Axes` on which to draw the plots.
         geo :
             The geographic selection to make on the output data.
         time :
-            The time selection to make on the output data.
+            The time selection to make on the output data. For
+            this plot the time selection must be a single time instant.
+            For instance you could use
+            `rume.time_frame.select.days(100, 100).group("day").agg()`
+            to create a histogram corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws the lines.
+            that draws the kde plot.
         ax_title :
             A format string specifying the format of the title. The string will be used
             in a call to `format()` with replacement variables `{n}` for the geo and
@@ -1564,15 +1651,13 @@ class PlotRendererPipeline:
             - "quantity" iterates over the quantities, cycling as need.
         bandwidth :
             The bandwidth for the convolution kernel. Specify either a float or
-            a string for an adaptive scheme. Options are "scott" or "silverman".
-            See scipy.stats.gaussian_kde for details.
+            a string for an adaptive scheme. Options are "scott", "silverman".
+            See
+            [https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html)
+            for details.
         delta_t :
             Specifies the interval at which to sample the kernelized density.
             If `None` will be `1/100` of the range of the data.
-        ax_title :
-            Specifies the format of the title for the subplots. The string will be used
-            in a call to `format()` with replacement variables `{n}` for the geo and
-            `{t}` for the time.
         label_format :
             Specifies the label format for the legend. The string will be used in a
             call to `format()` with replacement variables `{n}` for the geo, `{q}`
@@ -1586,7 +1671,16 @@ class PlotRendererPipeline:
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
         time_format :
-            Controls the formatting of the time axis (the horizontal axis).
+            Controls the formatting of the time axis (the horizontal axis);
+
+             - "auto" will use the format defined by the grouping of the
+            `time` parameter,
+             - "date" attempts to display calendar dates,
+             - "day" attempts to display days numerically indexed from the start of the
+            simulation with the first day being 0.
+
+            If the system cannot convert to the requested time format, this argument
+            may be ignored.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
