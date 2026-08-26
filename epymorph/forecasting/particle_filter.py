@@ -110,7 +110,7 @@ class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
         Performs systematic resampling as part of a particle filter update. It is used
         to take a weighted particle cloud and produce an equally-weighted particle cloud
         through resampling. Each particle in the resampled cloud is a duplicate of a
-        particle in the orginal cloud. Not all particles are retained in the resampled
+        particle in the original cloud. Not all particles are retained in the resampled
         cloud. An important property of systematic resampling is that a cloud of
         equally-weighted particles will produce the exact same cloud.
 

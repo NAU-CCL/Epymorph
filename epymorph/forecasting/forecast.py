@@ -1,3 +1,7 @@
+"""
+Implements a simulator for multi-realization forecast simulations.
+"""
+
 import dataclasses
 from dataclasses import dataclass
 
@@ -21,14 +25,33 @@ _events = EventBus()
 @dataclass(frozen=True)
 class ForecastSimulator(PipelineSimulator):
     """
-    PipelineSimulator for running a multi-realization forecast of a RUME and any
-    unknown parameters.
+    Simulator for running multi-realization simulations without available observations.
+
+    The typical usage is as a multi-realization forecast, extending the output of a
+    state/parameter fitting simulator, such as `EnsembleKalmanFilterSimulator`, past its
+    available observations.
 
     Parameters
     ----------
     config :
-        Contains the rume, number of realizations, initial compartment values, and
+        Contains the RUME, number of realizations, initial compartment values, and
         dictionary of unknown parameters.
+
+    Examples
+    --------
+    Construct and run a forecast from a RUME using its internal initializer and without
+    any unknown parameters.
+    ```python
+    sim = ForecastSimulator(PipelineConfig.from_rume(rume, num_realizations=100))
+    my_results = sim.run()
+    ```
+
+    Construct and run a 1-week forecast to extend the output of a fitting simulation,
+    using its final estimated state and parameters.
+    ```python
+    sim = ForecastSimulator(PipelineConfig.from_output(fit_out, extend_duration=7))
+    my_results = sim.run()
+    ```
     """
 
     config: PipelineConfig

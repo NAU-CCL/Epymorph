@@ -17,8 +17,7 @@ RealizationAggMethod = Literal["mean", "std", "quantiles"]
 
 
 class UnknownParam(Protocol):
-    """Dummy class for typing purposes.
-    The implementation of UnknownParam is in pipeline.py."""
+    """Dummy class for typing purposes. See `UnknownParam` in `pipeline`."""
 
 
 def quantile_method(q_val: float):

@@ -94,6 +94,9 @@ def sim_messaging(
     Run simulations in this context manager to output (print) progress messages during
     simulation activity.
 
+    If you are running a multi-realization simulation, e.g. `ForecastSimulator`, use the
+    `pipeline_messaging` context manager instead.
+
     Parameters
     ----------
     adrio :
@@ -215,8 +218,8 @@ def pipeline_messaging(
     live: bool | None = None,
 ) -> Generator[None, None, None]:
     """
-    Run pipeline simulations in this context manager to output (print) progress messages
-    during simulation activity.
+    Run multi-realization pipeline simulations in this context manager to output (print)
+    progress messages during simulation activity.
 
     Parameters
     ----------
@@ -232,13 +235,15 @@ def pipeline_messaging(
     --------
     ```python
     with pipeline_messaging():
-        sim = ForecastSimulator(PipelineConfig.fromRume(rume, num_realizations=100))
+        sim = ForecastSimulator(PipelineConfig.from_rume(rume, num_realizations=100))
         my_results = sim.run()
     ```
     """
 
     live = is_live_messaging(live)
     start_time: float | None = None
+
+    # The simulator determines what the progress steps are and how many there are.
     total_progress: int = 0
     progress_complete = 0
 
@@ -278,7 +283,6 @@ def pipeline_messaging(
         percent_complete = (progress_complete + 1) / total_progress
         progress_left = total_progress - progress_complete
 
-        # multiply the remaining ticks by the average processing time
         estimate = progress_left * average_process_time
 
         time_remaining = humanize.precisedelta(ceil(estimate), minimum_unit="seconds")
@@ -297,6 +301,8 @@ def pipeline_messaging(
         if start_time is not None:
             print(f"Runtime: {(end_time - start_time):.3f}s")
 
+    # This is an exact duplicate of `on_adrio_progress` in `sim_messaging`. At the
+    # moment it is non-trivial to refactor the duplication due to nonlocal variables.
     def on_adrio_progress(e: ADRIOProgress) -> None:
         nonlocal last_progress_length
         if e.ratio_complete == 0:

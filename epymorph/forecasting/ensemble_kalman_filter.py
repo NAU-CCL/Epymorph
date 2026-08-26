@@ -21,7 +21,7 @@ from epymorph.forecasting.filter import (
 @dataclass(frozen=True)
 class _EnsembleKalmanFilterContext:
     """
-    Stores additional context and diagonistic information for the ensemble Kalman filter
+    Stores additional context and diagnostic information for the ensemble Kalman filter
     update.
     """
 
