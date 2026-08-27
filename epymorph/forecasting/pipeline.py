@@ -368,7 +368,7 @@ class PipelineOutput:
 
     @property
     def param_select(self) -> ParameterSelector:
-        return ParameterSelector(self.unknown_params)  # type: ignore
+        return ParameterSelector(self.unknown_params)
 
 
 @dataclass(frozen=True)
