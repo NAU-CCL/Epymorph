@@ -1,6 +1,6 @@
 """
-Implements classes for representing observed data along with a base class for filtering
-algorithms for state/parameter estimation.
+Classes for implementing filtering algorithms for state/parameter estimation, including
+a class for representing observed data and a base class for filtering algorithms.
 """
 
 import dataclasses
@@ -47,8 +47,9 @@ _events = EventBus()
 @dataclass(frozen=True)
 class ModelLink:
     """
-    Contains the information needed to subselect, group, and aggregate model output in
-    order to compare it to observed data.
+    Contains the information needed to process model output into predicted observations
+    to compare to observed data. The processing involves subselecting, grouping, and
+    aggregating the geography, time, and quantity axes of the model output.
 
     Parameters
     ----------
@@ -73,7 +74,9 @@ class ModelLink:
 @dataclass(frozen=True)
 class Observations(Generic[ValueT]):
     """
-    The observed data used to estimate the state and parameters of a simulation.
+    Represents observed data, used to estimate the state and parameters of a simulation,
+    along with the information needed to compare predictions from the model output to
+    the observations.
 
     Parameters
     ----------
@@ -82,10 +85,10 @@ class Observations(Generic[ValueT]):
         (A, N, Q) array where A is a time axis of unknown length, N is the number of
         nodes, and Q are quantities. The entries of the array are date-value pairs.
     model_link :
-        Contains the information needed to generate a predicted observation from a
-        single realization of a simulation.
+        The information needed to generate a predicted observation from a single
+        realization of a simulation.
     likelihood :
-        Contains a likelihood function used to compare a predicted observation to
+        A likelihood function used to compare a predicted observation to
         observed data.
     """
 
@@ -102,7 +105,7 @@ class Observations(Generic[ValueT]):
 
     likelihood: Likelihood
     """
-    Contains a likelihood function used to compare a predicted observation to observed
+    A likelihood function used to compare a predicted observation to observed
     data.
     """
 

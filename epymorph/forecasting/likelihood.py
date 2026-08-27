@@ -83,7 +83,7 @@ class Likelihood(ABC):
 @dataclass(frozen=True)
 class PoissonLikelihood(Likelihood):
     """
-    Encapsulatees the Poisson likelihood function for observational data. The expected
+    Encapsulates the Poisson likelihood function for observational data. The expected
     value of the observation is used as the parameter for the Poisson distribution. The
     observed values must be nonnegative integers.
 
@@ -124,7 +124,7 @@ class PoissonLikelihood(Likelihood):
 @dataclass(frozen=True)
 class NegativeBinomialLikelihood(Likelihood):
     """
-    Encapsulatees the Negative Binomial likelihood function for observational data.
+    Encapsulates the Negative Binomial likelihood function for observational data.
 
     Parameters
     ----------

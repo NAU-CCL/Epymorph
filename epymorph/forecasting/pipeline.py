@@ -1,5 +1,5 @@
 """
-Simulators for performing multi-realization simulations such as forecasting and
+Classes for implementing multi-realization simulations such as forecasting and
 state/parameter fitting.
 """
 
@@ -53,12 +53,16 @@ class UnknownParam:
     parameter which can vary across realizations in a multi-realization simulation. Some
     simulators will try to estimate unknown parameters.
 
+    Typically a dictionary of `UnknownParam` objects is provided to the `PipelineConfig`
+    used in a multi-realization simulator.
+
     Parameters
     ----------
     prior :
         The prior distribution or initial values of the parameter.
     dynamics :
-        The dynamics of the parameter dictating how the parameter changes over time.
+        The dynamics of the parameter dictating how the parameter changes over time. For
+        parameters without a time-dependence, `Static()` is typically used.
     """
 
     prior: NDArray[np.float64] | Prior
@@ -75,9 +79,11 @@ class UnknownParam:
 @dataclass(frozen=True)
 class PipelineConfig:
     """
-    Contains the basic information needed to initialize a `PipelineSimulator`.
-    Some simulators may require additional information provided in their respective
+    Contains the generic information needed to run a `PipelineSimulator`. Some
+    simulators may require additional information provided in their respective
     constructor.
+
+    Users will typically use one of the alternate constructors, e.g. `from_output`.
 
     Parameters
     ----------
@@ -90,7 +96,7 @@ class PipelineConfig:
         (R, N, C) where R is the number of realizations, N is the number of nodes,
         and C is the number of compartments.
     unknown_params :
-        The dictionary of unknown paramters of the simulator.
+        The dictionary of unknown parameters of the simulator.
     """
 
     rume: RUME
@@ -110,7 +116,7 @@ class PipelineConfig:
 
     unknown_params: Mapping[NamePattern, UnknownParam]
     """
-    The dictionary of unknown paramters of the simulator.
+    The dictionary of unknown parameters of the simulator.
     """
 
     @classmethod
@@ -123,8 +129,8 @@ class PipelineConfig:
         | Mapping[str, UnknownParam] = {},
     ) -> Self:
         """
-        Creates a PipelineConfig from a RUME. Converts the keys of unknown_params into
-        NamePattern's.
+        Creates a PipelineConfig from a RUME. For convenience, the keys of
+        `unknown_params` are converted into `NamePattern`'s.
 
         Parameters
         ----------
@@ -137,7 +143,7 @@ class PipelineConfig:
             shape (R, N, C) where R is the number of realizations, N is the number of
             nodes, and C is the number of compartments.
         unknown_params :
-            The dictionary of unknown paramters of the simulator. String names are
+            The dictionary of unknown parameters of the simulator. String names are
             converted to NamePattern
         """
         return cls(
@@ -156,19 +162,25 @@ class PipelineConfig:
         | Mapping[str, ParamFunctionDynamics] = {},
     ) -> Self:
         """
-        Creates a PipelineConfig starting from the end of a previous PipelineOutput.
-        The RUME, unknown parameters, and initial compartment values are taken from the
-        output. The time frame is extended from the end of the previous time frame.
+        Creates a config for a simulator starting from the end of a `PipelineOutput`.
+        The RUME and unknown parameters of the resulting config are taken from the
+        output. The time frame in the RUME is modified to start at the end of the output
+        with the provided duration extension. The initial compartment values and initial
+        unknown parameter values are taken from the respective final values from output.
+
+        A typical use case is producing a forecast from the end of a fitting simulation.
+        Another use case is extending a filtering algorithm as new data becomes
+        available.
 
         Parameters
         ----------
         output :
-            The output to extend.
+            The output to extend from.
         extend_duration :
             The number of days to extend the simulation from the end of the previous
             output.
         override_dynamics :
-            Override the dyanmics of any parameters from the previous output.
+            Override the dynamics of any parameters from the previous output.
         """
         new_time_frame = TimeFrame.of(
             start_date=output.rume.time_frame.end_date + datetime.timedelta(1),
@@ -210,9 +222,10 @@ class PipelineOutput:
     """
     An array of shape (R, N, C) where R is the number of realizations, N is the number
     of nodes, and C is the number of compartments. Each realization is an array of
-    compartment values suitable for intializing another simulation. For movement models,
-    this is always at the home node, regardless of the `movement_data_mode`. The precise
-    interpretation of the array depends on the simulator used to produce the output.
+    compartment values suitable for initializing another simulation. For movement
+    models, this is always at the home node, regardless of the `movement_data_mode`.
+    The precise interpretation of the array depends on the simulator used to produce the
+    output.
     """
 
     final_params: Mapping[NamePattern, NDArray[np.float64]]
@@ -220,7 +233,7 @@ class PipelineOutput:
     A dictionary where the keys are unknown parameters and the values are of arrays of
     shape (R, N) where R is the number of realizations and N is the number of nodes.
     Each realization of a parameter is an array of parameter values suitable for
-    intializing another simulation. The precise interpretation of the array depends on
+    initializing another simulation. The precise interpretation of the array depends on
     the simulator used to produce the output.
     """
 
@@ -256,7 +269,7 @@ class PipelineOutput:
     A dictionary where the keys are unknown parameters and the values are
     arrays of shape (R, T, N) where R is the number of realizations, T is the number of
     days and N is the number of nodes. Each realization of a parameter is an array of
-    parameter values suitable for intializing another simulation. The precise
+    parameter values suitable for initializing another simulation. The precise
     interpretation of the array depends on the simulator used to produce the output.
     """
 
@@ -355,7 +368,7 @@ class PipelineOutput:
 
     @property
     def param_select(self) -> ParameterSelector:
-        return ParameterSelector(self.unknown_params)  # type: ignore
+        return ParameterSelector(self.unknown_params)
 
 
 @dataclass(frozen=True)
@@ -379,7 +392,7 @@ class PipelineSimulator(ABC):
     @property
     def rume(self) -> RUME:
         """
-        The RUME containing the IPM, MM, scope, time_frame, and the fixed params for
+        The RUME containing the IPM, MM, scope, time frame, and the fixed parameters for
         each realization.
         """
         return self.config.rume
@@ -387,7 +400,7 @@ class PipelineSimulator(ABC):
     @property
     def num_realizations(self) -> int:
         """
-        The number of realzations.
+        The number of realizations.
         """
         return self.config.num_realizations
 
@@ -435,7 +448,7 @@ def _initialize_compartments_and_params(
         The number of realizations.
     initial_values :
         An array of shape (R, N, C) containing the initial compartment values.
-        If None then the RUME's intitializer is used to generate a single initial value
+        If `None` then the RUME's initializer is used to generate a single initial value
         for each compartment.
     rng :
         The random number generator.
@@ -443,7 +456,7 @@ def _initialize_compartments_and_params(
     Returns
     -------
     :
-        The initial compartment values and the initial paramter values.
+        The initial compartment values and the initial parameter values.
     """
     num_compartments = rume.ipm.num_compartments
     current_params = {
@@ -546,8 +559,8 @@ def _simulate_realizations(
         realization.
     unknown_params :
         A dictionary containing the unknown parameters which are allowed to vary across
-        realizations. The prior field of each UnknownParam is ingnored in favor of
-        param_values.
+        realizations. The `prior` attribute of each `UnknownParam` is ignored in favor
+        of the corresponding array in `param_values`.
     param_values :
         A dictionary containing the current parameter values.
     geo :

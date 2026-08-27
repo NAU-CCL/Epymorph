@@ -5,20 +5,18 @@ over an additional axis, the realizations.
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Literal, Mapping, OrderedDict, Protocol, Sequence
+from typing import TYPE_CHECKING, List, Literal, Mapping, OrderedDict, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 
 from epymorph.attribute import NamePattern
 
+if TYPE_CHECKING:
+    from epymorph.forecasting.pipeline import UnknownParam
+
 RealizationAggMethod = Literal["mean", "std", "quantiles"]
 """The supported methods for aggregating realizations."""
-
-
-class UnknownParam(Protocol):
-    """Dummy class for typing purposes.
-    The implementation of UnknownParam is in pipeline.py."""
 
 
 def quantile_method(q_val: float):
@@ -60,7 +58,7 @@ class ParameterStrategy:
         A boolean mask for parameter selection.
     """
 
-    parameters: Mapping[NamePattern, UnknownParam]
+    parameters: Mapping[NamePattern, "UnknownParam"]
     """A dictionary of unknown parameters."""
     selection: NDArray[np.bool_]
     """A boolean mask for selection of a subset of parameters."""
@@ -97,7 +95,7 @@ class ParameterStrategy:
 
 @dataclass(frozen=True)
 class ParameterSelection(ParameterStrategy):
-    parameters: Mapping[NamePattern, UnknownParam]
+    parameters: Mapping[NamePattern, "UnknownParam"]
     """A dictionary of unknown parameters."""
     selection: NDArray[np.bool_]
     """A boolean mask for selection of a subset of parameters."""
@@ -119,10 +117,10 @@ class ParameterSelector:
     using `FilterOutput's` `param_select` property.
     """
 
-    parameters: Mapping[NamePattern, UnknownParam]
+    parameters: Mapping[NamePattern, "UnknownParam"]
     """A dictionary of unknown parameters."""
 
-    def __init__(self, parameters: Mapping[NamePattern, UnknownParam]):
+    def __init__(self, parameters: Mapping[NamePattern, "UnknownParam"]):
         self.parameters = parameters
 
     def _mask(
