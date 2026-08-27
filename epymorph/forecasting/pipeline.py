@@ -222,9 +222,10 @@ class PipelineOutput:
     """
     An array of shape (R, N, C) where R is the number of realizations, N is the number
     of nodes, and C is the number of compartments. Each realization is an array of
-    compartment values suitable for initializing another simulation. For movement models,
-    this is always at the home node, regardless of the `movement_data_mode`. The precise
-    interpretation of the array depends on the simulator used to produce the output.
+    compartment values suitable for initializing another simulation. For movement
+    models, this is always at the home node, regardless of the `movement_data_mode`.
+    The precise interpretation of the array depends on the simulator used to produce the
+    output.
     """
 
     final_params: Mapping[NamePattern, NDArray[np.float64]]

@@ -58,8 +58,12 @@ class ParticleFilterOutput(FilterOutput):
 @dataclass(frozen=True)
 class ParticleFilterSimulator(FilterSimulator[_ParticleFilterContext]):
     """
-    A PipelineSimulator for using a particle filter to estimate the state and parameters
-    of a system based on observed data.
+    A simulator for using a particle filter to estimate the state and parameters of a
+    system based on observed data.
+
+    The particle filter is best suited for low-dimensional systems where the model is a
+    good approximation for the data-generating process. Otherwise see
+    `EnsembleKalmanFilterSimulator` for an alternative.
 
     Parameters
     ----------
