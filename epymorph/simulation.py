@@ -552,7 +552,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT]):
     --------
     Refer to
     [epymorph.simulation.SimulationFunction][] and
-    [epymorph.simulation.SimulationTickFunction][] for more concrete subclasses.
+    [epymorph.movement_model.MovementClause][] for more concrete subclasses.
     """
 
     @classmethod
@@ -561,7 +561,7 @@ class BaseSimulationFunction(ABC, Generic[ResultT]):
         _validate_simulation_function(cls)
 
     # NOTE: this base class exists so that we don't limit the signature of `evaluate`.
-    # `SimulationTickFunction` evaluates using the current tick, while
+    # `MovementClause` evaluates using the current tick and available population, while
     # `SimulationFunction` does not require any parameters.
 
     requirements: Sequence[AttributeDef] | property = ()
