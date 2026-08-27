@@ -90,6 +90,7 @@ jobs:
     
     permissions:
       contents: write  # for actions/checkout and `gh release`
+      id-token: write  # for PyPI publishing via OIDC
 
     steps:
       - name: Checkout code
