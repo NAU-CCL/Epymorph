@@ -111,7 +111,9 @@ def test_basic_pipeline_munge(rume, filter_output):
         }
     )
 
-    pd.testing.assert_frame_equal(actual, expected)
+    # Don't check the dtype due to platform differences. It is relatively
+    # inconsequential whether realization indices are int32 or int64.
+    pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
 
     # Test using munge on a compartment value
     quantity = rume.ipm.select.compartments("S")
@@ -130,7 +132,7 @@ def test_basic_pipeline_munge(rume, filter_output):
             "S": np.ones(geo.scope.nodes * realization.num_realizations * 2),
         }
     )
-    pd.testing.assert_frame_equal(actual, expected)
+    pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
 
 
 def test_aggregation_pipeline_munge(rume, filter_output):
@@ -160,7 +162,9 @@ def test_aggregation_pipeline_munge(rume, filter_output):
         {("time", ""): "int64", ("*::*::test_0", "mean"): "float64"}
     )
 
-    pd.testing.assert_frame_equal(actual, expected)
+    # Don't check the dtype due to platform differences. It is relatively
+    # inconsequential whether time ticks are int32 or int64.
+    pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
 
     # Test aggregation for the std
     # This primarily makes sure the multi-index is there with the correct labels.
@@ -178,8 +182,10 @@ def test_aggregation_pipeline_munge(rume, filter_output):
         {("time", ""): "int64", ("*::*::test_0", "std"): "float64"}
     )
 
+    pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
 
-def test_filter():
+
+def test_ensemble_kalman_filter():
     rume = SingleStrataRUME.build(
         ipm=SIRH(),
         mm=No(),
