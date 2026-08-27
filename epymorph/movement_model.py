@@ -179,12 +179,7 @@ class MovementClause(BaseSimulationFunction[NDArray[SimDType]], ABC):
         return self.__class__.__name__
 
     @abstractmethod
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[SimDType]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[SimDType]:
         """
         Implement this method to provide logic for the clause.
         Use self methods and properties to access the simulation context or defer

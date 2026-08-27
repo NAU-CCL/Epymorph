@@ -190,7 +190,7 @@ class MovementExecutor:
 
             try:
                 requested_movers = clause.evaluate(
-                    tick,
+                    tick=tick,
                     available=available_movers.sum(axis=1, dtype=SimDType),
                 )
                 np.fill_diagonal(requested_movers, 0)

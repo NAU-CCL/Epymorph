@@ -30,12 +30,7 @@ class IcecubeClause(MovementClause):
     returns = TickDelta(step=1, days=0)
 
     @override
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[np.int64]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[np.int64]:
         N = self.scope.nodes
         pop = self.data("population")
         comm_prop = self.data("commuter_proportion")

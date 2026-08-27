@@ -65,12 +65,7 @@ class CentroidsClause(MovementClause):
         return row_normalize(prob)
 
     @override
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[np.int64]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[np.int64]:
         comm_prop = self.data("commuter_proportion")
         if comm_prop < 0:
             err = (

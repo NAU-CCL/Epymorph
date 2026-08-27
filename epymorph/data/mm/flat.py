@@ -45,12 +45,7 @@ class FlatClause(MovementClause):
         return row_normalize(ones)
 
     @override
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[SimDType]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[SimDType]:
         pop = self.data("population")
         comm_prop = self.data("commuter_proportion")
         n_commuters = np.floor(pop * comm_prop).astype(SimDType)

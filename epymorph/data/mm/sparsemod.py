@@ -60,12 +60,7 @@ class SparsemodClause(MovementClause):
         return row_normalize(1 / np.exp(distance / phi))
 
     @override
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[np.int64]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[np.int64]:
         return self.rng.multinomial(self.commuters_by_node, self.dispersal_kernel)
 
 

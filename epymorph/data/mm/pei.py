@@ -54,12 +54,7 @@ class Commuters(MovementClause):
         return row_normalize(commuters)
 
     @override
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[np.int64]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[np.int64]:
         move_control = self.data("move_control")
         actual = self.rng.binomial(self.commuters_by_node, move_control)
         return self.rng.multinomial(actual, self.commuting_probability)
@@ -95,12 +90,7 @@ class Dispersers(MovementClause):
         return (commuters + commuters.T) // 2
 
     @override
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[SimDType]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[SimDType]:
         theta = self.data("theta")
         return self.rng.poisson(theta * self.commuters_average)
 

@@ -162,7 +162,7 @@ class CombineMmTest(unittest.TestCase):
             predicate = EveryDay()
 
             def evaluate(
-                self, tick: Tick, *, available: NDArray[np.int64]
+                self, tick: Tick, available: NDArray[np.int64]
             ) -> NDArray[np.int64]:
                 return np.array([])
 
@@ -176,7 +176,7 @@ class CombineMmTest(unittest.TestCase):
             predicate = EveryDay()
 
             def evaluate(
-                self, tick: Tick, *, available: NDArray[np.int64]
+                self, tick: Tick, available: NDArray[np.int64]
             ) -> NDArray[np.int64]:
                 return np.array([])
 
@@ -205,7 +205,7 @@ class CombineMmTest(unittest.TestCase):
             predicate = EveryDay()
 
             def evaluate(
-                self, tick: Tick, *, available: NDArray[np.int64]
+                self, tick: Tick, available: NDArray[np.int64]
             ) -> NDArray[np.int64]:
                 return np.array([])
 
@@ -219,7 +219,7 @@ class CombineMmTest(unittest.TestCase):
             predicate = EveryDay()
 
             def evaluate(
-                self, tick: Tick, *, available: NDArray[np.int64]
+                self, tick: Tick, available: NDArray[np.int64]
             ) -> NDArray[np.int64]:
                 return np.array([])
 

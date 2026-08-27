@@ -57,12 +57,7 @@ class TestCentroidsClause(MovementClause):
         return row_normalize(prob)
 
     @override
-    def evaluate(
-        self,
-        tick: Tick,
-        *,
-        available: NDArray[SimDType],
-    ) -> NDArray[np.int64]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[np.int64]:
         comm_prop = self.data("commuter_proportion")
         n_commuters = np.floor(available * comm_prop).astype(SimDType)
         return self.rng.multinomial(n_commuters, self.dispersal_kernel)
