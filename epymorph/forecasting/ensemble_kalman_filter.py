@@ -21,7 +21,7 @@ from epymorph.forecasting.filter import (
 @dataclass(frozen=True)
 class _EnsembleKalmanFilterContext:
     """
-    Stores additional context and diagonistic information for the ensemble Kalman filter
+    Stores additional context and diagnostic information for the ensemble Kalman filter
     update.
     """
 
@@ -44,8 +44,15 @@ class EnsembleKalmanFilterOutput(FilterOutput):
 @dataclass(frozen=True)
 class EnsembleKalmanFilterSimulator(FilterSimulator[_EnsembleKalmanFilterContext]):
     """
-    A PipelineSimulator for running an ensemble Kalman filter to estimate the state and
+    A simulator for running an ensemble Kalman filter to estimate the state and
     parameters of a system.
+
+    The ensemble Kalman filter, relative to the particle filter, is better for high
+    dimensional systems and systems with model error, i.e. where the model differs
+    significantly from the data-generating process. The ensemble Kalman filter uses a
+    weak Gaussian approximation during the update step, meaning that, unlike the
+    particle filter, the resulting trajectories only approximate true trajectories of
+    the system.
 
     Parameters
     ----------

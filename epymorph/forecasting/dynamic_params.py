@@ -304,7 +304,7 @@ class ExponentialTransform(ParamFunction[np.float64]):
 
 class ShiftTransform(ParamFunction[np.float64]):
     """
-    Produces a time-by-node matrix of data by taking the sum of two other parameters.
+    Produces a time-by-node array of data by taking the sum of two other parameters.
 
     Parameters
     ----------
