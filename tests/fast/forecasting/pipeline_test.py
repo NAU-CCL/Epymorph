@@ -5,8 +5,13 @@ import pytest
 from epymorph import initializer as init
 from epymorph.attribute import NamePattern
 from epymorph.data import ipm, mm
+from epymorph.data.ipm.sirh import SIRH
+from epymorph.data.mm.no import No
 from epymorph.data_type import SimDType
-from epymorph.forecasting.dynamic_params import BrownianMotion, GaussianPrior
+from epymorph.forecasting.dynamic_params import BrownianMotion, GaussianPrior, Static
+from epymorph.forecasting.ensemble_kalman_filter import EnsembleKalmanFilterSimulator
+from epymorph.forecasting.filter import ModelLink, Observations
+from epymorph.forecasting.likelihood import GaussianLikelihood
 from epymorph.forecasting.pipeline import (
     PipelineConfig,
     PipelineOutput,
@@ -15,8 +20,12 @@ from epymorph.forecasting.pipeline import (
     munge_pipeline_output,
 )
 from epymorph.geography.us_census import StateScope
+from epymorph.initializer import Explicit
 from epymorph.rume import RUME, SingleStrataRUME
-from epymorph.time import TimeFrame
+from epymorph.simulator.basic.basic_simulator import BasicSimulator
+from epymorph.time import EveryNDays, TimeFrame
+from epymorph.tools.data import munge
+from epymorph.util import to_date_value_array
 
 
 @pytest.fixture
@@ -168,3 +177,79 @@ def test_aggregation_pipeline_munge(rume, filter_output):
     expected = expected.astype(
         {("time", ""): "int64", ("*::*::test_0", "std"): "float64"}
     )
+
+
+def test_filter():
+    rume = SingleStrataRUME.build(
+        ipm=SIRH(),
+        mm=No(),
+        scope=StateScope.in_states(["AZ"], year=2020),
+        init=Explicit(np.array([[4_500_000, 499_500, 2_000_000, 500]], dtype=np.int64)),
+        time_frame=TimeFrame.of(start_date="2021-01-01", duration_days=7),
+        params={
+            "beta": 0.4,
+            "gamma": 1 / 5,
+            "xi": 0,
+            "hospitalization_prob": 100 / 100_000,
+            "hospitalization_duration": 5.0,
+        },
+    )
+
+    out = BasicSimulator(rume=rume).run(rng_factory=lambda: np.random.default_rng(0))
+
+    geo = rume.scope.select.all()
+    time = rume.time_frame.select.all().group(EveryNDays(7)).agg("sum")
+    quantity = rume.ipm.select.events("I->H")
+
+    munge_df = munge(out, geo=geo, time=time, quantity=quantity)
+
+    source = to_date_value_array(
+        dates=munge_df.iloc[:, 0].to_numpy(),
+        values=munge_df.iloc[:, 2].to_numpy().reshape(-1, 1),
+    )
+
+    observations = Observations(
+        source=source,
+        model_link=ModelLink(geo=geo, time=time, quantity=quantity),
+        likelihood=GaussianLikelihood(50),
+    )
+
+    num_realizations = 9
+    initial_beta = np.linspace(0.1, 0.5, num_realizations).reshape(-1, 1)
+
+    filter_sim = EnsembleKalmanFilterSimulator(
+        config=PipelineConfig.from_rume(
+            rume,
+            num_realizations=num_realizations,
+            unknown_params={
+                "beta": UnknownParam(prior=initial_beta.copy(), dynamics=Static())
+            },
+        ),
+        observations=observations,
+    )
+
+    filter_out = filter_sim.run(rng=np.random.default_rng(0))
+
+    prior_infected = filter_out.compartments[:, -1, :, 1]
+    posterior_infected = filter_out.final_compartments[:, :, 1]
+
+    # The true beta is in the upper range of the prior, so the posterior infection
+    # should increase relative to the prior infection.
+    np.testing.assert_array_less(prior_infected.mean(), posterior_infected.mean())
+
+    # The uncertainty of the posterior should always be lower than the prior.
+    np.testing.assert_array_less(posterior_infected.std(), prior_infected.std())
+
+    prior_beta = filter_out.estimated_params[NamePattern.of("beta")][:, -1, :]
+    posterior_beta = filter_out.final_params[NamePattern.of("beta")]
+
+    # Beta is modeled as a static parameter, so the prior should be equal to the
+    # initial value.
+    np.testing.assert_array_equal(prior_beta, initial_beta)
+
+    # The true beta is in the upper range of the prior, so the posterior should be
+    # larger.
+    np.testing.assert_array_less(prior_beta.mean(), posterior_beta.mean())
+
+    # The uncertainty of the posterior should be lower than the prior.
+    np.testing.assert_array_less(posterior_beta.std(), prior_beta.std())
