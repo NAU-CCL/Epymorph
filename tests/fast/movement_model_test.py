@@ -41,7 +41,9 @@ def test_movement_clause_create_01():
         returns = TickDelta(days=0, step=1)
         predicate = EveryDay()
 
-        def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+        def evaluate(
+            self, tick: Tick, available: NDArray[SimDType]
+        ) -> NDArray[SimDType]:
             return np.array([0])
 
     clause = MyClause()
@@ -57,7 +59,9 @@ def test_movement_clause_create_02_missing_leaves():
             returns = TickDelta(days=0, step=1)
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[SimDType]
+            ) -> NDArray[SimDType]:
                 return np.array([0])
 
 
@@ -69,7 +73,9 @@ def test_movement_clause_create_03_missing_returns():
             # returns = TickDelta(days=0, step=1)  # noqa: ERA001
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[SimDType]
+            ) -> NDArray[SimDType]:
                 return np.array([0])
 
 
@@ -81,7 +87,9 @@ def test_movement_clause_create_04_missing_predicate():
             returns = TickDelta(days=0, step=1)
             # predicate = EveryDay()  # noqa: ERA001
 
-            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[SimDType]
+            ) -> NDArray[SimDType]:
                 return np.array([0])
 
 
@@ -93,7 +101,9 @@ def test_movement_clause_create_05_invalid_leaves_index():
             returns = TickDelta(days=0, step=1)
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[SimDType]
+            ) -> NDArray[SimDType]:
                 return np.array([0])
 
 
@@ -105,7 +115,9 @@ def test_movement_clause_create_06_invalid_returns_index():
             returns = TickDelta(days=0, step=-23)
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[SimDType]
+            ) -> NDArray[SimDType]:
                 return np.array([0])
 
 
@@ -115,7 +127,9 @@ def test_movement_clause_create_07_never_returns():
         returns = NEVER
         predicate = EveryDay()
 
-        def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+        def evaluate(
+            self, tick: Tick, available: NDArray[SimDType]
+        ) -> NDArray[SimDType]:
             return np.array([0])
 
     clause = MyClause()
@@ -128,7 +142,7 @@ class MyClause(MovementClause):
     returns = TickDelta(days=0, step=1)
     predicate = EveryDay()
 
-    def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+    def evaluate(self, tick: Tick, available: NDArray[SimDType]) -> NDArray[SimDType]:
         return np.array([0])
 
 
@@ -187,7 +201,9 @@ def test_movement_model_create_06_clause_references_invalid_step():
         returns = TickDelta(days=0, step=9)
         predicate = EveryDay()
 
-        def evaluate(self, tick: Tick) -> NDArray[SimDType]:
+        def evaluate(
+            self, tick: Tick, available: NDArray[SimDType]
+        ) -> NDArray[SimDType]:
             return np.array([0])
 
     with pytest.raises(

@@ -161,7 +161,9 @@ class CombineMmTest(unittest.TestCase):
             returns = TickDelta(days=0, step=1)
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[np.int64]
+            ) -> NDArray[np.int64]:
                 return np.array([])
 
         class Model1(MovementModel):
@@ -173,7 +175,9 @@ class CombineMmTest(unittest.TestCase):
             returns = TickDelta(days=0, step=1)
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[np.int64]
+            ) -> NDArray[np.int64]:
                 return np.array([])
 
         class Model2(MovementModel):
@@ -200,7 +204,9 @@ class CombineMmTest(unittest.TestCase):
             returns = TickDelta(days=0, step=1)
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[np.int64]
+            ) -> NDArray[np.int64]:
                 return np.array([])
 
         class Model1(MovementModel):
@@ -212,7 +218,9 @@ class CombineMmTest(unittest.TestCase):
             returns = NEVER
             predicate = EveryDay()
 
-            def evaluate(self, tick: Tick) -> NDArray[np.int64]:
+            def evaluate(
+                self, tick: Tick, available: NDArray[np.int64]
+            ) -> NDArray[np.int64]:
                 return np.array([])
 
         class Model2(MovementModel):
@@ -383,12 +391,6 @@ class RumeTest(unittest.TestCase):
                 ),
                 AbsoluteName("gpm:aaa", "ipm", "gamma"): AttributeDef(
                     "gamma", float, Shapes.TxN
-                ),
-                AbsoluteName("gpm:aaa", "mm", "population"): AttributeDef(
-                    "population",
-                    int,
-                    Shapes.N,
-                    comment="The total population at each node.",
                 ),
                 AbsoluteName("gpm:aaa", "mm", "centroid"): AttributeDef(
                     "centroid",
