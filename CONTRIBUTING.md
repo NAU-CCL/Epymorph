@@ -65,6 +65,8 @@ Pre-release tasks:
 - Review docstrings for accuracy (especially anything new)
 - Check for doc build issues: `uv run mkdocs build`
 - Run numerical consistency checks including the release candidate branch
+- Add and commit the release notes to `CHANGELOG.md` under an exact
+  `## [X.Y.Z] - YYYY-MM-DD` heading
 
 Release process:
 
@@ -77,6 +79,5 @@ Release process:
 
 Post release tasks:
 
-- Edit the GitHub Release notes; the auto-generated notes are just a starting point
 - Trigger a build and deploy of the documentation site to bring in the new API reference docs
 - Announce the release!

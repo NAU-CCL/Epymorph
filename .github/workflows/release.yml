@@ -110,10 +110,12 @@ jobs:
       - name: Build project
         run: uv build
 
-      - name: Get epymorph version
+      - name: Get version and extract CHANGELOG.md section
         run: |
+          set -euo pipefail
           version="$(uv run python -m setuptools_scm)"
           echo "EPYMORPH_VERSION=$version" >> $GITHUB_ENV
+          uv run scripts/extract_changelog.py "$version" > ./dist/changelog.md
 
       - name: Build and package docs
         run: |
@@ -122,17 +124,19 @@ jobs:
           mkdir -p dist
           tar -czf "./dist/epymorph-docs-${version}.tar.gz" -C site "${version}"
 
-      - name: Create GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          version="$EPYMORPH_VERSION"
-          wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
-          source_file="./dist/epymorph-${version}.tar.gz"
-          docs_file="./dist/epymorph-docs-${version}.tar.gz"
-          gh release create "v${version}" --generate-notes $wheel_file $source_file $docs_file
-
       - name: Create PyPI Release
         run: |  # zizmor: ignore[use-trusted-publishing] (this *is* trusted publishing)
           version="$EPYMORPH_VERSION"
           uv publish "dist/epymorph-${version}-py3-none-any.whl" "dist/epymorph-${version}.tar.gz"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$EPYMORPH_VERSION"
+          notes_file="./dist/changelog.md"
+          wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
+          source_file="./dist/epymorph-${version}.tar.gz"
+          docs_file="./dist/epymorph-docs-${version}.tar.gz"
+          gh release create "v${version}" --notes-file $notes_file $wheel_file $source_file $docs_file
