@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+title: epymorph
+type: software
+doi: 10.5281/zenodo.21710585
+url: 'https://github.com/NAU-CCL/Epymorph'
+license: GPL-3.0
+authors:
+  - given-names: Joseph
+    family-names: Mihaljevic
+    orcid: 'https://orcid.org/0000-0003-2320-5773'
+  - given-names: Tyler
+    family-names: Coles
+    orcid: 'https://orcid.org/0009-0006-9600-8411'
+  - given-names: Jeffrey
+    family-names: Covington
+    orcid: 'https://orcid.org/0000-0003-4501-1830'
+  - given-names: Avery
+    family-names: Drennan
+    orcid: 'https://orcid.org/0009-0004-0516-7843'
+  - given-names: Kayode
+    family-names: Oshinubi
+    orcid: 'https://orcid.org/0000-0003-4598-8510'
+  - given-names: Crystal
+    family-names: Hepp
+    orcid: 'https://orcid.org/0000-0002-0612-3648'
+  - given-names: Tim
+    family-names: Lant
+    orcid: 'https://orcid.org/0000-0002-6784-2152'
+  - given-names: Esma
+    family-names: Gel
+    orcid: 'https://orcid.org/0000-0003-0472-4762'
+  - given-names: Sanjay
+    family-names: Mehrotra
+    orcid: 'https://orcid.org/0000-0003-1106-1901'
+  - given-names: Samantha
+    family-names: Sabo
+    orcid: 'https://orcid.org/0000-0003-4509-9182'
+  - given-names: Ye
+    family-names: Chen
+    orcid: 'https://orcid.org/0000-0001-8785-7653'
+  - given-names: Eck
+    family-names: Doerry
+    orcid: 'https://orcid.org/0000-0002-5511-1854'
