@@ -37,7 +37,7 @@ from epymorph.adrio.validation import (
 from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import DataShape, Shapes
-from epymorph.data_type import AttributeArray
+from epymorph.data_type import AttributeData
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
 from epymorph.database import DataResolver, evaluate_param
 from epymorph.error import MissingContextError
@@ -621,7 +621,7 @@ def _(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
+) -> AttributeData:
     # depth-first evaluation guarantees `data` has our dependencies.
     ctx = Context.of(name, data, scope, time_frame, ipm, rng)
     sim_func = value.with_context_internal(ctx)

@@ -7,6 +7,7 @@ from typing import Protocol, TypeVar
 
 import numpy as np
 import pandas as pd
+from typing_extensions import deprecated
 
 from epymorph.attribute import NamePattern
 from epymorph.compartment_model import (
@@ -17,7 +18,7 @@ from epymorph.compartment_model import (
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.rume import RUME
 from epymorph.time import Dim, TimeAggregation, TimeSelection
-from epymorph.util import mask
+from epymorph.util import are_values_instances, mask
 
 
 class Output(Protocol):
@@ -234,6 +235,11 @@ RumeT = TypeVar("RumeT", bound=RUME)
 """A type of RUME."""
 
 
+@deprecated(
+    "This method is not compatible with RUMEs that contain stratified parameters. "
+    "We want to replace this with a more general serialization mechanism, "
+    "but for now this method will remain limited."
+)
 def memoize_rume(
     path: str | Path,
     rume: RumeT,
@@ -288,7 +294,15 @@ def memoize_rume(
         # Save to cache
         # Evaluate parameters and store the resulting arrays
         resolver = rume.evaluate_params(rng=rng or np.random.default_rng())
+
         param_values = resolver.to_dict(simplify_names=True)
+        if not are_values_instances(param_values, np.ndarray):
+            err = (
+                "This function is not compatible with RUMEs that contain stratified "
+                "parameters, and at the moment there is no alternative available."
+            )
+            raise ValueError(err)
+
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(path, **param_values)
 

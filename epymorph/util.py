@@ -96,7 +96,14 @@ def ansi_stylize(
 # function utilities
 
 
+# general type parameter
 T = TypeVar("T")
+
+# type parameters for key/value pairs
+K = TypeVar("K")
+V = TypeVar("V")
+
+# type parameters for when there is a pairing of types
 A = TypeVar("A")
 B = TypeVar("B")
 
@@ -193,6 +200,14 @@ def are_instances(
     return all(isinstance(x, of_type) for x in xs)
 
 
+def are_values_instances(xs: dict[K, V], of_type: type[T]) -> TypeGuard[dict[K, T]]:
+    """
+    TypeGuards a dictionary to check that all values are
+    instances of the given type (`of_type`).
+    """
+    return all(isinstance(v, of_type) for v in xs.values())
+
+
 def filter_unique(xs: Iterable[T]) -> list[T]:
     """
     Convert an iterable to a list, keeping only the unique values and
@@ -228,10 +243,6 @@ def filter_with_mask(
 def zip_list(xs: Iterable[A], ys: Iterable[B]) -> list[tuple[A, B]]:
     """Zip (strict) two iterables together as a list."""
     return list(zip(xs, ys, strict=True))
-
-
-K = TypeVar("K")
-V = TypeVar("V")
 
 
 class KeyValue(Generic[K, V], NamedTuple):

@@ -17,7 +17,13 @@ from epymorph.attribute import (
     ModuleNamespace,
     NamePattern,
 )
+from epymorph.compartment_model import CombinedCompartmentModel
 from epymorph.data_shape import Dimensions, Shapes
+from epymorph.data_type import (
+    AttributeData,
+    SingleStratumAttributeArray,
+    StratifiedAttributeArray,
+)
 from epymorph.database import (
     Database,
     DataResolver,
@@ -47,6 +53,11 @@ def time_frame():
 @pytest.fixture(scope="module")
 def scope():
     return MagicMock(spec=GeoScope, nodes=2)
+
+
+@pytest.fixture(scope="module")
+def multistrata_ipm():
+    return MagicMock(spec=CombinedCompartmentModel, strata=("aaa", "bbb"))
 
 
 ###################
@@ -520,6 +531,34 @@ def _to_txn(
     return np.broadcast_to(value, shape=(time_frame.days, scope.nodes))
 
 
+def _assert_is_single_strata(
+    values: dict[str, AttributeData],
+    name: str,
+) -> SingleStratumAttributeArray:
+    val = values.get(name)
+    if val is None:
+        err = f"Expected value for {name} not found in values."
+        raise AssertionError(err)
+    if isinstance(val, StratifiedAttributeArray):
+        err = f"Expected single-stratum value for {name}, but found a stratified value."
+        raise AssertionError(err)
+    return val
+
+
+def _assert_is_stratified(
+    values: dict[str, AttributeData],
+    name: str,
+) -> StratifiedAttributeArray:
+    val = values.get(name)
+    if val is None:
+        err = f"Expected value for {name} not found in values."
+        raise AssertionError(err)
+    if not isinstance(val, StratifiedAttributeArray):
+        err = f"Expected stratified value for {name}, but found a single-stratum value."
+        raise AssertionError(err)
+    return val
+
+
 def test_param_eval_01(time_frame, scope):
     eval_calls = 0
 
@@ -552,8 +591,8 @@ def test_param_eval_01(time_frame, scope):
     # F evaluated once; beta is 1.4 for both strata
     assert 1 == eval_calls
     exp = _to_txn(1.4, time_frame, scope)
-    a_val = values["gpm:a::ipm::beta"]
-    b_val = values["gpm:b::ipm::beta"]
+    a_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     np.testing.assert_array_equal(exp, a_val)
     np.testing.assert_array_equal(exp, b_val)
 
@@ -591,8 +630,8 @@ def test_param_eval_02(time_frame, scope):
     # beta is 1.4 for both strata
     assert 2 == eval_calls
     exp = _to_txn(1.4, time_frame, scope)
-    a_val = values["gpm:a::ipm::beta"]
-    b_val = values["gpm:b::ipm::beta"]
+    a_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     np.testing.assert_array_equal(exp, a_val)
     np.testing.assert_array_equal(exp, b_val)
 
@@ -630,8 +669,8 @@ def test_param_eval_03(time_frame, scope):
     # beta is 0.6 for strata a
     # and 1.4 for strata b
     assert 2 == eval_calls
-    a_val = values["gpm:a::ipm::beta"]
-    b_val = values["gpm:b::ipm::beta"]
+    a_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     np.testing.assert_array_equal(_to_txn(0.6, time_frame, scope), a_val)
     np.testing.assert_array_equal(_to_txn(1.4, time_frame, scope), b_val)
 
@@ -667,8 +706,8 @@ def test_param_eval_04(time_frame, scope, rng):
     # beta is random, but the same value is shared between strata
     assert 1 == eval_calls
 
-    a_val = values["gpm:a::ipm::beta"]
-    b_val = values["gpm:b::ipm::beta"]
+    a_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     np.testing.assert_array_equal(a_val, b_val)
 
 
@@ -703,8 +742,8 @@ def test_param_eval_05(time_frame, scope, rng):
     # Fs evaluated once each
     # beta is two unique random numbers
     assert 2 == eval_calls
-    a_val = values["gpm:a::ipm::beta"]
-    b_val = values["gpm:b::ipm::beta"]
+    a_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     assert not np.array_equal(a_val, b_val)
 
 
@@ -751,8 +790,8 @@ def test_param_eval_06(time_frame, scope):
     N = scope.nodes
     assert values["gpm:a::ipm::gamma"] == 0.1
     assert values["gpm:b::ipm::gamma"] == 0.1
-    a_val = values["gpm:a::ipm::beta"]
-    b_val = values["gpm:b::ipm::beta"]
+    a_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     assert a_val.shape == (T, N)
     assert b_val.shape == (T, N)
 
@@ -798,11 +837,11 @@ def test_param_eval_07(time_frame, scope, rng):
     # same random values for both strata
     assert 1 == f_eval_calls
     assert 1 == g_eval_calls
-    a_beta_val = values["gpm:a::ipm::beta"]
-    b_beta_val = values["gpm:b::ipm::beta"]
+    a_beta_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_beta_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     np.testing.assert_array_equal(a_beta_val, b_beta_val)
-    a_gamma_val = values["gpm:a::ipm::gamma"]
-    b_gamma_val = values["gpm:b::ipm::gamma"]
+    a_gamma_val = _assert_is_single_strata(values, "gpm:a::ipm::gamma")
+    b_gamma_val = _assert_is_single_strata(values, "gpm:b::ipm::gamma")
     np.testing.assert_array_equal(a_gamma_val, b_gamma_val)
 
 
@@ -847,11 +886,11 @@ def test_param_eval_08(time_frame, scope, rng):
     # different random values for the strata
     assert 2 == f_eval_calls
     assert 2 == g_eval_calls
-    a_beta_val = values["gpm:a::ipm::beta"]
-    b_beta_val = values["gpm:b::ipm::beta"]
+    a_beta_val = _assert_is_single_strata(values, "gpm:a::ipm::beta")
+    b_beta_val = _assert_is_single_strata(values, "gpm:b::ipm::beta")
     assert not np.array_equal(a_beta_val, b_beta_val)
-    a_gamma_val = values["gpm:a::ipm::gamma"]
-    b_gamma_val = values["gpm:b::ipm::gamma"]
+    a_gamma_val = _assert_is_single_strata(values, "gpm:a::ipm::gamma")
+    b_gamma_val = _assert_is_single_strata(values, "gpm:b::ipm::gamma")
     assert not np.array_equal(a_gamma_val, b_gamma_val)
 
 
@@ -1101,6 +1140,41 @@ def test_evaluate_reqs_literals_and_defaults(scope, time_frame):
     )
 
 
+def test_evaluate_reqs_stratified(scope, time_frame, multistrata_ipm):
+    value = StratifiedAttributeArray.from_dict(
+        {
+            "aaa": np.array(0.4),
+            "bbb": np.array(0.5),
+        }
+    )
+
+    tree = _req_tree(
+        _resolved_by_param(
+            BETA_ATTRIB,
+            AN("gpm:aaa::ipm::beta"),
+            NP("*::ipm::beta"),
+            value,
+        ),
+        _resolved_by_param(
+            BETA_ATTRIB,
+            AN("gpm:bbb::ipm::beta"),
+            NP("*::ipm::beta"),
+            value,
+        ),
+    )
+
+    data = evaluate_requirements(tree, scope, time_frame, multistrata_ipm, None)
+
+    np.testing.assert_array_equal(
+        data.resolve(AN("gpm:aaa::ipm::beta"), BETA_ATTRIB),
+        np.full((3, 2), 0.4),
+    )
+    np.testing.assert_array_equal(
+        data.resolve(AN("gpm:bbb::ipm::beta"), BETA_ATTRIB),
+        np.full((3, 2), 0.5),
+    )
+
+
 def test_evaluate_reqs_sympy(scope, time_frame):
     t, T, n = simulation_symbols("day", "duration_days", "node_index")
     expression = 0.04 * sympy.sin(8 * sympy.pi * t / T) + 0.34 + 0.02 * n
@@ -1313,6 +1387,38 @@ def test_data_resolver_resolve_adapts_and_caches():
         resolver_c.resolve(beta_name, AttributeDef("beta", int, Shapes.N))
 
 
+def test_data_resolver_resolves_stratified_values():
+    value = StratifiedAttributeArray(
+        np.array(
+            [
+                [[1, 2], [3, 4], [5, 6]],
+                [[7, 8], [9, 10], [11, 12]],
+            ],
+            dtype=np.int64,
+        ),
+        strata=["aaa", "bbb"],
+    )
+
+    # We presume that `value` resolves for both strata,
+    # as it would for a parameter specified as "*::ipm::beta".
+    resolver = DataResolver(
+        dim=Dimensions.of(T=3, N=2),
+        values={
+            AN("gpm:aaa::ipm::beta"): value,
+            AN("gpm:bbb::ipm::beta"): value,
+        },
+    )
+
+    definition = AD("beta", float, Shapes.TxN)
+    beta_aaa = resolver.resolve(AN("gpm:aaa::ipm::beta"), definition)
+    beta_bbb = resolver.resolve(AN("gpm:bbb::ipm::beta"), definition)
+
+    assert beta_aaa.dtype == np.float64
+    assert beta_bbb.dtype == np.float64
+    np.testing.assert_array_equal(beta_aaa, [[1, 2], [3, 4], [5, 6]])
+    np.testing.assert_array_equal(beta_bbb, [[7, 8], [9, 10], [11, 12]])
+
+
 def test_eval_copies_numpy_parameter_values(time_frame, scope):
     source = np.array([3, 5], dtype=np.int64)
     name = AN("gpm:all::ipm::beta")
@@ -1324,6 +1430,7 @@ def test_eval_copies_numpy_parameter_values(time_frame, scope):
     source[0] = 99
 
     val = resolver.get_raw(name)
+    assert not isinstance(val, StratifiedAttributeArray)
     np.testing.assert_array_equal(val, np.array([3, 5]))
 
 

@@ -36,11 +36,7 @@ from typing import (
 import numpy as np
 from typing_extensions import override
 
-from epymorph.attribute import (
-    AbsoluteName,
-    AttributeDef,
-    NamePattern,
-)
+from epymorph.attribute import AbsoluteName, AttributeDef, NamePattern
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import (
     DataShape,
@@ -52,20 +48,18 @@ from epymorph.data_shape import (
     TimeAndNode,
 )
 from epymorph.data_type import (
-    AttributeArray,
+    AttributeData,
     AttributeType,
     AttributeValue,
+    SingleStratumAttributeArray,
+    StratifiedAttributeArray,
     dtype_as_np,
     dtype_str,
 )
 from epymorph.error import DataAttributeError, DataAttributeErrorGroup
 from epymorph.geography.scope import GeoScope
 from epymorph.time import TimeFrame
-from epymorph.util import (
-    ANSIColor,
-    ANSIStyle,
-    ansi_stylize,
-)
+from epymorph.util import ANSIColor, ANSIStyle, ansi_stylize
 
 ############
 # Database #
@@ -177,7 +171,7 @@ def assert_can_adapt(
     data_type: AttributeType,
     data_shape: DataShape,
     dim: Dimensions,
-    value: AttributeArray,
+    value: AttributeData,
 ) -> None:
     """
     Check that we can adapt the given `value` to the given type and shape,
@@ -199,6 +193,11 @@ def assert_can_adapt(
     DataAttributeError
         If not.
     """
+    if isinstance(value, StratifiedAttributeArray):
+        # For stratified values, examining the first strata
+        # should be just as good as examining all of them.
+        value = value.values_for(0)
+
     if not np.can_cast(value, dtype_as_np(data_type)):
         raise DataAttributeError("Not a compatible type.")
     if not data_shape.matches(dim, value):
@@ -209,8 +208,8 @@ def adapt(
     data_type: AttributeType,
     data_shape: DataShape,
     dim: Dimensions,
-    value: AttributeArray,
-) -> AttributeArray:
+    value: SingleStratumAttributeArray,
+) -> SingleStratumAttributeArray:
     """
     Adapt the given `value` to the given type and shape, given dimensional
     information.
@@ -290,15 +289,15 @@ class DataResolver:
 
     _dim: Dimensions
     """Simulation dimensions."""
-    _raw_values: dict[AbsoluteName, AttributeArray]
+    _raw_values: dict[AbsoluteName, AttributeData]
     """Values in their 'input' form."""
-    _adapted_values: dict[Key, AttributeArray]
+    _adapted_values: dict[Key, SingleStratumAttributeArray]
     """Values in their 'output' form, after adaptation."""
 
     def __init__(
         self,
         dim: Dimensions,
-        values: dict[AbsoluteName, AttributeArray] | None = None,
+        values: dict[AbsoluteName, AttributeData] | None = None,
     ):
         self._dim = dim
         self._raw_values = values or {}
@@ -321,7 +320,7 @@ class DataResolver:
         return name in self._raw_values
 
     @property
-    def raw_values(self) -> Mapping[AbsoluteName, AttributeArray]:
+    def raw_values(self) -> Mapping[AbsoluteName, AttributeData]:
         """
         The mapping of raw values in the resolver, by absolute name.
 
@@ -331,7 +330,7 @@ class DataResolver:
         """
         return self._raw_values
 
-    def get_raw(self, name: str | NamePattern | AbsoluteName) -> AttributeArray:
+    def get_raw(self, name: str | NamePattern | AbsoluteName) -> AttributeData:
         """
         Retrieve a raw value that matches the given name.
 
@@ -383,7 +382,7 @@ class DataResolver:
             raise ValueError(err)
         return self._raw_values[name]
 
-    def add(self, name: AbsoluteName, value: AttributeArray) -> None:
+    def add(self, name: AbsoluteName, value: AttributeData) -> None:
         """
         Add a value to this resolver. You may not overwrite an existing name.
 
@@ -407,7 +406,9 @@ class DataResolver:
             raise ValueError(err)
         self._raw_values[name] = value
 
-    def resolve(self, name: AbsoluteName, definition: AttributeDef) -> AttributeArray:
+    def resolve(
+        self, name: AbsoluteName, definition: AttributeDef
+    ) -> SingleStratumAttributeArray:
         """
         Resolve a value known by `name` to fit the given requirement `definition`.
 
@@ -436,6 +437,9 @@ class DataResolver:
         if name not in self._raw_values:
             raise DataAttributeError(f"No value for name '{name}'")
         value = self._raw_values[name]
+        if isinstance(value, StratifiedAttributeArray):
+            value = value.values_for(name.strata)
+
         adapted_value = adapt(definition.type, definition.shape, self._dim, value)
         self._adapted_values[key] = adapted_value
         return adapted_value
@@ -501,16 +505,14 @@ class DataResolver:
     @overload
     def to_dict(
         self, *, simplify_names: Literal[False] = False
-    ) -> dict[AbsoluteName, AttributeArray]: ...
+    ) -> dict[AbsoluteName, AttributeData]: ...
 
     @overload
-    def to_dict(
-        self, *, simplify_names: Literal[True]
-    ) -> dict[str, AttributeArray]: ...
+    def to_dict(self, *, simplify_names: Literal[True]) -> dict[str, AttributeData]: ...
 
     def to_dict(
         self, *, simplify_names: bool = False
-    ) -> dict[AbsoluteName, AttributeArray] | dict[str, AttributeArray]:
+    ) -> dict[AbsoluteName, AttributeData] | dict[str, AttributeData]:
         """
         Extract a dictionary from this resolver containing all of its raw (non-adapted)
         key-value pairs.
@@ -979,7 +981,7 @@ def evaluate_param(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
+) -> AttributeData:
     """
     Evaluate a parameter, transforming acceptable input values (type: `ParamValue`) to
     the form required internally by epymorph (`AttributeArray`).
@@ -1034,10 +1036,62 @@ def _(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
+) -> AttributeData:
     # Evaluate numpy arrays.
     # numpy array: make a copy so we don't risk unexpected mutations
     return value.copy()
+
+
+@evaluate_param.register
+def _(
+    value: StratifiedAttributeArray,
+    name: AbsoluteName,
+    data: DataResolver,
+    scope: GeoScope | None,
+    time_frame: TimeFrame | None,
+    ipm: BaseCompartmentModel | None,
+    rng: np.random.Generator | None,
+) -> AttributeData:
+    # Evaluate stratified attribute arrays.
+    if ipm is None:
+        # We must have an IPM to check strata information.
+        err = (
+            f"Cannot evaluate parameter '{name}' as a stratified array "
+            "without a disease model (IPM) to provide strata information."
+        )
+        raise DataAttributeError(err)
+
+    if not value.strata:
+        # If the value does not name its strata,
+        # check that the number of strata matches the IPM.
+        if value.num_strata != len(ipm.strata):
+            err = (
+                f"Strata mismatch for parameter '{name}': "
+                f"expected {len(ipm.strata)}, "
+                f"but only {value.num_strata} were specified by the value."
+            )
+            raise DataAttributeError(err)
+        strata = list(ipm.strata)
+
+    else:
+        # If the value does name its strata,
+        # the set of strata must match the IPM.
+        # It's okay, however, if the order does not match;
+        # this should be worked out by the resolver.
+        if not set(value.strata) == set(ipm.strata):
+            err = (
+                f"Strata mismatch for parameter '{name}': "
+                f"from the IPM we expected {ipm.strata}, "
+                f"but the value specifies {value.strata}."
+            )
+            raise DataAttributeError(err)
+        strata = value.strata
+
+    # Make a copy so we don't risk unexpected mutations
+    return StratifiedAttributeArray(
+        values=value.values.copy(),
+        strata=strata,
+    )
 
 
 @evaluate_param.register
@@ -1049,8 +1103,8 @@ def _(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
-    # Evluate scalars.
+) -> AttributeData:
+    # Evaluate scalars.
     # scalar value or python collection: re-pack it as a numpy array
     return np.asarray(value, dtype=None)
 
@@ -1064,7 +1118,7 @@ def _(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
+) -> AttributeData:
     # Evaluate Python type instances.
     # forgot to instantiate? a common error worth checking for
     err = (
@@ -1139,7 +1193,7 @@ def evaluate_requirements(
     errors = list[DataAttributeError]()
     resolved = DataResolver(dim)
     resolved_by = dict[AbsoluteName, ResolutionTree]()
-    evaluated = dict[ResolutionTree, AttributeArray]()
+    evaluated = dict[ResolutionTree, AttributeData]()
 
     for node in req.traverse():
         try:
@@ -1159,10 +1213,11 @@ def evaluate_requirements(
                     rng,
                 )
 
-                if not isinstance(value, np.ndarray):
+                if not isinstance(value, (np.ndarray, StratifiedAttributeArray)):
                     err = (
                         f"Attribute '{node.name}' ({node.resolution}) did "
-                        f"not evaluate to a numpy array."
+                        "not evaluate to an allowed AttributeData "
+                        "(either a numpy array or a stratified value)."
                     )
                     raise DataAttributeError(err)
 

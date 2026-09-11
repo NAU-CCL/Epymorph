@@ -35,9 +35,9 @@ from epymorph.attribute import (
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import DataShape, Dimensions
 from epymorph.data_type import (
-    AttributeArray,
     ScalarDType,
     ScalarValue,
+    SingleStratumAttributeArray,
     StructDType,
     StructValue,
 )
@@ -256,7 +256,7 @@ class Context(ABC):
         """The name under which this attribute is being evaluated."""
 
     @abstractmethod
-    def data(self, attribute: AttributeDef) -> AttributeArray:
+    def data(self, attribute: AttributeDef) -> SingleStratumAttributeArray:
         """
         Retrieve the value of an attribute.
 
@@ -442,7 +442,9 @@ class Context(ABC):
             if data is None:
                 return make_missing_context("data")
 
-            def data_getter(self, attribute: AttributeDef) -> AttributeArray:
+            def data_getter(
+                self, attribute: AttributeDef
+            ) -> SingleStratumAttributeArray:
                 n = name.to_namespace().to_absolute(attribute.name)
                 return data.resolve(n, attribute)  # type: ignore
 
