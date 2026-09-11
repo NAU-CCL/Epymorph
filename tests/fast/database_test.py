@@ -916,6 +916,44 @@ class ParamEvalTest(unittest.TestCase):
         self.assertIn("circular dependency", err)
         self.assertIn("gpm:a::ipm::beta", err)
 
+    def test_eval_err_03(self):
+        # Test that independent validation failures are collected together.
+        requirements = {
+            AN("gpm:a::ipm::beta"): AD("beta", int, Shapes.Scalar),
+            AN("gpm:a::ipm::gamma"): AD("gamma", int, Shapes.Scalar),
+        }
+
+        with self.assertRaises(DataAttributeErrorGroup) as ctx:
+            ReqTree.of(
+                requirements=requirements,
+                params=Database(
+                    {
+                        NP("gpm:a::ipm::beta"): 0.5,
+                        NP("gpm:a::ipm::gamma"): 0.7,
+                    }
+                ),
+            ).evaluate(self.scope, self.time_frame, None, None)
+
+        errors = "\n".join(str(e).lower() for e in ctx.exception.exceptions)
+        self.assertEqual(2, len(ctx.exception.exceptions))
+        self.assertIn("gpm:a::ipm::beta", errors)
+        self.assertIn("gpm:a::ipm::gamma", errors)
+        self.assertIn("not a compatible type", errors)
+
+    def test_eval_err_04(self):
+        # Test the targeted error for a class supplied in place of an instance.
+        with self.assertRaises(DataAttributeErrorGroup) as ctx:
+            ReqTree.of(
+                requirements={
+                    AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.Scalar),
+                },
+                params=Database({NP("gpm:a::ipm::beta"): ParamFunction}),
+            ).evaluate(self.scope, self.time_frame, None, None)
+
+        self.assertEqual(1, len(ctx.exception.exceptions))
+        error = str(ctx.exception.exceptions[0]).lower()
+        self.assertIn("class instead of an instance", error)
+
 
 ################
 # DataResolver #
@@ -968,3 +1006,77 @@ def test_data_resolver_get_raw(data_resolver):
         data_resolver.get_raw("gpm:one::ipm::beta")
     with pytest.raises(ValueError, match="matches more than one value"):
         data_resolver.get_raw("xi")
+
+
+def test_data_resolver_resolve_adapts_and_caches():
+    dim = Dimensions.of(T=2, N=3)
+    beta_name = AbsoluteName.parse("gpm:all::ipm::beta")
+
+    resolver_a = DataResolver(dim, {beta_name: np.array(7, dtype=np.int64)})
+
+    # resolving the same an attribute with the shape/type should yield the same object
+    # type adaptations which do not lose information are allowed (e.g., int -> float)
+    first = resolver_a.resolve(beta_name, AttributeDef("beta", float, Shapes.TxN))
+    second = resolver_a.resolve(beta_name, AttributeDef("beta", float, Shapes.TxN))
+    assert first is second
+    assert first.dtype == np.float64
+    np.testing.assert_array_equal(first, np.full((2, 3), 7.0))
+
+    with pytest.raises(DataAttributeError, match="No value"):
+        resolver_a.resolve(
+            AbsoluteName.parse("gpm:all::ipm::gamma"),
+            AttributeDef("gamma", float, Shapes.Scalar),
+        )
+
+    # type adaptations which might lose information are not allowed (e.g., float -> int)
+    resolver_b = DataResolver(dim, {beta_name: np.array(7.5, dtype=np.float64)})
+    with pytest.raises(DataAttributeError, match="Not a compatible type"):
+        resolver_b.resolve(beta_name, AttributeDef("beta", int, Shapes.Scalar))
+
+
+def test_data_resolver_resolve_txn_series():
+    dim = Dimensions.of(T=2, N=2)
+    beta = AbsoluteName.parse("gpm:all::ipm::beta")
+    gamma = AbsoluteName.parse("gpm:all::ipm::gamma")
+    resolver = DataResolver(
+        dim,
+        {
+            beta: np.array(
+                [
+                    [1, 2],  # day 0
+                    [3, 4],  # day 1
+                ],
+                dtype=np.int64,
+            ),
+            gamma: np.array(0.5, dtype=np.float64),
+        },
+    )
+
+    values = list(
+        resolver.resolve_txn_series(
+            [
+                (beta, AttributeDef("beta", float, Shapes.TxN)),
+                (gamma, AttributeDef("gamma", float, Shapes.Scalar)),
+            ],
+            tau_steps=2,
+        )
+    )
+
+    assert values == [
+        [1.0, 0.5],  # day 0, step 0, node 0
+        [2.0, 0.5],  # day 0, step 0, node 1
+        [1.0, 0.5],  # day 0, step 1, node 0
+        [2.0, 0.5],  # day 0, step 1, node 1
+        [3.0, 0.5],  # day 1, step 0, node 0
+        [4.0, 0.5],  # day 1, step 0, node 1
+        [3.0, 0.5],  # day 1, step 1, node 0
+        [4.0, 0.5],  # day 1, step 1, node 1
+    ]
+
+    with pytest.raises(DataAttributeError, match="broadcast to TxN"):
+        list(
+            resolver.resolve_txn_series(
+                [(beta, AttributeDef("beta", float, Shapes.NxN))],
+                tau_steps=1,
+            )
+        )
