@@ -1,6 +1,5 @@
 # ruff: noqa: PT009,PT027
 import math
-import unittest
 from typing import TypeVar
 from unittest.mock import MagicMock
 
@@ -24,389 +23,462 @@ from epymorph.geography.scope import GeoScope
 from epymorph.params import ParamFunction, ParamFunctionTimeAndNode
 from epymorph.time import TimeFrame
 
-
-class ModuleNamespaceTest(unittest.TestCase):
-    def test_post_init_empty(self):
-        with self.assertRaises(ValueError):
-            ModuleNamespace("", "module")
-        with self.assertRaises(ValueError):
-            ModuleNamespace("strata", "")
-
-    def test_post_init_wildcards(self):
-        with self.assertRaises(ValueError):
-            ModuleNamespace("*", "module")
-        with self.assertRaises(ValueError):
-            ModuleNamespace("strata", "*")
-
-    def test_post_init_delimeters(self):
-        with self.assertRaises(ValueError):
-            ModuleNamespace("::", "module")
-        with self.assertRaises(ValueError):
-            ModuleNamespace("strata", "::")
-
-    def test_parse_valid_string(self):
-        ns = ModuleNamespace.parse("strata::module")
-        self.assertEqual(ns.strata, "strata")
-        self.assertEqual(ns.module, "module")
-
-    def test_parse_invalid_string(self):
-        with self.assertRaises(ValueError):
-            ModuleNamespace.parse("invalid_string")
-
-    def test_parse_with_more_parts(self):
-        with self.assertRaises(ValueError):
-            ModuleNamespace.parse("too::many::parts")
-
-    def test_str_representation(self):
-        ns = ModuleNamespace("strata", "module")
-        self.assertEqual(str(ns), "strata::module")
-
-    def test_to_absolute(self):
-        ns = ModuleNamespace("strata", "module")
-        pattern = ns.to_absolute("id")
-        self.assertIsInstance(pattern, AbsoluteName)
-        self.assertEqual(pattern.strata, "strata")
-        self.assertEqual(pattern.module, "module")
-        self.assertEqual(pattern.id, "id")
+###################
+# ModuleNamespace #
+###################
 
 
-class AbsoluteNameTest(unittest.TestCase):
-    def test_post_init_empty(self):
-        with self.assertRaises(ValueError):
-            AbsoluteName("", "module", "id")
-        with self.assertRaises(ValueError):
-            AbsoluteName("strata", "", "id")
-        with self.assertRaises(ValueError):
-            AbsoluteName("strata", "module", "")
-
-    def test_post_init_wildcards(self):
-        with self.assertRaises(ValueError):
-            AbsoluteName("*", "module", "id")
-        with self.assertRaises(ValueError):
-            AbsoluteName("strata", "*", "id")
-        with self.assertRaises(ValueError):
-            AbsoluteName("strata", "module", "*")
-
-    def test_post_init_delimeters(self):
-        with self.assertRaises(ValueError):
-            AbsoluteName("::", "module", "id")
-        with self.assertRaises(ValueError):
-            AbsoluteName("strata", "::", "id")
-        with self.assertRaises(ValueError):
-            AbsoluteName("strata", "module", "::")
-
-    def test_parse_valid_string(self):
-        name = AbsoluteName.parse("strata::module::id")
-        self.assertEqual(name.strata, "strata")
-        self.assertEqual(name.module, "module")
-        self.assertEqual(name.id, "id")
-
-    def test_parse_invalid_string(self):
-        with self.assertRaises(ValueError):
-            AbsoluteName.parse("invalid_string")
-
-    def test_str_representation(self):
-        name = AbsoluteName("strata", "module", "id")
-        self.assertEqual(str(name), "strata::module::id")
-
-    def test_in_strata(self):
-        name = AbsoluteName("strata", "module", "id")
-        new_name = name.in_strata("new_strata")
-        self.assertIsInstance(new_name, AbsoluteName)
-        self.assertEqual(new_name.strata, "new_strata")
-        self.assertEqual(new_name.module, "module")
-        self.assertEqual(new_name.id, "id")
-
-    def test_to_namespace(self):
-        name = AbsoluteName("strata", "module", "id")
-        namespace = name.to_namespace()
-        self.assertIsInstance(namespace, ModuleNamespace)
-        self.assertEqual(namespace.strata, "strata")
-        self.assertEqual(namespace.module, "module")
-
-    def test_to_pattern(self):
-        name = AbsoluteName("strata", "module", "id")
-        pattern = name.to_pattern()
-        self.assertIsInstance(pattern, NamePattern)
-        self.assertEqual(pattern.strata, "strata")
-        self.assertEqual(pattern.module, "module")
-        self.assertEqual(pattern.id, "id")
+def test_module_namespace_post_init_empty():
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleNamespace("", "module")
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleNamespace("strata", "")
 
 
-class ModuleNameTest(unittest.TestCase):
-    def test_post_init_empty(self):
-        with self.assertRaises(ValueError):
-            ModuleName("module", "")
-        with self.assertRaises(ValueError):
-            ModuleName("", "id")
-
-    def test_post_init_wildcards(self):
-        with self.assertRaises(ValueError):
-            ModuleName("*", "id")
-        with self.assertRaises(ValueError):
-            ModuleName("module", "*")
-
-    def test_post_init_delimeters(self):
-        with self.assertRaises(ValueError):
-            ModuleName("::", "id")
-        with self.assertRaises(ValueError):
-            ModuleName("module", "::")
-
-    def test_empty(self):
-        with self.assertRaises(ValueError):
-            ModuleName.parse("")
-
-    def test_parse_valid_string(self):
-        name = ModuleName.parse("module::id")
-        self.assertEqual(name.module, "module")
-        self.assertEqual(name.id, "id")
-
-    def test_parse_invalid_string(self):
-        with self.assertRaises(ValueError):
-            ModuleName.parse("invalid_string")
-
-    def test_parse_with_more_parts(self):
-        with self.assertRaises(ValueError):
-            ModuleName.parse("too::many::parts")
-
-    def test_str_representation(self):
-        name = ModuleName("module", "id")
-        self.assertEqual(str(name), "module::id")
-
-    def test_to_absolute(self):
-        name = ModuleName("module", "id")
-        absolute_name = name.to_absolute("strata")
-        self.assertIsInstance(absolute_name, AbsoluteName)
-        self.assertEqual(absolute_name.strata, "strata")
-        self.assertEqual(absolute_name.module, "module")
-        self.assertEqual(absolute_name.id, "id")
+def test_module_namespace_post_init_wildcards():
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleNamespace("*", "module")
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleNamespace("strata", "*")
 
 
-class AttributeNameTest(unittest.TestCase):
-    def test_post_init_empty(self):
-        with self.assertRaises(ValueError):
-            AttributeName("")
-
-    def test_post_init_wildcard_id(self):
-        with self.assertRaises(ValueError):
-            AttributeName("*")
-
-    def test_post_init_delimiters(self):
-        with self.assertRaises(ValueError):
-            AttributeName("invalid::id")
-
-    def test_str_representation(self):
-        attr_name = AttributeName("id")
-        self.assertEqual(str(attr_name), "id")
+def test_module_namespace_post_init_delimeters():
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleNamespace("::", "module")
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleNamespace("strata", "::")
 
 
-class NamePatternTest(unittest.TestCase):
-    def test_post_init_empty(self):
-        with self.assertRaises(ValueError):
-            NamePattern("", "module", "id")
-        with self.assertRaises(ValueError):
-            NamePattern("strata", "", "id")
-        with self.assertRaises(ValueError):
-            NamePattern("strata", "module", "")
-
-    def test_post_init_delimeters(self):
-        with self.assertRaises(ValueError):
-            NamePattern("::", "module", "id")
-        with self.assertRaises(ValueError):
-            NamePattern("strata", "::", "id")
-        with self.assertRaises(ValueError):
-            NamePattern("strata", "module", "::")
-
-    def test_parse_one_part(self):
-        pattern = NamePattern.parse("id")
-        self.assertEqual(pattern.strata, "*")
-        self.assertEqual(pattern.module, "*")
-        self.assertEqual(pattern.id, "id")
-
-    def test_parse_two_parts(self):
-        pattern = NamePattern.parse("module::id")
-        self.assertEqual(pattern.strata, "*")
-        self.assertEqual(pattern.module, "module")
-        self.assertEqual(pattern.id, "id")
-
-    def test_parse_three_parts(self):
-        pattern = NamePattern.parse("strata::module::id")
-        self.assertEqual(pattern.strata, "strata")
-        self.assertEqual(pattern.module, "module")
-        self.assertEqual(pattern.id, "id")
-
-    def test_parse_invalid_string(self):
-        with self.assertRaises(ValueError):
-            NamePattern.parse("too::many::parts::here")
-
-    def test_match_absolute_name(self):
-        valid_patterns = [
-            NamePattern("strata", "module", "*"),
-            NamePattern("strata", "*", "id"),
-            NamePattern("*", "module", "id"),
-            NamePattern("*", "*", "id"),
-            NamePattern("*", "module", "*"),
-            NamePattern("strata", "*", "*"),
-            NamePattern("*", "*", "*"),
-        ]
-        for pattern in valid_patterns:
-            absolute_name = AbsoluteName("strata", "module", "id")
-            self.assertTrue(pattern.match(absolute_name))
-
-    def test_no_match_absolute_name(self):
-        pattern = NamePattern("strata", "module", "*")
-        absolute_name = AbsoluteName("other_strata", "module", "id")
-        self.assertFalse(pattern.match(absolute_name))
-
-        pattern = NamePattern("strata", "*", "id")
-        absolute_name = AbsoluteName("other_strata", "module", "id")
-        self.assertFalse(pattern.match(absolute_name))
-
-        pattern = NamePattern("*", "module", "id")
-        absolute_name = AbsoluteName("strata", "other_module", "id")
-        self.assertFalse(pattern.match(absolute_name))
-
-    def test_match_name_pattern(self):
-        pattern1 = NamePattern("strata", "*", "id")
-        pattern2 = NamePattern("strata", "module", "id")
-        self.assertTrue(pattern1.match(pattern2))
-
-    def test_no_match_name_pattern(self):
-        pattern1 = NamePattern("strata", "module", "id")
-        pattern2 = NamePattern("*", "other_module", "id")
-        self.assertFalse(pattern1.match(pattern2))
-
-    def test_str_representation(self):
-        pattern = NamePattern("strata", "module", "id")
-        self.assertEqual(str(pattern), "strata::module::id")
+def test_module_namespace_parse_valid_string():
+    ns = ModuleNamespace.parse("strata::module")
+    assert ns.strata == "strata"
+    assert ns.module == "module"
 
 
-class ModuleNamePatternTest(unittest.TestCase):
-    def test_post_init_empty(self):
-        with self.assertRaises(ValueError):
-            ModuleNamePattern("", "id")
-        with self.assertRaises(ValueError):
-            ModuleNamePattern("module", "")
+def test_module_namespace_parse_invalid_string():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        ModuleNamespace.parse("invalid_string")
 
-    def test_post_init_delimeters(self):
-        with self.assertRaises(ValueError):
-            ModuleNamePattern("::", "id")
-        with self.assertRaises(ValueError):
-            ModuleNamePattern("module", "::")
 
-    def test_parse_one_part(self):
-        pattern = ModuleNamePattern.parse("id")
-        self.assertEqual(pattern.module, "*")
-        self.assertEqual(pattern.id, "id")
+def test_module_namespace_parse_with_more_parts():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        ModuleNamespace.parse("too::many::parts")
 
-    def test_parse_two_parts(self):
-        pattern = ModuleNamePattern.parse("module::id")
-        self.assertEqual(pattern.module, "module")
-        self.assertEqual(pattern.id, "id")
 
-    def test_parse_invalid_string(self):
-        with self.assertRaises(ValueError):
-            ModuleNamePattern.parse("too::many::parts::here")
+def test_module_namespace_str_representation():
+    ns = ModuleNamespace("strata", "module")
+    assert str(ns) == "strata::module"
 
-    def test_parse_empty(self):
-        with self.assertRaises(ValueError):
-            ModuleNamePattern.parse("")
 
-    def test_to_absolute(self):
-        pattern = ModuleNamePattern("module", "id")
-        absolute_pattern = pattern.to_absolute("strata")
-        self.assertIsInstance(absolute_pattern, NamePattern)
-        self.assertEqual(absolute_pattern.strata, "strata")
-        self.assertEqual(absolute_pattern.module, "module")
-        self.assertEqual(absolute_pattern.id, "id")
+def test_module_namespace_to_absolute():
+    ns = ModuleNamespace("strata", "module")
+    pattern = ns.to_absolute("id")
+    assert isinstance(pattern, AbsoluteName)
+    assert pattern.strata == "strata"
+    assert pattern.module == "module"
+    assert pattern.id == "id"
 
-    def test_str_representation(self):
-        pattern = ModuleNamePattern("module", "id")
-        self.assertEqual(str(pattern), "module::id")
+
+################
+# AbsoluteName #
+################
+
+
+def test_absolute_name_post_init_empty():
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("", "module", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("strata", "", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("strata", "module", "")
+
+
+def test_absolute_name_post_init_wildcards():
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("*", "module", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("strata", "*", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("strata", "module", "*")
+
+
+def test_absolute_name_post_init_delimeters():
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("::", "module", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("strata", "::", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        AbsoluteName("strata", "module", "::")
+
+
+def test_absolute_name_parse_valid_string():
+    name = AbsoluteName.parse("strata::module::id")
+    assert name.strata == "strata"
+    assert name.module == "module"
+    assert name.id == "id"
+
+
+def test_absolute_name_parse_invalid_string():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        AbsoluteName.parse("invalid_string")
+
+
+def test_absolute_name_str_representation():
+    name = AbsoluteName("strata", "module", "id")
+    assert str(name) == "strata::module::id"
+
+
+def test_absolute_name_in_strata():
+    name = AbsoluteName("strata", "module", "id")
+    new_name = name.in_strata("new_strata")
+    assert isinstance(new_name, AbsoluteName)
+    assert new_name.strata == "new_strata"
+    assert new_name.module == "module"
+    assert new_name.id == "id"
+
+
+def test_absolute_name_to_namespace():
+    name = AbsoluteName("strata", "module", "id")
+    namespace = name.to_namespace()
+    assert isinstance(namespace, ModuleNamespace)
+    assert namespace.strata == "strata"
+    assert namespace.module == "module"
+
+
+def test_absolute_name_to_pattern():
+    name = AbsoluteName("strata", "module", "id")
+    pattern = name.to_pattern()
+    assert isinstance(pattern, NamePattern)
+    assert pattern.strata == "strata"
+    assert pattern.module == "module"
+    assert pattern.id == "id"
+
+
+##############
+# ModuleName #
+##############
+
+
+def test_module_name_post_init_empty():
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleName("module", "")
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleName("", "id")
+
+
+def test_module_name_post_init_wildcards():
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleName("*", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleName("module", "*")
+
+
+def test_module_name_post_init_delimeters():
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleName("::", "id")
+    with pytest.raises(ValueError, match="Invalid name"):
+        ModuleName("module", "::")
+
+
+def test_module_name_parse_empty():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        ModuleName.parse("")
+
+
+def test_module_name_parse_valid_string():
+    name = ModuleName.parse("module::id")
+    assert name.module == "module"
+    assert name.id == "id"
+
+
+def test_module_name_parse_invalid_string():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        ModuleName.parse("invalid_string")
+
+
+def test_module_name_parse_with_more_parts():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        ModuleName.parse("too::many::parts")
+
+
+def test_module_name_str_representation():
+    name = ModuleName("module", "id")
+    assert str(name) == "module::id"
+
+
+def test_module_name_to_absolute():
+    name = ModuleName("module", "id")
+    absolute_name = name.to_absolute("strata")
+    assert isinstance(absolute_name, AbsoluteName)
+    assert absolute_name.strata == "strata"
+    assert absolute_name.module == "module"
+    assert absolute_name.id == "id"
+
+
+#################
+# AttributeName #
+#################
+
+
+def test_attribute_name_post_init_empty():
+    with pytest.raises(ValueError, match="Invalid name"):
+        AttributeName("")
+
+
+def test_attribute_name_post_init_wildcard_id():
+    with pytest.raises(ValueError, match="Invalid name"):
+        AttributeName("*")
+
+
+def test_attribute_name_post_init_delimiters():
+    with pytest.raises(ValueError, match="Invalid name"):
+        AttributeName("invalid::id")
+
+
+def test_attribute_name_str_representation():
+    attr_name = AttributeName("id")
+    assert str(attr_name) == "id"
+
+
+###############
+# NamePattern #
+###############
+
+
+def test_name_pattern_post_init_empty():
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        NamePattern("", "module", "id")
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        NamePattern("strata", "", "id")
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        NamePattern("strata", "module", "")
+
+
+def test_name_pattern_post_init_delimeters():
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        NamePattern("::", "module", "id")
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        NamePattern("strata", "::", "id")
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        NamePattern("strata", "module", "::")
+
+
+def test_name_pattern_parse_one_part():
+    pattern = NamePattern.parse("id")
+    assert pattern.strata == "*"
+    assert pattern.module == "*"
+    assert pattern.id == "id"
+
+
+def test_name_pattern_parse_two_parts():
+    pattern = NamePattern.parse("module::id")
+    assert pattern.strata == "*"
+    assert pattern.module == "module"
+    assert pattern.id == "id"
+
+
+def test_name_pattern_parse_three_parts():
+    pattern = NamePattern.parse("strata::module::id")
+    assert pattern.strata == "strata"
+    assert pattern.module == "module"
+    assert pattern.id == "id"
+
+
+def test_name_pattern_parse_invalid_string():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        NamePattern.parse("too::many::parts::here")
+
+
+def test_name_pattern_match_absolute_name():
+    valid_patterns = [
+        NamePattern("strata", "module", "*"),
+        NamePattern("strata", "*", "id"),
+        NamePattern("*", "module", "id"),
+        NamePattern("*", "*", "id"),
+        NamePattern("*", "module", "*"),
+        NamePattern("strata", "*", "*"),
+        NamePattern("*", "*", "*"),
+    ]
+    for pattern in valid_patterns:
+        absolute_name = AbsoluteName("strata", "module", "id")
+        assert pattern.match(absolute_name)
+
+
+def test_name_pattern_no_match_absolute_name():
+    pattern = NamePattern("strata", "module", "*")
+    absolute_name = AbsoluteName("other_strata", "module", "id")
+    assert not pattern.match(absolute_name)
+
+    pattern = NamePattern("strata", "*", "id")
+    absolute_name = AbsoluteName("other_strata", "module", "id")
+    assert not pattern.match(absolute_name)
+
+    pattern = NamePattern("*", "module", "id")
+    absolute_name = AbsoluteName("strata", "other_module", "id")
+    assert not pattern.match(absolute_name)
+
+
+def test_name_pattern_match_name_pattern():
+    pattern1 = NamePattern("strata", "*", "id")
+    pattern2 = NamePattern("strata", "module", "id")
+    assert pattern1.match(pattern2)
+
+
+def test_name_pattern_no_match_name_pattern():
+    pattern1 = NamePattern("strata", "module", "id")
+    pattern2 = NamePattern("*", "other_module", "id")
+    assert not pattern1.match(pattern2)
+
+
+def test_name_pattern_str_representation():
+    pattern = NamePattern("strata", "module", "id")
+    assert str(pattern) == "strata::module::id"
+
+
+#####################
+# ModuleNamePattern #
+#####################
+
+
+def test_module_name_pattern_post_init_empty():
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        ModuleNamePattern("", "id")
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        ModuleNamePattern("module", "")
+
+
+def test_module_name_pattern_post_init_delimeters():
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        ModuleNamePattern("::", "id")
+    with pytest.raises(ValueError, match="Invalid pattern"):
+        ModuleNamePattern("module", "::")
+
+
+def test_module_name_pattern_parse_one_part():
+    pattern = ModuleNamePattern.parse("id")
+    assert pattern.module == "*"
+    assert pattern.id == "id"
+
+
+def test_module_name_pattern_parse_two_parts():
+    pattern = ModuleNamePattern.parse("module::id")
+    assert pattern.module == "module"
+    assert pattern.id == "id"
+
+
+def test_module_name_pattern_parse_invalid_string():
+    with pytest.raises(ValueError, match="Invalid number of parts"):
+        ModuleNamePattern.parse("too::many::parts::here")
+
+
+def test_module_name_pattern_parse_empty():
+    with pytest.raises(ValueError, match="Empty string"):
+        ModuleNamePattern.parse("")
+
+
+def test_module_name_pattern_to_absolute():
+    pattern = ModuleNamePattern("module", "id")
+    absolute_pattern = pattern.to_absolute("strata")
+    assert isinstance(absolute_pattern, NamePattern)
+    assert absolute_pattern.strata == "strata"
+    assert absolute_pattern.module == "module"
+    assert absolute_pattern.id == "id"
+
+
+def test_module_name_pattern_str_representation():
+    pattern = ModuleNamePattern("module", "id")
+    assert str(pattern) == "module::id"
+
+
+############
+# Database #
+############
 
 
 T = TypeVar("T")
 
 
-class _DatabaseTestCase(unittest.TestCase):
-    def assert_match(self, expected: T, test: Match[T] | None):
-        if test is None:
-            self.fail("Expected a match, but it was None.")
-        self.assertEqual(expected, test.value)
+def _assert_match(expected: T, test: Match[T] | None):
+    if test is None:
+        raise AssertionError("Expected a match, but it was None.")
+    assert expected == test.value
 
 
-class DatabaseTest(_DatabaseTestCase):
-    def test_basic_usage(self):
-        db = Database[int](
+def test_database_query():
+    db = Database[int](
+        {
+            NamePattern("gpm:1", "ipm", "beta"): 1,
+            NamePattern("*", "ipm", "delta"): 2,
+            NamePattern("*", "*", "gamma"): 3,
+            NamePattern("gpm:2", "ipm", "beta"): 4,
+        }
+    )
+
+    _assert_match(1, db.query(AbsoluteName("gpm:1", "ipm", "beta")))
+    _assert_match(1, db.query("gpm:1::ipm::beta"))
+    _assert_match(4, db.query("gpm:2::ipm::beta"))
+    assert db.query("gpm:3::ipm::beta") is None
+
+    _assert_match(2, db.query("gpm:1::ipm::delta"))
+    _assert_match(2, db.query("gpm:2::ipm::delta"))
+    _assert_match(2, db.query("gpm:9::ipm::delta"))
+    assert db.query("gpm:1::mm::delta") is None
+
+    _assert_match(3, db.query("gpm:1::ipm::gamma"))
+    _assert_match(3, db.query("gpm:2::ipm::gamma"))
+    _assert_match(3, db.query("gpm:1::mm::gamma"))
+    _assert_match(3, db.query("gpm:1::init::gamma"))
+
+
+def test_database_query_ambiguous():
+    with pytest.raises(ValueError, match="ambiguous"):
+        Database[int](
             {
-                NamePattern("gpm:1", "ipm", "beta"): 1,
-                NamePattern("*", "ipm", "delta"): 2,
-                NamePattern("*", "*", "gamma"): 3,
-                NamePattern("gpm:2", "ipm", "beta"): 4,
+                NamePattern("*", "*", "beta"): 1,
+                NamePattern("gpm:1", "*", "beta"): 2,
+                NamePattern("*", "ipm", "beta"): 3,
             }
         )
 
-        self.assert_match(1, db.query(AbsoluteName("gpm:1", "ipm", "beta")))
-        self.assert_match(1, db.query("gpm:1::ipm::beta"))
-        self.assert_match(4, db.query("gpm:2::ipm::beta"))
-        self.assertIsNone(db.query("gpm:3::ipm::beta"))
 
-        self.assert_match(2, db.query("gpm:1::ipm::delta"))
-        self.assert_match(2, db.query("gpm:2::ipm::delta"))
-        self.assert_match(2, db.query("gpm:9::ipm::delta"))
-        self.assertIsNone(db.query("gpm:1::mm::delta"))
+def test_database_query_all():
+    primary = Database[int](
+        {
+            NamePattern("gpm:1", "ipm", "beta"): 11,
+            NamePattern("gpm:2", "*", "beta"): 44,
+            NamePattern("gpm:3", "*", "*"): 55,
+        }
+    )
 
-        self.assert_match(3, db.query("gpm:1::ipm::gamma"))
-        self.assert_match(3, db.query("gpm:2::ipm::gamma"))
-        self.assert_match(3, db.query("gpm:1::mm::gamma"))
-        self.assert_match(3, db.query("gpm:1::init::gamma"))
+    secondary = Database[int](
+        {
+            NamePattern("gpm:1", "ipm", "beta"): 1,
+            NamePattern("*", "ipm", "delta"): 2,
+            NamePattern("*", "ipm", "gamma"): 3,
+            NamePattern("gpm:2", "ipm", "beta"): 4,
+            NamePattern("gpm:3", "init", "alpha"): 6,
+        }
+    )
 
-    def test_ambiguous_values(self):
-        with self.assertRaises(ValueError) as e:
-            Database[int](
-                {
-                    NamePattern("*", "*", "beta"): 1,
-                    NamePattern("gpm:1", "*", "beta"): 2,
-                    NamePattern("*", "ipm", "beta"): 3,
-                }
-            )
-        self.assertIn("ambiguous", str(e.exception))
+    db = [primary, secondary]
+
+    _assert_match(11, Database.query_all(db, "gpm:1::ipm::beta"))
+    _assert_match(44, Database.query_all(db, "gpm:2::ipm::beta"))
+
+    _assert_match(55, Database.query_all(db, "gpm:3::ipm::beta"))
+    _assert_match(55, Database.query_all(db, "gpm:3::init::alpha"))
+    _assert_match(55, Database.query_all(db, "gpm:3::foo::bar"))
+
+    _assert_match(2, Database.query_all(db, "gpm:1::ipm::delta"))
+    _assert_match(2, Database.query_all(db, "gpm:2::ipm::delta"))
+    _assert_match(55, Database.query_all(db, "gpm:3::ipm::delta"))
+
+    assert Database.query_all(db, "gpm:1::init::alpha") is None
 
 
-class DatabaseQueryAllTest(_DatabaseTestCase):
-    def test_basic_usage(self):
-        primary = Database[int](
-            {
-                NamePattern("gpm:1", "ipm", "beta"): 11,
-                NamePattern("gpm:2", "*", "beta"): 44,
-                NamePattern("gpm:3", "*", "*"): 55,
-            }
-        )
-
-        secondary = Database[int](
-            {
-                NamePattern("gpm:1", "ipm", "beta"): 1,
-                NamePattern("*", "ipm", "delta"): 2,
-                NamePattern("*", "ipm", "gamma"): 3,
-                NamePattern("gpm:2", "ipm", "beta"): 4,
-                NamePattern("gpm:3", "init", "alpha"): 6,
-            }
-        )
-
-        db = [primary, secondary]
-
-        self.assert_match(11, Database.query_all(db, "gpm:1::ipm::beta"))
-        self.assert_match(44, Database.query_all(db, "gpm:2::ipm::beta"))
-
-        self.assert_match(55, Database.query_all(db, "gpm:3::ipm::beta"))
-        self.assert_match(55, Database.query_all(db, "gpm:3::init::alpha"))
-        self.assert_match(55, Database.query_all(db, "gpm:3::foo::bar"))
-
-        self.assert_match(2, Database.query_all(db, "gpm:1::ipm::delta"))
-        self.assert_match(2, Database.query_all(db, "gpm:2::ipm::delta"))
-        self.assert_match(55, Database.query_all(db, "gpm:3::ipm::delta"))
-
-        self.assertIsNone(Database.query_all(db, "gpm:1::init::alpha"))
+########################
+# Parameter evaluation #
+########################
 
 
 AD = AttributeDef
@@ -414,545 +486,545 @@ AN = AbsoluteName.parse
 NP = NamePattern.parse
 
 
-class ParamEvalTest(unittest.TestCase):
-    time_frame = TimeFrame.of("2020-01-01", 3)
-    scope = MagicMock(spec=GeoScope, nodes=2)
+@pytest.fixture(scope="module")
+def time_frame():
+    return TimeFrame.of("2020-01-01", 3)
 
-    @property
-    def rng(self):
-        return np.random.default_rng(1)
 
-    def _to_txn(self, value: float) -> NDArray[np.float64]:
-        return np.broadcast_to(value, shape=(self.time_frame.days, self.scope.nodes))
+@pytest.fixture(scope="module")
+def scope():
+    return MagicMock(spec=GeoScope, nodes=2)
 
-    def test_eval_01(self):
-        eval_calls = 0
 
-        # Test that a function can be used for multiple strata
-        # but will only be evaluated once if all of its dependencies
-        # do not vary by strata.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
+@pytest.fixture(scope="module")
+def rng():
+    return np.random.default_rng(1)
 
-            def evaluate(self):
-                nonlocal eval_calls
-                eval_calls += 1
-                return 2.0 * self.data("gamma")
 
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("*::ipm::beta"): F(),
-                    NP("*::ipm::gamma"): 0.7,
-                }
-            ),
-        )
+def _to_txn(
+    value: float,
+    time_frame: TimeFrame,
+    scope: GeoScope,
+) -> NDArray[np.float64]:
+    return np.broadcast_to(value, shape=(time_frame.days, scope.nodes))
 
-        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
-            simplify_names=True
-        )
 
-        # F evaluated once; beta is 1.4 for both strata
-        self.assertEqual(1, eval_calls)
-        exp = self._to_txn(1.4)
-        np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
-        np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
+def test_param_eval_01(time_frame, scope):
+    eval_calls = 0
 
-    def test_eval_02(self):
-        eval_calls = 0
+    # Test that a function can be used for multiple strata
+    # but will only be evaluated once if all of its dependencies
+    # do not vary by strata.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
 
-        # Test that a function declared "randomized" will be evaluated
-        # every time it's referenced, even if it otherwise wouldn't need to be.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
-            randomized = True
+        def evaluate(self):
+            nonlocal eval_calls
+            eval_calls += 1
+            return 2.0 * self.data("gamma")
 
-            def evaluate(self):
-                nonlocal eval_calls
-                eval_calls += 1
-                return 2.0 * self.data("gamma")
-
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("*::ipm::beta"): F(),
-                    NP("*::ipm::gamma"): 0.7,
-                }
-            ),
-        )
-
-        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
-            simplify_names=True
-        )
-
-        # F evaluated twice, even though it produces the same value each time
-        # beta is 1.4 for both strata
-        self.assertEqual(2, eval_calls)
-        exp = self._to_txn(1.4)
-        np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
-        np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
-
-    def test_eval_03(self):
-        eval_calls = 0
-
-        # Test a single function resolving to different values
-        # due to dependencies that differ between strata.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
-
-            def evaluate(self):
-                nonlocal eval_calls
-                eval_calls += 1
-                return 2.0 * self.data("gamma")
-
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("*::ipm::beta"): F(),
-                    NP("gpm:a::ipm::gamma"): 0.3,
-                    NP("gpm:b::ipm::gamma"): 0.7,
-                }
-            ),
-        )
-
-        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
-            simplify_names=True
-        )
-
-        # F evaluated twice
-        # beta is 0.6 for strata a
-        # and 1.4 for strata b
-        self.assertEqual(2, eval_calls)
-        np.testing.assert_array_equal(self._to_txn(0.6), values["gpm:a::ipm::beta"])
-        np.testing.assert_array_equal(self._to_txn(1.4), values["gpm:b::ipm::beta"])
-
-    def test_eval_04(self):
-        eval_calls = 0
-
-        # Test a single shared random value when a single instance is used.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
-
-            def evaluate(self):
-                nonlocal eval_calls
-                eval_calls += 1
-                return 2.0 * self.data("gamma") * self.rng.random()
-
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("*::ipm::beta"): F(),
-                    NP("*::ipm::gamma"): 0.7,
-                }
-            ),
-        )
-
-        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
-            simplify_names=True
-        )
-
-        # F evaluated once
-        # beta is random, but the same value is shared between strata
-        self.assertEqual(1, eval_calls)
-        np.testing.assert_array_equal(
-            values["gpm:a::ipm::beta"],
-            values["gpm:b::ipm::beta"],
-        )
-
-    def test_eval_05(self):
-        eval_calls = 0
-
-        # Test unique random values by virtue of providing different instances.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
-
-            def evaluate(self):
-                nonlocal eval_calls
-                eval_calls += 1
-                return 2.0 * self.data("gamma") * self.rng.random()
-
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("gpm:a::ipm::beta"): F(),
-                    NP("gpm:b::ipm::beta"): F(),
-                    NP("*::ipm::gamma"): 0.7,
-                }
-            ),
-        )
-
-        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
-            simplify_names=True
-        )
-
-        # Fs evaluated once each
-        # beta is two unique random numbers
-        self.assertEqual(2, eval_calls)
-        self.assertFalse(
-            np.array_equal(
-                values["gpm:a::ipm::beta"],
-                values["gpm:b::ipm::beta"],
-            )
-        )
-
-    def test_eval_06(self):
-        # Test input broadcasting and TxN functions.
-        class Beta(ParamFunctionTimeAndNode):
-            GAMMA = AD("gamma", float, Shapes.TxN)
-
-            requirements = [GAMMA]
-
-            r_0: float
-
-            def __init__(self, r_0: float):
-                self.r_0 = r_0
-
-            def evaluate1(self, day: int, node_index: int) -> float:
-                T = self.time_frame.days
-                gamma = self.data(self.GAMMA)[day, node_index]
-                magnitude = self.r_0 * gamma
-                return (
-                    0.1 * magnitude * math.sin(8 * math.pi * day / T)
-                    + (0.85 * magnitude)
-                    + (0.05 * magnitude * node_index)
-                )
-
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:a::ipm::gamma"): AD("gamma", float, Shapes.TxN),
-                AN("gpm:b::ipm::gamma"): AD("gamma", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("beta"): Beta(4),
-                    NP("gamma"): 0.1,
-                }
-            ),
-        )
-
-        values = reqs.evaluate(self.scope, self.time_frame, None, None).to_dict(
-            simplify_names=True
-        )
-
-        T = self.time_frame.days
-        N = self.scope.nodes
-        self.assertEqual(values["gpm:a::ipm::gamma"], 0.1)
-        self.assertEqual(values["gpm:b::ipm::gamma"], 0.1)
-        self.assertEqual(values["gpm:a::ipm::beta"].shape, (T, N))
-        self.assertEqual(values["gpm:b::ipm::beta"].shape, (T, N))
-
-    def test_eval_07(self):
-        f_eval_calls = 0
-        g_eval_calls = 0
-
-        # Test when a dependent function is not randomized,
-        # it and its parent will only be evaluated once.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
-
-            def evaluate(self):
-                nonlocal f_eval_calls
-                f_eval_calls += 1
-                return 2.0 * self.data("gamma")
-
-        class G(ParamFunction):
-            randomized = False
-
-            def evaluate(self):
-                nonlocal g_eval_calls
-                g_eval_calls += 1
-                return np.asarray(3.0 * self.rng.random())
-
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("*::ipm::beta"): F(),
-                    NP("*::ipm::gamma"): G(),
-                }
-            ),
-        )
-
-        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
-            simplify_names=True
-        )
-
-        # F and G(randomized=False) evaluated once
-        # same random values for both strata
-        self.assertEqual(1, f_eval_calls)
-        self.assertEqual(1, g_eval_calls)
-        np.testing.assert_array_equal(
-            values["gpm:a::ipm::beta"],
-            values["gpm:b::ipm::beta"],
-        )
-        np.testing.assert_array_equal(
-            values["gpm:a::ipm::gamma"],
-            values["gpm:b::ipm::gamma"],
-        )
-
-    def test_eval_08(self):
-        f_eval_calls = 0
-        g_eval_calls = 0
-
-        # Test when a dependent function is randomized,
-        # it and its parent will be evaluated every time.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
-
-            def evaluate(self):
-                nonlocal f_eval_calls
-                f_eval_calls += 1
-                return 2.0 * self.data("gamma")
-
-        class G(ParamFunction):
-            randomized = True
-
-            def evaluate(self):
-                nonlocal g_eval_calls
-                g_eval_calls += 1
-                return np.asarray(3.0 * self.rng.random())
-
-        reqs = ReqTree.of(
-            requirements={
-                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            },
-            params=Database(
-                {
-                    NP("*::ipm::beta"): F(),
-                    NP("*::ipm::gamma"): G(),
-                }
-            ),
-        )
-
-        values = reqs.evaluate(self.scope, self.time_frame, None, self.rng).to_dict(
-            simplify_names=True
-        )
-
-        # F and G(randomized=True) evaluated twice
-        # different random values for the strata
-        self.assertEqual(2, f_eval_calls)
-        self.assertEqual(2, g_eval_calls)
-        self.assertFalse(
-            np.array_equal(
-                values["gpm:a::ipm::beta"],
-                values["gpm:b::ipm::beta"],
-            )
-        )
-        self.assertFalse(
-            np.array_equal(
-                values["gpm:a::ipm::gamma"],
-                values["gpm:b::ipm::gamma"],
-            )
-        )
-
-    def test_eval_09(self):
-        # Test that different AttributeDefs can specify different shapes
-        # and resolve correctly, even when they use the same value,
-        # as long as that value can successfully broadcast to both shapes.
-        assert_equal = self.assertEqual
-
-        class F(ParamFunction):
-            # F wants a TxN alpha
-            requirements = (AD("alpha", float, Shapes.TxN),)
-
-            def evaluate(self):
-                # NOTE: it would also be possible to pull T and N from
-                # the shape of alpha, however this "hides" the dependency
-                # on the `dim` context; if dim is not given alpha will not
-                # be shape-adapted (it remains scalar), which causes this logic to fail.
-                t = self.time_frame.days
-                n = self.scope.nodes
-                alpha = self.data("alpha")
-                assert_equal((t, n), alpha.shape)
-                return np.arange(t * n).reshape((t, n)) * alpha
-
-        class G(ParamFunction):
-            # G wants a scalar alpha
-            requirements = (AD("alpha", float, Shapes.Scalar),)
-
-            def evaluate(self):
-                alpha = self.data("alpha")
-                assert_equal((), alpha.shape)
-                return np.asarray(3.0 * alpha)
-
-        req_a = AN("gpm:a::ipm::beta"), AD("beta", float, Shapes.TxN)
-        req_b = AN("gpm:b::ipm::beta"), AD("beta", float, Shapes.TxN)
-
-        reqs = ReqTree.of(
-            requirements={
-                req_a[0]: req_a[1],
-                req_b[0]: req_b[1],
-            },
-            params=Database(
-                {
-                    NP("gpm:a::ipm::beta"): F(),
-                    NP("gpm:b::ipm::beta"): G(),
-                    NP("*::*::alpha"): 0.5,
-                }
-            ),
-        )
-
-        data = reqs.evaluate(self.scope, self.time_frame, None, None)
-
-        # alpha should be interpreted differently for F and G:
-        beta_a = data.resolve(req_a[0], req_a[1])
-        beta_b = data.resolve(req_b[0], req_b[1])
-
-        T = self.time_frame.days
-        N = self.scope.nodes
-        # (gpm:a) F should get a TxN view of alpha,
-        # allowing it to produce a varying result
-        self.assertEqual((T, N), beta_a.shape)
-        self.assertTrue(np.unique(beta_a).size == T * N)
-
-        # (gpm:b) G should get a scalar view of alpha,
-        # producing a constant result over TxN
-        self.assertEqual((T, N), beta_b.shape)
-        self.assertTrue(np.all(beta_b == beta_b[0]))
-
-    def test_eval_err_01(self):
-        # Tests what happens when default values wind up conflicting
-        # due to different AttributeDefs managing to resolve to the same
-        # AbsoluteName. And test that this can be resolved by providing
-        # explicit values.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN, default_value=0.9),)
-
-            def evaluate(self):
-                return 2.0 * self.data("gamma")
-
-        requirements = {
+    reqs = ReqTree.of(
+        requirements={
             AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
             AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-            AN("gpm:a::ipm::gamma"): AD("gamma", float, Shapes.TxN, default_value=0.3),
-            AN("gpm:b::ipm::gamma"): AD("gamma", float, Shapes.TxN, default_value=0.7),
-        }
+        },
+        params=Database(
+            {
+                NP("*::ipm::beta"): F(),
+                NP("*::ipm::gamma"): 0.7,
+            }
+        ),
+    )
 
-        # detect conflicting defaults!
-        with self.assertRaises(DataAttributeErrorGroup) as ctx:
-            ReqTree.of(
-                requirements=requirements,
-                params=Database({NP("*::ipm::beta"): F()}),
-            ).evaluate(self.scope, self.time_frame, None, None)
+    values = reqs.evaluate(scope, time_frame, None, None).to_dict(simplify_names=True)
 
-        err = "\n".join([str(e).lower() for e in ctx.exception.exceptions])
-        self.assertIn(
-            "conflicting resolutions for requirement 'gpm:a::ipm::gamma'",
-            err,
-        )
-        self.assertIn(
-            "conflicting resolutions for requirement 'gpm:b::ipm::gamma'",
-            err,
-        )
+    # F evaluated once; beta is 1.4 for both strata
+    assert 1 == eval_calls
+    exp = _to_txn(1.4, time_frame, scope)
+    np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
+    np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
 
-        # Now test resolution:
+
+def test_param_eval_02(time_frame, scope):
+    eval_calls = 0
+
+    # Test that a function declared "randomized" will be evaluated
+    # every time it's referenced, even if it otherwise wouldn't need to be.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
+        randomized = True
+
+        def evaluate(self):
+            nonlocal eval_calls
+            eval_calls += 1
+            return 2.0 * self.data("gamma")
+
+    reqs = ReqTree.of(
+        requirements={
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+        },
+        params=Database(
+            {
+                NP("*::ipm::beta"): F(),
+                NP("*::ipm::gamma"): 0.7,
+            }
+        ),
+    )
+
+    values = reqs.evaluate(scope, time_frame, None, None).to_dict(simplify_names=True)
+
+    # F evaluated twice, even though it produces the same value each time
+    # beta is 1.4 for both strata
+    assert 2 == eval_calls
+    exp = _to_txn(1.4, time_frame, scope)
+    np.testing.assert_array_equal(exp, values["gpm:a::ipm::beta"])
+    np.testing.assert_array_equal(exp, values["gpm:b::ipm::beta"])
+
+
+def test_param_eval_03(time_frame, scope):
+    eval_calls = 0
+
+    # Test a single function resolving to different values
+    # due to dependencies that differ between strata.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
+
+        def evaluate(self):
+            nonlocal eval_calls
+            eval_calls += 1
+            return 2.0 * self.data("gamma")
+
+    reqs = ReqTree.of(
+        requirements={
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+        },
+        params=Database(
+            {
+                NP("*::ipm::beta"): F(),
+                NP("gpm:a::ipm::gamma"): 0.3,
+                NP("gpm:b::ipm::gamma"): 0.7,
+            }
+        ),
+    )
+
+    values = reqs.evaluate(scope, time_frame, None, None).to_dict(simplify_names=True)
+
+    # F evaluated twice
+    # beta is 0.6 for strata a
+    # and 1.4 for strata b
+    assert 2 == eval_calls
+    np.testing.assert_array_equal(
+        _to_txn(0.6, time_frame, scope),
+        values["gpm:a::ipm::beta"],
+    )
+    np.testing.assert_array_equal(
+        _to_txn(1.4, time_frame, scope),
+        values["gpm:b::ipm::beta"],
+    )
+
+
+def test_param_eval_04(time_frame, scope, rng):
+    eval_calls = 0
+
+    # Test a single shared random value when a single instance is used.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
+
+        def evaluate(self):
+            nonlocal eval_calls
+            eval_calls += 1
+            return 2.0 * self.data("gamma") * self.rng.random()
+
+    reqs = ReqTree.of(
+        requirements={
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+        },
+        params=Database(
+            {
+                NP("*::ipm::beta"): F(),
+                NP("*::ipm::gamma"): 0.7,
+            }
+        ),
+    )
+
+    values = reqs.evaluate(scope, time_frame, None, rng).to_dict(simplify_names=True)
+
+    # F evaluated once
+    # beta is random, but the same value is shared between strata
+    assert 1 == eval_calls
+    np.testing.assert_array_equal(
+        values["gpm:a::ipm::beta"],
+        values["gpm:b::ipm::beta"],
+    )
+
+
+def test_param_eval_05(time_frame, scope, rng):
+    eval_calls = 0
+
+    # Test unique random values by virtue of providing different instances.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
+
+        def evaluate(self):
+            nonlocal eval_calls
+            eval_calls += 1
+            return 2.0 * self.data("gamma") * self.rng.random()
+
+    reqs = ReqTree.of(
+        requirements={
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+        },
+        params=Database(
+            {
+                NP("gpm:a::ipm::beta"): F(),
+                NP("gpm:b::ipm::beta"): F(),
+                NP("*::ipm::gamma"): 0.7,
+            }
+        ),
+    )
+
+    values = reqs.evaluate(scope, time_frame, None, rng).to_dict(simplify_names=True)
+
+    # Fs evaluated once each
+    # beta is two unique random numbers
+    assert 2 == eval_calls
+    assert not np.array_equal(
+        values["gpm:a::ipm::beta"],
+        values["gpm:b::ipm::beta"],
+    )
+
+
+def test_param_eval_06(time_frame, scope):
+    # Test input broadcasting and TxN functions.
+    class Beta(ParamFunctionTimeAndNode):
+        GAMMA = AD("gamma", float, Shapes.TxN)
+
+        requirements = [GAMMA]
+
+        r_0: float
+
+        def __init__(self, r_0: float):
+            self.r_0 = r_0
+
+        def evaluate1(self, day: int, node_index: int) -> float:
+            T = self.time_frame.days
+            gamma = self.data(self.GAMMA)[day, node_index]
+            magnitude = self.r_0 * gamma
+            return (
+                0.1 * magnitude * math.sin(8 * math.pi * day / T)
+                + (0.85 * magnitude)
+                + (0.05 * magnitude * node_index)
+            )
+
+    reqs = ReqTree.of(
+        requirements={
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:a::ipm::gamma"): AD("gamma", float, Shapes.TxN),
+            AN("gpm:b::ipm::gamma"): AD("gamma", float, Shapes.TxN),
+        },
+        params=Database(
+            {
+                NP("beta"): Beta(4),
+                NP("gamma"): 0.1,
+            }
+        ),
+    )
+
+    values = reqs.evaluate(scope, time_frame, None, None).to_dict(simplify_names=True)
+
+    T = time_frame.days
+    N = scope.nodes
+    assert values["gpm:a::ipm::gamma"] == 0.1
+    assert values["gpm:b::ipm::gamma"] == 0.1
+    assert values["gpm:a::ipm::beta"].shape == (T, N)
+    assert values["gpm:b::ipm::beta"].shape == (T, N)
+
+
+def test_param_eval_07(time_frame, scope, rng):
+    f_eval_calls = 0
+    g_eval_calls = 0
+
+    # Test when a dependent function is not randomized,
+    # it and its parent will only be evaluated once.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
+
+        def evaluate(self):
+            nonlocal f_eval_calls
+            f_eval_calls += 1
+            return 2.0 * self.data("gamma")
+
+    class G(ParamFunction):
+        randomized = False
+
+        def evaluate(self):
+            nonlocal g_eval_calls
+            g_eval_calls += 1
+            return np.asarray(3.0 * self.rng.random())
+
+    reqs = ReqTree.of(
+        requirements={
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+        },
+        params=Database(
+            {
+                NP("*::ipm::beta"): F(),
+                NP("*::ipm::gamma"): G(),
+            }
+        ),
+    )
+
+    values = reqs.evaluate(scope, time_frame, None, rng).to_dict(simplify_names=True)
+
+    # F and G(randomized=False) evaluated once
+    # same random values for both strata
+    assert 1 == f_eval_calls
+    assert 1 == g_eval_calls
+    np.testing.assert_array_equal(
+        values["gpm:a::ipm::beta"],
+        values["gpm:b::ipm::beta"],
+    )
+    np.testing.assert_array_equal(
+        values["gpm:a::ipm::gamma"],
+        values["gpm:b::ipm::gamma"],
+    )
+
+
+def test_param_eval_08(time_frame, scope, rng):
+    f_eval_calls = 0
+    g_eval_calls = 0
+
+    # Test when a dependent function is randomized,
+    # it and its parent will be evaluated every time.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
+
+        def evaluate(self):
+            nonlocal f_eval_calls
+            f_eval_calls += 1
+            return 2.0 * self.data("gamma")
+
+    class G(ParamFunction):
+        randomized = True
+
+        def evaluate(self):
+            nonlocal g_eval_calls
+            g_eval_calls += 1
+            return np.asarray(3.0 * self.rng.random())
+
+    reqs = ReqTree.of(
+        requirements={
+            AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+            AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+        },
+        params=Database(
+            {
+                NP("*::ipm::beta"): F(),
+                NP("*::ipm::gamma"): G(),
+            }
+        ),
+    )
+
+    values = reqs.evaluate(scope, time_frame, None, rng).to_dict(simplify_names=True)
+
+    # F and G(randomized=True) evaluated twice
+    # different random values for the strata
+    assert 2 == f_eval_calls
+    assert 2 == g_eval_calls
+    assert not np.array_equal(
+        values["gpm:a::ipm::beta"],
+        values["gpm:b::ipm::beta"],
+    )
+    assert not np.array_equal(
+        values["gpm:a::ipm::gamma"],
+        values["gpm:b::ipm::gamma"],
+    )
+
+
+def test_param_eval_09(time_frame, scope):
+    # Test that different AttributeDefs can specify different shapes
+    # and resolve correctly, even when they use the same value,
+    # as long as that value can successfully broadcast to both shapes.
+    class F(ParamFunction):
+        # F wants a TxN alpha
+        requirements = (AD("alpha", float, Shapes.TxN),)
+
+        def evaluate(self):
+            # NOTE: it would also be possible to pull T and N from
+            # the shape of alpha, however this "hides" the dependency
+            # on the `dim` context; if dim is not given alpha will not
+            # be shape-adapted (it remains scalar), which causes this logic to fail.
+            t = self.time_frame.days
+            n = self.scope.nodes
+            alpha = self.data("alpha")
+            assert (t, n) == alpha.shape
+            return np.arange(t * n).reshape((t, n)) * alpha
+
+    class G(ParamFunction):
+        # G wants a scalar alpha
+        requirements = (AD("alpha", float, Shapes.Scalar),)
+
+        def evaluate(self):
+            alpha = self.data("alpha")
+            assert () == alpha.shape
+            return np.asarray(3.0 * alpha)
+
+    req_a = AN("gpm:a::ipm::beta"), AD("beta", float, Shapes.TxN)
+    req_b = AN("gpm:b::ipm::beta"), AD("beta", float, Shapes.TxN)
+
+    reqs = ReqTree.of(
+        requirements={
+            req_a[0]: req_a[1],
+            req_b[0]: req_b[1],
+        },
+        params=Database(
+            {
+                NP("gpm:a::ipm::beta"): F(),
+                NP("gpm:b::ipm::beta"): G(),
+                NP("*::*::alpha"): 0.5,
+            }
+        ),
+    )
+
+    data = reqs.evaluate(scope, time_frame, None, None)
+
+    # alpha should be interpreted differently for F and G:
+    beta_a = data.resolve(req_a[0], req_a[1])
+    beta_b = data.resolve(req_b[0], req_b[1])
+
+    T = time_frame.days
+    N = scope.nodes
+    # (gpm:a) F should get a TxN view of alpha,
+    # allowing it to produce a varying result
+    assert (T, N) == beta_a.shape
+    assert np.unique(beta_a).size == T * N
+
+    # (gpm:b) G should get a scalar view of alpha,
+    # producing a constant result over TxN
+    assert (T, N) == beta_b.shape
+    assert np.all(beta_b == beta_b[0])
+
+
+def test_param_eval_err_01(time_frame, scope):
+    # Tests what happens when default values wind up conflicting
+    # due to different AttributeDefs managing to resolve to the same
+    # AbsoluteName. And test that this can be resolved by providing
+    # explicit values.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN, default_value=0.9),)
+
+        def evaluate(self):
+            return 2.0 * self.data("gamma")
+
+    requirements = {
+        AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+        AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+        AN("gpm:a::ipm::gamma"): AD("gamma", float, Shapes.TxN, default_value=0.3),
+        AN("gpm:b::ipm::gamma"): AD("gamma", float, Shapes.TxN, default_value=0.7),
+    }
+
+    # detect conflicting defaults!
+    with pytest.raises(DataAttributeErrorGroup) as exc:
+        ReqTree.of(
+            requirements=requirements,
+            params=Database({NP("*::ipm::beta"): F()}),
+        ).evaluate(scope, time_frame, None, None)
+
+    err = "\n".join([str(e).lower() for e in exc.value.exceptions])
+    assert "conflicting resolutions for requirement 'gpm:a::ipm::gamma'" in err
+    assert "conflicting resolutions for requirement 'gpm:b::ipm::gamma'" in err
+
+    # Now test resolution:
+    ReqTree.of(
+        requirements=requirements,
+        params=Database(
+            {
+                NP("*::ipm::beta"): F(),
+                # Providing these two values prevents the error.
+                NP("gpm:a::ipm::gamma"): 0.4,
+                NP("gpm:b::ipm::gamma"): 0.5,
+            }
+        ),
+    ).evaluate(scope, time_frame, None, None)
+
+
+def test_param_eval_err_02(time_frame, scope):
+    # Test circular dependency detection.
+    class F(ParamFunction):
+        requirements = (AD("gamma", float, Shapes.TxN),)
+
+        def evaluate(self):
+            return 2.0 * self.data("gamma")
+
+    class G(ParamFunction):
+        requirements = (AD("beta", float, Shapes.TxN),)
+
+        def evaluate(self):
+            return 3.0 * self.data("beta")
+
+    with pytest.raises(DataAttributeError) as exc:
+        ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
+                AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
+            },
+            params=Database(
+                {
+                    NP("*::ipm::beta"): F(),
+                    NP("*::ipm::gamma"): G(),
+                }
+            ),
+        ).evaluate(scope, time_frame, None, None)
+
+    err = str(exc.value).lower()
+    assert "circular dependency" in err
+    assert "gpm:a::ipm::beta" in err
+
+
+def test_param_eval_err_03(time_frame, scope):
+    # Test that independent validation failures are collected together.
+    requirements = {
+        AN("gpm:a::ipm::beta"): AD("beta", int, Shapes.Scalar),
+        AN("gpm:a::ipm::gamma"): AD("gamma", int, Shapes.Scalar),
+    }
+
+    with pytest.raises(DataAttributeErrorGroup) as exc:
         ReqTree.of(
             requirements=requirements,
             params=Database(
                 {
-                    NP("*::ipm::beta"): F(),
-                    # Providing these two values prevents the error.
-                    NP("gpm:a::ipm::gamma"): 0.4,
-                    NP("gpm:b::ipm::gamma"): 0.5,
+                    NP("gpm:a::ipm::beta"): 0.5,
+                    NP("gpm:a::ipm::gamma"): 0.7,
                 }
             ),
-        ).evaluate(self.scope, self.time_frame, None, None)
+        ).evaluate(scope, time_frame, None, None)
 
-    def test_eval_err_02(self):
-        # Test circular dependency detection.
-        class F(ParamFunction):
-            requirements = (AD("gamma", float, Shapes.TxN),)
+    errors = "\n".join(str(e).lower() for e in exc.value.exceptions)
+    assert 2 == len(exc.value.exceptions)
+    assert "gpm:a::ipm::beta" in errors
+    assert "gpm:a::ipm::gamma" in errors
+    assert "not a compatible type" in errors
 
-            def evaluate(self):
-                return 2.0 * self.data("gamma")
 
-        class G(ParamFunction):
-            requirements = (AD("beta", float, Shapes.TxN),)
+def test_param_eval_err_04(time_frame, scope):
+    # Test the targeted error for a class supplied in place of an instance.
+    with pytest.raises(DataAttributeErrorGroup) as exc:
+        ReqTree.of(
+            requirements={
+                AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.Scalar),
+            },
+            params=Database({NP("gpm:a::ipm::beta"): ParamFunction}),
+        ).evaluate(scope, time_frame, None, None)
 
-            def evaluate(self):
-                return 3.0 * self.data("beta")
-
-        with self.assertRaises(DataAttributeError) as ctx:
-            ReqTree.of(
-                requirements={
-                    AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.TxN),
-                    AN("gpm:b::ipm::beta"): AD("beta", float, Shapes.TxN),
-                },
-                params=Database(
-                    {
-                        NP("*::ipm::beta"): F(),
-                        NP("*::ipm::gamma"): G(),
-                    }
-                ),
-            ).evaluate(self.scope, self.time_frame, None, None)
-
-        err = str(ctx.exception).lower()
-        self.assertIn("circular dependency", err)
-        self.assertIn("gpm:a::ipm::beta", err)
-
-    def test_eval_err_03(self):
-        # Test that independent validation failures are collected together.
-        requirements = {
-            AN("gpm:a::ipm::beta"): AD("beta", int, Shapes.Scalar),
-            AN("gpm:a::ipm::gamma"): AD("gamma", int, Shapes.Scalar),
-        }
-
-        with self.assertRaises(DataAttributeErrorGroup) as ctx:
-            ReqTree.of(
-                requirements=requirements,
-                params=Database(
-                    {
-                        NP("gpm:a::ipm::beta"): 0.5,
-                        NP("gpm:a::ipm::gamma"): 0.7,
-                    }
-                ),
-            ).evaluate(self.scope, self.time_frame, None, None)
-
-        errors = "\n".join(str(e).lower() for e in ctx.exception.exceptions)
-        self.assertEqual(2, len(ctx.exception.exceptions))
-        self.assertIn("gpm:a::ipm::beta", errors)
-        self.assertIn("gpm:a::ipm::gamma", errors)
-        self.assertIn("not a compatible type", errors)
-
-    def test_eval_err_04(self):
-        # Test the targeted error for a class supplied in place of an instance.
-        with self.assertRaises(DataAttributeErrorGroup) as ctx:
-            ReqTree.of(
-                requirements={
-                    AN("gpm:a::ipm::beta"): AD("beta", float, Shapes.Scalar),
-                },
-                params=Database({NP("gpm:a::ipm::beta"): ParamFunction}),
-            ).evaluate(self.scope, self.time_frame, None, None)
-
-        self.assertEqual(1, len(ctx.exception.exceptions))
-        error = str(ctx.exception.exceptions[0]).lower()
-        self.assertIn("class instead of an instance", error)
+    assert 1 == len(exc.value.exceptions)
+    error = str(exc.value.exceptions[0]).lower()
+    assert "class instead of an instance" in error
 
 
 ################
@@ -960,7 +1032,7 @@ class ParamEvalTest(unittest.TestCase):
 ################
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def data_resolver():
     return DataResolver(
         dim=MagicMock(Dimensions),
@@ -1041,13 +1113,13 @@ def test_data_resolver_resolve_adapts_and_caches():
         resolver_c.resolve(beta_name, AttributeDef("beta", int, Shapes.N))
 
 
-def test_eval_copies_numpy_parameter_values():
+def test_eval_copies_numpy_parameter_values(time_frame, scope):
     source = np.array([3, 5], dtype=np.int64)
     name = AN("gpm:all::ipm::beta")
     resolver = ReqTree.of(
         requirements={name: AttributeDef("beta", int, Shapes.N)},
         params=Database({NP("gpm:all::ipm::beta"): source}),
-    ).evaluate(ParamEvalTest.scope, ParamEvalTest.time_frame, None, None)
+    ).evaluate(scope, time_frame, None, None)
 
     source[0] = 99
 
