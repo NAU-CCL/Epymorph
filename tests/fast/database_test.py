@@ -1015,6 +1015,7 @@ def test_data_resolver_resolve_adapts_and_caches():
     resolver_a = DataResolver(dim, {beta_name: np.array(7, dtype=np.int64)})
 
     # resolving the same an attribute with the shape/type should yield the same object
+    # certain shape adaptations are allowed (e.g., scalar -> TxN)
     # type adaptations which do not lose information are allowed (e.g., int -> float)
     first = resolver_a.resolve(beta_name, AttributeDef("beta", float, Shapes.TxN))
     second = resolver_a.resolve(beta_name, AttributeDef("beta", float, Shapes.TxN))
@@ -1032,6 +1033,25 @@ def test_data_resolver_resolve_adapts_and_caches():
     resolver_b = DataResolver(dim, {beta_name: np.array(7.5, dtype=np.float64)})
     with pytest.raises(DataAttributeError, match="Not a compatible type"):
         resolver_b.resolve(beta_name, AttributeDef("beta", int, Shapes.Scalar))
+
+    # shape adaptations which are not compatible are not allowed
+    # (here, value is length 2, eval as shape N, but N=3)
+    resolver_c = DataResolver(dim, {beta_name: np.array([1, 2], dtype=np.int64)})
+    with pytest.raises(DataAttributeError, match="Not a compatible shape"):
+        resolver_c.resolve(beta_name, AttributeDef("beta", int, Shapes.N))
+
+
+def test_eval_copies_numpy_parameter_values():
+    source = np.array([3, 5], dtype=np.int64)
+    name = AN("gpm:all::ipm::beta")
+    resolver = ReqTree.of(
+        requirements={name: AttributeDef("beta", int, Shapes.N)},
+        params=Database({NP("gpm:all::ipm::beta"): source}),
+    ).evaluate(ParamEvalTest.scope, ParamEvalTest.time_frame, None, None)
+
+    source[0] = 99
+
+    np.testing.assert_array_equal(resolver.get_raw(name), np.array([3, 5]))
 
 
 def test_data_resolver_resolve_txn_series():
