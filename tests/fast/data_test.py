@@ -2,23 +2,20 @@
 import math
 
 import numpy as np
-import numpy.testing as npt
 import pytest
 import sympy
 from numpy.typing import NDArray
 
-from epymorph.attribute import (
-    AbsoluteName,
-    AttributeDef,
-    ModuleNamePattern,
-)
+from epymorph.attribute import AbsoluteName, AttributeDef, ModuleNamePattern
 from epymorph.compartment_model import MultiStrataModelSymbols, edge
 from epymorph.data.ipm.sirs import SIRS
 from epymorph.data.mm.centroids import Centroids
 from epymorph.data_shape import Shapes
 from epymorph.data_type import (
+    AnyAttributeArray,
     AttributeArray,
     CentroidDType,
+    StratifiedAttributeArray,
 )
 from epymorph.error import DataAttributeError
 from epymorph.geography.us_census import StateScope
@@ -36,7 +33,7 @@ from epymorph.time import TimeFrame
 
 
 def _assert_db(
-    db: dict[AbsoluteName, AttributeArray],
+    db: dict[AbsoluteName, AnyAttributeArray],
     key: str,
     value: AttributeArray,
 ) -> None:
@@ -44,12 +41,15 @@ def _assert_db(
     if matched is None:
         pytest.fail(f"Database did not contain the expected key: {key}")
 
+    if isinstance(matched, StratifiedAttributeArray):
+        matched = matched.values
+
     if value.dtype == np.float64:
         msg = f"Database value at key {key} did not match expected."
-        npt.assert_array_almost_equal(matched, value, err_msg=msg)  # type: ignore
+        np.testing.assert_array_almost_equal(matched, value, err_msg=msg)  # type: ignore
     else:
         msg = f"Database value at key {key} did not match expected."
-        npt.assert_array_equal(matched, value, err_msg=msg)
+        np.testing.assert_array_equal(matched, value, err_msg=msg)
 
 
 def _default_params() -> dict[str, ParamValue]:
@@ -116,9 +116,14 @@ def _rume(rume_params: dict[str, ParamValue] | None = None) -> RUME:
     )
 
 
-def test_eval_1():
+@pytest.fixture(scope="module")
+def rng() -> np.random.Generator:
+    return np.random.default_rng(1)
+
+
+def test_eval_1(rng):
     rume = _rume()
-    db = rume.evaluate_params(rng=np.random.default_rng(1)).to_dict()
+    db = rume.evaluate_params(rng=rng).to_dict()
 
     # We should have as many entries in our DB as we have attributes in the RUME.
     assert len(db) == len(rume.requirements)
@@ -158,14 +163,11 @@ def test_eval_1():
     assert x1 is x2
 
 
-def test_eval_2():
+def test_eval_2(rng):
     # Test with override values.
     rume = _rume()
 
-    db = rume.evaluate_params(
-        override_params={"*::*::beta": 0.5},
-        rng=np.random.default_rng(1),
-    ).to_dict()
+    db = rume.evaluate_params(override_params={"*::*::beta": 0.5}, rng=rng).to_dict()
 
     # Beta should be overridden from test case 1,
     _assert_db(db, "gpm:aaa::ipm::beta", np.array(0.5, dtype=np.float64))
@@ -177,7 +179,7 @@ def test_eval_2():
     _assert_db(db, "gpm:bbb::ipm::xi", np.array(1 / 90, dtype=np.float64))
 
 
-def test_eval_3():
+def test_eval_3(rng):
     # Test for missing attribute.
     # Use the default params but delete one of the attributes.
     params = _default_params()
@@ -186,7 +188,7 @@ def test_eval_3():
     rume = _rume(params)
 
     with pytest.raises(DataAttributeError) as exc:
-        rume.evaluate_params(rng=np.random.default_rng(1))
+        rume.evaluate_params(rng=rng)
 
     err = str(exc.value).lower()
     assert "there are missing values" in err
@@ -194,7 +196,7 @@ def test_eval_3():
     assert "gpm:bbb::ipm::gamma" in err
 
 
-def test_eval_sympy_expression():
+def test_eval_sympy_expression(rng):
     # Test param as sympy expression
     t, T, n = simulation_symbols("day", "duration_days", "node_index")
     beta_expr = 0.04 * sympy.sin(8 * sympy.pi * t / T) + 0.34 + (0.02 * n)
@@ -203,7 +205,7 @@ def test_eval_sympy_expression():
 
     db = rume.evaluate_params(
         override_params={"gpm:aaa::ipm::beta": beta_expr},
-        rng=np.random.default_rng(1),
+        rng=rng,
     ).to_dict()
 
     expected = np.stack(
@@ -217,7 +219,7 @@ def test_eval_sympy_expression():
     _assert_db(db, "gpm:aaa::ipm::beta", expected)
 
 
-def test_eval_param_function_1():
+def test_eval_param_function_1(rng):
     # Test param as shaped function
     class Beta(ParamFunctionTimeAndNode):
         GAMMA = AttributeDef("gamma", float, Shapes.TxN)
@@ -243,7 +245,7 @@ def test_eval_param_function_1():
 
     db = rume.evaluate_params(
         override_params={"gpm:aaa::ipm::beta": Beta(4.0)},
-        rng=np.random.default_rng(1),
+        rng=rng,
     ).to_dict()
 
     expected = np.stack(
@@ -257,7 +259,7 @@ def test_eval_param_function_1():
     _assert_db(db, "gpm:aaa::ipm::beta", expected)
 
 
-def test_eval_param_function_2():
+def test_eval_param_function_2(rng):
     # Test param as shaped function, with difference between strata
     class Xi(ParamFunctionNode):
         BETA = AttributeDef("beta", float, Shapes.TxN)
@@ -270,10 +272,7 @@ def test_eval_param_function_2():
 
     rume = _rume()
 
-    db = rume.evaluate_params(
-        override_params={"ipm::xi": Xi()},
-        rng=np.random.default_rng(1),
-    ).to_dict()
+    db = rume.evaluate_params(override_params={"ipm::xi": Xi()}, rng=rng).to_dict()
 
     expected_aaa = np.array([(0.4 / 5), (0.4 / 10)], dtype=np.float64)
     expected_bbb = np.array([(0.3 / 5), (0.3 / 10)], dtype=np.float64)
@@ -281,7 +280,7 @@ def test_eval_param_function_2():
     _assert_db(db, "gpm:bbb::ipm::xi", expected_bbb)
 
 
-def test_eval_param_function_chained():
+def test_eval_param_function_chained(rng):
     class Gamma(ParamFunctionScalar):
         BETA = AttributeDef("beta", float, Shapes.Scalar)
 
@@ -314,7 +313,7 @@ def test_eval_param_function_chained():
             "gpm:aaa::ipm::gamma": Gamma(),
             "gpm:aaa::ipm::xi": Xi(),
         },
-        rng=np.random.default_rng(1),
+        rng=rng,
     ).to_dict()
 
     _assert_db(db, "gpm:aaa::ipm::alpha", np.array(9))
@@ -323,7 +322,7 @@ def test_eval_param_function_chained():
     _assert_db(db, "gpm:aaa::ipm::xi", np.array(1 / 90))
 
 
-def test_eval_param_function_circular():
+def test_eval_param_function_circular(rng):
     class Gamma(ParamFunctionNumpy):
         XI = AttributeDef("xi", float, Shapes.Scalar)
 
@@ -348,7 +347,7 @@ def test_eval_param_function_circular():
                 "gpm:aaa::ipm::gamma": Gamma(),
                 "gpm:aaa::ipm::xi": Xi(),
             },
-            rng=np.random.default_rng(1),
+            rng=rng,
         )
 
     err = str(exc.value).lower()
