@@ -36,11 +36,7 @@ from typing import (
 import numpy as np
 from typing_extensions import override
 
-from epymorph.attribute import (
-    AbsoluteName,
-    AttributeDef,
-    NamePattern,
-)
+from epymorph.attribute import AbsoluteName, AttributeDef, NamePattern
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import (
     DataShape,
@@ -52,20 +48,18 @@ from epymorph.data_shape import (
     TimeAndNode,
 )
 from epymorph.data_type import (
+    AnyAttributeArray,
     AttributeArray,
     AttributeType,
     AttributeValue,
+    StratifiedAttributeArray,
     dtype_as_np,
     dtype_str,
 )
 from epymorph.error import DataAttributeError, DataAttributeErrorGroup
 from epymorph.geography.scope import GeoScope
 from epymorph.time import TimeFrame
-from epymorph.util import (
-    ANSIColor,
-    ANSIStyle,
-    ansi_stylize,
-)
+from epymorph.util import ANSIColor, ANSIStyle, ansi_stylize
 
 ############
 # Database #
@@ -177,7 +171,7 @@ def assert_can_adapt(
     data_type: AttributeType,
     data_shape: DataShape,
     dim: Dimensions,
-    value: AttributeArray,
+    value: AnyAttributeArray,
 ) -> None:
     """
     Check that we can adapt the given `value` to the given type and shape,
@@ -199,6 +193,11 @@ def assert_can_adapt(
     DataAttributeError
         If not.
     """
+    if isinstance(value, StratifiedAttributeArray):
+        # For stratified values, examining the first strata
+        # should be just as good as examining all of them.
+        value = value.values_for(0)
+
     if not np.can_cast(value, dtype_as_np(data_type)):
         raise DataAttributeError("Not a compatible type.")
     if not data_shape.matches(dim, value):
@@ -290,7 +289,7 @@ class DataResolver:
 
     _dim: Dimensions
     """Simulation dimensions."""
-    _raw_values: dict[AbsoluteName, AttributeArray]
+    _raw_values: dict[AbsoluteName, AnyAttributeArray]
     """Values in their 'input' form."""
     _adapted_values: dict[Key, AttributeArray]
     """Values in their 'output' form, after adaptation."""
@@ -298,7 +297,7 @@ class DataResolver:
     def __init__(
         self,
         dim: Dimensions,
-        values: dict[AbsoluteName, AttributeArray] | None = None,
+        values: dict[AbsoluteName, AnyAttributeArray] | None = None,
     ):
         self._dim = dim
         self._raw_values = values or {}
@@ -321,7 +320,7 @@ class DataResolver:
         return name in self._raw_values
 
     @property
-    def raw_values(self) -> Mapping[AbsoluteName, AttributeArray]:
+    def raw_values(self) -> Mapping[AbsoluteName, AnyAttributeArray]:
         """
         The mapping of raw values in the resolver, by absolute name.
 
@@ -331,7 +330,7 @@ class DataResolver:
         """
         return self._raw_values
 
-    def get_raw(self, name: str | NamePattern | AbsoluteName) -> AttributeArray:
+    def get_raw(self, name: str | NamePattern | AbsoluteName) -> AnyAttributeArray:
         """
         Retrieve a raw value that matches the given name.
 
@@ -383,7 +382,7 @@ class DataResolver:
             raise ValueError(err)
         return self._raw_values[name]
 
-    def add(self, name: AbsoluteName, value: AttributeArray) -> None:
+    def add(self, name: AbsoluteName, value: AnyAttributeArray) -> None:
         """
         Add a value to this resolver. You may not overwrite an existing name.
 
@@ -436,6 +435,9 @@ class DataResolver:
         if name not in self._raw_values:
             raise DataAttributeError(f"No value for name '{name}'")
         value = self._raw_values[name]
+        if isinstance(value, StratifiedAttributeArray):
+            value = value.values_for(name.strata)
+
         adapted_value = adapt(definition.type, definition.shape, self._dim, value)
         self._adapted_values[key] = adapted_value
         return adapted_value
@@ -501,16 +503,16 @@ class DataResolver:
     @overload
     def to_dict(
         self, *, simplify_names: Literal[False] = False
-    ) -> dict[AbsoluteName, AttributeArray]: ...
+    ) -> dict[AbsoluteName, AnyAttributeArray]: ...
 
     @overload
     def to_dict(
         self, *, simplify_names: Literal[True]
-    ) -> dict[str, AttributeArray]: ...
+    ) -> dict[str, AnyAttributeArray]: ...
 
     def to_dict(
         self, *, simplify_names: bool = False
-    ) -> dict[AbsoluteName, AttributeArray] | dict[str, AttributeArray]:
+    ) -> dict[AbsoluteName, AnyAttributeArray] | dict[str, AnyAttributeArray]:
         """
         Extract a dictionary from this resolver containing all of its raw (non-adapted)
         key-value pairs.
@@ -979,7 +981,7 @@ def evaluate_param(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
+) -> AnyAttributeArray:
     """
     Evaluate a parameter, transforming acceptable input values (type: `ParamValue`) to
     the form required internally by epymorph (`AttributeArray`).
@@ -1139,7 +1141,7 @@ def evaluate_requirements(
     errors = list[DataAttributeError]()
     resolved = DataResolver(dim)
     resolved_by = dict[AbsoluteName, ResolutionTree]()
-    evaluated = dict[ResolutionTree, AttributeArray]()
+    evaluated = dict[ResolutionTree, AnyAttributeArray]()
 
     for node in req.traverse():
         try:

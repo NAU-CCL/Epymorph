@@ -6,8 +6,9 @@ working with them. The goal is to simplify and remove certain categories of erro
 like numerical overflow when simulating reasonable numbers of individuals.
 """
 
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -45,7 +46,96 @@ AttributeDType = ScalarDType | StructDType
 """The allowed numpy dtypes for use in epymorph: these map 1:1 with `AttributeType`."""
 
 AttributeArray = NDArray[AttributeDType]
-"""A type describing all supported numpy array forms for attribute data."""
+"""A type describing all supported single-stratum forms of attribute data."""
+
+
+T = TypeVar("T", bound=AttributeDType)
+
+
+@dataclass(frozen=True)
+class StratifiedAttributeArray(Generic[T]):
+    """
+    A container for attributes which have data for multiple strata.
+
+    Parameters
+    ----------
+    values :
+        The underlying array, whose first dimension corresponds to the number of strata.
+    strata :
+        The list of strata names in order, if known, or else None to use
+        positional indexing only.
+
+    Raises
+    ------
+    ValueError :
+        For invalid or mismatched values and strata information. The values array must
+        be at least one-dimensional, and if strata names are given, their number must
+        match the values array's first dimension.
+    """
+
+    values: NDArray[T]
+    strata: list[str] | None = field(default=None)
+    num_strata: int = field(init=False)
+    # TODO: should we have strata names here? Not yet convinced this is necessary.
+
+    def __post_init__(self):
+        shape = self.values.shape
+        if len(shape) < 1:
+            err = (
+                "Invalid values: the array's first dimension must correspond to "
+                "the number of strata."
+            )
+            raise ValueError(err)
+        setattr(self, "num_strata", shape[0])
+        if self.strata is not None and len(self.strata) != self.num_strata:
+            err = (
+                "Invalid strata: the number of names given must match the "
+                "number of strata in the values array, judging the length of its "
+                "first dimension."
+            )
+            raise ValueError(err)
+
+    @staticmethod
+    def _calc_num_strata():
+        pass
+
+    def values_for(self, stratum: str | int) -> NDArray[T]:
+        """
+        Retrieve the values for a specific stratum.
+
+        Parameters
+        ----------
+        stratum :
+            The name or index of the stratum to retrieve.
+
+        Returns
+        -------
+        :
+            The values for the requested stratum.
+
+        Raises
+        ------
+        ValueError :
+            If the stratum is invalid. If an index is given but it's out of bounds,
+            or if a name is given but this object was not constructed with a list of
+            names.
+        """
+        if isinstance(stratum, str):
+            if self.strata is None:
+                err = "Strata not specified by name cannot be accessed by name."
+                raise ValueError(err)
+            else:
+                try:
+                    stratum = self.strata.index(stratum)
+                except ValueError:
+                    err = f"Stratum '{stratum}' not found in attribute array."
+                    raise ValueError(err) from None
+        return self.values[stratum, ...]
+
+
+AnyAttributeArray = AttributeArray | StratifiedAttributeArray
+"""A type describing all supported forms of attribute data."""
+# TODO: this is a terrible name...
 
 
 def dtype_as_np(dtype: AttributeType) -> np.dtype:
@@ -180,6 +270,8 @@ SimArray = NDArray[SimDType]
 __all__ = [
     "AttributeType",
     "AttributeArray",
+    "StratifiedAttributeArray",
+    "AnyAttributeArray",
     "CentroidType",
     "SimDType",
 ]
