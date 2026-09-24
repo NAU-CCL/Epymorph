@@ -17,10 +17,11 @@ from epymorph.attribute import (
     ModuleNamespace,
     NamePattern,
 )
+from epymorph.compartment_model import CombinedCompartmentModel
 from epymorph.data_shape import Dimensions, Shapes
 from epymorph.data_type import (
-    AnyAttributeArray,
-    AttributeArray,
+    AttributeData,
+    SingleStratumAttributeArray,
     StratifiedAttributeArray,
 )
 from epymorph.database import (
@@ -52,6 +53,11 @@ def time_frame():
 @pytest.fixture(scope="module")
 def scope():
     return MagicMock(spec=GeoScope, nodes=2)
+
+
+@pytest.fixture(scope="module")
+def multistrata_ipm():
+    return MagicMock(spec=CombinedCompartmentModel, strata=("aaa", "bbb"))
 
 
 ###################
@@ -526,9 +532,9 @@ def _to_txn(
 
 
 def _assert_is_single_strata(
-    values: dict[str, AnyAttributeArray],
+    values: dict[str, AttributeData],
     name: str,
-) -> AttributeArray:
+) -> SingleStratumAttributeArray:
     val = values.get(name)
     if val is None:
         err = f"Expected value for {name} not found in values."
@@ -540,7 +546,7 @@ def _assert_is_single_strata(
 
 
 def _assert_is_stratified(
-    values: dict[str, AnyAttributeArray],
+    values: dict[str, AttributeData],
     name: str,
 ) -> StratifiedAttributeArray:
     val = values.get(name)
@@ -1134,6 +1140,41 @@ def test_evaluate_reqs_literals_and_defaults(scope, time_frame):
     )
 
 
+def test_evaluate_reqs_stratified(scope, time_frame, multistrata_ipm):
+    value = StratifiedAttributeArray.from_dict(
+        {
+            "aaa": np.array(0.4),
+            "bbb": np.array(0.5),
+        }
+    )
+
+    tree = _req_tree(
+        _resolved_by_param(
+            BETA_ATTRIB,
+            AN("gpm:aaa::ipm::beta"),
+            NP("*::ipm::beta"),
+            value,
+        ),
+        _resolved_by_param(
+            BETA_ATTRIB,
+            AN("gpm:bbb::ipm::beta"),
+            NP("*::ipm::beta"),
+            value,
+        ),
+    )
+
+    data = evaluate_requirements(tree, scope, time_frame, multistrata_ipm, None)
+
+    np.testing.assert_array_equal(
+        data.resolve(AN("gpm:aaa::ipm::beta"), BETA_ATTRIB),
+        np.full((3, 2), 0.4),
+    )
+    np.testing.assert_array_equal(
+        data.resolve(AN("gpm:bbb::ipm::beta"), BETA_ATTRIB),
+        np.full((3, 2), 0.5),
+    )
+
+
 def test_evaluate_reqs_sympy(scope, time_frame):
     t, T, n = simulation_symbols("day", "duration_days", "node_index")
     expression = 0.04 * sympy.sin(8 * sympy.pi * t / T) + 0.34 + 0.02 * n
@@ -1344,6 +1385,38 @@ def test_data_resolver_resolve_adapts_and_caches():
     resolver_c = DataResolver(dim, {beta_name: np.array([1, 2], dtype=np.int64)})
     with pytest.raises(DataAttributeError, match="Not a compatible shape"):
         resolver_c.resolve(beta_name, AttributeDef("beta", int, Shapes.N))
+
+
+def test_data_resolver_resolves_stratified_values():
+    value = StratifiedAttributeArray(
+        np.array(
+            [
+                [[1, 2], [3, 4], [5, 6]],
+                [[7, 8], [9, 10], [11, 12]],
+            ],
+            dtype=np.int64,
+        ),
+        strata=["aaa", "bbb"],
+    )
+
+    # We presume that `value` resolves for both strata,
+    # as it would for a parameter specified as "*::ipm::beta".
+    resolver = DataResolver(
+        dim=Dimensions.of(T=3, N=2),
+        values={
+            AN("gpm:aaa::ipm::beta"): value,
+            AN("gpm:bbb::ipm::beta"): value,
+        },
+    )
+
+    definition = AD("beta", float, Shapes.TxN)
+    beta_aaa = resolver.resolve(AN("gpm:aaa::ipm::beta"), definition)
+    beta_bbb = resolver.resolve(AN("gpm:bbb::ipm::beta"), definition)
+
+    assert beta_aaa.dtype == np.float64
+    assert beta_bbb.dtype == np.float64
+    np.testing.assert_array_equal(beta_aaa, [[1, 2], [3, 4], [5, 6]])
+    np.testing.assert_array_equal(beta_bbb, [[7, 8], [9, 10], [11, 12]])
 
 
 def test_eval_copies_numpy_parameter_values(time_frame, scope):

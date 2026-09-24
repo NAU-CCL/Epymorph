@@ -6,10 +6,12 @@ working with them. The goal is to simplify and remove certain categories of erro
 like numerical overflow when simulating reasonable numbers of individuals.
 """
 
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import Any, Generic, Self, TypeVar
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 
 # Types for attribute declarations:
@@ -44,8 +46,242 @@ StructDType = np.void
 AttributeDType = ScalarDType | StructDType
 """The allowed numpy dtypes for use in epymorph: these map 1:1 with `AttributeType`."""
 
-AttributeArray = NDArray[AttributeDType]
-"""A type describing all supported numpy array forms for attribute data."""
+SingleStratumAttributeArray = NDArray[AttributeDType]
+"""The type of a single-stratum attribute data array."""
+
+
+T = TypeVar("T", bound=AttributeDType)
+
+
+@dataclass(frozen=True)
+class StratifiedAttributeArray(Generic[T]):
+    """
+    A multi-strata attribute data array.
+
+    Parameters
+    ----------
+    values :
+        The combined data array, whose first dimension corresponds to the number of
+        strata.
+    strata :
+        The list of strata names in order, if known, or else None to use positional
+        indexing only.
+
+    Raises
+    ------
+    ValueError :
+        For invalid or mismatched values and strata information. The values array must
+        be at least one-dimensional, and if strata names are given, their number must
+        match the values array's first dimension.
+    """
+
+    values: NDArray[T]
+    strata: list[str] | None = field(default=None)
+    num_strata: int = field(init=False)
+
+    def __post_init__(self):
+        shape = self.values.shape
+        if len(shape) < 1:
+            err = (
+                "Invalid values: the array's first dimension must correspond to "
+                "the number of strata."
+            )
+            raise ValueError(err)
+        object.__setattr__(self, "num_strata", shape[0])
+        if self.strata is not None and len(self.strata) != self.num_strata:
+            err = (
+                "Invalid strata: the number of names given must match the "
+                "number of strata in the values array, judging the length of its "
+                "first dimension."
+            )
+            raise ValueError(err)
+
+    @classmethod
+    def from_dict(cls, values: dict[str, NDArray[T]]) -> Self:
+        """
+        Construct a stratified array from a dictionary mapping stratum names to their
+        corresponding values arrays. The order of the strata will be determined by the
+        order of the keys in the dictionary.
+
+        Parameters
+        ----------
+        values :
+            A dictionary where keys are stratum names and values are numpy arrays
+            corresponding to the data for each stratum. The numpy arrays must have
+            broadcast-compatible shapes and equivalent dtypes.
+
+        Returns
+        -------
+        :
+            The stratified array instance.
+
+        Raises
+        ------
+        ValueError :
+            If the input dictionary is empty or if the arrays have incompatible types
+            or shapes.
+        """
+        if not values:
+            err = "The `values` dictionary must not be empty."
+            raise ValueError(err)
+
+        try:
+            broadcasted = np.broadcast_arrays(*values.values())
+        except ValueError:
+            err = "The input arrays must have shapes that can be broadcast together."
+            raise ValueError(err) from None
+
+        try:
+            array = np.stack(broadcasted, axis=0, casting="equiv")
+        except TypeError:
+            err = (
+                "The input arrays must have equivalent types to be stacked into a "
+                "stratified array."
+            )
+            raise ValueError(err) from None
+
+        return cls(values=array, strata=list(values.keys()))
+
+    @classmethod
+    def from_dataframe(
+        cls,
+        df: pd.DataFrame,
+        *,
+        columns: str | None = None,
+        index: str | None = None,
+        values: str | None = None,
+    ) -> Self:
+        """
+        Construct a stratified array from a pandas DataFrame. Note: dtypes will be
+        coerced to a common type.
+
+        By default, we assume your DataFrame is in "wide format", where each column
+        is assumed to be the name of a stratum, and values are provided along the rows.
+
+        If your data is in "long format", provide additional arguments following the
+        conventions of `pandas.DataFrame.pivot`. `columns` is the name of the column
+        containing stratum names, and `values` is the name of column containing data
+        values. Unlike pandas' pivot, you can only specify one `columns` and `values`
+        column. If you require more control than this, consider pivoting the DataFrame
+        before calling this method.
+
+        Parameters
+        ----------
+        df :
+            The input DataFrame.
+        columns :
+            Column containing stratum names in long format.
+        values :
+            Column containing data values in long format.
+        index :
+            Column to use to re-index the data values in long format;
+            may be omitted to use the DataFrame's existing index.
+
+        Returns
+        -------
+        :
+            The stratified array instance.
+
+        Raises
+        ------
+        ValueError :
+            If the DataFrame has invalid or duplicate columns, long-format options
+            are incomplete, or long-format data has duplicate or missing values or
+            observation/stratum combinations.
+        """
+        if not df.columns.is_unique:
+            err = "The DataFrame must have unique column names."
+            raise ValueError(err)
+
+        if columns is None and values is None:
+            if index is not None:
+                err = "The `index` argument is only used with long-format data."
+                raise ValueError(err)
+        else:
+            if columns is None or values is None:
+                err = (
+                    "Both `columns` and `values` must be provided for long-format data."
+                )
+                raise ValueError(err)
+
+            requested_columns = [columns, values]
+            if index is not None:
+                requested_columns.append(index)
+
+            if any(name not in df.columns for name in requested_columns):
+                err = "The requested long-format columns must exist in the DataFrame."
+                raise ValueError(err)
+
+            if len(set(requested_columns)) != len(requested_columns):
+                err = "The index, strata, and values columns must be distinct."
+                raise ValueError(err)
+
+            try:
+                kwargs = {"columns": columns, "values": values}
+                if index is not None:
+                    kwargs["index"] = index
+                df = df.pivot(**kwargs)  # noqa: PD010
+            except ValueError:
+                err = "Each observation and stratum pair must be unique."
+                raise ValueError(err) from None
+
+        values_np = df.to_numpy().T
+        if np.any(np.isnan(values_np)):
+            err = (
+                "The result contains missing values. You should pivot this data "
+                "yourself and handle missing values according to your use-case."
+            )
+            raise ValueError(err)
+
+        if any(not isinstance(name, str) for name in df.columns):
+            err = "Stratum names in the DataFrame must be strings."
+            raise ValueError(err)
+
+        return StratifiedAttributeArray(
+            values=values_np,
+            strata=list(df.columns),
+        )  # pyright: ignore[reportReturnType]
+
+    def values_for(self, stratum: str | int) -> NDArray[T]:
+        """
+        Retrieve the values for a specific stratum.
+
+        Parameters
+        ----------
+        stratum :
+            The name or index of the stratum to retrieve.
+
+        Returns
+        -------
+        :
+            The values for the requested stratum.
+
+        Raises
+        ------
+        ValueError :
+            If the stratum is invalid. If an index is given but it's out of bounds,
+            or if a name is given but this object was not constructed with a list of
+            names.
+        """
+        if isinstance(stratum, str):
+            if self.strata is None:
+                err = "Strata not specified by name cannot be accessed by name."
+                raise ValueError(err)
+            else:
+                stratum = stratum.removeprefix("gpm:")
+                try:
+                    stratum = self.strata.index(stratum)
+                except ValueError:
+                    err = f"Stratum '{stratum}' not found in attribute array."
+                    raise ValueError(err) from None
+        if stratum < -self.num_strata or stratum >= self.num_strata:
+            err = f"Stratum index {stratum} is out of bounds for the attribute array."
+            raise ValueError(err)
+        return self.values[stratum, ...]
+
+
+AttributeData = SingleStratumAttributeArray | StratifiedAttributeArray
+"""The type describing all supported forms of attribute data."""
 
 
 def dtype_as_np(dtype: AttributeType) -> np.dtype:
@@ -179,7 +415,9 @@ SimArray = NDArray[SimDType]
 
 __all__ = [
     "AttributeType",
-    "AttributeArray",
+    "SingleStratumAttributeArray",
+    "StratifiedAttributeArray",
+    "AttributeData",
     "CentroidType",
     "SimDType",
 ]

@@ -15,7 +15,7 @@ from typing_extensions import override
 from epymorph.attribute import AbsoluteName
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_type import (
-    AttributeArray,
+    AttributeData,
     AttributeValue,
 )
 from epymorph.database import DataResolver, evaluate_param
@@ -47,7 +47,7 @@ def _(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
+) -> AttributeData:
     # depth-first evaluation guarantees `data` has our dependencies.
     ctx = Context.of(name, data, scope, time_frame, ipm, rng)
     sim_func = value.with_context_internal(ctx)
@@ -429,7 +429,7 @@ def _(
     time_frame: TimeFrame | None,
     ipm: BaseCompartmentModel | None,
     rng: np.random.Generator | None,
-) -> AttributeArray:
+) -> AttributeData:
     # Automatically convert sympy expressions into a ParamFunction instance.
     try:
         expr_func = ParamExpressionTimeAndNode(value)
