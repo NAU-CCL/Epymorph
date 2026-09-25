@@ -37,7 +37,7 @@ from epymorph.adrio.validation import (
 from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import DataShape, Shapes
-from epymorph.data_type import AttributeData
+from epymorph.data_type import AttributeData, StratifiedAttributeArray
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
 from epymorph.database import DataResolver, evaluate_param
 from epymorph.error import MissingContextError
@@ -484,7 +484,7 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
     def validate_result(
         self,
         context: Context,
-        result: NDArray[ResultT],
+        result: AttributeData,
     ) -> None:
         """
         Validate that the result of evaluating the ADRIO adheres to the
@@ -502,16 +502,24 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
         ADRIOProcessingError
             If the result is invalid, indicating the processing logic has a bug.
         """
-        adrio_validate_pipe(
-            self,
-            context,
-            result,
-            validate_numpy(),
-            validate_shape(self.result_format.shape.to_tuple(context.dim)),
-            validate_dtype(self.result_format.dtype),
+        result_arrays = (
+            # Multistrata values: validate each stratum separately.
+            result.values  # noqa: PD011 (false positive)
+            if isinstance(result, StratifiedAttributeArray)
+            # Single-stratum values: add a new axis so the loop needs no special-casing
+            else result[np.newaxis, ...]
         )
+        for array in result_arrays:
+            adrio_validate_pipe(
+                self,
+                context,
+                array,
+                validate_numpy(),
+                validate_shape(self.result_format.shape.to_tuple(context.dim)),
+                validate_dtype(self.result_format.dtype),
+            )
 
-    def evaluate(self) -> NDArray[ResultT]:
+    def evaluate(self) -> AttributeData:
         """
         Evaluate the ADRIO in the current context.
 

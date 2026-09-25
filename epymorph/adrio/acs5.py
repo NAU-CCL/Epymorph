@@ -48,6 +48,10 @@ from epymorph.adrio.validation import (
 from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
+from epymorph.data_type import (
+    AttributeData,
+    StratifiedAttributeArray,
+)
 from epymorph.error import MissingContextError
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -63,6 +67,7 @@ from epymorph.geography.us_geography import (
     CensusGranularity,
 )
 from epymorph.simulation import Context
+from epymorph.strata import DEFAULT_STRATA
 from epymorph.util import filter_unique, filter_with_mask
 
 
@@ -540,11 +545,11 @@ class Population(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -604,14 +609,14 @@ class PopulationByAgeTable(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.NxA, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         scope = cast(CensusScope, self.scope)
         variables = ACS5Client.get_group_var_names(scope.year, "B01001")
         result_shape = (context.scope.nodes, len(variables))
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(result_shape),
             validate_dtype(self.result_format.dtype),
@@ -762,11 +767,11 @@ class PopulationByAge(_ACS5Mixin, ADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -905,11 +910,11 @@ class PopulationByRace(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -965,11 +970,11 @@ class AverageHouseholdSize(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1024,11 +1029,11 @@ class MedianAge(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1084,11 +1089,11 @@ class MedianIncome(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1148,11 +1153,11 @@ class GiniIndex(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1270,11 +1275,11 @@ class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1375,4 +1380,109 @@ class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
             dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
             issues={k: v for k, v in issues},
+        )
+
+
+AgeRangeLike = tuple[int, int | None] | AgeRange
+
+
+@adrio_cache
+class Population2(_ACS5FetchMixin, ADRIO[np.int64, np.int64]):
+    strata: list[str] | None
+    age_ranges: list[AgeRange]
+
+    def __init__(
+        self,
+        strata: dict[str, AgeRangeLike] | list[AgeRangeLike] | None = None,
+    ):
+        if strata is None:
+            strata = {DEFAULT_STRATA: AgeRange(0, None)}
+
+        self.strata = list(strata.keys()) if isinstance(strata, dict) else None
+        strata_vals = list(strata.values()) if isinstance(strata, dict) else strata
+        self.age_ranges = [
+            AgeRange(*x) if isinstance(x, tuple) else x for x in strata_vals
+        ]
+
+        # TODO
+        self._fix_insufficient_data = Fix.of_int64(False)
+        self._fix_missing = Fill.of_int64(False)
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat:
+        return ResultFormat(shape=Shapes.N, dtype=np.int64)
+
+    @override
+    def validate_result(self, context: Context, result: AttributeData) -> None:
+        # result_arrays = (
+        #     # Multistrata values: validate each stratum separately.
+        #     result.values  # noqa: PD011 (false positive)
+        #     if isinstance(result, StratifiedAttributeArray)
+        #     # Single-stratum values: add a new axis so the loop needs no special-casing
+        #     else result[np.newaxis, ...]
+        # )
+
+        # At validation time, the result is a plain numpy array
+        # where the first axis is the stratum.
+        # TODO: I think PipelineResult should allow StratifiedAttributeArray values?
+        for stratum in cast(np.ndarray, result):
+            adrio_validate_pipe(
+                self,
+                context,
+                stratum,
+                validate_numpy(),
+                validate_shape(self.result_format.shape.to_tuple(context.dim)),
+                validate_dtype(self.result_format.dtype),
+                validate_values_in_range(0, None),
+            )
+
+    @property
+    @override
+    def _variables(self) -> list[str]:
+        return ["group(B01001)"]
+
+    @override
+    def _process(self, context: Context, data_df: pd.DataFrame) -> PipelineResult:
+        table_result = super()._process(context, data_df)
+        if table_result.issues:
+            return table_result
+
+        # NOTE: we don't use the age_ranges() static method here because it's important
+        # for us to keep one value per column, even for columns which don't
+        # correspond to an age group (total, total male, total female).
+        scope = cast(CensusScope, context.scope)
+        age_ranges = [
+            AgeRange.parse(attrs["label"])
+            for var, attrs in ACS5Client.get_group_vars(scope.year, "B01001")
+        ]
+
+        strata_masks = []
+        for adrio_range in self.age_ranges:
+
+            def is_included(x: AgeRange | None) -> TypeGuard[AgeRange]:
+                return x is not None and adrio_range.contains(x)
+
+            included, col_mask = filter_with_mask(age_ranges, is_included)
+
+            # At least one var must have its start equal to the ADRIO range
+            if not any((x.start == adrio_range.start for x in included)):
+                raise ADRIOProcessingError(
+                    self, self.context, f"bad start {adrio_range}"
+                )
+            # At least one var must have its end equal to the ADRIO range
+            if not any((x.end == adrio_range.end for x in included)):
+                raise ADRIOProcessingError(self, self.context, f"bad end {adrio_range}")
+
+            strata_masks.append(col_mask)
+
+        mask_matrix = np.asarray(strata_masks, dtype=np.int64)
+        result = np.matmul(mask_matrix, table_result.value.T)
+        return PipelineResult(value=result, issues={})
+
+    @override
+    def evaluate(self) -> AttributeData:
+        return StratifiedAttributeArray(
+            values=cast(np.ndarray, super().evaluate()),
+            strata=self.strata,
         )

@@ -46,11 +46,10 @@ StructDType = np.void
 AttributeDType = ScalarDType | StructDType
 """The allowed numpy dtypes for use in epymorph: these map 1:1 with `AttributeType`."""
 
-SingleStratumAttributeArray = NDArray[AttributeDType]
-"""The type of a single-stratum attribute data array."""
-
-
 T = TypeVar("T", bound=AttributeDType)
+
+SingleStratumAttributeArray = NDArray[T]
+"""The type of a single-stratum attribute data array."""
 
 
 @dataclass(frozen=True)
@@ -280,7 +279,7 @@ class StratifiedAttributeArray(Generic[T]):
         return self.values[stratum, ...]
 
 
-AttributeData = SingleStratumAttributeArray | StratifiedAttributeArray
+AttributeData = SingleStratumAttributeArray[T] | StratifiedAttributeArray[T]
 """The type describing all supported forms of attribute data."""
 
 
