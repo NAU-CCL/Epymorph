@@ -1,8 +1,10 @@
 """ADRIOs for access US Census Bureau American Community Survey data."""
 
+import itertools
 import os
 import re
 from abc import abstractmethod
+from collections.abc import Iterator
 from functools import cache, reduce
 from itertools import groupby
 from json import load as load_json
@@ -48,6 +50,10 @@ from epymorph.adrio.validation import (
 from epymorph.attribute import AttributeDef
 from epymorph.cache import load_or_fetch_url, module_cache_path
 from epymorph.data_shape import Shapes
+from epymorph.data_type import (
+    AttributeData,
+    StratifiedAttributeArray,
+)
 from epymorph.error import MissingContextError
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -63,7 +69,8 @@ from epymorph.geography.us_geography import (
     CensusGranularity,
 )
 from epymorph.simulation import Context
-from epymorph.util import filter_unique, filter_with_mask
+from epymorph.strata import DEFAULT_STRATA
+from epymorph.util import filter_unique, filter_with_mask, split_at
 
 
 def census_api_key() -> str | None:
@@ -373,6 +380,7 @@ class ACS5Client:
                     timeout=30,
                 )
                 response.raise_for_status()  # Raise an error for bad status codes
+                print(response.json())
                 [columns, *rows] = response.json()
 
                 # keep all estimate columns
@@ -540,11 +548,11 @@ class Population(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -604,14 +612,14 @@ class PopulationByAgeTable(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.NxA, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         scope = cast(CensusScope, self.scope)
         variables = ACS5Client.get_group_var_names(scope.year, "B01001")
         result_shape = (context.scope.nodes, len(variables))
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(result_shape),
             validate_dtype(self.result_format.dtype),
@@ -762,11 +770,11 @@ class PopulationByAge(_ACS5Mixin, ADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -905,11 +913,11 @@ class PopulationByRace(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -965,11 +973,11 @@ class AverageHouseholdSize(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1024,11 +1032,11 @@ class MedianAge(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1084,11 +1092,11 @@ class MedianIncome(_ACS5FetchMixin, FetchADRIO[np.int64, np.int64]):
         return ResultFormat(shape=Shapes.N, dtype=np.int64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1148,11 +1156,11 @@ class GiniIndex(_ACS5FetchMixin, FetchADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1270,11 +1278,11 @@ class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
         return ResultFormat(shape=Shapes.N, dtype=np.float64)
 
     @override
-    def validate_result(self, context: Context, result: NDArray) -> None:
+    def validate_result(self, context: Context, result: AttributeData) -> None:
         adrio_validate_pipe(
             self,
             context,
-            result,
+            cast(np.ndarray, result),
             validate_numpy(),
             validate_shape(self.result_format.shape.to_tuple(context.dim)),
             validate_dtype(self.result_format.dtype),
@@ -1376,3 +1384,211 @@ class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
             shape=self.result_format.shape,
             issues={k: v for k, v in issues},
         )
+
+
+AgeRangeLike = tuple[int, int | None] | AgeRange
+
+
+@adrio_cache
+class Population2(_ACS5FetchMixin, ADRIO[np.int64, np.int64]):
+    strata: list[str] | None
+    age_ranges: list[AgeRange]
+
+    def __init__(
+        self,
+        strata: dict[str, AgeRangeLike] | list[AgeRangeLike] | None = None,
+        *,
+        fix_insufficient_data: FixLikeInt = False,
+        fix_missing: FillLikeInt = False,
+    ):
+        self._fix_insufficient_data = Fix.of_int64(fix_insufficient_data)
+        self._fix_missing = Fill.of_int64(fix_missing)
+
+        if strata is None:
+            strata = {DEFAULT_STRATA: AgeRange(0, None)}
+
+        self.strata = list(strata.keys()) if isinstance(strata, dict) else None
+        strata_vals = list(strata.values()) if isinstance(strata, dict) else strata
+        self.age_ranges = [
+            AgeRange(*x) if isinstance(x, tuple) else x for x in strata_vals
+        ]
+
+    @property
+    @override
+    def result_format(self) -> ResultFormat:
+        # This actually describes the shape of each stratum's results...
+        return ResultFormat(shape=Shapes.N, dtype=np.int64)
+
+    @override
+    def validate_result(self, context: Context, result: AttributeData) -> None:
+        # At validation, result is just a numpy array where the first axis is strata.
+        # TODO: I think PipelineResult should allow StratifiedAttributeArray values...
+        for stratum in cast(np.ndarray, result):
+            adrio_validate_pipe(
+                self,
+                context,
+                stratum,
+                validate_numpy(),
+                validate_shape(self.result_format.shape.to_tuple(context.dim)),
+                validate_dtype(self.result_format.dtype),
+                validate_values_in_range(0, None),
+            )
+
+    @property
+    @override
+    def _variables(self) -> list[str]:
+        return ["group(B01001)"]
+
+    @override
+    def _process(self, context: Context, data_df: pd.DataFrame) -> PipelineResult:
+        table_result = super()._process(context, data_df)
+        if table_result.issues:
+            return table_result
+
+        # NOTE: we can't use the age_ranges() static method here because it omits
+        # total and subtotal vars and we need to account for the whole group.
+        scope = cast(CensusScope, context.scope)
+        age_ranges = [
+            AgeRange.parse(attrs["label"])
+            for var, attrs in ACS5Client.get_group_vars(scope.year, "B01001")
+        ]
+
+        strata_masks = []
+        for adrio_range in self.age_ranges:
+
+            def is_included(x: AgeRange | None) -> TypeGuard[AgeRange]:
+                return x is not None and adrio_range.contains(x)
+
+            included, col_mask = filter_with_mask(age_ranges, is_included)
+
+            # At least one var must have its start equal to the ADRIO range
+            if not any((x.start == adrio_range.start for x in included)):
+                raise ADRIOProcessingError(
+                    self, self.context, f"bad start {adrio_range}"
+                )
+            # At least one var must have its end equal to the ADRIO range
+            if not any((x.end == adrio_range.end for x in included)):
+                raise ADRIOProcessingError(self, self.context, f"bad end {adrio_range}")
+
+            strata_masks.append(col_mask)
+
+        # Length variables:
+        # - M is number of strata,
+        # - N is number of locations,
+        # - V is the number of variables.
+        #
+        # Shapes:
+        # - `Mask` is: MxV
+        # - `Table` is: NxV
+        # - So `Mask @ Table.T` is: MxN
+        mask_matrix = np.asarray(strata_masks, dtype=np.int64)
+        result = np.matmul(mask_matrix, table_result.value.T)
+        return PipelineResult(value=result, issues={})
+
+    @override
+    def evaluate(self) -> AttributeData:
+        return StratifiedAttributeArray(
+            values=cast(np.ndarray, super().evaluate()),
+            strata=self.strata,
+        )
+
+
+def split_vars(acs_vars: list[str]) -> list[list[str]]:
+    """
+    Split a list of ACS variables so as to be suitable for querying in batches.
+
+    The ACS API does not allow you to include more than one group per query,
+    so we may need to split the list of variables into groups of non-group variables and
+    group variables.
+    """
+    if not acs_vars:
+        return []
+    if acs_vars[0].startswith("group("):
+        return [[acs_vars[0]], *split_vars(acs_vars[1:])]
+
+    nongroup_vars, remaining_vars = split_at(acs_vars, lambda x: x.startswith("group("))
+    return [nongroup_vars, *split_vars(remaining_vars)]
+
+
+def fetch(
+    scope: CensusScope,
+    acs_vars: list[str],
+    value_dtype: type[np.generic],
+    *,
+    report_progress: Callable[[float], None] | None = None,
+    result_format: Literal["long", "wide"] = "long",
+) -> pd.DataFrame:
+    """
+    Request `variables` from the Census API for the given `scope`.
+
+    Parameters
+    ----------
+    scope :
+        The geo scope to query.
+    acs_vars :
+        The list of variables to query.
+    value_dtype :
+        The dtype of the result array.
+    report_progress :
+        A callback for reporting query progress; especially useful when the scope
+        necessitates multiple queries.
+
+    Returns
+    -------
+    :
+        A dataframe in "long" format, with columns: geoid, variable, and value.
+        Geoid and variable are strings and value will be converted to the given
+        dtype.
+    """
+    url = ACS5Client.url(scope.year)
+    var_queries = split_vars(acs_vars)
+    geo_queries = ACS5Client.make_queries(scope)
+    queries = list(itertools.product(var_queries, geo_queries))
+    processing_steps = len(queries) + 1
+
+    est_var_re = re.compile(r".*?_\d\d\dE$")
+
+    def single_query(
+        query_index: int,
+        session: requests.Session,
+        query_vars: list[str],
+        query_geo: dict[str, str],
+    ) -> Iterator[list[str]]:
+        response = session.get(
+            url,
+            params={
+                "key": census_api_key(),
+                "get": ",".join(["GEO_ID", *query_vars]),
+                **query_geo,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        [cols, *rows] = response.json()
+
+        # yield long-format records, dropping non-estimate columns
+        est_cols = [(i, x) for i, x in enumerate(cols) if est_var_re.match(x)]
+        for row in rows:
+            for col_index, col in est_cols:
+                geoid = row[0][9:]  # drop ucgid prefix from geoid, e.g., "0500000US"
+                yield [geoid, col, row[col_index]]
+
+        if report_progress:
+            report_progress((query_index + 1) / processing_steps)
+
+    with requests.Session() as session:
+        records = itertools.chain.from_iterable(
+            single_query(i, session, query_vars, query_geo)
+            for i, (query_vars, query_geo) in enumerate(queries)
+        )
+        result_df = pd.DataFrame.from_records(
+            data=records,
+            index=["geoid", "variable"],
+            columns=["geoid", "variable", "value"],
+        )
+        result_df["value"] = result_df["value"].astype(value_dtype)
+        result_df = result_df.sort_index()
+        if result_format == "long":
+            return result_df
+        else:
+            return cast(pd.DataFrame, result_df["value"].unstack(level="variable"))

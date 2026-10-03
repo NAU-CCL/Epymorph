@@ -281,9 +281,7 @@ class TableRenderer:
             ordering,
             column_names,
             lambda df: (
-                # `pivot` is more appropriate than `pivot_table` because we don't want
-                # aggregation to happen accidentally
-                df.quantile(_quantiles)  # noqa: PD010
+                df.quantile(_quantiles)
                 .reset_index()
                 .pivot(index=["geo", "quantity"], columns=["level_2"])
                 .reset_index()

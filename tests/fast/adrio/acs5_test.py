@@ -1,5 +1,7 @@
 import numpy as np
+import pytest
 
+from epymorph.adrio import acs5
 from epymorph.adrio.acs5 import ACS5Client, DissimilarityIndex
 from epymorph.geography.us_census import (
     BlockGroupScope,
@@ -131,6 +133,31 @@ def test_acs5_client_make_queries_bg():
         {"for": "block group:2,4", "in": "state:35 county:001 tract:003714"},
     ]
     assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("variables", "expected"),
+    [
+        (
+            ["B01001_001E", "B01001_002E", "group(B01001)", "B01001_003E"],
+            [["B01001_001E", "B01001_002E"], ["group(B01001)"], ["B01001_003E"]],
+        ),
+        (
+            ["group(B01001A)", "group(B01001B)", "group(B01001C)"],
+            [["group(B01001A)"], ["group(B01001B)"], ["group(B01001C)"]],
+        ),
+        (
+            ["B01001_001E", "B01001_002E", "B01001_003E"],
+            [["B01001_001E", "B01001_002E", "B01001_003E"]],
+        ),
+        (
+            ["group(B01001)"],
+            [["group(B01001)"]],
+        ),
+    ],
+)
+def test_split_variables(variables, expected):
+    assert acs5.split_vars(variables) == expected
 
 
 #######################

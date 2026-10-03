@@ -284,6 +284,19 @@ def map_values(f: Callable[[A], B], xs: Mapping[K, A]) -> dict[K, B]:
     return {k: f(v) for k, v in xs.items()}
 
 
+def split_at(xs: list[T], predicate: Callable[[T], bool]) -> tuple[list[T], list[T]]:
+    """
+    Split a list into two lists at the first index where the predicate is True.
+    The first list contains all items before that index, and the second list
+    contains all items from that index onward. If no item matches the predicate,
+    the first list will contain all items and the second will be empty.
+    """
+    i = index_where(xs, predicate)
+    if i == -1:
+        return xs, []
+    return xs[:i], xs[i:]
+
+
 # numpy utilities
 
 

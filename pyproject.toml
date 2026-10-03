@@ -51,7 +51,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   # Jupyter
-  "ipykernel>7",
+  "ipykernel<7",
   # Linting/formatting
   "ruff~=0.15.15",
   # Testing
@@ -157,6 +157,7 @@ select = [
 
 ignore = [
   "E741", # (ambiguous names: false positives for common compartment name "I")
+  "PD010", # (prefer pandas pivot_table(): false positive when aggregation isn't appropriate)
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
