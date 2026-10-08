@@ -10,11 +10,7 @@ from numpy.typing import NDArray
 from epymorph.attribute import AbsoluteName, AttributeDef
 from epymorph.data_shape import Shapes
 from epymorph.error import MissingContextError
-from epymorph.simulation import (
-    SimulationFunction,
-    Tick,
-    simulation_clock,
-)
+from epymorph.simulation import SimulationFunction, Tick, simulation_clock
 from epymorph.time import TimeFrame
 
 ###############
@@ -82,6 +78,25 @@ def test_basic_usage():
         match=r"(?i)missing function context 'data' during evaluation",
     ):
         f.evaluate()
+
+
+def test_partial_context_evaluation():
+    class ContextFree(SimulationFunction[NDArray[np.int64]]):
+        def evaluate(self):
+            return np.asarray(42)
+
+    class NeedsScope(SimulationFunction[NDArray[np.int64]]):
+        def evaluate(self):
+            return np.asarray(self.scope.nodes)
+
+    partial_context = (
+        AbsoluteName("gpm:all", "foo", "foo"),
+        # the rest will be left unspecified (None)
+    )
+    assert ContextFree().with_context(*partial_context).evaluate() == 42
+
+    with pytest.raises(MissingContextError, match=r"(?i)context 'scope'"):
+        NeedsScope().with_context(*partial_context).evaluate()
 
 
 def test_immutable_requirements():
