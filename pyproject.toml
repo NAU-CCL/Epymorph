@@ -53,7 +53,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   # Jupyter
-  "ipykernel>7",
+  "ipykernel<7",
   # Linting/formatting
   "ruff~=0.15.15",
   # Testing
