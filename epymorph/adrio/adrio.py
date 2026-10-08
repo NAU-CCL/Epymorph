@@ -5,6 +5,7 @@ ADRIO implementations.
 
 import functools
 from abc import abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass
 from time import perf_counter
 from typing import (
@@ -15,12 +16,12 @@ from typing import (
     TypeVar,
     final,
 )
-from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
 from numpy.core.records import fromarrays
 from numpy.typing import NDArray
+from requests import HTTPError
 from sparklines import sparklines
 from typing_extensions import override
 
@@ -37,7 +38,7 @@ from epymorph.adrio.validation import (
 from epymorph.attribute import NAME_PLACEHOLDER, AbsoluteName, AttributeDef
 from epymorph.compartment_model import BaseCompartmentModel
 from epymorph.data_shape import DataShape, Shapes
-from epymorph.data_type import AttributeData
+from epymorph.data_type import AttributeData, StratifiedAttributeArray
 from epymorph.data_usage import DataEstimate, EmptyDataEstimate
 from epymorph.database import DataResolver, evaluate_param
 from epymorph.error import MissingContextError
@@ -139,9 +140,11 @@ class ADRIOError(Exception):
     context: Context
     """The evaluation context."""
 
-    def __init__(self, adrio: "ADRIO", context: Context, message: str):
+    def __init__(self, adrio: "ADRIO", context: Context, message: str | None):
         self.adrio = adrio
         self.context = context
+        if message is None:
+            message = "the ADRIO encountered an unexpected error"
         # If message contains "{adrio_name}", fill it in.
         message = message.format(adrio_name=_adrio_name(adrio, context))
         super().__init__(message)
@@ -223,6 +226,31 @@ class ADRIOProcessingError(ADRIOError):
             message = "the ADRIO encountered an unexpected error processing results"
         message = "Error processing {adrio_name}: " + message
         super().__init__(adrio, context, message)
+
+
+class DeferredADRIOError(Exception):
+    """
+    An error that occurred while evaluating an ADRIO, but in a place where we do not
+    have access to the full context.
+
+    Parameters
+    ----------
+    error_type :
+        The type of the error that occurred, but that will need to be constructed later.
+    message :
+        An error description.
+    """
+
+    message: str | None
+
+    def __init__(
+        self,
+        error_type: type[ADRIOError],
+        message: str | None = None,
+    ):
+        self.error_type = error_type
+        self.message = message
+        super().__init__()
 
 
 ResultT = TypeVar("ResultT", bound=np.generic)
@@ -484,7 +512,7 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
     def validate_result(
         self,
         context: Context,
-        result: NDArray[ResultT],
+        result: AttributeData,
     ) -> None:
         """
         Validate that the result of evaluating the ADRIO adheres to the
@@ -502,16 +530,24 @@ class ADRIO(SimulationFunction[NDArray[ResultT]], Generic[ResultT, ValueT]):
         ADRIOProcessingError
             If the result is invalid, indicating the processing logic has a bug.
         """
-        adrio_validate_pipe(
-            self,
-            context,
-            result,
-            validate_numpy(),
-            validate_shape(self.result_format.shape.to_tuple(context.dim)),
-            validate_dtype(self.result_format.dtype),
+        result_arrays = (
+            # Multistrata values: validate each stratum separately.
+            result.values  # noqa: PD011 (false positive)
+            if isinstance(result, StratifiedAttributeArray)
+            # Single-stratum values: add a new axis so the loop needs no special-casing
+            else result[np.newaxis, ...]
         )
+        for array in result_arrays:
+            adrio_validate_pipe(
+                self,
+                context,
+                array,
+                validate_numpy(),
+                validate_shape(self.result_format.shape.to_tuple(context.dim)),
+                validate_dtype(self.result_format.dtype),
+            )
 
-    def evaluate(self) -> NDArray[ResultT]:
+    def evaluate(self) -> AttributeData:
         """
         Evaluate the ADRIO in the current context.
 
@@ -689,59 +725,60 @@ class FetchADRIO(ADRIO[ResultT, ValueT]):
         :
             The data inspection results for the ADRIO's current context.
         """
-        ctx = self.context
-        try:
-            self.validate_context(ctx)
-        except ADRIOError:
-            raise
-        except MissingContextError as e:
-            raise ADRIOContextError(self, ctx, str(e))
-        except Exception as e:
-            raise ADRIOContextError(self, ctx) from e
+        return adrio_fetch_and_process(
+            self,
+            self.context,
+            self.validate_context,
+            self._fetch,
+            self._process,
+            self.validate_result,
+        )
 
-        self._report_progress(0.0)
+
+@contextmanager
+def adrio_exception_handling(adrio: ADRIO, ctx: Context):
+    try:
+        yield
+    except ADRIOError:
+        raise
+    except DeferredADRIOError as e:
+        raise e.error_type(adrio, ctx, e.message) from e.__cause__
+    except MissingContextError as e:
+        raise ADRIOContextError(adrio, ctx, str(e))
+    except HTTPError as e:
+        raise ADRIOCommunicationError(adrio, ctx, str(e)) from e
+    except Exception as e:
+        raise ADRIOProcessingError(adrio, ctx) from e
+
+
+def adrio_fetch_and_process(
+    adrio: ADRIO[ResultT, ValueT],
+    ctx: Context,
+    validate_context: Callable[[Context], None],
+    fetch: Callable[[Context], pd.DataFrame],
+    process: Callable[[Context, pd.DataFrame], PipelineResult[ResultT]],
+    validate_result: Callable[[Context, NDArray[ResultT]], None],
+) -> InspectResult[ResultT, ValueT]:
+    with adrio_exception_handling(adrio, ctx):
+        validate_context(ctx)
+
+        adrio._report_progress(0.0)
         start_time = perf_counter()
 
-        try:
-            source_df = self._fetch(ctx)
-        except ADRIOCommunicationError as e:
-            e2 = e.__cause__
-            if isinstance(e2, HTTPError) and e2.code == 414:
-                err = (
-                    "the attempted request URI was too long to send. "
-                    "The root cause for this can vary, but it usually suggests "
-                    "your query involves too many locations."
-                )
-                raise ADRIOCommunicationError(e.adrio, e.context, err) from e2
-            else:
-                raise e
-        except ADRIOError:
-            raise
-        except MissingContextError as e:
-            raise ADRIOContextError(self, ctx, str(e))
-        except Exception as e:
-            raise ADRIOProcessingError(self, ctx) from e
-
-        try:
-            proc_res = self._process(ctx, source_df)
-            result_np = proc_res.value_as_masked
-            self.validate_result(ctx, result_np)
-        except ADRIOError:
-            raise
-        except MissingContextError as e:
-            raise ADRIOContextError(self, ctx, str(e))
-        except Exception as e:
-            raise ADRIOProcessingError(self, ctx) from e
+        source_df = fetch(ctx)
+        proc_res = process(ctx, source_df)
+        result_np = proc_res.value_as_masked
+        validate_result(ctx, result_np)
 
         finish_time = perf_counter()
-        self._report_complete(finish_time - start_time)
+        adrio._report_complete(finish_time - start_time)
 
         return InspectResult[ResultT, ValueT](
-            self,
+            adrio,
             source_df,
             result_np,
-            self.result_format.dtype.type,
-            self.result_format.shape,
+            adrio.result_format.dtype.type,
+            adrio.result_format.shape,
             proc_res.issues,
         )
 
