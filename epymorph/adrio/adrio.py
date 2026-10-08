@@ -19,7 +19,6 @@ from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
-from numpy.core.records import fromarrays
 from numpy.typing import NDArray
 from sparklines import sparklines
 from typing_extensions import override
@@ -942,7 +941,7 @@ class PopulationPerKM2(ADRIO[np.float64, np.float64]):
         self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
-            source=fromarrays(
+            source=np.rec.fromarrays(
                 [pop, area],
                 names=["population", "land_area_km2"],  # type: ignore
             ),

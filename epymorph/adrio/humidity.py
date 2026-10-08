@@ -1,7 +1,6 @@
 """ADRIOs for caculating absolute or relative humidity."""
 
 import numpy as np
-from numpy.core.records import fromarrays
 from numpy.typing import NDArray
 from typing_extensions import override
 
@@ -141,7 +140,7 @@ class AbsoluteHumidity(ADRIO[np.float64, np.float64]):
         self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
-            source=fromarrays(
+            source=np.rec.fromarrays(
                 [temperature, dewpoint],
                 names=["temperature", "dewpoint"],  # type: ignore
             ),
@@ -195,7 +194,7 @@ class RelativeHumidity(ADRIO[np.float64, np.float64]):
         self.validate_result(self.context, result)
         return InspectResult(
             adrio=self,
-            source=fromarrays(
+            source=np.rec.fromarrays(
                 [temperature, dewpoint],
                 names=["temperature", "dewpoint"],  # type: ignore
             ),

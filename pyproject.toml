@@ -16,12 +16,14 @@ authors = [
 
 dynamic = ["version"]
 
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: OS Independent",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
@@ -31,9 +33,9 @@ classifiers = [
 
 dependencies = [
   "matplotlib",
-  "numpy>=1.26.4,<2",
+  "numpy>=2,<2.5",
   "sympy",
-  "pandas>=2,<3",
+  "pandas>=3,<4",
   "openpyxl",
   "geopandas",
   "pyproj",
