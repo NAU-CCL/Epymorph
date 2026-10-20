@@ -1,5 +1,4 @@
 from dataclasses import dataclass, replace
-from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -54,7 +53,10 @@ def output(rume: RUME[StateScope]) -> Output:
         pd.DataFrame(
             {
                 "tick": np.repeat(np.arange(0, 4, dtype=np.int64), 2),
-                "date": np.repeat(np.arange(date(2021, 1, 1), date(2021, 1, 5)), 2),
+                "date": np.repeat(
+                    np.arange("2021-01-01", "2021-01-05", dtype="datetime64[D]"),
+                    2,
+                ),
                 "node": np.tile(["04", "35"], 4),
                 "S": np.arange(3000, 3800, 100, dtype=np.int64),
                 "I": np.arange(2000, 2800, 100, dtype=np.int64),

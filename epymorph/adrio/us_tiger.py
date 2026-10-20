@@ -3,8 +3,8 @@
 from typing import cast
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
-from pandas import to_numeric
 from typing_extensions import override
 
 from epymorph.adrio.adrio import (
@@ -147,8 +147,8 @@ class InternalPoint(_USTIGERMixin, ADRIO[StructDType, np.float64]):
         info_df = scope.get_info()
         centroids = list(
             zip(
-                to_numeric(info_df["INTPTLON"]),
-                to_numeric(info_df["INTPTLAT"]),
+                pd.to_numeric(info_df["INTPTLON"]),
+                pd.to_numeric(info_df["INTPTLAT"]),
             )
         )
         result_np = np.array(centroids, dtype=CentroidDType)

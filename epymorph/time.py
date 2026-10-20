@@ -195,10 +195,10 @@ class DateRange:
         :
             The one-dimensional array containing all dates in the range in order.
         """
-        step = timedelta(days=self.step)
+        step = np.timedelta64(self.step, "D")
         return np.arange(
-            start=self.start_date,
-            stop=self.end_date + step,
+            np.datetime64(self.start_date),
+            np.datetime64(self.end_date) + step,
             step=step,
             dtype="datetime64[D]",
         )

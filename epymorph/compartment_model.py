@@ -1466,7 +1466,7 @@ class QuantitySelection(QuantityStrategy):
         May be an empty tuple.
         """
         C = self.ipm.num_compartments
-        return tuple(i for i in np.flatnonzero(self.selection) if i < C)
+        return tuple(int(i) for i in np.flatnonzero(self.selection) if i < C)
 
     @property
     def event_index(self) -> int:
@@ -1493,7 +1493,7 @@ class QuantitySelection(QuantityStrategy):
         May be an empty tuple.
         """
         C = self.ipm.num_compartments
-        return tuple(i - C for i in np.flatnonzero(self.selection) if i >= C)
+        return tuple(int(i - C) for i in np.flatnonzero(self.selection) if i >= C)
 
     def group(
         self,

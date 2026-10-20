@@ -13,6 +13,7 @@ from typing import (
     Mapping,
     Sequence,
     TypeVar,
+    cast,
     final,
 )
 from urllib.error import HTTPError
@@ -323,14 +324,16 @@ class InspectResult(Generic[ResultT, ValueT]):
         """The number of unmasked values in the result."""
         vs = self.values  # NOTE: the values accessor unwraps date/values
         mask = np.ma.getmaskarray(vs)
-        if mask.dtype.names is None:
+        field_names = mask.dtype.names
+        if field_names is None:
             # values mask is not structured
             return np.ma.count(vs)
 
         # values mask is structured! (but not date/value)
+        mask = cast(NDArray[np.void], mask)
         # consider a value masked if any part of it is masked (mask boolean or)
         combined_mask = np.zeros(vs.shape, dtype=np.bool_)
-        for name in mask.dtype.names:
+        for name in field_names:
             combined_mask |= mask[name]
         return np.invert(combined_mask).sum()
 
