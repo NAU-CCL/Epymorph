@@ -7,6 +7,7 @@ from typing import Protocol, TypeVar
 
 import numpy as np
 import pandas as pd
+from typing_extensions import deprecated
 
 from epymorph.attribute import NamePattern
 from epymorph.compartment_model import (
@@ -234,6 +235,11 @@ RumeT = TypeVar("RumeT", bound=RUME)
 """A type of RUME."""
 
 
+@deprecated(
+    "This function is not well supported, and will be removed in a future release. "
+    "Replacement features are in the works for use-cases addressed by this "
+    "function but are not available yet."
+)
 def memoize_rume(
     path: str | Path,
     rume: RumeT,
