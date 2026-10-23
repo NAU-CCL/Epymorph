@@ -70,7 +70,10 @@ dev = [
 ]
 
 [tool.uv]
-exclude-newer = "7 days" # supply chain attack mitigationuv audit
+exclude-newer = "7 days" # supply chain attack mitigation
+
+[tool.uv.exclude-newer-package]
+certifi = "2026-10-20" # emudhra mitigation
 
 [project.urls]
 Homepage = "https://docs.www.epimorph.org"
