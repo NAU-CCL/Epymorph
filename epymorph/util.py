@@ -291,7 +291,9 @@ def normalize(arr: NDArray[N]) -> NDArray[N]:
 
 
 def row_normalize(
-    arr: NDArray[N], row_sums: NDArray[N] | None = None, dtype: DTypeLike = None
+    arr: NDArray[N],
+    row_sums: NDArray[N] | None = None,
+    dtype: DTypeLike | None = None,
 ) -> NDArray[N]:
     """
     Assuming `arr` is a 2D array, normalize values across each row by dividing

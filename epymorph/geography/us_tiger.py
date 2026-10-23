@@ -185,9 +185,10 @@ def _load_tiger_data(
                 progress((i + 1) / processing_steps, None)
 
         # Concat the DataFrames, fix column names, and data quality checks.
+        rename_columns = dict(columns)
         combined_df = (
             pd_concat(dfs, ignore_index=True)
-            .rename(columns=dict(columns))
+            .rename(columns=rename_columns)
             .drop_duplicates()
         )
         # Drop records that aren't in our supported set of states.

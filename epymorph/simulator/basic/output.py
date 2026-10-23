@@ -3,7 +3,7 @@
 import dataclasses
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Generic, Literal, TypeVar
+from typing import Generic, Literal, TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -151,8 +151,13 @@ class Output(
         N = self.rume.scope.nodes
         E = self.rume.ipm.num_events
         taus = self.rume.num_tau_steps
-        return np.sum(
-            self.events.reshape((S // taus, taus, N, E)), axis=1, dtype=SimDType
+        return cast(
+            NDArray[SimDType],
+            np.sum(
+                self.events.reshape((S // taus, taus, N, E)),
+                axis=1,
+                dtype=SimDType,
+            ),
         )
 
     @property

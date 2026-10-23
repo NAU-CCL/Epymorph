@@ -283,14 +283,14 @@ def memoize_rume(
     path = Path(path)
     if not refresh and path.exists():
         # Load from cache
-        param_values = dict(np.load(path))
+        param_values = dict(np.load(path, allow_pickle=True))
     else:
         # Save to cache
         # Evaluate parameters and store the resulting arrays
         resolver = rume.evaluate_params(rng=rng or np.random.default_rng())
         param_values = resolver.to_dict(simplify_names=True)
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(path, **param_values)
+        np.savez(path, allow_pickle=True, **param_values)
 
     # In either case: clone RUME and replace all parameters from saved arrays
     params = {NamePattern.parse(key): value for key, value in param_values.items()}

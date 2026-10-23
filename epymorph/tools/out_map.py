@@ -529,8 +529,8 @@ class MapRenderer:
             column="data",
             legend=False,
             cmap=color_scale.cmap,
-            vmin=color_scale.norm.vmin,
-            vmax=color_scale.norm.vmax,
+            vmin=vmin,
+            vmax=vmax,
         )
 
         # Draw borders?

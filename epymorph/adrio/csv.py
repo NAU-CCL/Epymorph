@@ -503,7 +503,8 @@ class CSVFileAxN(_CSVMixin, ADRIO[DateValueType, np.generic]):
             raise ADRIOProcessingError(self, self.context, err)
 
         result_np = to_date_value_array(
-            result_np.index.to_numpy(), result_np.to_numpy(dtype=self.dtype)
+            result_np.index.to_numpy(dtype=np.datetime64),
+            result_np.to_numpy(dtype=self.dtype),
         )
 
         self.validate_result(self.context, result_np)

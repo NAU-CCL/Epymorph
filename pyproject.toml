@@ -16,12 +16,14 @@ authors = [
 
 dynamic = ["version"]
 
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: OS Independent",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
@@ -31,9 +33,9 @@ classifiers = [
 
 dependencies = [
   "matplotlib",
-  "numpy>=1.26.4,<2",
+  "numpy>=2,<2.5",
   "sympy",
-  "pandas>=2,<3",
+  "pandas>=3,<4",
   "openpyxl",
   "geopandas",
   "pyproj",
@@ -51,7 +53,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   # Jupyter
-  "ipykernel>7",
+  "ipykernel<7",
   # Linting/formatting
   "ruff~=0.15.15",
   # Testing
@@ -70,7 +72,11 @@ dev = [
 ]
 
 [tool.uv]
-exclude-newer = "7 days" # supply chain attack mitigationuv audit
+exclude-newer = "7 days" # supply chain attack mitigation
+
+[tool.uv.exclude-newer-package]
+certifi = "2026-10-20" # emudhra mitigation
+pillow = "2026-10-16"
 
 [project.urls]
 Homepage = "https://docs.www.epimorph.org"

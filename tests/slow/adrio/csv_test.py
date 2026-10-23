@@ -10,6 +10,7 @@ from epymorph.geography.custom import CustomScope
 from epymorph.geography.us_census import CountyScope, StateScope
 from epymorph.geography.us_tiger import get_counties, get_states
 from epymorph.time import DateRange, TimeFrame
+from epymorph.util import is_date_value_array
 
 
 @pytest.fixture
@@ -332,6 +333,138 @@ def test_csv_txn_03(tmp_path, rng):
             skiprows=1,
             date_range=date_range,
         ).with_context(scope=scope).evaluate()
+
+
+def test_csv_axn_01(tmp_path, rng):
+    # CSVFileAxN successful case
+    tmp_file = tmp_path / "vaccines.csv"
+    data_df = _generate_txn_data(rng)
+    data_df.sample(frac=1, random_state=rng).to_csv(tmp_file, index=False)
+
+    scope = CountyScope.in_counties(["08001", "35001", "04013"], year=2021)
+    time_frame = TimeFrame.range("2021-01-15", "2021-01-19")
+
+    actual = (
+        csv.CSVFileAxN(
+            file_path=tmp_file,
+            dtype=np.int64,
+            key_col=1,
+            key_type="geoid",
+            time_col=0,
+            data_col=2,
+            skiprows=1,
+        )
+        .with_context(scope=scope, time_frame=time_frame)
+        .evaluate()
+    )
+
+    subset_df = data_df[
+        data_df["fips"].isin(scope.node_ids)
+        & data_df["date"].isin(time_frame.to_date_range().to_pandas())
+    ]
+    expected_dates = (
+        subset_df["date"]
+        .drop_duplicates()
+        .sort_values()
+        .to_numpy(dtype="datetime64[D]")
+    )
+    expected_values = subset_df.pivot_table(
+        index="date",
+        columns="fips",
+        values="series_complete_yes",
+        sort=True,
+    ).to_numpy(dtype=np.int64)
+
+    assert actual.shape == (len(expected_dates), scope.nodes)
+    assert actual.dtype == np.dtype([("date", "datetime64[D]"), ("value", np.int64)])
+    assert is_date_value_array(actual)
+    assert np.array_equal(actual["date"][:, 0], expected_dates)
+    assert np.array_equal(actual["value"], expected_values)
+    assert not np.ma.getmaskarray(actual["value"]).any()
+
+
+def test_csv_axn_02(tmp_path, rng):
+    # CSVFileAxN masks data missing from a date/geography pair
+    tmp_file = tmp_path / "vaccines.csv"
+    data_df = _generate_txn_data(rng)
+    missing_date = pd.Timestamp("2021-01-17")
+    missing_fips = "35001"
+    data_df = data_df[
+        ~((data_df["date"] == missing_date) & (data_df["fips"] == missing_fips))
+    ]
+    data_df.to_csv(tmp_file, index=False)
+
+    scope = CountyScope.in_counties(["08001", "35001", "04013"], year=2021)
+    time_frame = TimeFrame.range("2021-01-15", "2021-01-19")
+
+    actual = (
+        csv.CSVFileAxN(
+            file_path=tmp_file,
+            dtype=np.int64,
+            key_col=1,
+            key_type="geoid",
+            time_col=0,
+            data_col=2,
+            skiprows=1,
+        )
+        .with_context(scope=scope, time_frame=time_frame)
+        .evaluate()
+    )
+
+    dates = np.ma.getdata(actual["date"][:, 0])
+    row = np.flatnonzero(dates == np.datetime64(missing_date, "D"))[0]
+    column = list(scope.node_ids).index(missing_fips)
+    mask = np.ma.getmaskarray(actual["value"])
+
+    assert mask[row, column]
+    assert mask.sum() == 1
+
+
+def test_csv_axn_03(tmp_path, rng):
+    # Error: CSVFileAxN duplicate date/geography data
+    tmp_file = tmp_path / "vaccines.csv"
+    data_df = _generate_txn_data(rng)
+    duplicate = data_df[
+        (data_df["date"] == pd.Timestamp("2021-01-15")) & (data_df["fips"] == "08001")
+    ]
+    data_df = pd.concat((data_df, duplicate))
+    data_df.to_csv(tmp_file, index=False)
+
+    scope = CountyScope.in_counties(["08001", "35001", "04013"], year=2021)
+    time_frame = TimeFrame.range("2021-01-15", "2021-01-19")
+
+    with pytest.raises(ADRIOProcessingError, match="duplicate key/values"):
+        csv.CSVFileAxN(
+            file_path=tmp_file,
+            dtype=np.int64,
+            key_col=1,
+            key_type="geoid",
+            time_col=0,
+            data_col=2,
+            skiprows=1,
+        ).with_context(scope=scope, time_frame=time_frame).evaluate()
+
+
+def test_csv_axn_04(tmp_path, rng):
+    # Error: CSVFileAxN missing requested geography
+    tmp_file = tmp_path / "vaccines.csv"
+    data_df = _generate_txn_data(rng)
+    data_df = data_df[data_df["fips"] != "04013"]
+    data_df.to_csv(tmp_file, index=False)
+
+    scope = CountyScope.in_counties(["08001", "35001", "04013"], year=2021)
+    time_frame = TimeFrame.range("2021-01-15", "2021-01-19")
+
+    with pytest.raises(ADRIOProcessingError, match="required geographies are missing"):
+        csv.CSVFileAxN(
+            file_path=tmp_file,
+            dtype=np.int64,
+            key_col=1,
+            key_type="geoid",
+            time_col=0,
+            data_col=2,
+            skiprows=1,
+        ).with_context(scope=scope, time_frame=time_frame).evaluate()
 
 
 def _generate_nxn_data(rng):

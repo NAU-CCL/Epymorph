@@ -67,7 +67,7 @@ def quantiles(items: np.ndarray) -> List[float]:
             0.990,
         ]
     )
-    return np.quantile(items, qtl_mark, axis=0)
+    return list(np.quantile(items, qtl_mark, axis=0))
 
 
 # @staticmethod

@@ -205,7 +205,10 @@ def test_dont_fill_none_missing(rng):
 def test_pipeline_init_error():
     with pytest.raises(ValueError, match="should not be masked"):
         PipelineResult(
-            np.ma.masked_array(data=[1, 2, 3], mask=[1, 0, 0]),
+            np.ma.masked_array(
+                data=np.array([1, 2, 3]),
+                mask=np.array([1, 0, 0]),
+            ),
             issues={},
         )
 

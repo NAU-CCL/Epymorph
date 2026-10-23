@@ -468,7 +468,7 @@ class RandomLocationsAndRandomSeed(SeededInfection):
 
         sub = IndexedLocations(
             selection=selection,
-            seed_size=seed_size,
+            seed_size=int(seed_size),
             initial_compartment=self.initial_compartment,
             infection_compartment=self.infection_compartment,
         )

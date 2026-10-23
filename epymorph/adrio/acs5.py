@@ -1298,13 +1298,19 @@ class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
 
         # Load populations at the coarse-granularity scope (coarse nodes)
         high_scope = cast(CensusScope, self.scope)
-        high_majority = self.defer(majority_race)
-        high_minority = self.defer(minority_race)
+        high_majority = cast(NDArray[np.int64], self.defer(majority_race))
+        high_minority = cast(NDArray[np.int64], self.defer(minority_race))
 
         # Load populations at the fine-granularity scope (fine nodes)
         low_scope = high_scope.lower_granularity()
-        low_majority = self.defer(majority_race, scope=low_scope)
-        low_minority = self.defer(minority_race, scope=low_scope)
+        low_majority = cast(
+            NDArray[np.int64],
+            self.defer(majority_race, scope=low_scope),
+        )
+        low_minority = cast(
+            NDArray[np.int64],
+            self.defer(minority_race, scope=low_scope),
+        )
 
         # Which fine nodes belong to which coarse nodes?
         as_high = np.vectorize(CensusGranularity.of(high_scope.granularity).truncate)
@@ -1319,9 +1325,9 @@ class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
         # If coarse population is unavailable or zero, we can't compute DI
         issues: list[tuple[str, NDArray[np.bool_]]] = []
         if np.ma.is_masked(maj_total):
-            issues.append(("majority_total_unavailable", np.ma.getmask(maj_total)))
+            issues.append(("majority_total_unavailable", np.ma.getmaskarray(maj_total)))
         if np.ma.is_masked(min_total):
-            issues.append(("minority_total_unavailable", np.ma.getmask(min_total)))
+            issues.append(("minority_total_unavailable", np.ma.getmaskarray(min_total)))
         if np.any(maj_zeros := (maj_total == 0)):
             issues.append(("majority_total_zero", maj_zeros))
         if np.any(min_zeros := (min_total == 0)):
@@ -1371,7 +1377,7 @@ class DissimilarityIndex(_ACS5Mixin, ADRIO[np.float64, np.float64]):
         return InspectResult(
             adrio=self,
             source=np.column_stack((low_majority, low_minority, maj_total, min_total)),
-            result=result_np,
+            result=cast(NDArray[np.float64], result_np),
             dtype=self.result_format.dtype.type,
             shape=self.result_format.shape,
             issues={k: v for k, v in issues},
