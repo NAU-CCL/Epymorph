@@ -2,13 +2,7 @@ from datetime import timedelta
 from itertools import cycle
 from math import ceil
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Iterable,
-    Literal,
-    Sequence,
-)
+from typing import Any, Callable, Iterable, Literal, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,9 +13,7 @@ from matplotlib.lines import Line2D
 from numpy.typing import NDArray
 from scipy.stats import gaussian_kde
 
-from epymorph.compartment_model import (
-    QuantityStrategy,
-)
+from epymorph.compartment_model import QuantityStrategy
 from epymorph.forecasting.munge_realizations import (
     ParameterStrategy,
     RealizationAggregation,
@@ -29,10 +21,7 @@ from epymorph.forecasting.munge_realizations import (
 )
 from epymorph.forecasting.pipeline import PipelineOutput, munge_pipeline_output
 from epymorph.geography.scope import GeoAggregation, GeoSelection
-from epymorph.time import (
-    TimeAggregation,
-    TimeSelection,
-)
+from epymorph.time import TimeAggregation, TimeSelection
 from epymorph.tools.out_plot import LegendOption, TimeFormatOption
 from epymorph.util import identity
 
@@ -43,7 +32,7 @@ class PlotRendererPipeline:
 
     Parameters
     ----------
-    output : PipelineOutput
+    output :
         The PipelineOutput the renderer will use.
     """
 
@@ -191,7 +180,7 @@ class PlotRendererPipeline:
 
         Parameters
         ----------
-        realization:
+        realization :
             A realization selection to make on the output data,
             you can either select all the realizations or a random subset.
         geo :
@@ -535,9 +524,10 @@ class PlotRendererPipeline:
         title: str | None = None,
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ):
+    ) -> None:
         """
-        Produces a quantile plot of a filter output.
+        Produces a quantile plot of a filter output, typically as a median line
+        with one or more shaded credible intervals.
 
         Parameters
         ----------
@@ -551,6 +541,7 @@ class PlotRendererPipeline:
             A list of credible intervals you wish to plot.
             This argument only accepts CI's in 2.5% increments,
             i.e. 2.5,5.0,7.5,...,97.5,100.0.
+            Defaults to [95].
         sharex :
             Whether or not the subplots should share the x-axis ticks.
         ncols :
@@ -670,7 +661,7 @@ class PlotRendererPipeline:
         """
         Draw quantile plots onto the array of matplotlib `Axes`, such as what is
         returned by matplotlib `subplots`. This is a variant of the method
-        `quantile`.
+        `quantiles`.
 
         Parameters
         ----------
@@ -686,6 +677,7 @@ class PlotRendererPipeline:
             A list of credible intervals you wish to plot.
             This argument only accepts CI's in 2.5% increments,
             i.e. 2.5,5.0,7.5,...,97.5,100.0.
+            Defaults to [95].
         legend :
             Whether and how to draw the plot legend.
 
@@ -844,7 +836,7 @@ class PlotRendererPipeline:
                     **l_kwargs,
                 )
 
-            ax_title_str = ax_title.format(n=geo_group_name, t=time.date_bounds)
+            ax_title_str = ax_title.format(n=geo_group_name)
             ax.set_title(ax_title_str)
             ax.tick_params(axis="x", labelrotation=45)
 
@@ -906,11 +898,10 @@ class PlotRendererPipeline:
         hist_kwargs: list[dict] | None = None,
         ncols: int = 3,
         legend: LegendOption = "auto",
-        time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ):
+    ) -> None:
         """
         Produces a histogram plot of a filter output. This is a plot where
         a specific time instance is taken and plotted as a histogram.
@@ -942,17 +933,6 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-        time_format :
-            Controls the formatting of the time axis (the horizontal axis);
-
-            - "auto" will use the format defined by the grouping of the `time`
-            parameter.
-            - "date" attempts to display calendar dates.
-            - "day" attempts to display days numerically indexed from the start of the
-            simulation with the first day being 0.
-
-            If the system cannot convert to the requested time format, this argument
-            may be ignored.
         title :
             A title to draw on the plot.
         to_file :
@@ -1005,7 +985,6 @@ class PlotRendererPipeline:
                 legend=legend,
                 hist_kwargs=hist_kwargs,
                 label_format="{q}",
-                time_format=time_format,
                 transform=transform,
             )
 
@@ -1030,8 +1009,7 @@ class PlotRendererPipeline:
         hist_kwargs: list[dict] | None = None,
         kwarg_type: Literal["quantity", "geo"] = "quantity",
         ax_title: str = "{n}: {t}",
-        label_format="{n}: {q}: {t}",
-        time_format: TimeFormatOption = "auto",
+        label_format: str = "{n}: {q}: {t}",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
         """
@@ -1078,18 +1056,6 @@ class PlotRendererPipeline:
             Specifies the label format for the legend; the string will be used in a call
             to `format()` with replacement variables `{n}` for the geo, `{q}` for the
             quantity, and `{t}` for the time.
-
-        time_format :
-            Controls the formatting of the time axis (the horizontal axis);
-
-            - "auto" will use the format defined by the grouping of the `time`
-            parameter.
-            - "date" attempts to display calendar dates.
-            - "day" attempts to display days numerically indexed from the start of the
-            simulation with the first day being 0.
-
-            If the system cannot convert to the requested time format, this argument
-            may be ignored.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1123,10 +1089,6 @@ class PlotRendererPipeline:
                 "single point (scalar)."
             )
             raise ValueError(err)
-
-        # Map time labels:
-        _, map_time_axis = self._time_format(time, time_format)
-        data_df["time"] = map_time_axis(data_df["time"])
 
         # Map geo labels:
         result_scope = geo.to_scope()
@@ -1480,11 +1442,10 @@ class PlotRendererPipeline:
         legend: LegendOption = "auto",
         delta_t: float | None = None,
         bandwidth: float | str = "scott",
-        time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ):
+    ) -> None:
         """
         Produces a kernel density plot of a filter output. This is a plot where
         a specific time instance is taken and plotted as a KDE.
@@ -1524,17 +1485,6 @@ class PlotRendererPipeline:
             See
             [https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html)
             for details.
-        time_format :
-            Controls the formatting of the time axis (the horizontal axis);
-
-             - "auto" will use the format defined by the grouping of the
-            `time` parameter,
-             - "date" attempts to display calendar dates,
-             - "day" attempts to display days numerically indexed from the start of the
-            simulation with the first day being 0.
-
-            If the system cannot convert to the requested time format, this argument
-            may be ignored.
         title :
             A title to draw on the plot.
         to_file :
@@ -1587,7 +1537,6 @@ class PlotRendererPipeline:
                 legend=legend,
                 bandwidth=bandwidth,
                 label_format="{q}",
-                time_format=time_format,
                 transform=transform,
             )
 
@@ -1615,7 +1564,6 @@ class PlotRendererPipeline:
         delta_t: float | None = None,
         label_format: str = "{n}: {q}: {t}",
         legend: LegendOption = "auto",
-        time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ):
         """
@@ -1670,17 +1618,6 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-        time_format :
-            Controls the formatting of the time axis (the horizontal axis);
-
-             - "auto" will use the format defined by the grouping of the
-            `time` parameter,
-             - "date" attempts to display calendar dates,
-             - "day" attempts to display days numerically indexed from the start of the
-            simulation with the first day being 0.
-
-            If the system cannot convert to the requested time format, this argument
-            may be ignored.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1715,10 +1652,6 @@ class PlotRendererPipeline:
 
         if transform is None:
             transform = identity
-
-        # Map time labels:
-        _, map_time_axis = self._time_format(time, time_format)
-        data_df["time"] = map_time_axis(data_df["time"])
 
         # Map geo labels:
         result_scope = geo.to_scope()
