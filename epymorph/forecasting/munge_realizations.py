@@ -1,13 +1,14 @@
 """
-This module extends the functionality of munge
-over an additional axis, the realizations.
+This module extends the functionality of munge over an additional axis, realizations.
 """
 
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Literal, Mapping, OrderedDict, Sequence
+from typing import TYPE_CHECKING, Any, List, Mapping, OrderedDict, Sequence
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 
 from epymorph.attribute import NamePattern
@@ -15,14 +16,11 @@ from epymorph.attribute import NamePattern
 if TYPE_CHECKING:
     from epymorph.forecasting.pipeline import UnknownParam
 
-RealizationAggMethod = Literal["mean", "std", "quantiles"]
-"""The supported methods for aggregating realizations."""
 
-
-def quantile_method(q_val: float):
+def quantile_method(q_val: float) -> Callable[[pd.Series], np.floating]:
     """Returns a function that evaluates the given quantile."""
 
-    def method(x):
+    def method(x: pd.Series) -> np.floating:
         return x.quantile(q_val)
 
     method.__name__ = f"quantile_{round(100 * q_val, 1)}"
@@ -31,18 +29,18 @@ def quantile_method(q_val: float):
 
 _every_025 = np.linspace(0.0, 1.0, 41)
 
-"""Dictionaries of aggregation methods."""
-agg_methods = {
+agg_methods: dict[str, list[Any]] = {
     "mean": ["mean"],
     "std": ["std"],
     "median": ["median"],
-    "quantiles": list(map(quantile_method, _every_025)),
+    "quantiles": [quantile_method(q_val) for q_val in _every_025],
+    # Supported quantiles are every 2.5%
+    **{
+        f"quantile_{round(100 * q_val, 1)}": [quantile_method(q_val)]
+        for q_val in _every_025
+    },
 }
-
-"""Extend agg methods to individual quantiles.
-   Supported quantiles are every 2.5%"""
-for q_val in _every_025:
-    agg_methods[f"quantile_{round(100 * q_val, 1)}"] = [quantile_method(q_val)]
+"""Dictionaries of aggregation methods."""
 
 
 @dataclass(frozen=True)
@@ -68,8 +66,10 @@ class ParameterStrategy:
     """Aggregation for parameters (unimplemented)."""
 
     def disambiguate(self) -> OrderedDict[str, str]:
-        """Disambiguates parameter names to avoid any potential duplicates.
-        Returns a dictionary from new names to original names."""
+        """
+        Disambiguates parameter names to avoid any potential duplicates.
+        Returns a dictionary from new names to original names.
+        """
         selected = [
             (i, q) for i, q in enumerate(self.parameters.keys()) if self.selection[i]
         ]
@@ -88,8 +88,9 @@ class ParameterStrategy:
         """Labels for the parameters in the result, after any grouping."""
 
     def disambiguate_groups(self) -> OrderedDict[str, str]:
-        """Since grouping is not currently supported this
-        is identical to disambiguate."""
+        """
+        Since grouping is not currently supported this is identical to disambiguate.
+        """
         return self.disambiguate()
 
 
@@ -112,9 +113,8 @@ class ParameterSelection(ParameterStrategy):
 
 class ParameterSelector:
     """
-    A utility class for selecting a subset of the estimated parameters.
-    Most of the time you obtain one of these
-    using `FilterOutput's` `param_select` property.
+    A utility class for selecting a subset of the estimated parameters. Most of the time
+    you obtain one of these using `FilterOutput`'s `param_select` property.
     """
 
     parameters: Mapping[NamePattern, "UnknownParam"]
@@ -145,9 +145,14 @@ class ParameterSelector:
         m = self._mask(parameters_boolean=True)
         return ParameterSelection(self.parameters, m)
 
-    def by_name(self, *patterns: str) -> ParameterSelection:
+    def by_name(self, *patterns: str | NamePattern) -> ParameterSelection:
         """
         Select parameters by name.
+
+        Parameters
+        ----------
+        patterns :
+            A list of parameter name patterns to match, as a var-arg.
 
         Returns
         -------
@@ -184,16 +189,16 @@ class RealizationStrategy:
     num_realizations:
         The number of realizations.
     selection:
-        A NDArray of integer indices to sample.
+        An integer array indicating which realizations are selected.
     aggregation:
-        A method or methods for aggregating the quantity groups.
+        A list of methods for aggregating the realization data.
     """
 
     num_realizations: int
     """The number of realizations in the original output. """
-    selection: NDArray[np.int_]
+    selection: NDArray[np.intp]
     """An integer array indicating which realization indices are selected. """
-    aggregation: List[RealizationAggMethod] | None
+    aggregation: List[str] | None
     """A list of methods for aggregating the realization data."""
 
 
@@ -208,37 +213,62 @@ class RealizationAggregation(RealizationStrategy):
     Parameters
     ----------
     num_realizations :
-        The number of particle realizations.
+        The number of realizations.
     selection :
-        A boolean mask for selection of a subset of realizations.
+        An integer array indicating which realizations are selected.
     aggregation :
-        A method for aggregating the realizations.
+        A list of methods for aggregating the realization data.
     """
 
     num_realizations: int
-    """The number of realizations in the original output. """
-    selection: NDArray[np.int_]
-    """An integer array indicating which
-    realizations are selected. """
-    aggregation: List[RealizationAggMethod]
+    """The number of realizations in the original output."""
+    selection: NDArray[np.intp]
+    """An integer array indicating which realizations are selected."""
+    aggregation: List[str]
     """A list of methods for aggregating the realization data."""
 
 
 @dataclass(frozen=True)
 class RealizationSelection(RealizationStrategy):
     """
-    A kind of `RealizationStrategy`
-    describing a sub-selection of realizations.
+    A kind of `RealizationStrategy` describing a sub-selection of realizations.
     A selection performs no grouping or aggregation.
+
+    Parameters
+    ----------
+    num_realizations :
+        The number of realizations.
+    selection :
+        An integer array indicating which realizations are selected.
+    aggregation :
+        A list of methods for aggregating the realization data.
     """
 
     num_realizations: int
-    """The number of realizations in the original output. """
-    selection: NDArray[np.int_]
-    """An integer array indicating which realization indices are selected. """
+    """The number of realizations in the original output."""
+    selection: NDArray[np.intp]
+    """An integer array indicating which realization indices are selected."""
     aggregation: None = field(init=False, default=None)
+    """A list of methods for aggregating the realization data."""
 
-    def agg(self, aggs) -> RealizationAggregation:
+    def agg(self, aggs: list[str]) -> RealizationAggregation:
+        """
+        Aggregate the selected realizations using the specified aggregation methods.
+
+        Parameters
+        ----------
+        aggs :
+            A list of aggregation method names. In general, one data series will be
+            produced for each aggregation method. Supported methods are: "mean", "std",
+            "median", "quantiles" (for a default set of quantiles), and a specified
+            quantile in the format "quantile_<value>" where values are range from 0 to 1
+            with a step of 2.5%, like "quantile_0.0", "quantile_2.5", etc.
+
+        Returns
+        -------
+        :
+            The aggregation strategy object.
+        """
         if len(aggs) == 0:
             raise ValueError("No realization aggregation method supplied.")
         if any((agg := name) not in agg_methods for name in aggs):
@@ -247,23 +277,50 @@ class RealizationSelection(RealizationStrategy):
         return RealizationAggregation(self.num_realizations, self.selection, agg_list)
 
     def mean(self) -> RealizationAggregation:
+        """
+        Aggregate the selected realizations using the mean. Equivalent to
+        `agg(["mean"])`.
+
+        Returns
+        -------
+        :
+            The aggregation strategy object.
+        """
         return self.agg(["mean"])
 
     def std(self) -> RealizationAggregation:
+        """
+        Aggregate the selected realizations using the standard deviation. Equivalent to
+        `agg(["std"])`.
+
+        Returns
+        -------
+        :
+            The aggregation strategy object.
+        """
         return self.agg(["std"])
 
     def quantiles(self) -> RealizationAggregation:
+        """
+        Aggregate the selected realizations using a standard set of quantiles.
+        Equivalent to `agg(["quantiles"])`.
+
+        Returns
+        -------
+        :
+            The aggregation strategy object.
+        """
         return self.agg(["quantiles"])
 
 
 class RealizationSelector:
     """
     A utility class for selecting a subset of the realizations. Most of the time you
-    obtain one of these using `FilterOutput's` `select` property.
+    obtain one of these using `FilterOutput`'s `select` property.
     """
 
     _num_realizations: int
-    """The number of realizations in the original output. """
+    """The number of realizations in the original output."""
 
     def __init__(self, num_realizations: int):
         self._num_realizations = num_realizations
@@ -278,11 +335,15 @@ class RealizationSelector:
             The selection object.
         """
         return RealizationSelection(
-            self._num_realizations, np.arange(self._num_realizations)
+            self._num_realizations,
+            np.arange(self._num_realizations),
         )
 
     def sample(
-        self, *, rng: np.random.Generator, size: np.int_
+        self,
+        *,
+        rng: np.random.Generator,
+        size: int | np.integer,
     ) -> RealizationSelection:
         """
         Select a random subset of the realizations.
@@ -303,13 +364,13 @@ class RealizationSelector:
             raise ValueError(
                 (
                     "Sample size must be greater than zero "
-                    "and less than the number of realizations. "
+                    "and less than the number of realizations."
                 )
             )
 
         if not isinstance(rng, np.random.Generator):
-            raise ValueError("Parameter rng must be a NumPy random number generator. ")
+            raise ValueError("Parameter rng must be a NumPy random number generator.")
 
-        indices = rng.choice(np.arange(self._num_realizations), size, replace=False)
+        indices = rng.choice(self._num_realizations, size, replace=False)
 
         return RealizationSelection(self._num_realizations, indices)
