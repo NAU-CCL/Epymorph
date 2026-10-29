@@ -6,7 +6,7 @@ state/parameter fitting.
 import datetime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import Literal, Mapping, Self
+from typing import TYPE_CHECKING, Literal, Mapping, Self
 
 import numpy as np
 import pandas as pd
@@ -42,6 +42,9 @@ from epymorph.time import (
     TimeSelection,
 )
 from epymorph.tools.data import mask, munge
+
+if TYPE_CHECKING:
+    from epymorph.forecasting.filter_plot import PlotRendererPipeline
 
 _events = EventBus()
 
@@ -281,6 +284,13 @@ class PipelineOutput:
     Note that this property cannot be changed after the simulation, in contrast to
     `epymorph.simulator.basic.output.Output`.
     """
+
+    @property
+    def plot(self) -> "PlotRendererPipeline":
+        """Render a plot from this output."""
+        from epymorph.forecasting.filter_plot import PlotRendererPipeline
+
+        return PlotRendererPipeline(self)
 
     @property
     def rume(self) -> RUME:

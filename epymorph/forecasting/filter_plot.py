@@ -30,6 +30,14 @@ class PlotRendererPipeline:
     """
     Provides methods for rendering an output in plot form.
 
+    Most commonly, you will use `PlotRendererPipeline` starting from a pipeline output
+    object that supports it:
+
+    ```python
+    out = EnsembleKalmanFilterSimulator(...).run(...)
+    out.plot.line(...)
+    ```
+
     Parameters
     ----------
     output :

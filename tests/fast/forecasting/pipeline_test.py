@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,6 +12,7 @@ from epymorph.data_type import SimDType
 from epymorph.forecasting.dynamic_params import BrownianMotion, GaussianPrior, Static
 from epymorph.forecasting.ensemble_kalman_filter import EnsembleKalmanFilterSimulator
 from epymorph.forecasting.filter import ModelLink, Observations
+from epymorph.forecasting.filter_plot import PlotRendererPipeline
 from epymorph.forecasting.likelihood import GaussianLikelihood
 from epymorph.forecasting.pipeline import (
     PipelineConfig,
@@ -85,6 +87,28 @@ def filter_output(rume):
         initial=compartments[:, 0, :, :],
         estimated_params={param_name: np.ones((R, T, N)) for param_name in param_names},
     )
+
+
+def test_pipeline_output_plot(rume, filter_output):
+    renderer = filter_output.plot
+    assert isinstance(renderer, PlotRendererPipeline)
+    assert renderer.output is filter_output
+
+    fig, ax = plt.subplots()
+    try:
+        lines = renderer.line_plt(
+            ax,
+            filter_output.select.all().agg(["mean"]),
+            rume.scope.select.by_state("04"),
+            rume.time_frame.select.all(),
+            rume.ipm.select.compartments("S"),
+        )
+        assert len(lines) == 1
+        assert lines[0].get_label() == "AZ: S: mean"
+        np.testing.assert_array_equal(lines[0].get_xdata(), [1, 2, 3, 4])
+        np.testing.assert_array_equal(lines[0].get_ydata(), [1, 1, 1, 1])
+    finally:
+        plt.close(fig)
 
 
 def test_basic_pipeline_munge(rume, filter_output):
