@@ -3,7 +3,7 @@
 from datetime import timedelta
 from itertools import cycle
 from pathlib import Path
-from typing import Callable, Literal, OrderedDict, cast
+from typing import TYPE_CHECKING, Callable, Literal, OrderedDict, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,8 +16,11 @@ from matplotlib.ticker import EngFormatter
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.time import TimeAggregation, TimeSelection
-from epymorph.tools.data import Output, munge
+from epymorph.tools.data import munge
 from epymorph.util import identity
+
+if TYPE_CHECKING:
+    from epymorph.simulator.basic.output import Output
 
 OrderingOption = Literal["location", "quantity"]
 """Options for plot line ordering."""
@@ -47,10 +50,10 @@ class PlotRenderer:
     ```
     """
 
-    output: Output
+    output: "Output"
     """The output the renderer will use."""
 
-    def __init__(self, output: Output):
+    def __init__(self, output: "Output"):
         self.output = output
 
     def _sorting(
@@ -408,12 +411,3 @@ class PlotRenderer:
             ls = ax.plot(data["time"], data["value"], **curr_kwargs)
             lines.extend(ls)
         return lines
-
-
-class PlotRendererMixin(Output):
-    """Mixin class that adds a convenient method for rendering plots from an output."""
-
-    @property
-    def plot(self) -> PlotRenderer:
-        """Render a plot from this output."""
-        return PlotRenderer(self)

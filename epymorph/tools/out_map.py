@@ -2,7 +2,7 @@
 
 from itertools import repeat
 from pathlib import Path
-from typing import Any, Callable, Iterable, cast
+from typing import TYPE_CHECKING, Any, Callable, Iterable, cast
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -18,7 +18,10 @@ from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.error import GeographyError
 from epymorph.geography.scope import GeoAggregation, GeoGroup, GeoSelection
 from epymorph.time import TimeAggregation, TimeSelection
-from epymorph.tools.data import Output, munge
+from epymorph.tools.data import munge
+
+if TYPE_CHECKING:
+    from epymorph.simulator.basic.output import Output
 
 
 class NodeLabelRenderer:
@@ -175,10 +178,10 @@ class MapRenderer:
         The output the renderer will use.
     """
 
-    output: Output
+    output: "Output"
     """The output the renderer will use."""
 
-    def __init__(self, output: Output):
+    def __init__(self, output: "Output"):
         self.output = output
 
     def geography_data(
@@ -546,15 +549,3 @@ class MapRenderer:
             )
 
         return data_gdf, color_scale
-
-
-class MapRendererMixin(Output):
-    """
-    Mixin class that adds a convenient method for rendering choropleth maps from an
-    output.
-    """
-
-    @property
-    def map(self) -> MapRenderer:
-        """Render a choropleth map from this output."""
-        return MapRenderer(self)

@@ -8,26 +8,20 @@ from typing import Generic, Literal, TypeVar, cast
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from typing_extensions import override
 
 from epymorph.data_type import SimDType
 from epymorph.geography.scope import GeoScope
 from epymorph.rume import RUME
-from epymorph.tools.out_map import MapRendererMixin
-from epymorph.tools.out_plot import PlotRendererMixin
-from epymorph.tools.out_table import TableRendererMixin
+from epymorph.tools.out_map import MapRenderer
+from epymorph.tools.out_plot import PlotRenderer
+from epymorph.tools.out_table import TableRenderer
 
 RUMEType_co = TypeVar("RUMEType_co", covariant=True, bound=RUME[GeoScope])
 """The type of a `RUME` used to produce an `Output`."""
 
 
 @dataclass(frozen=True)
-class Output(
-    TableRendererMixin,
-    PlotRendererMixin,
-    MapRendererMixin,
-    Generic[RUMEType_co],
-):
+class Output(Generic[RUMEType_co]):
     """
     The output of a `BasicSimulation` run, including time series for compartment data
     and transition events for all locations.
@@ -53,7 +47,7 @@ class Output(
     way to create an output.
     """
 
-    rume: RUMEType_co  # type: ignore (pylance can't tell that rume is immutable)
+    rume: RUMEType_co
     """The `RUME` used in the simulation that generated this output."""
 
     initial: NDArray[SimDType]
@@ -93,6 +87,21 @@ class Output(
     See `data_by_visit` and `data_by_home`
     to obtain an Output object that uses a different data mode.
     """
+
+    @property
+    def plot(self) -> PlotRenderer:
+        """Render a plot from this output."""
+        return PlotRenderer(self)
+
+    @property
+    def map(self) -> MapRenderer:
+        """Render a choropleth map from this output."""
+        return MapRenderer(self)
+
+    @property
+    def table(self) -> TableRenderer:
+        """Render a table from this output."""
+        return TableRenderer(self)
 
     def _with_data_mode(self, data_mode: Literal["visit", "home"]) -> "Output":
         return (
@@ -174,7 +183,6 @@ class Output(
         )
 
     @property
-    @override
     def dataframe(self) -> pd.DataFrame:
         """Returns the output data as a data frame, using the current data mode."""
         # NOTE: reshape ordering is critical, because the index column creation
