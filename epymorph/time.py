@@ -798,6 +798,14 @@ class TimeStrategy:
         last_date = self.time_frame.start_date + timedelta(days=stop - 1)
         return (first_date, last_date)
 
+    @property
+    def date_bounds_label(self) -> str:
+        """A string label describing the bounds of the selection."""
+        first, last = self.date_bounds
+        if first == last:
+            return first.isoformat()
+        return f"{first.isoformat()}/{last.isoformat()}"
+
     def to_time_frame(self) -> TimeFrame:
         """
         Create a `TimeFrame` that has the same bounds as this `TimeStrategy`.

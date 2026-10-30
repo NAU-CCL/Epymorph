@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import replace
 
 import numpy as np
@@ -145,40 +146,42 @@ def test_memoize_rume(tmp_path, rume):
     cache_path = tmp_path / "cache.npz"
     pop = NamePattern.of("gpm:all::init::population")
 
-    # First attempt: should evaluate params and save
-    rume1 = rume_with(population=np.array([42, 84]))
-    cached1 = memoize_rume(cache_path, rume1)
-    assert cached1 is not rume1  # returns a clone
-    assert cache_path.exists()  # cache file exists
-    assert adrio_evaluated == 1  # ADRIO gets evaluated
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        # First attempt: should evaluate params and save
+        rume1 = rume_with(population=np.array([42, 84]))
+        cached1 = memoize_rume(cache_path, rume1)
+        assert cached1 is not rume1  # returns a clone
+        assert cache_path.exists()  # cache file exists
+        assert adrio_evaluated == 1  # ADRIO gets evaluated
 
-    adrio_evaluated = 0  # reset counter
+        adrio_evaluated = 0  # reset counter
 
-    # Second attempt:
-    # Should load from cache, not evaluate params.
-    # Even though ADRIO values are different this time,
-    # the resulting RUME should still use the cached values.
-    rume2 = rume_with(population=np.array([11, 22]))
-    cached2 = memoize_rume(cache_path, rume2)
-    assert adrio_evaluated == 0  # ADRIO not eval'd
-    assert pop in cached1.params
-    assert pop in cached2.params
-    np.testing.assert_array_equal(cached1.params[pop], np.array([42, 84]))
-    np.testing.assert_array_equal(cached2.params[pop], np.array([42, 84]))
+        # Second attempt:
+        # Should load from cache, not evaluate params.
+        # Even though ADRIO values are different this time,
+        # the resulting RUME should still use the cached values.
+        rume2 = rume_with(population=np.array([11, 22]))
+        cached2 = memoize_rume(cache_path, rume2)
+        assert adrio_evaluated == 0  # ADRIO not eval'd
+        assert pop in cached1.params
+        assert pop in cached2.params
+        np.testing.assert_array_equal(cached1.params[pop], np.array([42, 84]))
+        np.testing.assert_array_equal(cached2.params[pop], np.array([42, 84]))
 
-    adrio_evaluated = 0  # reset counter
+        adrio_evaluated = 0  # reset counter
 
-    # Third attempt: refresh should overwrite the cached values
-    rume3 = rume_with(population=np.array([88, 99]))
-    cached3 = memoize_rume(cache_path, rume3, refresh=True)
-    assert adrio_evaluated == 1  # ADRIO gets evaluated
-    assert pop in cached3.params
-    # ensure both the RUME and the cache file have the new values
-    np.testing.assert_array_equal(
-        cached3.params[pop],
-        np.array([88, 99]),
-    )
-    np.testing.assert_array_equal(
-        np.load(cache_path)["gpm:all::init::population"],
-        np.array([88, 99]),
-    )
+        # Third attempt: refresh should overwrite the cached values
+        rume3 = rume_with(population=np.array([88, 99]))
+        cached3 = memoize_rume(cache_path, rume3, refresh=True)
+        assert adrio_evaluated == 1  # ADRIO gets evaluated
+        assert pop in cached3.params
+        # ensure both the RUME and the cache file have the new values
+        np.testing.assert_array_equal(
+            cached3.params[pop],
+            np.array([88, 99]),
+        )
+        np.testing.assert_array_equal(
+            np.load(cache_path)["gpm:all::init::population"],
+            np.array([88, 99]),
+        )

@@ -1,16 +1,16 @@
 from datetime import timedelta
 from itertools import cycle
-from math import ceil
 from pathlib import Path
-from typing import Any, Callable, Iterable, Literal, Sequence
+from typing import Callable, Literal, Mapping, Sequence, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
+from matplotlib.container import BarContainer
 from matplotlib.dates import AutoDateLocator, DateFormatter
 from matplotlib.lines import Line2D
-from numpy.typing import NDArray
+from matplotlib.patches import Polygon
 from scipy.stats import gaussian_kde
 
 from epymorph.compartment_model import QuantityStrategy
@@ -22,7 +22,7 @@ from epymorph.forecasting.munge_realizations import (
 from epymorph.forecasting.pipeline import PipelineOutput, munge_pipeline_output
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.time import TimeAggregation, TimeSelection
-from epymorph.tools.out_plot import LegendOption, TimeFormatOption
+from epymorph.tools.out_plot import LegendOption, OrderingOption, TimeFormatOption
 from epymorph.util import identity
 
 
@@ -55,6 +55,27 @@ class PlotRendererPipeline:
         exterior = (100.0 - credible_interval) / 2
         exterior = round(exterior, 1)
         return [0.0 + exterior, 100.0 - exterior]
+
+    def _sorting(
+        self, quantities_disambiguated: Mapping[str, str], ordering: OrderingOption
+    ) -> Callable:
+        quantity_order = {
+            name: index for index, name in enumerate(quantities_disambiguated)
+        }
+
+        if ordering == "quantity":
+
+            def quantity_sort(group):
+                (location, quantity), _ = group
+                return (quantity_order[quantity], location)
+
+            return quantity_sort
+
+        def location_sort(group):
+            (location, quantity), _ = group
+            return (location, quantity_order[quantity])
+
+        return location_sort
 
     def _time_format(
         self,
@@ -130,42 +151,6 @@ class PlotRendererPipeline:
                 # Any other combo doesn't need to be or can't be mapped.
                 return actual, identity
 
-    def _check_num_nodes(self, geo):
-        """
-        Figures out how many unique geo nodes remain after applying munge.
-        Used for determining how many subplots are needed for plotting.
-        """
-
-        geo_indices = np.array(geo.indices)
-
-        if geo.grouping is None:
-            if geo.aggregation is None:
-                num_nodes = self.output.rume.scope.nodes
-            else:
-                num_nodes = 1
-
-        else:
-            num_nodes = len(
-                np.unique(geo.grouping.map(geo.scope.node_ids[geo_indices]))
-            )
-
-        return num_nodes
-
-    def _promote_axs(self, axs):
-        """
-        Takes an axs object provided by the user
-        and ensures it is appropriately broadcast into a list.
-        """
-
-        if isinstance(axs, np.ndarray):
-            ax_list = list(axs.flat)
-        elif isinstance(axs, Axes):
-            ax_list = [axs]
-        else:
-            ax_list = list(axs)
-
-        return ax_list
-
     def spaghetti(
         self,
         realization: RealizationSelection,
@@ -173,10 +158,10 @@ class PlotRendererPipeline:
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        sharex: bool = True,
-        ncols: int = 3,
+        label_format: str = "{n}: {q}",
         legend: LegendOption = "auto",
         line_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
@@ -185,6 +170,12 @@ class PlotRendererPipeline:
         """
         Produces a spaghetti plot of a filter output. This is a plot where
         each realization corresponds to a specific line on a plot.
+
+        The plot will either be immediately rendered by this function by calling
+        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
+        This is intended as a quick plotting method to cover most casual use-cases.
+        If you want more control over how the plot is drawn, see method
+        `spaghetti_plt()`.
 
         Parameters
         ----------
@@ -197,24 +188,29 @@ class PlotRendererPipeline:
             The time selection to make on the output data.
         quantity :
             The quantity selection to make on the output data.
-        sharex :
-            Whether or not the subplots should share the x-axis ticks.
-        ncols :
-            The number of columns in the resulting subplot matrix. The
-            number of rows is set dynamically.
+        label_format :
+            A format for the items displayed in the legend;
+            the string will be used in a call to `format()`
+            with the replacement variables `{n}` for the name of the geo node
+            and `{q}` for the name of the quantity.
+            Each location/quantity group has one label.
         legend :
             Whether and how to draw the plot legend.
 
-            - "auto" will draw the legend unless it would be too large
+            - "auto" will draw the legend if there are at most 12 groups
             - "on" forces the legend to be drawn
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
         line_kwargs :
-            A list of dictionaries of keyword arguments to be passed to the matplotlib
-            function that draws each line. Each dictionary corresponds
-            to a single quantity.
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each line. Each dictionary applies to all realizations in one
+            location/quantity group; the list cycles in the order defined by the
+            `ordering` parameter.
             See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -252,79 +248,80 @@ class PlotRendererPipeline:
         if not isinstance(realization, RealizationSelection):
             raise ValueError("Spaghetti plots only support RealizationSelection.")
 
+        fig, ax = plt.subplots(layout="constrained")
         try:
-            num_nodes = self._check_num_nodes(geo)
-
-            nrows = ceil(num_nodes / ncols)
-            fig, axs = plt.subplots(
-                nrows,
-                ncols,
-                figsize=(ncols * 5, nrows * 3),
-                sharex=sharex,
-                layout="constrained",
-            )
-
-            # Y-axis
-            fig.supylabel("Count")
-
-            # Title
-            if title is not None:
-                fig.suptitle(t=title)
-
-            # Legend
-            if legend == "auto":
-                # auto: show a legend if there are at most 4 quantities.
-                legend = "on" if len(quantity.labels) <= 4 else "off"
-
-            # Call the spaghetti plot function, this returns the lines
-            _ = self.spaghetti_plt(
-                axs,
+            self.spaghetti_plt(
+                ax,
                 realization,
                 geo,
                 time,
                 quantity,
-                legend=legend,
+                label_format=label_format,
                 line_kwargs=line_kwargs,
+                ordering=ordering,
                 time_format=time_format,
-                label_format="{q}",
                 transform=transform,
             )
+
+            ax.set_ylabel("count")
+            actual_time_format, _ = self._time_format(time, time_format)
+            if actual_time_format == "date":
+                ax.set_xlabel("date")
+                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_locator(
+                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
+                )
+                ax.tick_params(axis="x", labelrotation=45)
+            elif actual_time_format == "day":
+                ax.set_xlabel("day")
+            elif actual_time_format == "tick":
+                ax.set_xlabel("tick")
+            else:
+                ax.set_xlabel("time")
+                ax.tick_params(axis="x", labelrotation=45)
+
+            if legend == "auto":
+                legend = "on" if len(ax.get_legend_handles_labels()[0]) <= 12 else "off"
+            if legend == "on":
+                ax.legend()
+            elif legend == "outside":
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if title is not None:
+                ax.set_title(title)
 
             if to_file is None:
                 plt.show()
             else:
-                path = Path(to_file)
-                fig.savefig(path)
+                fig.savefig(Path(to_file))
 
-        except:
-            plt.close()
+        except BaseException:
+            plt.close(fig)
             raise
 
     def spaghetti_plt(
         self,
-        axs: Axes | Iterable[Axes] | NDArray[Any],
+        ax: Axes,
         realization: RealizationSelection,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        legend: LegendOption = "auto",
-        kwarg_type: Literal["quantity", "geo"] = "quantity",
-        ax_title: str = "{n}",
-        line_kwargs: list[dict] | None = None,
-        time_format: TimeFormatOption = "auto",
         label_format: str = "{n}: {q}",
+        line_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
+        time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
         """
-        Draw spaghetti plots onto the array of matplotlib `Axes`, such as what is
-        returned by matplotlib `subplots`. This is a variant of the method
-        `spaghetti`.
+        Draw spaghetti lines onto one matplotlib `Axes`. This variant of
+        `spaghetti` leaves plot formatting and legend display to the caller.
+        To use subplots, call this method for each axes with narrowed selections.
 
         Parameters
         ----------
-        axs :
-            The array of matplotlib `Axes` on which to draw the plots.
+        ax :
+            The plot axes on which to draw lines.
         realization :
             A realization selection to make on the output data.
         geo :
@@ -333,28 +330,18 @@ class PlotRendererPipeline:
             The time selection to make on the output data.
         quantity :
             The quantity selection to make on the output data.
-        legend :
-            Whether and how to draw the plot legend.
-
-            - "auto" will draw the legend unless it would be too large
-            - "on" forces the legend to be drawn
-            - "off" forces the legend to not be drawn
-            - "outside" forces the legend to be drawn next to the plot area
-            (instead of inside it)
-        kwarg_type :
-            Whether to iterate the kwargs over the quantities or the geos.
-
-            - "geo" will iterate the kwargs over the geos, cycling as needed.
-            - "quantity" will iterate the kwargs over the quantities, cycling as needed.
-        ax_title :
-            A format string to display as the title for each subplot.
-            The string will be used in a call to `format()` with the
-            replacement variable `{n}` for the name of the geo node.
+        label_format :
+            A format for legend labels, with `{n}` for the geo node name and
+            `{q}` for the quantity name. Each location/quantity group has one label.
         line_kwargs :
-            A list of dictionaries of keyword arguments to be passed to the matplotlib
-            function that draws each line. Each dictionary corresponds
-            to a single quantity.
+            A list of keyword arguments to be passed to the matplotlib function that
+            draws each line. Each dictionary applies to all realizations in one
+            location/quantity group; the list cycles in `ordering` order. If no color
+            is specified, realizations in the same group share a default color.
             See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -366,10 +353,6 @@ class PlotRendererPipeline:
 
             If the system cannot convert to the requested time format, this argument
             may be ignored.
-        label_format :
-            A format for the items displayed in the legend. The string will be used in
-              a call to `format()` with the replacement variables `{n}` for
-              the name of the geo node and `{q}` for the name of the quantity.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -394,7 +377,8 @@ class PlotRendererPipeline:
             The list of `Line2D` objects for each line drawn.
         """
 
-        ax_list = self._promote_axs(axs)
+        if not isinstance(realization, RealizationSelection):
+            raise ValueError("Spaghetti plots only support RealizationSelection.")
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
@@ -417,102 +401,36 @@ class PlotRendererPipeline:
         # Before melting, disambiguate any quantities with the same name.
         q_mapping = quantity.disambiguate_groups()
 
-        # Group by geo location
-        groups_df = data_df.set_axis(
-            ["realization", "time", "geo", *q_mapping.keys()], axis=1
-        ).groupby("geo", sort=False)
-
-        _time_format, _ = self._time_format(time, time_format)
-
+        groups_df = (
+            data_df.set_axis(["realization", "time", "geo", *q_mapping.keys()], axis=1)
+            .melt(id_vars=["realization", "time", "geo"], var_name="quantity")
+            .groupby(["geo", "quantity"], sort=False)
+        )
         lines = list[Line2D]()
-        plot_index = 0
-        for (geo_group_name, gdf), gkwargs in zip(groups_df, cycle(line_kwargs)):
-            ax = ax_list[plot_index]
-
-            ax_title_str = ax_title.format(n=geo_group_name)
-
-            ax.set_title(ax_title_str)
-
-            ax.tick_params(axis="x", labelrotation=45)
-
-            quantity_groups = gdf.melt(
-                id_vars=["realization", "time", "geo"], var_name="quantity"
-            ).groupby("quantity")
-
-            # Line kwargs cycle over the quantity axis,
-            # not setting colors for individual lines!
-            for (quantity_group_name, qdf), kwargs in zip(
-                quantity_groups,
-                cycle(line_kwargs),
-            ):
-                if kwarg_type == "geo":
-                    kwargs = gkwargs
-
-                q_name = q_mapping[str(quantity_group_name)]
-                label = label_format.format(n=geo_group_name, q=q_name)
-                curr_kwargs = {"label": label, **kwargs}
-
-                realization_groups = qdf.groupby("realization")
-
-                # Iterate over each realization and apply args
-                for realization_index, (realization_group_name, rdf) in enumerate(
-                    realization_groups
+        for (group_key, group), kwargs in zip(
+            sorted(groups_df, key=self._sorting(q_mapping, ordering)),
+            cycle(line_kwargs),
+        ):
+            location, quantity_name = cast(tuple[str, str], group_key)
+            q_name = q_mapping[quantity_name]
+            label = label_format.format(n=location, q=q_name)
+            group_kwargs = {"label": label, **kwargs}
+            for index, (_, realization_data) in enumerate(group.groupby("realization")):
+                plot_kwargs = dict(group_kwargs)
+                if index > 0:
+                    plot_kwargs["label"] = "_nolegend_"
+                data = transform(
+                    realization_data.sort_values("time").assign(quantity=q_name)
+                )
+                line = ax.plot(data["time"], data["value"], **plot_kwargs)[0]
+                lines.append(line)
+                if (
+                    index == 0
+                    and kwargs.get("color") is None
+                    and kwargs.get("c") is None
                 ):
-                    plot_kwargs = curr_kwargs.copy()
-                    plot_kwargs["label"] = (
-                        label if realization_index == 1 else "_nolegend_"
-                    )
-                    rdf = rdf.sort_values("time")
-                    data = transform(rdf.assign(quantity=q_name))
-                    ls = ax.plot(rdf["time"], data["value"], **plot_kwargs)
-                    lines.extend(ls)
-
-            leg = None
-            ##Labels and Legend
-            if legend == "on":
-                leg = ax.legend()
-            elif legend == "outside":
-                leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
-
-            if leg is not None:
-                for lh in leg.legend_handles:
-                    if lh is not None:
-                        lh.set_alpha(1)
-
-            if _time_format == "date":
-                ax.set_xlabel("date")
-                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                ax.xaxis.set_major_locator(
-                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
-                )
-
-            elif _time_format == "day":
-                ax.set_xlabel("day")
-            elif _time_format == "tick":
-                ax.set_xlabel("tick")
-            else:
-                ax.set_xlabel("time")
-
-            plot_index += 1
-            plot_index = plot_index % len(ax_list)
-
-        for cleanup_index in range(plot_index, len(ax_list)):
-            ax = ax_list[cleanup_index]
-            ax.tick_params(axis="x", labelrotation=45)
-
-            if _time_format == "date":
-                ax.set_xlabel("date")
-                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                ax.xaxis.set_major_locator(
-                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
-                )
-
-            elif _time_format == "day":
-                ax.set_xlabel("day")
-            elif _time_format == "tick":
-                ax.set_xlabel("tick")
-            else:
-                ax.set_xlabel("time")
+                    color_key = "c" if "c" in kwargs else "color"
+                    group_kwargs[color_key] = line.get_color()
 
         return lines
 
@@ -523,11 +441,12 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         credible_intervals: Sequence[float] | None = None,
         *,
-        sharex: bool = True,
-        ncols: int = 3,
+        label_format: str = "{n}: {q}: {c}",
         legend: LegendOption = "auto",
+        median_label_format: str = "{n}: {q}",
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
@@ -536,6 +455,12 @@ class PlotRendererPipeline:
         """
         Produces a quantile plot of a filter output, typically as a median line
         with one or more shaded credible intervals.
+
+        The plot will either be immediately rendered by this function by calling
+        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
+        This is intended as a quick plotting method to cover most casual use-cases.
+        If you want more control over how the plot is drawn, see method
+        `quantiles_plt()`.
 
         Parameters
         ----------
@@ -546,15 +471,14 @@ class PlotRendererPipeline:
         quantity :
             The quantity selection to make on the output data.
         credible_intervals :
-            A list of credible intervals you wish to plot.
-            This argument only accepts CI's in 2.5% increments,
-            i.e. 2.5,5.0,7.5,...,97.5,100.0.
+            A list of credible intervals you wish to plot, in percentage points.
+            The supported interval widths are 0, 5, 10, ..., 100.
             Defaults to [95].
-        sharex :
-            Whether or not the subplots should share the x-axis ticks.
-        ncols :
-            The number of columns in the resulting subplot matrix. The
-            number of rows is set dynamically.
+        label_format :
+            A format for the items displayed in the legend for shaded intervals;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node, `{q}` for the name of the
+            quantity, and `{c}` for the list of credible intervals.
         legend :
             Whether and how to draw the plot legend.
 
@@ -563,13 +487,25 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
+        median_label_format :
+            A format for the items displayed in the legend for median lines;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node and `{q}` for the name of
+            the quantity. The suffix `: Median` is appended to each label.
         fill_kwargs :
-            A list of dictionaries corresponding to each CI.
-            This tells the plotting function how to fill the interior of the CI.
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each shaded interval. Each dictionary applies to all intervals
+            in one location/quantity group; the list cycles in the order defined by
+            the `ordering` parameter.
             See matplotlib documentation for the supported options.
         line_kwargs :
-            A list of dictionaries correspondng to each CI's median.
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each median line. The list cycles in the order defined by
+            the `ordering` parameter.
             See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -600,81 +536,83 @@ class PlotRendererPipeline:
             - "value": the data column
         """
 
+        fig, ax = plt.subplots(layout="constrained")
         try:
-            num_nodes = self._check_num_nodes(geo)
-
-            nrows = ceil(num_nodes / ncols)
-
-            fig, axs = plt.subplots(
-                nrows,
-                ncols,
-                figsize=(ncols * 5, nrows * 3),
-                sharex=sharex,
-                layout="constrained",
-            )
-
-            # Y-axis
-            fig.supylabel("Count")
-
-            # Title
-            if title is not None:
-                fig.suptitle(t=title)
-
-            # Legend
-            if legend == "auto":
-                # auto: show a legend if there are at most 5 realizations.
-                legend = "on" if len(quantity.labels) <= 4 else "off"
-
             self.quantiles_plt(
-                axs,
+                ax,
                 geo,
                 time,
                 quantity,
-                legend=legend,
                 credible_intervals=credible_intervals,
+                label_format=label_format,
+                median_label_format=median_label_format,
                 fill_kwargs=fill_kwargs,
                 line_kwargs=line_kwargs,
+                ordering=ordering,
                 time_format=time_format,
                 transform=transform,
             )
 
+            ax.set_ylabel("count")
+            actual_time_format, _ = self._time_format(time, time_format)
+            if actual_time_format == "date":
+                ax.set_xlabel("date")
+                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_locator(
+                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
+                )
+                ax.tick_params(axis="x", labelrotation=45)
+            elif actual_time_format == "day":
+                ax.set_xlabel("day")
+            elif actual_time_format == "tick":
+                ax.set_xlabel("tick")
+            else:
+                ax.set_xlabel("time")
+                ax.tick_params(axis="x", labelrotation=45)
+
+            if legend == "auto":
+                legend = "on" if len(ax.get_legend_handles_labels()[0]) <= 12 else "off"
+            if legend == "on":
+                ax.legend()
+            elif legend == "outside":
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if title is not None:
+                ax.set_title(title)
             if to_file is None:
                 plt.show()
             else:
-                path = Path(to_file)
-                fig.savefig(path)
+                fig.savefig(Path(to_file))
 
-        except:
-            plt.close()
+        except BaseException:
+            plt.close(fig)
             raise
 
     def quantiles_plt(
         self,
-        axs: Axes | Iterable[Axes] | NDArray[Any],
+        ax: Axes,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         credible_intervals: Sequence[float] | None = None,
         *,
-        legend: LegendOption = "auto",
-        kwarg_type: Literal["quantity", "geo"] = "quantity",
-        fill_kwargs: list[dict] | None = None,
-        line_kwargs: list[dict] | None = None,
-        time_format: TimeFormatOption = "auto",
         label_format: str = "{n}: {q}: {c}",
         median_label_format: str = "{n}: {q}",
-        ax_title: str = "{n}",
+        fill_kwargs: list[dict] | None = None,
+        line_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
+        time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ):
+    ) -> list[Line2D]:
         """
-        Draw quantile plots onto the array of matplotlib `Axes`, such as what is
-        returned by matplotlib `subplots`. This is a variant of the method
-        `quantiles`.
+        Draw quantile plots onto one matplotlib `Axes`. This variant of
+        `quantiles` leaves plot formatting and legend display to the caller.
+        To use subplots, call this method for each axes with narrowed selections.
 
         Parameters
         ----------
-        axs :
-            The array of matplotlib `Axes` on which to draw the plots.
+        ax :
+            The plot axes on which to draw lines and shaded intervals.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -682,30 +620,33 @@ class PlotRendererPipeline:
         quantity :
             The quantity selection to make on the output data.
         credible_intervals :
-            A list of credible intervals you wish to plot.
-            This argument only accepts CI's in 2.5% increments,
-            i.e. 2.5,5.0,7.5,...,97.5,100.0.
+            A list of credible intervals you wish to plot, in percentage points.
+            The supported interval widths are 0, 5, 10, ..., 100.
             Defaults to [95].
-        legend :
-            Whether and how to draw the plot legend.
-
-            - "auto" will draw the legend unless it would be too large
-            - "on" forces the legend to be drawn
-            - "off" forces the legend to not be drawn
-            - "outside" forces the legend to be drawn next to the plot area
-            (instead of inside it)
-        kwarg_type :
-            Whether to iterate the kwargs over the quantities or the geos.
-
-            - "geo" iterates over the geo nodes, cycling as needed.
-            - "quantity" iterates over the quantities, cycling as need.
+        label_format :
+            A format for the items displayed in the legend for shaded intervals;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node, `{q}` for the name of the
+            quantity, and `{c}` for the list of credible intervals.
+        median_label_format :
+            A format for the items displayed in the legend for median lines;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node and `{q}` for the name of
+            the quantity. The suffix `: Median` is appended to each label.
         fill_kwargs :
-            A list of dictionaries corresponding to each CI.
-            This tells the plotting function how to fill the interior of the CI.
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each shaded interval. Each dictionary applies to all intervals
+            in one location/quantity group; the list cycles in the order defined by
+            the `ordering` parameter.
             See matplotlib documentation for the supported options.
         line_kwargs :
-            A list of dictionaries correspondng to each CI's median.
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each median line. The list cycles in the order defined by
+            the `ordering` parameter.
             See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -717,17 +658,6 @@ class PlotRendererPipeline:
 
             If the system cannot convert to the requested time format, this argument
             may be ignored.
-        label_format :
-            A format string describing the labels in the legend. The string will be used
-            in a call to `format()` with replacement variables `{n}` for the geo, `{q}`
-            for the quantity, and `{c}` the list of credible intervals.
-        median_label_format :
-            A format string describing the label of the median in the legend. The string
-            will be used in a call to `format()` with replacement variables `{n}` for
-            the geo and `{q}` for the quantity.
-        ax_title :
-            A format string for the title of each subplot. The string will be used in a
-            call for `format()` with replacement variables `{n}` for the geo.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the quantiles.
@@ -741,9 +671,13 @@ class PlotRendererPipeline:
             Dataframe columns:
 
             - "value": the data column
-        """
-        ax_list = self._promote_axs(axs)
 
+        Returns
+        -------
+        :
+            The list of `Line2D` objects for each median line drawn. Shaded intervals
+            can be accessed through the axes' collections.
+        """
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{"color": "black"}]
 
@@ -755,16 +689,28 @@ class PlotRendererPipeline:
 
         if credible_intervals is None or len(credible_intervals) == 0:
             credible_intervals = [95]
+        if any(
+            not np.isfinite(interval)
+            or interval < 0
+            or interval > 100
+            or interval % 5 != 0
+            for interval in credible_intervals
+        ):
+            raise ValueError(
+                "Credible intervals must be between 0 and 100 in increments of 5."
+            )
 
-        quantile_list = list(list())
+        quantile_list = []
         for interval in sorted(credible_intervals, reverse=True):
             lower, upper = self._compute_quantile_range(interval)
-            quantile_list.append([f"quantile_{lower}", f"quantile_{upper}"])
+            quantile_list.append((f"quantile_{lower}", f"quantile_{upper}"))
 
-        flat_quantile_list = [
-            quantile for sublist in quantile_list for quantile in sublist
-        ]
-        flat_quantile_list.append("quantile_50.0")
+        flat_quantile_list = list(
+            dict.fromkeys(
+                [quantile for pair in quantile_list for quantile in pair]
+                + ["quantile_50.0"]
+            )
+        )
         realizations_agg = self.output.select.all().agg(flat_quantile_list)
 
         data_df = munge_pipeline_output(
@@ -784,118 +730,69 @@ class PlotRendererPipeline:
         # Before melting, disambiguate any quantities with the same name.
         q_mapping = quantity.disambiguate_groups()
 
-        data_df = data_df.rename(
-            columns={
-                "time": "time",
-                "geo": "geo",
-                **{v: k for k, v in q_mapping.items()},
-            }
+        data_df.columns = pd.MultiIndex.from_tuples(
+            [("time", ""), ("geo", "")]
+            + [
+                (quantity_name, quantile)
+                for quantity_name in q_mapping
+                for quantile in flat_quantile_list
+            ]
+        )
+        groups_df = data_df.groupby("geo", sort=False)
+        groups = (
+            ((location, quantity_name), group)
+            for location, group in groups_df
+            for quantity_name in q_mapping
         )
 
-        groups_df = data_df.groupby("geo", sort=False)
-
-        _time_format, _ = self._time_format(time, time_format)
-
-        plot_index = 0
-        for (geo_group_name, gdf), gl_kwargs, gf_kwargs in zip(
-            groups_df, cycle(line_kwargs), cycle(fill_kwargs)
+        lines = list[Line2D]()
+        for ((location, quantity_name), group), l_kwargs, f_kwargs in zip(
+            sorted(groups, key=self._sorting(q_mapping, ordering)),
+            cycle(line_kwargs),
+            cycle(fill_kwargs),
         ):
-            ax = ax_list[plot_index]
-
-            for (quantity_dis_label, quantity_label), l_kwargs, f_kwargs in zip(
-                q_mapping.items(), cycle(line_kwargs), cycle(fill_kwargs)
-            ):
-                if kwarg_type == "geo":
-                    l_kwargs = gl_kwargs
-                    f_kwargs = gf_kwargs
-
-                for ci_index, (upper, lower) in enumerate(quantile_list):
-                    data_lower = transform(
-                        pd.DataFrame({"value": gdf[quantity_dis_label][lower]})
-                    )
-                    data_upper = transform(
-                        pd.DataFrame({"value": gdf[quantity_dis_label][upper]})
-                    )
-
-                    label = ""
-                    if ci_index == (len(quantile_list) - 1):
-                        label = label_format.format(
-                            n=geo_group_name, q=quantity_label, c=credible_intervals
-                        )
-                    ax.fill_between(
-                        gdf["time"],
-                        data_lower["value"],
-                        data_upper["value"],
-                        label=label,
-                        **f_kwargs,
-                    )
-                data_median = transform(
-                    pd.DataFrame({"value": gdf[quantity_dis_label]["quantile_50.0"]})
+            quantity_label = q_mapping[quantity_name]
+            group = group.sort_values(("time", ""))
+            for index, (lower, upper) in enumerate(quantile_list):
+                data_lower = transform(
+                    pd.DataFrame({"value": group[quantity_name][lower]})
                 )
-                label_med = median_label_format.format(
-                    n=geo_group_name, q=quantity_label
+                data_upper = transform(
+                    pd.DataFrame({"value": group[quantity_name][upper]})
                 )
-                label_med = f"{label_med}: Median"
+                label = (
+                    label_format.format(
+                        n=location,
+                        q=quantity_label,
+                        c=credible_intervals,
+                    )
+                    if index == len(quantile_list) - 1
+                    else "_nolegend_"
+                )
+                plot_kwargs = {"label": label, **f_kwargs}
+                if index != len(quantile_list) - 1:
+                    plot_kwargs["label"] = "_nolegend_"
+                ax.fill_between(
+                    group["time"],
+                    data_lower["value"],
+                    data_upper["value"],
+                    **plot_kwargs,
+                )
+            data_median = transform(
+                pd.DataFrame({"value": group[quantity_name]["quantile_50.0"]})
+            )
+            label = (
+                f"{median_label_format.format(n=location, q=quantity_label)}: Median"
+            )
+            lines.extend(
                 ax.plot(
-                    gdf["time"],
+                    group["time"],
                     data_median["value"],
-                    label=label_med,
-                    zorder=100,
-                    **l_kwargs,
+                    **{"label": label, "zorder": 100, **l_kwargs},
                 )
+            )
 
-            ax_title_str = ax_title.format(n=geo_group_name)
-            ax.set_title(ax_title_str)
-            ax.tick_params(axis="x", labelrotation=45)
-
-            ##Labels and Legend
-            leg = None
-            if legend == "on":
-                leg = ax.legend()
-                leg.set_zorder(2e10)
-            elif legend == "outside":
-                leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
-                leg.set_zorder(2e10)
-
-            if leg is not None:
-                for lh in leg.legend_handles:
-                    if lh is not None:
-                        lh.set_alpha(1)
-
-            if _time_format == "date":
-                ax.set_xlabel("date")
-                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                ax.xaxis.set_major_locator(
-                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
-                )
-
-            elif _time_format == "day":
-                ax.set_xlabel("day")
-            elif _time_format == "tick":
-                ax.set_xlabel("tick")
-            else:
-                ax.set_xlabel("time")
-
-            plot_index += 1
-            plot_index = plot_index % len(ax_list)
-
-        for cleanup_index in range(plot_index, len(ax_list)):
-            ax = ax_list[cleanup_index]
-            ax.tick_params(axis="x", labelrotation=45)
-
-            if _time_format == "date":
-                ax.set_xlabel("date")
-                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                ax.xaxis.set_major_locator(
-                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
-                )
-
-            elif _time_format == "day":
-                ax.set_xlabel("day")
-            elif _time_format == "tick":
-                ax.set_xlabel("tick")
-            else:
-                ax.set_xlabel("time")
+        return lines
 
     def histogram(
         self,
@@ -903,9 +800,10 @@ class PlotRendererPipeline:
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        hist_kwargs: list[dict] | None = None,
-        ncols: int = 3,
+        label_format: str = "{n}: {q}: {t}",
         legend: LegendOption = "auto",
+        hist_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
         title: str | None = None,
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
@@ -913,6 +811,12 @@ class PlotRendererPipeline:
         """
         Produces a histogram plot of a filter output. This is a plot where
         a specific time instance is taken and plotted as a histogram.
+
+        The plot will either be immediately rendered by this function by calling
+        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
+        This is intended as a quick plotting method to cover most casual use-cases.
+        If you want more control over how the plot is drawn, see method
+        `histogram_plt()`.
 
         Parameters
         ----------
@@ -926,13 +830,11 @@ class PlotRendererPipeline:
             to create a histogram corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
-        hist_kwargs :
-            A list of keyword arguments to be passed to the matplotlib function
-            that draws the bin plot.
-            See matplotlib documentation for the supported options.
-        ncols :
-            The number of columns in the resulting subplot matrix. The
-            number of rows is set dynamically.
+        label_format :
+            A format for the items displayed in the legend;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node, `{q}` for the name of the
+            quantity, and `{t}` for the selected date range.
         legend :
             Whether and how to draw the plot legend.
 
@@ -941,6 +843,14 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
+        hist_kwargs :
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each histogram. The list cycles in the order defined by
+            the `ordering` parameter.
+            See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         title :
             A title to draw on the plot.
         to_file :
@@ -959,76 +869,62 @@ class PlotRendererPipeline:
             - "value": the data column
         """
 
+        fig, ax = plt.subplots(layout="constrained")
         try:
-            num_nodes = self._check_num_nodes(geo)
-
-            nrows = ceil(num_nodes / ncols)
-            fig, axs = plt.subplots(
-                nrows,
-                ncols,
-                figsize=(ncols * 5, nrows * 3),
-                layout="constrained",
-            )
-
-            # Y-axis
-            fig.supylabel("Count")
-
-            # X-axis
-            fig.supxlabel("Value")
-
-            # Title
-            if title is not None:
-                fig.suptitle(t=title)
-
-            # Legend
-            if legend == "auto":
-                # auto: show a legend if there are at most 4 quantities.
-                legend = "on" if len(quantity.labels) <= 4 else "off"
-
             self.histogram_plt(
-                axs,
+                ax,
                 geo,
                 time,
                 quantity,
-                legend=legend,
+                label_format=label_format,
                 hist_kwargs=hist_kwargs,
-                label_format="{q}",
+                ordering=ordering,
                 transform=transform,
             )
+
+            ax.set_xlabel("value")
+            ax.set_ylabel("count")
+
+            if legend == "auto":
+                legend = "on" if len(ax.get_legend_handles_labels()[0]) <= 12 else "off"
+            if legend == "on":
+                ax.legend()
+            elif legend == "outside":
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if title is not None:
+                ax.set_title(title)
 
             if to_file is None:
                 plt.show()
             else:
-                path = Path(to_file)
-                fig.savefig(path)
+                fig.savefig(Path(to_file))
 
-        except:
-            plt.close()
+        except BaseException:
+            plt.close(fig)
             raise
 
     def histogram_plt(
         self,
-        axs: Axes | Iterable[Axes] | NDArray[Any],
+        ax: Axes,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        legend: LegendOption = "auto",
-        hist_kwargs: list[dict] | None = None,
-        kwarg_type: Literal["quantity", "geo"] = "quantity",
-        ax_title: str = "{n}: {t}",
         label_format: str = "{n}: {q}: {t}",
+        hist_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ):
+    ) -> list[BarContainer | list[Polygon]]:
         """
-        Draw histogram plots onto the array of matplotlib `Axes`, such as what is
-        returned by matplotlib `subplots`. This is a variant of the method
-        `histogram`.
+        Draw histograms onto one matplotlib `Axes`. This variant of
+        `histogram` leaves plot formatting and legend display to the caller.
+        To use subplots, call this method for each axes with narrowed selections.
 
         Parameters
         ----------
-        axs :
-            The array of matplotlib `Axes` on which to draw the plots.
+        ax :
+            The plot axes on which to draw histograms.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -1039,31 +935,19 @@ class PlotRendererPipeline:
             to create a histogram corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
-        legend :
-            Whether and how to draw the plot legend.
-
-            - "auto" will draw the legend unless it would be too large
-            - "on" forces the legend to be drawn
-            - "off" forces the legend to not be drawn
-            - "outside" forces the legend to be drawn next to the plot area
-            (instead of inside it)
+        label_format :
+            A format for the items displayed in the legend;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node, `{q}` for the name of the
+            quantity, and `{t}` for the selected date range.
         hist_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws the bin plot.
+            that draws each histogram. The list cycles in the order defined by
+            the `ordering` parameter.
             See matplotlib documentation for the supported options.
-        kwarg_type :
-            Whether to iterate the kwargs over the quantities or the geos.
-
-            - "geo" iterates over the geo nodes, cycling as needed.
-            - "quantity" iterates over the quantities, cycling as need.
-        ax_title :
-            Specifies the format of the title for the subplots.
-            The string is supplied to a call to `format()` with replacement variables
-            `{n}` for the geo and `{t}` for the time.
-        label_format :
-            Specifies the label format for the legend; the string will be used in a call
-            to `format()` with replacement variables `{n}` for the geo, `{q}` for the
-            quantity, and `{t}` for the time.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1076,9 +960,14 @@ class PlotRendererPipeline:
             Dataframe columns:
 
             - "value": the data column
-        """
-        ax_list = self._promote_axs(axs)
 
+        Returns
+        -------
+        :
+            The matplotlib artists for each histogram drawn, in `ordering` order.
+            Bar histograms return a `BarContainer`; step histograms return a list of
+            `Polygon` objects.
+        """
         if hist_kwargs is None or len(hist_kwargs) == 0:
             hist_kwargs = [{}]
 
@@ -1107,64 +996,35 @@ class PlotRendererPipeline:
         # Before melting, disambiguate any quantities with the same name.
         q_mapping = quantity.disambiguate_groups()
 
-        data_df = data_df.rename(
-            columns={
-                "time": "time",
-                "geo": "geo",
-                **{v: k for k, v in q_mapping.items()},
-            }
+        groups_df = (
+            data_df.set_axis(["realization", "time", "geo", *q_mapping.keys()], axis=1)
+            .melt(id_vars=["realization", "time", "geo"], var_name="quantity")
+            .groupby(["geo", "quantity"], sort=False)
         )
 
-        groups_df = data_df.groupby("geo", sort=False)
-
-        plot_index = 0
-        ax_time_str = (
-            f"{time.date_bounds[0].isoformat()}/{time.date_bounds[1].isoformat()}"
-        )
-        for (geo_group_name, gdf), gwargs in zip(groups_df, cycle(hist_kwargs)):
-            ax = ax_list[plot_index]
-            ax.tick_params(axis="x", labelrotation=45)
-            ax_title_str = ax_title.format(
-                n=geo_group_name,
-                t=ax_time_str,
+        plots = list[BarContainer | list[Polygon]]()
+        for (group_key, group), kwargs in zip(
+            sorted(groups_df, key=self._sorting(q_mapping, ordering)),
+            cycle(hist_kwargs),
+        ):
+            location, quantity_name = cast(tuple[str, str], group_key)
+            label = label_format.format(
+                n=location,
+                q=q_mapping[quantity_name],
+                t=time.date_bounds_label,
             )
-            ax.set_title(ax_title_str)
-
-            for (quantity_dis_label, quantity_label), kwargs in zip(
-                q_mapping.items(), cycle(hist_kwargs)
+            data = transform(group[["value"]])
+            _, _, artists = ax.hist(data["value"], **{"label": label, **kwargs})
+            if isinstance(artists, BarContainer):
+                plots.append(artists)
+            elif isinstance(artists, list) and all(
+                isinstance(artist, Polygon) for artist in artists
             ):
-                if kwarg_type == "geo":
-                    kwargs = gwargs
+                plots.append(cast(list[Polygon], artists))
+            else:
+                raise TypeError("Matplotlib returned unexpected histogram artists.")
 
-                label = label_format.format(
-                    n=geo_group_name,
-                    q=quantity_label,
-                    t=ax_time_str,
-                )
-                curr_kwargs = {"label": label, **kwargs}
-
-                ax.hist(
-                    transform(pd.DataFrame({"value": gdf[quantity_dis_label]})),
-                    **curr_kwargs,
-                )
-            # Labels and Legend
-            leg = None
-            if legend == "on":
-                leg = ax.legend()
-            elif legend == "outside":
-                leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
-
-            if leg is not None:
-                for lh in leg.legend_handles:
-                    if lh is not None:
-                        lh.set_alpha(1)
-
-            plot_index += 1
-            plot_index = plot_index % len(ax_list)
-
-        for cleanup_index in range(plot_index, len(ax_list)):
-            ax = ax_list[cleanup_index]
-            ax.tick_params(axis="x", labelrotation=45)
+        return plots
 
     def line(
         self,
@@ -1176,6 +1036,7 @@ class PlotRendererPipeline:
         label_format: str = "{n}: {q}: {m}",
         legend: LegendOption = "auto",
         line_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
         to_file: str | Path | None = None,
@@ -1188,6 +1049,11 @@ class PlotRendererPipeline:
         Filter outputs typically contain many realizations of a simulation. In order to
         condense the realization axis to a single time-series, you are required to
         specify an aggregation method across realizations.
+
+        The plot will either be immediately rendered by this function by calling
+        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
+        This is intended as a quick plotting method to cover most casual use-cases.
+        If you want more control over how the plot is drawn, see method `line_plt()`.
 
         Parameters
         ----------
@@ -1215,9 +1081,13 @@ class PlotRendererPipeline:
             (instead of inside it)
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each line. If the list contains less items than there are lines,
-            we will cycle through the list as many times as needed.
+            that draws each line. The list cycles in the order defined by
+            the `ordering` parameter.
             See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
+            Within each group, lines are sorted by aggregation name.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -1236,11 +1106,12 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per realization per geo/quantity group
+            The function will be called once per aggregation per geo/quantity group
             -- once per line, essentially -- with a dataframe that contains just the
             data for that group. The dataframe given as the argument is the result of
-            applying all selections. You should return a dataframe with the same format,
-            where the values of the data column have been modified for your purposes.
+            applying all selections and aggregations. You should return a dataframe
+            with the same format, where the values of the data column have been modified
+            for your purposes.
 
             Dataframe columns:
 
@@ -1262,6 +1133,7 @@ class PlotRendererPipeline:
                 quantity,
                 line_kwargs=line_kwargs,
                 label_format=label_format,
+                ordering=ordering,
                 time_format=time_format,
                 transform=transform,
             )
@@ -1311,26 +1183,28 @@ class PlotRendererPipeline:
     def line_plt(
         self,
         ax: Axes,
-        realization: RealizationSelection | RealizationAggregation,
+        realization: RealizationAggregation,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
         label_format: str = "{n}: {q}: {m}",
         line_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
         """
-        Draw lines onto the matplotlib `Axes`. This is a variant of the method
-        `line`.
+        Draw lines onto one matplotlib `Axes`. This variant of
+        `line` leaves plot formatting and legend display to the caller.
+        To use subplots, call this method for each axes with narrowed selections.
 
         Parameters
         ----------
         ax :
-            The `Axes` on which to draw.
+            The plot axes on which to draw lines.
         realization :
-            A realization selection to make on the output data.
+            A realization aggregation to make on the output data.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -1345,9 +1219,13 @@ class PlotRendererPipeline:
             corresponding to the realization aggregation.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each line. If the list contains less items than there are lines,
-            we will cycle through the list as many times as needed.
+            that draws each line. The list cycles in the order defined by
+            the `ordering` parameter.
             See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
+            Within each group, lines are sorted by aggregation name.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -1362,11 +1240,12 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per realization per geo/quantity group
+            The function will be called once per aggregation per geo/quantity group
             -- once per line, essentially -- with a dataframe that contains just the
             data for that group. The dataframe given as the argument is the result of
-            applying all selections. You should return a dataframe with the same format,
-            where the values of the data column have been modified for your purposes.
+            applying all selections and aggregations. You should return a dataframe
+            with the same format, where the values of the data column have been modified
+            for your purposes.
 
             Dataframe columns:
 
@@ -1380,6 +1259,9 @@ class PlotRendererPipeline:
             control over the presentation of the lines.
 
         """
+
+        if not isinstance(realization, RealizationAggregation):
+            raise ValueError("Line plots only support RealizationAggregation.")
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
@@ -1402,36 +1284,45 @@ class PlotRendererPipeline:
         # Before melting, disambiguate any quantities with the same name.
         q_mapping = quantity.disambiguate_groups()
 
-        data_df = data_df.rename(
-            columns={
-                "time": "time",
-                "geo": "geo",
-                **{v: k for k, v in q_mapping.items()},
-            }
+        quantity_names = (name for name in q_mapping for _ in realization.aggregation)
+        data_df.columns = pd.MultiIndex.from_tuples(
+            [("time", ""), ("geo", "")]
+            + [
+                (name, metric)
+                for name, (_, metric) in zip(
+                    quantity_names, data_df.columns[2:], strict=True
+                )
+            ]
         )
 
         lines = list[Line2D]()
-
         geo_groups = data_df.groupby("geo", sort=False)
-
-        line_index = 0
-        for group_name, gdf in geo_groups:
-            for quantity_dis_label, quantity_label in q_mapping.items():
-                qdf = gdf[quantity_dis_label]
-                qdf = qdf.melt(var_name="metric")
-
-                metric_groups = qdf.groupby("metric")
-
-                for metric_name, mdf in metric_groups:
-                    kwargs = line_kwargs[line_index % len(line_kwargs)]
-                    label = label_format.format(
-                        n=group_name, q=quantity_label, m=metric_name
+        groups = (
+            ((location, quantity_name), group)
+            for location, group in geo_groups
+            for quantity_name in q_mapping
+        )
+        kwargs_cycle = cycle(line_kwargs)
+        for (location, quantity_name), group in sorted(
+            groups, key=self._sorting(q_mapping, ordering)
+        ):
+            metric_groups = (
+                group[quantity_name].melt(var_name="metric").groupby("metric")
+            )
+            for metric_name, metric_data in metric_groups:
+                label = label_format.format(
+                    n=location,
+                    q=q_mapping[quantity_name],
+                    m=metric_name,
+                )
+                data = transform(metric_data)
+                lines.extend(
+                    ax.plot(
+                        group["time"],
+                        data["value"],
+                        **{"label": label, **next(kwargs_cycle)},
                     )
-                    curr_kwargs = {"label": label, **kwargs}
-                    data = transform(mdf)
-                    ls = ax.plot(gdf["time"], data["value"], **curr_kwargs)
-                    lines.extend(ls)
-                    line_index += 1
+                )
 
         return lines
 
@@ -1441,11 +1332,12 @@ class PlotRendererPipeline:
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        line_kwargs: list[dict] | None = None,
-        ncols: int = 3,
+        label_format: str = "{n}: {q}: {t}",
         legend: LegendOption = "auto",
-        delta_t: float | None = None,
+        line_kwargs: list[dict] | None = None,
+        ordering: OrderingOption = "location",
         bandwidth: float | str = "scott",
+        delta_t: float | None = None,
         title: str | None = None,
         to_file: str | Path | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
@@ -1453,6 +1345,11 @@ class PlotRendererPipeline:
         """
         Produces a kernel density plot of a filter output. This is a plot where
         a specific time instance is taken and plotted as a KDE.
+
+        The plot will either be immediately rendered by this function by calling
+        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
+        This is intended as a quick plotting method to cover most casual use-cases.
+        If you want more control over how the plot is drawn, see method `kde_plt()`.
 
         Parameters
         ----------
@@ -1463,15 +1360,14 @@ class PlotRendererPipeline:
             this plot the time selection must be a single time instant.
             For instance you could use
             `rume.time_frame.select.days(100, 100).group("day").agg()`
-            to create a histogram corresponding to a single day.
+            to create a KDE corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
-        line_kwargs :
-            A list of keyword arguments to be passed to the matplotlib function
-            that draws the kde plot.
-        ncols :
-            The number of columns in the resulting subplot matrix. The
-            number of rows is set dynamically.
+        label_format :
+            A format for the items displayed in the legend;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node, `{q}` for the name of the
+            quantity, and `{t}` for the selected date range.
         legend :
             Whether and how to draw the plot legend.
 
@@ -1480,15 +1376,23 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-        delta_t :
-            Specifies the interval at which to sample the kernelized density.
-            If `None` will be `1/100` of the range of the data.
+        line_kwargs :
+            A list of keyword arguments to be passed to the matplotlib function
+            that draws each line. The list cycles in the order defined by
+            the `ordering` parameter.
+            See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         bandwidth :
             The bandwidth for the convolution kernel. Specify either a float or
             a string for an adaptive scheme. Options are "scott", "silverman".
             See
             [https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html)
             for details.
+        delta_t :
+            Specifies the positive, finite interval at which to sample the density.
+            If `None`, the interval is `1/100` of the data range for each group.
         title :
             A title to draw on the plot.
         to_file :
@@ -1506,79 +1410,66 @@ class PlotRendererPipeline:
 
             - "value": the data column
         """
+        fig, ax = plt.subplots(layout="constrained")
         try:
-            num_nodes = self._check_num_nodes(geo)
-
-            nrows = ceil(num_nodes / ncols)
-            fig, axes = plt.subplots(
-                nrows,
-                ncols,
-                figsize=(ncols * 5, nrows * 3),
-                layout="constrained",
-            )
-
-            # Y-axis
-            fig.supylabel("Density")
-
-            # X-axis
-            fig.supxlabel("Value")
-
-            # Title
-            fig.suptitle(t=title)  # type: ignore
-
-            # Legend
-            if legend == "auto":
-                # auto: show a legend if there are at most 12 lines.
-                legend = "on" if len(quantity.labels) <= 12 else "off"
-
             self.kde_plt(
-                axes,
+                ax,
                 geo,
                 time,
                 quantity,
+                label_format=label_format,
                 line_kwargs=line_kwargs,
+                ordering=ordering,
                 delta_t=delta_t,
-                legend=legend,
                 bandwidth=bandwidth,
-                label_format="{q}",
                 transform=transform,
             )
+
+            ax.set_xlabel("value")
+            ax.set_ylabel("density")
+
+            if legend == "auto":
+                legend = "on" if len(ax.get_legend_handles_labels()[0]) <= 12 else "off"
+            if legend == "on":
+                ax.legend()
+            elif legend == "outside":
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            if title is not None:
+                ax.set_title(title)
 
             if to_file is None:
                 plt.show()
             else:
-                path = Path(to_file)
-                fig.savefig(path)
+                fig.savefig(Path(to_file))
 
-        except:
-            plt.close()
+        except BaseException:
+            plt.close(fig)
             raise
 
     def kde_plt(
         self,
-        axs: Axes | Iterable[Axes] | NDArray[Any],
+        ax: Axes,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
+        label_format: str = "{n}: {q}: {t}",
         line_kwargs: list[dict] | None = None,
-        ax_title: str = "{n}: {t}",
-        kwarg_type: Literal["quantity", "geo"] = "quantity",
+        ordering: OrderingOption = "location",
         bandwidth: float | str = "scott",
         delta_t: float | None = None,
-        label_format: str = "{n}: {q}: {t}",
-        legend: LegendOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ):
+    ) -> list[Line2D]:
         """
-        Draw kde plots onto the array of matplotlib `Axes`, such as what is
-        returned by matplotlib `subplots`. This is a variant of the method
-        `kde`.
+        Draw KDE lines onto one matplotlib `Axes`. This variant of
+        `kde` leaves plot formatting and legend display to the caller.
+        To use subplots, call this method for each axes with narrowed selections.
 
         Parameters
         ----------
-        axs :
-            The array of matplotlib `Axes` on which to draw the plots.
+        ax :
+            The plot axes on which to draw lines.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -1586,21 +1477,22 @@ class PlotRendererPipeline:
             this plot the time selection must be a single time instant.
             For instance you could use
             `rume.time_frame.select.days(100, 100).group("day").agg()`
-            to create a histogram corresponding to a single day.
+            to create a KDE corresponding to a single day.
         quantity :
             The quantity selection to make on the output data.
+        label_format :
+            A format for the items displayed in the legend;
+            the string will be used in a call to `format()` with the replacement
+            variables `{n}` for the name of the geo node, `{q}` for the name of the
+            quantity, and `{t}` for the selected date range.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws the kde plot.
-        ax_title :
-            A format string specifying the format of the title. The string will be used
-            in a call to `format()` with replacement variables `{n}` for the geo and
-            `{t}` for the time.
-        kwarg_type :
-            Whether to iterate the kwargs over the quantities or the geos.
-
-            - "geo" iterates over the geo nodes, cycling as needed.
-            - "quantity" iterates over the quantities, cycling as need.
+            that draws each line. The list cycles in the order defined by
+            the `ordering` parameter.
+            See matplotlib documentation for the supported options.
+        ordering :
+            Whether location or quantity takes priority when ordering groups.
+            Locations are sorted by label and quantities follow selection order.
         bandwidth :
             The bandwidth for the convolution kernel. Specify either a float or
             a string for an adaptive scheme. Options are "scott", "silverman".
@@ -1608,20 +1500,8 @@ class PlotRendererPipeline:
             [https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html)
             for details.
         delta_t :
-            Specifies the interval at which to sample the kernelized density.
-            If `None` will be `1/100` of the range of the data.
-        label_format :
-            Specifies the label format for the legend. The string will be used in a
-            call to `format()` with replacement variables `{n}` for the geo, `{q}`
-            for the quantity, and `{t}` for the time.
-        legend :
-            Whether and how to draw the plot legend.
-
-            - "auto" will draw the legend unless it would be too large
-            - "on" forces the legend to be drawn
-            - "off" forces the legend to not be drawn
-            - "outside" forces the legend to be drawn next to the plot area
-            (instead of inside it)
+            Specifies the positive, finite interval at which to sample the density.
+            If `None`, the interval is `1/100` of the data range for each group.
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
@@ -1634,7 +1514,15 @@ class PlotRendererPipeline:
             Dataframe columns:
 
             - "value": the data column
+
+        Returns
+        -------
+        :
+            The list of `Line2D` objects for each line drawn.
         """
+
+        if delta_t is not None and (not np.isfinite(delta_t) or delta_t <= 0):
+            raise ValueError("delta_t must be positive and finite.")
 
         realizations_agg = self.output.select.all()
         data_df = munge_pipeline_output(
@@ -1648,8 +1536,6 @@ class PlotRendererPipeline:
                 "single point (scalar)."
             )
             raise ValueError(err)
-
-        ax_list = self._promote_axs(axs)
 
         if line_kwargs is None or len(line_kwargs) == 0:
             line_kwargs = [{}]
@@ -1666,78 +1552,35 @@ class PlotRendererPipeline:
         # Before melting, disambiguate any quantities with the same name.
         q_mapping = quantity.disambiguate_groups()
 
-        data_df = data_df.rename(
-            columns={
-                "time": "time",
-                "geo": "geo",
-                **{v: k for k, v in q_mapping.items()},
-            }
+        groups_df = (
+            data_df.set_axis(["realization", "time", "geo", *q_mapping.keys()], axis=1)
+            .melt(id_vars=["realization", "time", "geo"], var_name="quantity")
+            .groupby(["geo", "quantity"], sort=False)
         )
 
-        groups_df = data_df.groupby("geo", sort=False)
-
-        # Plotting
-        ax_time_str = (
-            f"{time.date_bounds[0].isoformat()}/{time.date_bounds[1].isoformat()}"
-        )
-
-        plot_index = 0
-        for (geo_group_name, gdf), gwargs in zip(groups_df, cycle(line_kwargs)):
-            ax = ax_list[plot_index]
-            ax.tick_params(axis="x", labelrotation=45)
-            ax_title_str = ax_title.format(
-                n=geo_group_name,
-                t=ax_time_str,
+        lines = list[Line2D]()
+        for (group_key, group), kwargs in zip(
+            sorted(groups_df, key=self._sorting(q_mapping, ordering)),
+            cycle(line_kwargs),
+        ):
+            location, quantity_name = cast(tuple[str, str], group_key)
+            label = label_format.format(
+                n=location,
+                q=q_mapping[quantity_name],
+                t=time.date_bounds_label,
             )
-            ax.set_title(ax_title_str)
-
-            for (quantity_dis_label, quantity_label), kwargs in zip(
-                q_mapping.items(), cycle(line_kwargs)
-            ):
-                if kwarg_type == "geo":
-                    kwargs = gwargs
-
-                label = label_format.format(
-                    n=geo_group_name,
-                    q=quantity_label,
-                    t=f"{time.date_bounds[0].isoformat()}:{time.date_bounds[1].isoformat()}",
-                )
-                curr_kwargs = {"label": label, **kwargs}
-
-                data = (
-                    transform(pd.DataFrame({"value": gdf[quantity_dis_label]}))
-                    .to_numpy()
-                    .squeeze()
-                )
-
-                d_max = data.max()
-                d_min = data.min()
-                if delta_t is None:
-                    delta_t = (d_max - d_min) / 100
-
-                eval_range = np.arange(d_min, d_max + delta_t, delta_t)
-                kde = gaussian_kde(data, bw_method=bandwidth)
+            data = transform(group[["value"]])["value"].to_numpy()
+            density = gaussian_kde(data, bw_method=bandwidth)
+            d_min = data.min()
+            d_max = data.max()
+            step = delta_t if delta_t is not None else (d_max - d_min) / 100
+            eval_range = np.arange(d_min, d_max + step, step)
+            lines.extend(
                 ax.plot(
                     eval_range,
-                    kde.evaluate(eval_range),
-                    **curr_kwargs,
+                    density.evaluate(eval_range),
+                    **{"label": label, **kwargs},
                 )
+            )
 
-            ##Labels and Legend
-            leg = None
-            if legend == "on":
-                leg = ax.legend()
-            elif legend == "outside":
-                leg = ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
-
-            if leg is not None:
-                for lh in leg.legend_handles:
-                    if lh is not None:
-                        lh.set_alpha(1)
-
-            plot_index += 1
-            plot_index = plot_index % len(ax_list)
-
-        for cleanup_index in range(plot_index, len(ax_list)):
-            ax = ax_list[cleanup_index]
-            ax.tick_params(axis="x", labelrotation=45)
+        return lines
