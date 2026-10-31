@@ -1,7 +1,7 @@
 from datetime import timedelta
-from itertools import cycle
+from itertools import chain, cycle
 from pathlib import Path
-from typing import Callable, Literal, Mapping, Sequence, cast
+from typing import Any, Callable, Literal, Mapping, Sequence, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,17 +13,38 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
 from scipy.stats import gaussian_kde
 
+from epymorph import util
 from epymorph.compartment_model import QuantityStrategy
 from epymorph.forecasting.munge_realizations import (
     ParameterStrategy,
     RealizationAggregation,
     RealizationSelection,
+    quantiles_from_intervals,
 )
 from epymorph.forecasting.pipeline import PipelineOutput, munge_pipeline_output
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.time import TimeAggregation, TimeSelection
 from epymorph.tools.out_plot import LegendOption, OrderingOption, TimeFormatOption
 from epymorph.util import identity
+
+
+def _normalize_kwargs(
+    mpl_kwargs: list[dict[str, Any]] | None,
+    *,
+    default: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if mpl_kwargs is None or len(mpl_kwargs) == 0:
+        mpl_kwargs = [default or {}]
+    else:
+        # copy to avoid mutating caller's dicts
+        mpl_kwargs = [{**kwargs} for kwargs in mpl_kwargs]
+
+    for kwargs in mpl_kwargs:
+        if "c" in kwargs:
+            kwargs["color"] = kwargs["c"]
+            del kwargs["c"]
+
+    return mpl_kwargs
 
 
 class PlotRendererPipeline:
@@ -50,14 +71,10 @@ class PlotRendererPipeline:
     def __init__(self, output: PipelineOutput):
         self.output = output
 
-    def _compute_quantile_range(self, credible_interval: float) -> list[float]:
-        """Computes the quantiles corresponding the a given credible interval."""
-        exterior = (100.0 - credible_interval) / 2
-        exterior = round(exterior, 1)
-        return [0.0 + exterior, 100.0 - exterior]
-
     def _sorting(
-        self, quantities_disambiguated: Mapping[str, str], ordering: OrderingOption
+        self,
+        quantities_disambiguated: Mapping[str, str],
+        ordering: OrderingOption,
     ) -> Callable:
         quantity_order = {
             name: index for index, name in enumerate(quantities_disambiguated)
@@ -229,10 +246,8 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per realization per geo/quantity group
-            -- once per line, essentially -- with a dataframe that contains just the
-            data for that realization and group. The dataframe given as the argument
-            is the result of applying all selections. You should return a dataframe
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument. You should return a dataframe
             with the same format, where the values of the data column have been modified
             for your purposes.
 
@@ -356,10 +371,8 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per realization per geo/quantity group
-            -- once per line, essentially -- with a dataframe that contains just the
-            data for that realization and group. The dataframe given as the argument
-            is the result of applying all selections. You should return a dataframe
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument. You should return a dataframe
             with the same format, where the values of the data column have been modified
             for your purposes.
 
@@ -380,13 +393,15 @@ class PlotRendererPipeline:
         if not isinstance(realization, RealizationSelection):
             raise ValueError("Spaghetti plots only support RealizationSelection.")
 
-        if line_kwargs is None or len(line_kwargs) == 0:
-            line_kwargs = [{}]
+        line_kwargs = _normalize_kwargs(line_kwargs)
 
-        if transform is None:
-            transform = identity
-
-        data_df = munge_pipeline_output(self.output, realization, geo, time, quantity)
+        data_df = munge_pipeline_output(
+            output=self.output,
+            realization=realization,
+            geo=geo,
+            time=time,
+            quantity=quantity,
+        )
 
         # Map time labels:
         _, map_time_axis = self._time_format(time, time_format)
@@ -401,36 +416,43 @@ class PlotRendererPipeline:
         # Before melting, disambiguate any quantities with the same name.
         q_mapping = quantity.disambiguate_groups()
 
-        groups_df = (
-            data_df.set_axis(["realization", "time", "geo", *q_mapping.keys()], axis=1)
-            .melt(id_vars=["realization", "time", "geo"], var_name="quantity")
-            .groupby(["geo", "quantity"], sort=False)
+        geo_quantity_group_dfs = sorted(
+            (
+                data_df.set_axis(
+                    ["realization", "time", "geo", *q_mapping.keys()], axis=1
+                )
+                .melt(id_vars=["realization", "time", "geo"], var_name="quantity")
+                .groupby(["geo", "quantity"], sort=False)
+            ),
+            key=self._sorting(q_mapping, ordering),
         )
+
         lines = list[Line2D]()
-        for (group_key, group), kwargs in zip(
-            sorted(groups_df, key=self._sorting(q_mapping, ordering)),
+        for ((location, quantity_name), group_df), kwargs in zip(
+            geo_quantity_group_dfs,
             cycle(line_kwargs),
         ):
-            location, quantity_name = cast(tuple[str, str], group_key)
-            q_name = q_mapping[quantity_name]
+            q_name = q_mapping[cast(str, quantity_name)]
             label = label_format.format(n=location, q=q_name)
-            group_kwargs = {"label": label, **kwargs}
-            for index, (_, realization_data) in enumerate(group.groupby("realization")):
-                plot_kwargs = dict(group_kwargs)
-                if index > 0:
-                    plot_kwargs["label"] = "_nolegend_"
-                data = transform(
-                    realization_data.sort_values("time").assign(quantity=q_name)
-                )
-                line = ax.plot(data["time"], data["value"], **plot_kwargs)[0]
+            first_kwargs = {**kwargs, "label": label}
+            rest_kwargs = {**kwargs, "label": "_nolegend_"}
+
+            for index, (_, realization_df) in enumerate(
+                group_df.groupby("realization", sort=False)
+            ):
+                plot_kwargs = first_kwargs if index == 0 else rest_kwargs
+                if transform is not None:
+                    realization_df = transform(realization_df.assign(quantity=q_name))
+                line = ax.plot(
+                    realization_df["time"],
+                    realization_df["value"],
+                    **plot_kwargs,
+                )[0]
                 lines.append(line)
-                if (
-                    index == 0
-                    and kwargs.get("color") is None
-                    and kwargs.get("c") is None
-                ):
-                    color_key = "c" if "c" in kwargs else "color"
-                    group_kwargs[color_key] = line.get_color()
+
+                # Make sure all realizations in the same group share a color.
+                if index == 0:
+                    rest_kwargs["color"] = line.get_color()
 
         return lines
 
@@ -443,7 +465,6 @@ class PlotRendererPipeline:
         *,
         label_format: str = "{n}: {q}: {c}",
         legend: LegendOption = "auto",
-        median_label_format: str = "{n}: {q}",
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
@@ -478,7 +499,7 @@ class PlotRendererPipeline:
             A format for the items displayed in the legend for shaded intervals;
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
-            quantity, and `{c}` for the list of credible intervals.
+            quantity, and `{c}` for the list of credible intervals or "Median".
         legend :
             Whether and how to draw the plot legend.
 
@@ -487,11 +508,6 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-        median_label_format :
-            A format for the items displayed in the legend for median lines;
-            the string will be used in a call to `format()` with the replacement
-            variables `{n}` for the name of the geo node and `{q}` for the name of
-            the quantity. The suffix `: Median` is appended to each label.
         fill_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each shaded interval. Each dictionary applies to all intervals
@@ -524,15 +540,17 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the quantiles.
-            The function will be called once per quantile per geo/quantity group
-            -- once per line, essentially -- with a dataframe that contains just the
-            data for that group. The dataframe given as the argument is the result
-            of applying all selections and computing the quantiles. You should return a
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument. You should return a
             dataframe with the same format, where the values of the data column have
             been modified for your purposes.
 
             Dataframe columns:
 
+            - "time": the time series column
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
+            - "quantile": the value of the computed quantile (same value per group)
             - "value": the data column
         """
 
@@ -545,7 +563,6 @@ class PlotRendererPipeline:
                 quantity,
                 credible_intervals=credible_intervals,
                 label_format=label_format,
-                median_label_format=median_label_format,
                 fill_kwargs=fill_kwargs,
                 line_kwargs=line_kwargs,
                 ordering=ordering,
@@ -597,7 +614,6 @@ class PlotRendererPipeline:
         credible_intervals: Sequence[float] | None = None,
         *,
         label_format: str = "{n}: {q}: {c}",
-        median_label_format: str = "{n}: {q}",
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
@@ -627,12 +643,7 @@ class PlotRendererPipeline:
             A format for the items displayed in the legend for shaded intervals;
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
-            quantity, and `{c}` for the list of credible intervals.
-        median_label_format :
-            A format for the items displayed in the legend for median lines;
-            the string will be used in a call to `format()` with the replacement
-            variables `{n}` for the name of the geo node and `{q}` for the name of
-            the quantity. The suffix `: Median` is appended to each label.
+            quantity, and `{c}` for the list of credible intervals or "Median".
         fill_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each shaded interval. Each dictionary applies to all intervals
@@ -661,15 +672,17 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the quantiles.
-            The function will be called once per quantile per geo/quantity group
-            -- once per line, essentially -- with a dataframe that contains just the
-            data for that group. The dataframe given as the argument is the result
-            of applying all selections and computing the quantiles. You should return a
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument. You should return a
             dataframe with the same format, where the values of the data column have
             been modified for your purposes.
 
             Dataframe columns:
 
+            - "time": the time series column
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
+            - "quantile": the value of the computed quantile (same value per group)
             - "value": the data column
 
         Returns
@@ -678,43 +691,29 @@ class PlotRendererPipeline:
             The list of `Line2D` objects for each median line drawn. Shaded intervals
             can be accessed through the axes' collections.
         """
-        if line_kwargs is None or len(line_kwargs) == 0:
-            line_kwargs = [{"color": "black"}]
-
-        if fill_kwargs is None or len(fill_kwargs) == 0:
-            fill_kwargs = [{"color": "tab:blue", "alpha": 0.3}]
-
-        if transform is None:
-            transform = identity
+        line_kwargs = _normalize_kwargs(
+            line_kwargs,
+            default={"color": "black"},
+        )
+        fill_kwargs = _normalize_kwargs(
+            fill_kwargs,
+            default={"color": "tab:blue", "alpha": 0.3},
+        )
 
         if credible_intervals is None or len(credible_intervals) == 0:
             credible_intervals = [95]
-        if any(
-            not np.isfinite(interval)
-            or interval < 0
-            or interval > 100
-            or interval % 5 != 0
-            for interval in credible_intervals
-        ):
-            raise ValueError(
-                "Credible intervals must be between 0 and 100 in increments of 5."
-            )
 
-        quantile_list = []
-        for interval in sorted(credible_intervals, reverse=True):
-            lower, upper = self._compute_quantile_range(interval)
-            quantile_list.append((f"quantile_{lower}", f"quantile_{upper}"))
-
-        flat_quantile_list = list(
-            dict.fromkeys(
-                [quantile for pair in quantile_list for quantile in pair]
-                + ["quantile_50.0"]
-            )
+        quantile_list = quantiles_from_intervals(credible_intervals)
+        unique_quantiles = util.filter_unique(
+            [*(chain.from_iterable(quantile_list)), "quantile_50.0"]
         )
-        realizations_agg = self.output.select.all().agg(flat_quantile_list)
 
         data_df = munge_pipeline_output(
-            self.output, realizations_agg, geo, time, quantity
+            output=self.output,
+            realization=self.output.select.all().agg(unique_quantiles),
+            geo=geo,
+            time=time,
+            quantity=quantity,
         )
 
         # Map time labels:
@@ -735,7 +734,7 @@ class PlotRendererPipeline:
             + [
                 (quantity_name, quantile)
                 for quantity_name in q_mapping
-                for quantile in flat_quantile_list
+                for quantile in unique_quantiles
             ]
         )
         groups_df = data_df.groupby("geo", sort=False)
@@ -745,6 +744,28 @@ class PlotRendererPipeline:
             for quantity_name in q_mapping
         )
 
+        def apply_transform(
+            df: pd.DataFrame,
+            quantity_name: str,
+            quantile: str,
+        ) -> pd.Series:
+            data = df[(quantity_name, quantile)]
+            if transform is None:
+                return data
+            quantile_value = float(quantile.removeprefix("quantile_"))
+            transformed_df = transform(
+                pd.DataFrame(
+                    {
+                        "time": df[("time", "")],
+                        "geo": df[("geo", "")],
+                        "quantity": q_mapping[quantity_name],
+                        "quantile": quantile_value,
+                        "value": data,
+                    }
+                )
+            )
+            return transformed_df["value"]
+
         lines = list[Line2D]()
         for ((location, quantity_name), group), l_kwargs, f_kwargs in zip(
             sorted(groups, key=self._sorting(q_mapping, ordering)),
@@ -752,42 +773,34 @@ class PlotRendererPipeline:
             cycle(fill_kwargs),
         ):
             quantity_label = q_mapping[quantity_name]
-            group = group.sort_values(("time", ""))
             for index, (lower, upper) in enumerate(quantile_list):
-                data_lower = transform(
-                    pd.DataFrame({"value": group[quantity_name][lower]})
-                )
-                data_upper = transform(
-                    pd.DataFrame({"value": group[quantity_name][upper]})
-                )
-                label = (
-                    label_format.format(
-                        n=location,
-                        q=quantity_label,
-                        c=credible_intervals,
-                    )
-                    if index == len(quantile_list) - 1
-                    else "_nolegend_"
+                data_lower = apply_transform(group, quantity_name, lower)
+                data_upper = apply_transform(group, quantity_name, upper)
+                label = label_format.format(
+                    n=location,
+                    q=quantity_label,
+                    c=credible_intervals,
                 )
                 plot_kwargs = {"label": label, **f_kwargs}
                 if index != len(quantile_list) - 1:
                     plot_kwargs["label"] = "_nolegend_"
                 ax.fill_between(
                     group["time"],
-                    data_lower["value"],
-                    data_upper["value"],
+                    data_lower,
+                    data_upper,
                     **plot_kwargs,
                 )
-            data_median = transform(
-                pd.DataFrame({"value": group[quantity_name]["quantile_50.0"]})
-            )
-            label = (
-                f"{median_label_format.format(n=location, q=quantity_label)}: Median"
+
+            data_median = apply_transform(group, quantity_name, "quantile_50.0")
+            label = label_format.format(
+                n=location,
+                q=quantity_label,
+                c="Median",
             )
             lines.extend(
                 ax.plot(
                     group["time"],
-                    data_median["value"],
+                    data_median,
                     **{"label": label, "zorder": 100, **l_kwargs},
                 )
             )
@@ -858,14 +871,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group with a dataframe
-            that contains just the data for that group. The dataframe given as the
-            argument is the result of applying all selections.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
 
@@ -951,14 +965,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group with a dataframe
-            that contains just the data for that group. The dataframe given as the
-            argument is the result of applying all selections.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
             - "value": the data column
 
         Returns
@@ -968,15 +983,14 @@ class PlotRendererPipeline:
             Bar histograms return a `BarContainer`; step histograms return a list of
             `Polygon` objects.
         """
-        if hist_kwargs is None or len(hist_kwargs) == 0:
-            hist_kwargs = [{}]
+        hist_kwargs = _normalize_kwargs(hist_kwargs)
 
-        if transform is None:
-            transform = identity
-
-        realizations_agg = self.output.select.all()
         data_df = munge_pipeline_output(
-            self.output, realizations_agg, geo, time, quantity
+            output=self.output,
+            realization=self.output.select.all(),
+            geo=geo,
+            time=time,
+            quantity=quantity,
         )
 
         if len(data_df["time"].unique()) > 1:
@@ -1013,8 +1027,20 @@ class PlotRendererPipeline:
                 q=q_mapping[quantity_name],
                 t=time.date_bounds_label,
             )
-            data = transform(group[["value"]])
-            _, _, artists = ax.hist(data["value"], **{"label": label, **kwargs})
+            data = group["value"]
+            if transform is not None:
+                transformed = transform(
+                    pd.DataFrame(
+                        {
+                            "geo": group["geo"],
+                            "quantity": q_mapping[quantity_name],
+                            "value": group["value"],
+                        }
+                    )
+                )
+                data = transformed["value"]
+
+            _, _, artists = ax.hist(data, **{"label": label, **kwargs})
             if isinstance(artists, BarContainer):
                 plots.append(artists)
             elif isinstance(artists, list) and all(
@@ -1087,7 +1113,8 @@ class PlotRendererPipeline:
         ordering :
             Whether location or quantity takes priority when ordering groups.
             Locations are sorted by label and quantities follow selection order.
-            Within each group, lines are sorted by aggregation name.
+            Within each group, lines are sorted by the order in which you specify the
+            aggregation functions.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -1106,15 +1133,16 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per aggregation per geo/quantity group
-            -- once per line, essentially -- with a dataframe that contains just the
-            data for that group. The dataframe given as the argument is the result of
-            applying all selections and aggregations. You should return a dataframe
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument. You should return a dataframe
             with the same format, where the values of the data column have been modified
             for your purposes.
 
             Dataframe columns:
 
+            - "time": the time series column
+            - "geo": the location label (same value per series)
+            - "quantity": the quantity label (same value per series)
             - "metric": the aggregation method for the realizations
             - "value": the data column
         """
@@ -1225,7 +1253,8 @@ class PlotRendererPipeline:
         ordering :
             Whether location or quantity takes priority when ordering groups.
             Locations are sorted by label and quantities follow selection order.
-            Within each group, lines are sorted by aggregation name.
+            Within each group, lines are sorted by the order in which you specify the
+            aggregation functions.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -1240,15 +1269,16 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per aggregation per geo/quantity group
-            -- once per line, essentially -- with a dataframe that contains just the
-            data for that group. The dataframe given as the argument is the result of
-            applying all selections and aggregations. You should return a dataframe
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument. You should return a dataframe
             with the same format, where the values of the data column have been modified
             for your purposes.
 
             Dataframe columns:
 
+            - "time": the time series column
+            - "geo": the location label (same value per series)
+            - "quantity": the quantity label (same value per series)
             - "metric": the aggregation method for the realizations
             - "value": the data column
 
@@ -1263,13 +1293,15 @@ class PlotRendererPipeline:
         if not isinstance(realization, RealizationAggregation):
             raise ValueError("Line plots only support RealizationAggregation.")
 
-        if line_kwargs is None or len(line_kwargs) == 0:
-            line_kwargs = [{}]
+        line_kwargs = _normalize_kwargs(line_kwargs)
 
-        if transform is None:
-            transform = identity
-
-        data_df = munge_pipeline_output(self.output, realization, geo, time, quantity)
+        data_df = munge_pipeline_output(
+            output=self.output,
+            realization=realization,
+            geo=geo,
+            time=time,
+            quantity=quantity,
+        )
 
         # Map time labels:
         _, map_time_axis = self._time_format(time, time_format)
@@ -1307,7 +1339,9 @@ class PlotRendererPipeline:
             groups, key=self._sorting(q_mapping, ordering)
         ):
             metric_groups = (
-                group[quantity_name].melt(var_name="metric").groupby("metric")
+                group[quantity_name]
+                .melt(var_name="metric", ignore_index=False)
+                .groupby("metric", sort=False)
             )
             for metric_name, metric_data in metric_groups:
                 label = label_format.format(
@@ -1315,11 +1349,25 @@ class PlotRendererPipeline:
                     q=q_mapping[quantity_name],
                     m=metric_name,
                 )
-                data = transform(metric_data)
+                data = metric_data["value"]
+                if transform is not None:
+                    transformed = transform(
+                        pd.DataFrame(
+                            {
+                                "time": group["time"],
+                                "geo": location,
+                                "quantity": q_mapping[quantity_name],
+                                "metric": metric_name,
+                                "value": metric_data["value"],
+                            }
+                        )
+                    )
+                    data = transformed["value"]
+
                 lines.extend(
                     ax.plot(
                         group["time"],
-                        data["value"],
+                        data,
                         **{"label": label, **next(kwargs_cycle)},
                     )
                 )
@@ -1400,14 +1448,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group with a dataframe
-            that contains just the data for that group. The dataframe given as the
-            argument is the result of applying all selections.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
         fig, ax = plt.subplots(layout="constrained")
@@ -1505,14 +1554,15 @@ class PlotRendererPipeline:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group with a dataframe
-            that contains just the data for that group. The dataframe given as the
-            argument is the result of applying all selections.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
+            - "geo": the node ID (same value per group)
+            - "quantity": the label of the quantity (same value per group)
             - "value": the data column
 
         Returns
@@ -1524,9 +1574,14 @@ class PlotRendererPipeline:
         if delta_t is not None and (not np.isfinite(delta_t) or delta_t <= 0):
             raise ValueError("delta_t must be positive and finite.")
 
-        realizations_agg = self.output.select.all()
+        line_kwargs = _normalize_kwargs(line_kwargs)
+
         data_df = munge_pipeline_output(
-            self.output, realizations_agg, geo, time, quantity
+            output=self.output,
+            realization=self.output.select.all(),
+            geo=geo,
+            time=time,
+            quantity=quantity,
         )
 
         if len(data_df["time"].unique()) > 1:
@@ -1536,12 +1591,6 @@ class PlotRendererPipeline:
                 "single point (scalar)."
             )
             raise ValueError(err)
-
-        if line_kwargs is None or len(line_kwargs) == 0:
-            line_kwargs = [{}]
-
-        if transform is None:
-            transform = identity
 
         # Map geo labels:
         result_scope = geo.to_scope()
@@ -1569,7 +1618,21 @@ class PlotRendererPipeline:
                 q=q_mapping[quantity_name],
                 t=time.date_bounds_label,
             )
-            data = transform(group[["value"]])["value"].to_numpy()
+
+            data = group["value"]
+            if transform is not None:
+                transformed = transform(
+                    pd.DataFrame(
+                        {
+                            "geo": group["geo"],
+                            "quantity": q_mapping[quantity_name],
+                            "value": group["value"],
+                        }
+                    )
+                )
+                data = transformed["value"]
+            data = data.to_numpy()
+
             density = gaussian_kde(data, bw_method=bandwidth)
             d_min = data.min()
             d_max = data.max()

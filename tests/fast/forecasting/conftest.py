@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -74,3 +76,22 @@ def filter_output(rume):
         initial=compartments[:, 0, :, :],
         estimated_params={param_name: np.ones((R, T, N)) for param_name in param_names},
     )
+
+
+@pytest.fixture
+def temporal_order_output(filter_output):
+    """A four-day output spanning epiweeks 9 and 10 with time-varying values."""
+    rume = replace(filter_output.rume, time_frame=TimeFrame.of("2021-03-05", 4))
+    config = replace(filter_output.simulator.config, rume=rume)
+    simulator = replace(filter_output.simulator, config=config)
+    output = replace(filter_output, simulator=simulator)
+
+    for realization in range(output.num_realizations):
+        for tick in range(rume.num_ticks):
+            for node in range(rume.scope.nodes):
+                for quantity in range(2):
+                    output.compartments[realization, tick, node, quantity] = (
+                        100 * realization + 10 * node + 3 * tick + quantity
+                    )
+
+    return output

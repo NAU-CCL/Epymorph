@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from epymorph.attribute import NamePattern
 from epymorph.data.ipm.sirh import SIRH
@@ -118,6 +119,64 @@ def test_aggregation_pipeline_munge(rume, filter_output):
     )
 
     pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
+
+
+@pytest.mark.parametrize("time_grouping", ["tick", "day", "epiweek"])
+@pytest.mark.parametrize("aggregate_geo", [False, True])
+@pytest.mark.parametrize("aggregate_realizations", [False, True])
+def test_pipeline_munge_preserves_temporal_order(
+    temporal_order_output, time_grouping, aggregate_geo, aggregate_realizations
+):
+    output = temporal_order_output
+    rume = output.rume
+    geo = rume.scope.select.all()
+    if aggregate_geo:
+        geo = geo.sum()
+    time = rume.time_frame.select.all()
+    if time_grouping != "tick":
+        time = time.group(time_grouping).agg()
+    realization = output.select.all()
+    if aggregate_realizations:
+        realization = realization.mean()
+
+    actual = munge_pipeline_output(
+        output, realization, geo, time, rume.ipm.select.compartments("S", "I")
+    )
+    expected_time = {
+        "tick": [0, 1, 2, 3],
+        "day": list(pd.date_range("2021-03-05", periods=4)),
+        "epiweek": ["2021-9", "2021-10"],
+    }[time_grouping]
+    ticks = np.array([1, 3] if time_grouping == "epiweek" else [0, 1, 2, 3])
+    geo_nodes = [("*", 10)] if aggregate_geo else [("04", 0), ("35", 10)]
+    realizations = [1] if aggregate_realizations else range(3)
+
+    for location, node_offset in geo_nodes:
+        for realization_index in realizations:
+            if aggregate_realizations:
+                group = actual[actual[("geo", "")] == location]
+                times = group[("time", "")]
+                susceptible = group[("S", "mean")]
+                infectious = group[("I", "mean")]
+            else:
+                group = actual[
+                    (actual["geo"] == location)
+                    & (actual["realization"] == realization_index)
+                ]
+                times = group["time"]
+                susceptible = group["S"]
+                infectious = group["I"]
+
+            expected_values = 100 * realization_index + 3 * ticks
+            if aggregate_geo:
+                expected_values = 2 * expected_values + node_offset
+            else:
+                expected_values = expected_values + node_offset
+            np.testing.assert_array_equal(times, expected_time)
+            np.testing.assert_array_equal(susceptible, expected_values)
+            np.testing.assert_array_equal(
+                infectious, expected_values + (2 if aggregate_geo else 1)
+            )
 
 
 def test_ensemble_kalman_filter():

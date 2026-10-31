@@ -223,10 +223,8 @@ class PlotRenderer:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
@@ -350,10 +348,8 @@ class PlotRenderer:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- one per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 

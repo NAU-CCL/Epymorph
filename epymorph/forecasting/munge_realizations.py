@@ -5,12 +5,14 @@ This module extends the functionality of munge over an additional axis, realizat
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import TYPE_CHECKING, Any, List, Mapping, OrderedDict, Sequence
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from epymorph import util
 from epymorph.attribute import NamePattern
 
 if TYPE_CHECKING:
@@ -23,7 +25,7 @@ def quantile_method(q_val: float) -> Callable[[pd.Series], np.floating]:
     def method(x: pd.Series) -> np.floating:
         return x.quantile(q_val)
 
-    method.__name__ = f"quantile_{round(100 * q_val, 1)}"
+    method.__name__ = f"quantile_{round(100 * q_val, 1):.1f}"
     return method
 
 
@@ -36,11 +38,47 @@ agg_methods: dict[str, list[Any]] = {
     "quantiles": [quantile_method(q_val) for q_val in _every_025],
     # Supported quantiles are every 2.5%
     **{
-        f"quantile_{round(100 * q_val, 1)}": [quantile_method(q_val)]
+        f"quantile_{round(100 * q_val, 1):.1f}": [quantile_method(q_val)]
         for q_val in _every_025
     },
 }
 """Dictionaries of aggregation methods."""
+
+
+def quantiles_from_intervals(intervals: Sequence[float]) -> list[tuple[str, str]]:
+    """
+    Translate credible intervals to their corresponding endpoint quantile names.
+
+    Note: for consistency of results, the intervals are sorted in descending order.
+    An interval of zero is treated as the median, with both endpoints being the 50%
+    quantile. Thus, don't depend on the list of endpoints being unique.
+
+    Parameters
+    ----------
+    intervals :
+        A list of credible intervals to compute. Each interval must be between 0 and
+        100 in increments of 5.
+
+    Returns
+    -------
+    :
+        A list of quantile names, as tuples of (lower, upper).
+    """
+    if any(not np.isfinite(v) or v < 0 or v > 100 or v % 5 != 0 for v in intervals):
+        msg = "Credible intervals must be between 0 and 100 in increments of 5."
+        raise ValueError(msg)
+
+    def endpoints(v: float) -> tuple[float, float]:
+        exterior = round((100.0 - v) / 2, 1)
+        lower = 0.0 + exterior
+        upper = 100.0 - exterior
+        return lower, upper
+
+    quantile_endpoints = (endpoints(v) for v in sorted(intervals, reverse=True))
+    return [
+        (f"quantile_{lower:.1f}", f"quantile_{upper:.1f}")
+        for lower, upper in quantile_endpoints
+    ]
 
 
 @dataclass(frozen=True)
@@ -311,6 +349,33 @@ class RealizationSelection(RealizationStrategy):
             The aggregation strategy object.
         """
         return self.agg(["quantiles"])
+
+    def intervals(
+        self,
+        intervals: Sequence[float],
+        *,
+        include_median: bool = True,
+    ) -> RealizationAggregation:
+        """
+        Aggregate the selected realizations using a set of credible intervals.
+
+        Parameters
+        ----------
+        intervals :
+            A list of credible intervals to compute. Each interval must be between 0
+            and 100 in increments of 5.
+        include_median :
+            Whether to include the median in the aggregation. Default is True.
+
+        Returns
+        -------
+        :
+            The aggregation strategy object.
+        """
+        quantiles = list(chain.from_iterable(quantiles_from_intervals(intervals)))
+        if include_median:
+            quantiles.append("quantile_50.0")
+        return self.agg(util.filter_unique(quantiles))
 
 
 class RealizationSelector:

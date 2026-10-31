@@ -32,6 +32,87 @@ def test_pipeline_output_plot(rume, filter_output):
         plt.close(fig)
 
 
+@pytest.mark.parametrize("method", ["spaghetti_plt", "line_plt", "quantiles_plt"])
+@pytest.mark.parametrize("aggregate_geo", [False, True])
+@pytest.mark.parametrize("with_transform", [False, True])
+def test_plot_preserves_epiweek_order(
+    temporal_order_output, method, aggregate_geo, with_transform
+):
+    output = temporal_order_output
+    rume = output.rume
+    geo = rume.scope.select.all()
+    if aggregate_geo:
+        geo = geo.sum()
+    time = rume.time_frame.select.all().group("epiweek").agg()
+    quantity = rume.ipm.select.compartments("S", "I")
+    seen = []
+
+    def transform(data):
+        seen.append(data.copy())
+        return data.assign(value=data["value"] + 5)
+
+    transform_arg = transform if with_transform else None
+    fig, ax = plt.subplots()
+    try:
+        if method == "spaghetti_plt":
+            lines = output.plot.spaghetti_plt(
+                ax, output.select.all(), geo, time, quantity, transform=transform_arg
+            )
+        elif method == "line_plt":
+            lines = output.plot.line_plt(
+                ax,
+                output.select.all().agg(["mean", "median"]),
+                geo,
+                time,
+                quantity,
+                transform=transform_arg,
+            )
+        else:
+            lines = output.plot.quantiles_plt(
+                ax, geo, time, quantity, transform=transform_arg
+            )
+
+        locations = [("*", 10)] if aggregate_geo else [("AZ", 0), ("NM", 10)]
+        expected = []
+        for location, node_offset in locations:
+            for name, quantity_offset in (("S", 0), ("I", 1)):
+                realization_values = range(3) if method == "spaghetti_plt" else [1, 1]
+                if method == "quantiles_plt":
+                    realization_values = [1]
+                for realization in realization_values:
+                    values = 100 * realization + 3 * np.array([1, 3])
+                    if aggregate_geo:
+                        values = 2 * values + node_offset + 2 * quantity_offset
+                    else:
+                        values = values + node_offset + quantity_offset
+                    expected.append((location, name, values))
+
+        assert len(lines) == len(expected)
+        for line, (_, _, values) in zip(lines, expected, strict=True):
+            np.testing.assert_array_equal(line.get_xdata(), ["2021-9", "2021-10"])
+            np.testing.assert_array_equal(
+                line.get_ydata(), values + (5 if with_transform else 0)
+            )
+
+        if with_transform:
+            line_data = seen
+            if method == "quantiles_plt":
+                assert len(seen) == 3 * len(lines)
+                line_data = [frame for frame in seen if frame["quantile"].iloc[0] == 50]
+            assert len(line_data) == len(lines)
+            for frame, (location, name, values) in zip(
+                line_data, expected, strict=True
+            ):
+                np.testing.assert_array_equal(frame["time"], ["2021-9", "2021-10"])
+                assert frame["geo"].eq(location).all()
+                assert frame["quantity"].eq(name).all()
+                np.testing.assert_array_equal(frame["value"], values)
+        else:
+            assert not seen
+    finally:
+        plt.close(fig)
+
+
 ##############
 # line plots #
 ##############
@@ -68,7 +149,7 @@ def test_line_plt_ordering_and_transform(
         assert [line.get_label() for line in lines] == [
             f"{group}: {metric}"
             for group in expected_groups
-            for metric in ("mean", "std")
+            for metric in ("std", "mean")
         ]
         assert [line.get_color() for line in lines] == [
             "red",
@@ -81,12 +162,12 @@ def test_line_plt_ordering_and_transform(
             "blue",
         ]
         assert seen == [
-            (["metric", "value"], metric)
+            (["time", "geo", "quantity", "metric", "value"], metric)
             for _ in expected_groups
-            for metric in ("mean", "std")
+            for metric in ("std", "mean")
         ]
-        np.testing.assert_array_equal(lines[0].get_ydata(), [2, 2, 2, 2])
-        np.testing.assert_array_equal(lines[1].get_ydata(), [0, 0, 0, 0])
+        np.testing.assert_array_equal(lines[0].get_ydata(), [0, 0, 0, 0])
+        np.testing.assert_array_equal(lines[1].get_ydata(), [2, 2, 2, 2])
         assert ax.get_legend() is None
         assert ax.get_xlabel() == ""
     finally:
@@ -151,14 +232,14 @@ def test_line_plt_parameter_aggregation_and_date(rume, filter_output):
             time_format="date",
         )
         assert [line.get_label() for line in lines] == [
-            "*::*::test_0 @ *: mean",
             "*::*::test_0 @ *: quantile_2.5",
+            "*::*::test_0 @ *: mean",
         ]
         pd.testing.assert_index_equal(
-            pd.DatetimeIndex(lines[0].get_xdata()),
+            pd.DatetimeIndex(lines[1].get_xdata()),
             pd.date_range("2021-01-02", periods=4),
         )
-        np.testing.assert_array_equal(lines[0].get_ydata(), [2, 2, 2, 2])
+        np.testing.assert_array_equal(lines[1].get_ydata(), [2, 2, 2, 2])
     finally:
         plt.close(fig)
 
@@ -469,7 +550,10 @@ def test_quantiles_plt_ordering_and_intervals(
                 [vertices[:, 1].min(), vertices[:, 1].max()], expected_bounds
             )
         assert len(transformed) == 20
-        assert all(list(data.columns) == ["value"] for data in transformed)
+        assert all(
+            list(data.columns) == ["time", "geo", "quantity", "quantile", "value"]
+            for data in transformed
+        )
         np.testing.assert_array_equal(lines[0].get_xdata(), [1, 2, 3, 4])
         np.testing.assert_array_equal(lines[0].get_ydata(), [20, 20, 20, 20])
         assert ax.get_legend() is None
@@ -489,7 +573,6 @@ def test_quantiles_plt_subplots_and_parameters(rume, filter_output):
                 rume.time_frame.select.all(),
                 filter_output.param_select.by_name("test_0"),
                 label_format="{q} @ {n}: {c}",
-                median_label_format="{q} @ {n}",
                 time_format="date",
             )
             assert [line.get_label() for line in lines] == [
@@ -616,7 +699,6 @@ def test_quantiles_legend(rume, filter_output, monkeypatch, legend):
             rume.ipm.select.compartments("S", "I"),
             ordering="quantity",
             label_format="{q} @ {n}: {c}",
-            median_label_format="{q} @ {n}",
             fill_kwargs=[{"alpha": 0.3}],
             legend=legend,
             time_format="date",
@@ -730,7 +812,7 @@ def test_histogram_plt_ordering_and_transform(
     transformed = []
 
     def transform(data):
-        assert list(data.columns) == ["value"]
+        assert list(data.columns) == ["geo", "quantity", "value"]
         transformed.append(data["value"].tolist())
         return data.assign(value=data["value"] + 0.5)
 
@@ -1005,7 +1087,7 @@ def test_kde_plt_ordering_and_transform(
     transformed = []
 
     def transform(data):
-        assert list(data.columns) == ["value"]
+        assert list(data.columns) == ["geo", "quantity", "value"]
         transformed.append(data["value"].tolist())
         return data.assign(value=data["value"] + 0.5)
 

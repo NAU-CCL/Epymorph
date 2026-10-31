@@ -215,8 +215,8 @@ class MapRenderer:
         transform :
             Allows you to specify an arbitrary transform function on the source
             dataframe before we plot it, e.g., to rescale the values.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             data column has been modified for your purposes.
 
@@ -382,8 +382,8 @@ class MapRenderer:
         transform :
             Allows you to specify an arbitrary transform function on the source
             dataframe before we plot it, e.g., to rescale the values.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             data column has been modified for your purposes.
 
@@ -487,8 +487,8 @@ class MapRenderer:
         transform :
             Allows you to specify an arbitrary transform function on the source
             dataframe before we plot it, e.g., to rescale the values.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             data column has been modified for your purposes.
 
