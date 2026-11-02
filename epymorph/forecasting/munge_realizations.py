@@ -152,7 +152,7 @@ class ParameterSelection(ParameterStrategy):
 class ParameterSelector:
     """
     A utility class for selecting a subset of the estimated parameters. Most of the time
-    you obtain one of these using `FilterOutput`'s `param_select` property.
+    you obtain one of these using `FilterOutput`'s `select_parameter` property.
     """
 
     parameters: Mapping[NamePattern, "UnknownParam"]
@@ -381,7 +381,7 @@ class RealizationSelection(RealizationStrategy):
 class RealizationSelector:
     """
     A utility class for selecting a subset of the realizations. Most of the time you
-    obtain one of these using `FilterOutput`'s `select` property.
+    obtain one of these using `FilterOutput`'s `select_realization` property.
     """
 
     _num_realizations: int

@@ -38,7 +38,7 @@ def rume() -> RUME[StateScope]:
 
 
 @pytest.fixture
-def filter_output(rume):
+def filter_output(rume) -> PipelineOutput:
     """A mock filter output so we don't have to run a filter."""
     R = 3  # noqa: N806
     N = rume.scope.nodes
@@ -79,7 +79,7 @@ def filter_output(rume):
 
 
 @pytest.fixture
-def temporal_order_output(filter_output):
+def temporal_order_output(filter_output) -> PipelineOutput:
     """A four-day output spanning epiweeks 9 and 10 with time-varying values."""
     rume = replace(filter_output.rume, time_frame=TimeFrame.of("2021-03-05", 4))
     config = replace(filter_output.simulator.config, rume=rume)

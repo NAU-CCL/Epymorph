@@ -19,7 +19,7 @@ def test_pipeline_output_plot(rume, filter_output):
     try:
         lines = renderer.line_plt(
             ax,
-            filter_output.select.all().agg(["mean"]),
+            filter_output.select_realization.all().agg(["mean"]),
             rume.scope.select.by_state("04"),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S"),
@@ -56,20 +56,29 @@ def test_plot_preserves_epiweek_order(
     try:
         if method == "spaghetti_plt":
             lines = output.plot.spaghetti_plt(
-                ax, output.select.all(), geo, time, quantity, transform=transform_arg
+                ax,
+                realization=output.select_realization.all(),
+                geo=geo,
+                time=time,
+                quantity=quantity,
+                transform=transform_arg,
             )
         elif method == "line_plt":
             lines = output.plot.line_plt(
                 ax,
-                output.select.all().agg(["mean", "median"]),
-                geo,
-                time,
-                quantity,
+                realization=output.select_realization.all().agg(["mean", "median"]),
+                geo=geo,
+                time=time,
+                quantity=quantity,
                 transform=transform_arg,
             )
         else:
             lines = output.plot.quantiles_plt(
-                ax, geo, time, quantity, transform=transform_arg
+                ax,
+                geo=geo,
+                time=time,
+                quantity=quantity,
+                transform=transform_arg,
             )
 
         locations = [("*", 10)] if aggregate_geo else [("AZ", 0), ("NM", 10)]
@@ -138,7 +147,7 @@ def test_line_plt_ordering_and_transform(
     try:
         lines = filter_output.plot.line_plt(
             ax,
-            filter_output.select.all().agg(["std", "mean"]),
+            filter_output.select_realization.all().agg(["std", "mean"]),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S", "I"),
@@ -179,7 +188,7 @@ def test_line_rejects_realization_selection(rume, filter_output, method):
     fig, ax = plt.subplots()
     try:
         args = (
-            filter_output.select.all(),
+            filter_output.select_realization.all(),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S"),
@@ -196,7 +205,7 @@ def test_line_ordering_and_legend(rume, filter_output, monkeypatch):
     monkeypatch.setattr(plt, "show", lambda: None)
     try:
         filter_output.plot.line(
-            filter_output.select.all().mean(),
+            filter_output.select_realization.all().agg(["mean"]),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S", "I"),
@@ -223,10 +232,10 @@ def test_line_plt_parameter_aggregation_and_date(rume, filter_output):
     try:
         lines = filter_output.plot.line_plt(
             ax,
-            filter_output.select.all().agg(["quantile_2.5", "mean"]),
+            filter_output.select_realization.all().agg(["quantile_2.5", "mean"]),
             rume.scope.select.all().sum(),
             rume.time_frame.select.all(),
-            filter_output.param_select.by_name("test_0"),
+            filter_output.select_parameter.by_name("test_0"),
             label_format="{q} @ {n}: {m}",
             line_kwargs=[],
             time_format="date",
@@ -255,7 +264,7 @@ def test_line_plt_disambiguates_duplicate_labels(rume, filter_output, monkeypatc
     try:
         lines = filter_output.plot.line_plt(
             ax,
-            filter_output.select.all().mean(),
+            filter_output.select_realization.all().mean(),
             rume.scope.select.by_state("04"),
             rume.time_frame.select.all(),
             quantity,
@@ -293,7 +302,7 @@ def test_spaghetti_plt_ordering_and_transform(
     try:
         lines = filter_output.plot.spaghetti_plt(
             ax,
-            filter_output.select.all(),
+            filter_output.select_realization.all(),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S", "I"),
@@ -326,7 +335,9 @@ def test_spaghetti_plt_ordering_and_transform(
 
 def test_spaghetti_plt_subplots_and_single_realization(rume, filter_output):
     fig, axes = plt.subplots(1, 2)
-    realization = filter_output.select.sample(rng=np.random.default_rng(42), size=1)
+    realization = filter_output.select_realization.sample(
+        rng=np.random.default_rng(42), size=1
+    )
     try:
         for ax, state, expected in zip(axes, ("04", "35"), ("AZ", "NM")):
             lines = filter_output.plot.spaghetti_plt(
@@ -357,10 +368,10 @@ def test_spaghetti_plt_default_group_colors_and_parameters(
     try:
         lines = filter_output.plot.spaghetti_plt(
             ax,
-            filter_output.select.all(),
+            filter_output.select_realization.all(),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
-            filter_output.param_select.by_name("test_0"),
+            filter_output.select_parameter.by_name("test_0"),
             line_kwargs=line_kwargs,
         )
         assert len(lines) == 6
@@ -380,7 +391,7 @@ def test_spaghetti_rejects_realization_aggregation(rume, filter_output, method):
     fig, ax = plt.subplots()
     try:
         args = (
-            filter_output.select.all().mean(),
+            filter_output.select_realization.all().mean(),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S"),
@@ -398,7 +409,7 @@ def test_spaghetti_legend(rume, filter_output, monkeypatch, legend):
     monkeypatch.setattr(plt, "show", lambda: None)
     try:
         filter_output.plot.spaghetti(
-            filter_output.select.all(),
+            filter_output.select_realization.all(),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S", "I"),
@@ -436,7 +447,7 @@ def test_spaghetti_save_single_plot(rume, filter_output, tmp_path):
     path = tmp_path / "spaghetti.png"
     try:
         filter_output.plot.spaghetti(
-            filter_output.select.all(),
+            filter_output.select_realization.all(),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S"),
@@ -466,7 +477,7 @@ def test_spaghetti_auto_legend_counts_groups(
     monkeypatch.setattr(renderer, "spaghetti_plt", draw_groups)
     try:
         renderer.spaghetti(
-            filter_output.select.all(),
+            filter_output.select_realization.all(),
             rume.scope.select.all(),
             rume.time_frame.select.all(),
             rume.ipm.select.compartments("S"),
@@ -478,7 +489,7 @@ def test_spaghetti_auto_legend_counts_groups(
 
 def test_spaghetti_closes_figure_on_failure(rume, filter_output):
     args = (
-        filter_output.select.all(),
+        filter_output.select_realization.all(),
         rume.scope.select.all(),
         rume.time_frame.select.all(),
         rume.ipm.select.compartments("S"),
@@ -571,7 +582,7 @@ def test_quantiles_plt_subplots_and_parameters(rume, filter_output):
                 ax,
                 rume.scope.select.by_state(state),
                 rume.time_frame.select.all(),
-                filter_output.param_select.by_name("test_0"),
+                filter_output.select_parameter.by_name("test_0"),
                 label_format="{q} @ {n}: {c}",
                 time_format="date",
             )
@@ -856,7 +867,7 @@ def test_histogram_plt_subplots_and_parameters(rume, filter_output):
                 ax,
                 rume.scope.select.by_state(state),
                 rume.time_frame.select.days(0, 0),
-                filter_output.param_select.by_name("test_0"),
+                filter_output.select_parameter.by_name("test_0"),
                 label_format="{q} @ {n}: {t}",
                 hist_kwargs=[{"bins": 2}],
             )
@@ -1133,7 +1144,7 @@ def test_kde_plt_subplots_and_parameters(rume, filter_output):
                 ax,
                 rume.scope.select.by_state(state),
                 rume.time_frame.select.days(0, 0),
-                filter_output.param_select.by_name("test_0"),
+                filter_output.select_parameter.by_name("test_0"),
                 label_format="{q} @ {n}: {t}",
                 delta_t=0.5,
                 bandwidth=0.5,

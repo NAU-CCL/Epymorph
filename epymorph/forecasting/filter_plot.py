@@ -710,7 +710,7 @@ class PlotRendererPipeline:
 
         data_df = munge_pipeline_output(
             output=self.output,
-            realization=self.output.select.all().agg(unique_quantiles),
+            realization=self.output.select_realization.all().agg(unique_quantiles),
             geo=geo,
             time=time,
             quantity=quantity,
@@ -987,7 +987,7 @@ class PlotRendererPipeline:
 
         data_df = munge_pipeline_output(
             output=self.output,
-            realization=self.output.select.all(),
+            realization=self.output.select_realization.all(),
             geo=geo,
             time=time,
             quantity=quantity,
@@ -1578,7 +1578,7 @@ class PlotRendererPipeline:
 
         data_df = munge_pipeline_output(
             output=self.output,
-            realization=self.output.select.all(),
+            realization=self.output.select_realization.all(),
             geo=geo,
             time=time,
             quantity=quantity,

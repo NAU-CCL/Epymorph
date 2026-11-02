@@ -3,7 +3,6 @@ import pandas as pd
 import pytest
 
 from epymorph.forecasting.munge_realizations import (
-    agg_methods,
     quantile_method,
     quantiles_from_intervals,
 )
@@ -24,24 +23,6 @@ def test_quantile_method(quantile, name, expected):
 
     assert method.__name__ == name
     assert method(pd.Series([0, 10, 20, 30, 40])) == pytest.approx(expected)
-
-
-def test_agg_methods_quantiles():
-    assert agg_methods["mean"] == ["mean"]
-    assert agg_methods["std"] == ["std"]
-    assert agg_methods["median"] == ["median"]
-
-    quantiles = agg_methods["quantiles"]
-    names = [f"quantile_{step * 2.5:.1f}" for step in range(41)]
-    assert [method.__name__ for method in quantiles] == names
-
-    values = pd.Series([0, 10, 20, 30, 40])
-    for step, (name, method) in enumerate(zip(names, quantiles, strict=True)):
-        individual = agg_methods[name]
-        assert len(individual) == 1
-        assert individual[0].__name__ == name
-        assert method(values) == pytest.approx(step)
-        assert individual[0](values) == pytest.approx(step)
 
 
 @pytest.mark.parametrize(

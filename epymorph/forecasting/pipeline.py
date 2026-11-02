@@ -370,14 +370,14 @@ class PipelineOutput:
         )
 
     @property
-    def select(self) -> RealizationSelector:
+    def select_realization(self) -> RealizationSelector:
         """
         Returns an instance of RealizationSelector.
         """
         return RealizationSelector(self.num_realizations)
 
     @property
-    def param_select(self) -> ParameterSelector:
+    def select_parameter(self) -> ParameterSelector:
         return ParameterSelector(self.unknown_params)
 
 
@@ -728,7 +728,7 @@ def munge_pipeline_output(
     time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N), NP)
     geo_mask = np.tile(np.tile(geo.selection, S), NP)
 
-    # columns are: ["realization","tick", "date", "node", *quantities, *parameters]
+    # columns are: ["realization", "tick", "date", "node", *quantities, *parameters]
 
     columns = [True, True, True, True]
     if isinstance(quantity, QuantityStrategy):

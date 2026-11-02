@@ -26,10 +26,10 @@ from epymorph.util import to_date_value_array
 def test_basic_pipeline_munge(rume, filter_output):
     # Test with a selection in each axis
     # and for parameters as well as compartments and events
-    realization = filter_output.select.all()
+    realization = filter_output.select_realization.all()
     time = rume.time_frame.select.days(0, 1)
     geo = rume.scope.select.all()
-    quantity = filter_output.param_select.by_name("test_0")
+    quantity = filter_output.select_parameter.by_name("test_0")
 
     # Test using munge on a parameter value
     actual = munge_pipeline_output(filter_output, realization, geo, time, quantity)
@@ -76,10 +76,10 @@ def test_aggregation_pipeline_munge(rume, filter_output):
 
     # Test aggregation for the mean
     # This primarily makes sure the multi-index is there with the correct labels.
-    realization = filter_output.select.all().agg(["mean"])
+    realization = filter_output.select_realization.all().agg(["mean"])
     time = rume.time_frame.select.days(0, 1)
     geo = rume.scope.select.all()
-    quantity = filter_output.param_select.by_name("test_0")
+    quantity = filter_output.select_parameter.by_name("test_0")
 
     actual = munge_pipeline_output(filter_output, realization, geo, time, quantity)
 
@@ -104,7 +104,7 @@ def test_aggregation_pipeline_munge(rume, filter_output):
 
     # Test aggregation for the std
     # This primarily makes sure the multi-index is there with the correct labels.
-    realization = filter_output.select.all().agg(["std"])
+    realization = filter_output.select_realization.all().agg(["std"])
     data["value"] = np.zeros(geo.scope.nodes * 2)
 
     actual = munge_pipeline_output(filter_output, realization, geo, time, quantity)
@@ -135,7 +135,7 @@ def test_pipeline_munge_preserves_temporal_order(
     time = rume.time_frame.select.all()
     if time_grouping != "tick":
         time = time.group(time_grouping).agg()
-    realization = output.select.all()
+    realization = output.select_realization.all()
     if aggregate_realizations:
         realization = realization.mean()
 
