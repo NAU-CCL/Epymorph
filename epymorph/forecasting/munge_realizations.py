@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import TYPE_CHECKING, Any, List, Mapping, OrderedDict, Sequence
+from typing import TYPE_CHECKING, Mapping, OrderedDict, Sequence
 
 import numpy as np
 import pandas as pd
@@ -17,6 +17,8 @@ from epymorph.attribute import NamePattern
 
 if TYPE_CHECKING:
     from epymorph.forecasting.pipeline import UnknownParam
+
+AggregationMethod = str | Callable[[pd.Series], np.floating]
 
 
 def quantile_method(q_val: float) -> Callable[[pd.Series], np.floating]:
@@ -31,7 +33,7 @@ def quantile_method(q_val: float) -> Callable[[pd.Series], np.floating]:
 
 _every_025 = np.linspace(0.0, 1.0, 41)
 
-agg_methods: dict[str, list[Any]] = {
+agg_methods: dict[str, list[AggregationMethod]] = {
     "mean": ["mean"],
     "std": ["std"],
     "median": ["median"],
@@ -84,29 +86,41 @@ def quantiles_from_intervals(intervals: Sequence[float]) -> list[tuple[str, str]
 @dataclass(frozen=True)
 class ParameterStrategy:
     """
-    A strategy for selecting estimated parameters from the output of a filtering run.
+    A strategy for dealing with estimated parameters from the output of a filtering run.
+    Strategies can include selection of a subset only.
+
+    Typically you will create one of these by calling methods on a `ParameterSelector`
+    instance.
 
     Parameters
     ----------
-    parameters:
-        A mapping of NamePatterns to UnknownParam objects.
-    selection:
-        A boolean mask for parameter selection.
+    parameters :
+        A mapping of parameter names to unknown parameters.
+    selection :
+        A boolean mask for selection of a subset of unknown parameters.
     """
 
     parameters: Mapping[NamePattern, "UnknownParam"]
-    """A dictionary of unknown parameters."""
+    """The available unknown parameters and their names."""
     selection: NDArray[np.bool_]
-    """A boolean mask for selection of a subset of parameters."""
+    """A boolean mask for selection of a subset of unknown parameters."""
     grouping: None
-    """Grouping for parameters (unimplemented)."""
+    """Grouping for parameters (not supported)."""
     aggregation: None
-    """Aggregation for parameters (unimplemented)."""
+    """Aggregation for parameters (not supported)."""
 
     def disambiguate(self) -> OrderedDict[str, str]:
         """
-        Disambiguates parameter names to avoid any potential duplicates.
-        Returns a dictionary from new names to original names.
+        Create a name mapping to disambiguate estimated parameters that have
+        the same name. This could happen in multistrata IPMs where the same
+        parameter is estimated in multiple strata. The returned mapping includes
+        only the selected parameters, but definition order is maintained.
+        Keys are the unique name and values are the original names
+        (because the original names might contain duplicates);
+        so you will have to map into unique names by position, but can map
+        back using this mapping directly.
+
+        This function is intended for epymorph's internal use.
         """
         selected = [
             (i, q) for i, q in enumerate(self.parameters.keys()) if self.selection[i]
@@ -116,7 +130,7 @@ class ParameterStrategy:
         return OrderedDict(zip(qs_renamed, qs_original))
 
     @property
-    def selected(self) -> Sequence:
+    def selected(self) -> Sequence["UnknownParam"]:
         """The parameters from the model which are selected, prior to any grouping."""
         return [q for sel, q in zip(self.selection, self.parameters.values()) if sel]
 
@@ -127,7 +141,12 @@ class ParameterStrategy:
 
     def disambiguate_groups(self) -> OrderedDict[str, str]:
         """
-        Since grouping is not currently supported this is identical to disambiguate.
+        Like method `disambiguate` but for working with quantities
+        after any grouping has been performed. Since grouping estimated parameters
+        is not yet supported, this is equivalent to `disambiguate`.
+        This is included for the sake of API compatibility with other strategies.
+
+        This function is intended for epymorph's internal use.
         """
         return self.disambiguate()
 
@@ -139,9 +158,9 @@ class ParameterSelection(ParameterStrategy):
     selection: NDArray[np.bool_]
     """A boolean mask for selection of a subset of parameters."""
     grouping: None = field(init=False, default=None)
-    """Grouping for parameters (unimplemented)."""
+    """Grouping for parameters (not supported)."""
     aggregation: None = field(init=False, default=None)
-    """Aggregation for parameters (unimplemented)."""
+    """Aggregation for parameters (not supported)."""
 
     @property
     def labels(self) -> Sequence[str]:
@@ -222,22 +241,25 @@ class RealizationStrategy:
     A strategy for dealing with the realization axis, e.g., in processing results.
     Strategies can include random sampling and aggregation.
 
+    Typically you will create one of these by calling methods on a `RealizationSelector`
+    instance.
+
     Parameters
     ----------
     num_realizations:
         The number of realizations.
     selection:
-        An integer array indicating which realizations are selected.
+        An array of integers for which realization indices are selected.
     aggregation:
         A list of methods for aggregating the realization data.
     """
 
     num_realizations: int
-    """The number of realizations in the original output. """
+    """The number of realizations in the original output."""
     selection: NDArray[np.intp]
-    """An integer array indicating which realization indices are selected. """
-    aggregation: List[str] | None
-    """A list of methods for aggregating the realization data."""
+    """An array of integers for which realization indices are selected."""
+    aggregation: list[AggregationMethod] | None
+    """A method (or methods) for aggregating the realization data."""
 
 
 @dataclass(frozen=True)
@@ -253,17 +275,17 @@ class RealizationAggregation(RealizationStrategy):
     num_realizations :
         The number of realizations.
     selection :
-        An integer array indicating which realizations are selected.
+        An array of integers for which realization indices are selected.
     aggregation :
-        A list of methods for aggregating the realization data.
+        A method (or methods) for aggregating the realization data.
     """
 
     num_realizations: int
     """The number of realizations in the original output."""
     selection: NDArray[np.intp]
-    """An integer array indicating which realizations are selected."""
-    aggregation: List[str]
-    """A list of methods for aggregating the realization data."""
+    """An array of integers for which realization indices are selected."""
+    aggregation: list[AggregationMethod]
+    """A method (or methods) for aggregating the realization data."""
 
 
 @dataclass(frozen=True)
@@ -277,17 +299,17 @@ class RealizationSelection(RealizationStrategy):
     num_realizations :
         The number of realizations.
     selection :
-        An integer array indicating which realizations are selected.
+        An array of integers for which realization indices are selected.
     aggregation :
-        A list of methods for aggregating the realization data.
+        A method (or methods) for aggregating the realization data.
     """
 
     num_realizations: int
     """The number of realizations in the original output."""
     selection: NDArray[np.intp]
-    """An integer array indicating which realization indices are selected."""
+    """An array of integers for which realization indices are selected."""
     aggregation: None = field(init=False, default=None)
-    """A list of methods for aggregating the realization data."""
+    """A method (or methods) for aggregating the realization data."""
 
     def agg(self, aggs: list[str]) -> RealizationAggregation:
         """
