@@ -123,7 +123,7 @@ class GeoStrategy(ABC, Generic[GeoScopeT_co]):
     A strategy for dealing with the spatial axis, e.g., in processing results.
     Strategies can include selection of a subset, grouping, and aggregation.
 
-    Typically you will create one of these buy calling methods on a `GeoSelector`
+    Typically you will create one of these by calling methods on a `GeoSelector`
     instance.
 
     `GeoStrategy` is generic in the type of `GeoScope` it works with (`GeoScopeT_co`).
