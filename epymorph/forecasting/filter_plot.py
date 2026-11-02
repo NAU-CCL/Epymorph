@@ -255,7 +255,7 @@ class PlotRendererPipeline:
 
             - "realization": the realization index (same value per group)
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
@@ -380,7 +380,7 @@ class PlotRendererPipeline:
 
             - "realization": the realization index (same value per group)
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
 
@@ -548,7 +548,7 @@ class PlotRendererPipeline:
             Dataframe columns:
 
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "quantile": the value of the computed quantile (same value per group)
             - "value": the data column
@@ -680,7 +680,7 @@ class PlotRendererPipeline:
             Dataframe columns:
 
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "quantile": the value of the computed quantile (same value per group)
             - "value": the data column
@@ -878,7 +878,7 @@ class PlotRendererPipeline:
 
             Dataframe columns:
 
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
@@ -972,7 +972,7 @@ class PlotRendererPipeline:
 
             Dataframe columns:
 
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
 
@@ -1368,7 +1368,8 @@ class PlotRendererPipeline:
                     ax.plot(
                         group["time"],
                         data,
-                        **{"label": label, **next(kwargs_cycle)},
+                        label=label,
+                        **next(kwargs_cycle),
                     )
                 )
 
@@ -1455,7 +1456,7 @@ class PlotRendererPipeline:
 
             Dataframe columns:
 
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
@@ -1561,7 +1562,7 @@ class PlotRendererPipeline:
 
             Dataframe columns:
 
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
 

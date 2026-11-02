@@ -231,7 +231,7 @@ class PlotRenderer:
             Dataframe columns:
 
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
@@ -356,7 +356,7 @@ class PlotRenderer:
             Dataframe columns:
 
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
 
