@@ -329,9 +329,10 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
         """
-        Draw spaghetti lines onto one matplotlib `Axes`. This variant of
-        `spaghetti` leaves plot formatting and legend display to the caller.
-        To use subplots, call this method for each axes with narrowed selections.
+        Draw spaghetti lines onto one matplotlib `Axes`. This is a variant of the method
+        `spaghetti()` that gives you more control over the rendering of a plot by
+        letting you do most of the work with matplotlib's API. To use subplots, call
+        this method for each axes with narrowed selections.
 
         Parameters
         ----------
@@ -621,9 +622,10 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
         """
-        Draw quantile plots onto one matplotlib `Axes`. This variant of
-        `quantiles` leaves plot formatting and legend display to the caller.
-        To use subplots, call this method for each axes with narrowed selections.
+        Draw quantile plots onto one matplotlib `Axes`. This is a variant of the method
+        `quantiles()` that gives you more control over the rendering of a plot by
+        letting you do most of the work with matplotlib's API. To use subplots, call
+        this method for each axes with narrowed selections.
 
         Parameters
         ----------
@@ -822,8 +824,11 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Produces a histogram plot of a filter output. This is a plot where
-        a specific time instance is taken and plotted as a histogram.
+        Produces a histogram plot of pipeline output. The histogram represents the
+        distribution of the selected quantity at a particular time among the
+        realizations in the output. If multiple quantities and/or geographies are
+        selected, multiple histograms will be plotted corresponding to each combination.
+        Only a single time point or a single aggregation of the time axis can be used.
 
         The plot will either be immediately rendered by this function by calling
         `plt.show()` or, if you specify the `to_file` argument, saved to a file.
@@ -931,9 +936,10 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[BarContainer | list[Polygon]]:
         """
-        Draw histograms onto one matplotlib `Axes`. This variant of
-        `histogram` leaves plot formatting and legend display to the caller.
-        To use subplots, call this method for each axes with narrowed selections.
+        Draw histograms onto one matplotlib `Axes`. This is a variant of the method
+        `histogram()` that gives you more control over the rendering of a plot by
+        letting you do most of the work with matplotlib's API. To use subplots, call
+        this method for each axes with narrowed selections.
 
         Parameters
         ----------
@@ -1223,9 +1229,10 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
         """
-        Draw lines onto one matplotlib `Axes`. This variant of
-        `line` leaves plot formatting and legend display to the caller.
-        To use subplots, call this method for each axes with narrowed selections.
+        Draw lines onto one matplotlib `Axes`. This is a variant of the method
+        `line()` that gives you more control over the rendering of a plot by
+        letting you do most of the work with matplotlib's API. To use subplots, call
+        this method for each axes with narrowed selections.
 
         Parameters
         ----------
@@ -1375,7 +1382,7 @@ class PlotRendererPipeline:
 
         return lines
 
-    def kde(
+    def kernel_density(
         self,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
@@ -1392,13 +1399,18 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Produces a kernel density plot of a filter output. This is a plot where
-        a specific time instance is taken and plotted as a KDE.
+        Produces a kernel density plot of pipeline output. The plotted line estimates
+        the probability density function of the distribution of the selected quantity
+        at a particular time among the realizations in the output. If multiple
+        quantities and/or geographies are selected, multiple densities will be plotted
+        corresponding to each combination. Only a single time point or a single
+        aggregation of the time axis can be used.
 
         The plot will either be immediately rendered by this function by calling
         `plt.show()` or, if you specify the `to_file` argument, saved to a file.
         This is intended as a quick plotting method to cover most casual use-cases.
-        If you want more control over how the plot is drawn, see method `kde_plt()`.
+        If you want more control over how the plot is drawn, see method
+        `kernel_density_plt()`.
 
         Parameters
         ----------
@@ -1462,7 +1474,7 @@ class PlotRendererPipeline:
         """
         fig, ax = plt.subplots(layout="constrained")
         try:
-            self.kde_plt(
+            self.kernel_density_plt(
                 ax,
                 geo,
                 time,
@@ -1497,7 +1509,7 @@ class PlotRendererPipeline:
             plt.close(fig)
             raise
 
-    def kde_plt(
+    def kernel_density_plt(
         self,
         ax: Axes,
         geo: GeoSelection | GeoAggregation,
@@ -1512,9 +1524,10 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> list[Line2D]:
         """
-        Draw KDE lines onto one matplotlib `Axes`. This variant of
-        `kde` leaves plot formatting and legend display to the caller.
-        To use subplots, call this method for each axes with narrowed selections.
+        Draw KDE lines onto one matplotlib `Axes`. This is a variant of the method
+        `kernel_density()` that gives you more control over the rendering of a plot by
+        letting you do most of the work with matplotlib's API. To use subplots, call
+        this method for each axes with narrowed selections.
 
         Parameters
         ----------

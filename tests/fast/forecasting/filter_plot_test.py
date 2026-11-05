@@ -1104,7 +1104,7 @@ def test_kde_plt_ordering_and_transform(
 
     fig, ax = plt.subplots()
     try:
-        lines = filter_output.plot.kde_plt(
+        lines = filter_output.plot.kernel_density_plt(
             ax,
             rume.scope.select.all(),
             rume.time_frame.select.days(0, 0),
@@ -1140,7 +1140,7 @@ def test_kde_plt_subplots_and_parameters(rume, filter_output):
     fig, axes = plt.subplots(1, 2)
     try:
         for ax, state, expected in zip(axes, ("04", "35"), ("AZ", "NM")):
-            lines = filter_output.plot.kde_plt(
+            lines = filter_output.plot.kernel_density_plt(
                 ax,
                 rume.scope.select.by_state(state),
                 rume.time_frame.select.days(0, 0),
@@ -1166,7 +1166,7 @@ def test_kde_plt_aggregated_selections(rume, filter_output):
         filter_output.compartments[realization, ...] = realization
     fig, ax = plt.subplots()
     try:
-        lines = filter_output.plot.kde_plt(
+        lines = filter_output.plot.kernel_density_plt(
             ax,
             rume.scope.select.all().sum(),
             rume.time_frame.select.all().agg(),
@@ -1190,7 +1190,7 @@ def test_kde_plt_rejects_constant_data(rume, filter_output):
     fig, ax = plt.subplots()
     try:
         with pytest.raises(np.linalg.LinAlgError, match="singular"):
-            filter_output.plot.kde_plt(
+            filter_output.plot.kernel_density_plt(
                 ax,
                 rume.scope.select.by_state("04"),
                 rume.time_frame.select.days(0, 0),
@@ -1204,7 +1204,7 @@ def test_kde_plt_rejects_multiple_times(rume, filter_output):
     fig, ax = plt.subplots()
     try:
         with pytest.raises(ValueError, match="single point"):
-            filter_output.plot.kde_plt(
+            filter_output.plot.kernel_density_plt(
                 ax,
                 rume.scope.select.all(),
                 rume.time_frame.select.all(),
@@ -1220,7 +1220,7 @@ def test_kde_plt_rejects_invalid_delta_t(rume, filter_output, delta_t):
     fig, ax = plt.subplots()
     try:
         with pytest.raises(ValueError, match="delta_t"):
-            filter_output.plot.kde_plt(
+            filter_output.plot.kernel_density_plt(
                 ax,
                 rume.scope.select.all(),
                 rume.time_frame.select.days(0, 0),
@@ -1237,7 +1237,7 @@ def test_kde_legend(rume, filter_output, monkeypatch, legend):
         filter_output.compartments[realization, ...] = realization
     monkeypatch.setattr(plt, "show", lambda: None)
     try:
-        filter_output.plot.kde(
+        filter_output.plot.kernel_density(
             rume.scope.select.all(),
             rume.time_frame.select.days(0, 0),
             rume.ipm.select.compartments("S", "I"),
@@ -1283,9 +1283,9 @@ def test_kde_auto_legend_counts_groups(
             for group in range(groups)
         ]
 
-    monkeypatch.setattr(renderer, "kde_plt", draw_groups)
+    monkeypatch.setattr(renderer, "kernel_density_plt", draw_groups)
     try:
-        renderer.kde(
+        renderer.kernel_density(
             rume.scope.select.all(),
             rume.time_frame.select.days(0, 0),
             rume.ipm.select.compartments("S"),
@@ -1300,7 +1300,7 @@ def test_kde_save_single_plot(rume, filter_output, tmp_path):
         filter_output.compartments[realization, ...] = realization
     path = tmp_path / "kde.png"
     try:
-        filter_output.plot.kde(
+        filter_output.plot.kernel_density(
             rume.scope.select.all(),
             rume.time_frame.select.days(0, 0),
             rume.ipm.select.compartments("S"),
@@ -1321,7 +1321,7 @@ def test_kde_closes_figure_on_failure(rume, filter_output):
             raise RuntimeError("transform failed")
 
         with pytest.raises(RuntimeError, match="transform failed"):
-            filter_output.plot.kde(
+            filter_output.plot.kernel_density(
                 rume.scope.select.all(),
                 rume.time_frame.select.days(0, 0),
                 rume.ipm.select.compartments("S"),
