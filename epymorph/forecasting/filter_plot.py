@@ -1,5 +1,5 @@
 from datetime import timedelta
-from itertools import chain, cycle
+from itertools import chain, cycle, repeat
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence, cast
 
@@ -168,295 +168,6 @@ class PlotRendererPipeline:
                 # Any other combo doesn't need to be or can't be mapped.
                 return actual, identity
 
-    def spaghetti(
-        self,
-        realization: RealizationSelection,
-        geo: GeoSelection | GeoAggregation,
-        time: TimeSelection | TimeAggregation,
-        quantity: QuantityStrategy | ParameterStrategy,
-        *,
-        label_format: str = "{n}: {q}",
-        legend: LegendOption = "auto",
-        line_kwargs: list[dict] | None = None,
-        ordering: OrderingOption = "location",
-        time_format: TimeFormatOption = "auto",
-        title: str | None = None,
-        to_file: str | Path | None = None,
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ) -> None:
-        """
-        Produces a spaghetti plot of a filter output. This is a plot where
-        each realization corresponds to a specific line on a plot.
-
-        The plot will either be immediately rendered by this function by calling
-        `plt.show()` or, if you specify the `to_file` argument, saved to a file.
-        This is intended as a quick plotting method to cover most casual use-cases.
-        If you want more control over how the plot is drawn, see method
-        `spaghetti_plt()`.
-
-        Parameters
-        ----------
-        realization :
-            A realization selection to make on the output data,
-            you can either select all the realizations or a random subset.
-        geo :
-            The geographic selection to make on the output data.
-        time :
-            The time selection to make on the output data.
-        quantity :
-            The quantity selection to make on the output data.
-        label_format :
-            A format for the items displayed in the legend;
-            the string will be used in a call to `format()`
-            with the replacement variables `{n}` for the name of the geo node
-            and `{q}` for the name of the quantity.
-            Each location/quantity group has one label.
-        legend :
-            Whether and how to draw the plot legend.
-
-            - "auto" will draw the legend if there are at most 12 groups
-            - "on" forces the legend to be drawn
-            - "off" forces the legend to not be drawn
-            - "outside" forces the legend to be drawn next to the plot area
-            (instead of inside it)
-        line_kwargs :
-            A list of keyword arguments to be passed to the matplotlib function
-            that draws each line. Each dictionary applies to all realizations in one
-            location/quantity group; the list cycles in the order defined by the
-            `ordering` parameter.
-            See matplotlib documentation for the supported options.
-        ordering :
-            Whether location or quantity takes priority when ordering groups.
-            Locations are sorted by label and quantities follow selection order.
-        time_format :
-            Controls the formatting of the time axis (the horizontal axis);
-
-            - "auto" will use the format defined by the grouping of the
-            `time` parameter
-            - "date" attempts to display calendar dates
-            - "day" attempts to display days numerically indexed from the start of the
-            simulation with the first day being 0
-
-            If the system cannot convert to the requested time format, this argument
-            may be ignored.
-        title :
-            A title to draw on the plot.
-        to_file :
-            Specify a path to save the plot to a file instead of calling `plt.show()`.
-        transform :
-            Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per data series resulting from your
-            selections, with that data as the argument. You should return a dataframe
-            with the same format, where the values of the data column have been modified
-            for your purposes.
-
-            Dataframe columns:
-
-            - "realization": the realization index (same value per group)
-            - "time": the time series column
-            - "geo": the location label (same value per group)
-            - "quantity": the label of the quantity (same value per group)
-            - "value": the data column
-        """
-
-        if not isinstance(realization, RealizationSelection):
-            raise ValueError("Spaghetti plots only support RealizationSelection.")
-
-        fig, ax = plt.subplots(layout="constrained")
-        try:
-            self.spaghetti_plt(
-                ax,
-                realization,
-                geo,
-                time,
-                quantity,
-                label_format=label_format,
-                line_kwargs=line_kwargs,
-                ordering=ordering,
-                time_format=time_format,
-                transform=transform,
-            )
-
-            ax.set_ylabel("count")
-            actual_time_format, _ = self._time_format(time, time_format)
-            if actual_time_format == "date":
-                ax.set_xlabel("date")
-                ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d"))
-                ax.xaxis.set_major_locator(
-                    AutoDateLocator(minticks=6, maxticks=12, interval_multiples=True)
-                )
-                ax.tick_params(axis="x", labelrotation=45)
-            elif actual_time_format == "day":
-                ax.set_xlabel("day")
-            elif actual_time_format == "tick":
-                ax.set_xlabel("tick")
-            else:
-                ax.set_xlabel("time")
-                ax.tick_params(axis="x", labelrotation=45)
-
-            if legend == "auto":
-                legend = "on" if len(ax.get_legend_handles_labels()[0]) <= 12 else "off"
-            if legend == "on":
-                ax.legend()
-            elif legend == "outside":
-                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
-
-            if title is not None:
-                ax.set_title(title)
-
-            if to_file is None:
-                plt.show()
-            else:
-                fig.savefig(Path(to_file))
-
-        except BaseException:
-            plt.close(fig)
-            raise
-
-    def spaghetti_plt(
-        self,
-        ax: Axes,
-        realization: RealizationSelection,
-        geo: GeoSelection | GeoAggregation,
-        time: TimeSelection | TimeAggregation,
-        quantity: QuantityStrategy | ParameterStrategy,
-        *,
-        label_format: str = "{n}: {q}",
-        line_kwargs: list[dict] | None = None,
-        ordering: OrderingOption = "location",
-        time_format: TimeFormatOption = "auto",
-        transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ) -> list[Line2D]:
-        """
-        Draw spaghetti lines onto one matplotlib `Axes`. This is a variant of the method
-        `spaghetti()` that gives you more control over the rendering of a plot by
-        letting you do most of the work with matplotlib's API. To use subplots, call
-        this method for each axes with narrowed selections.
-
-        Parameters
-        ----------
-        ax :
-            The plot axes on which to draw lines.
-        realization :
-            A realization selection to make on the output data.
-        geo :
-            The geographic selection to make on the output data.
-        time :
-            The time selection to make on the output data.
-        quantity :
-            The quantity selection to make on the output data.
-        label_format :
-            A format for legend labels, with `{n}` for the geo node name and
-            `{q}` for the quantity name. Each location/quantity group has one label.
-        line_kwargs :
-            A list of keyword arguments to be passed to the matplotlib function that
-            draws each line. Each dictionary applies to all realizations in one
-            location/quantity group; the list cycles in `ordering` order. If no color
-            is specified, realizations in the same group share a default color.
-            See matplotlib documentation for the supported options.
-        ordering :
-            Whether location or quantity takes priority when ordering groups.
-            Locations are sorted by label and quantities follow selection order.
-        time_format :
-            Controls the formatting of the time axis (the horizontal axis);
-
-            - "auto" will use the format defined by the grouping of the
-            `time` parameter
-            - "date" attempts to display calendar dates
-            - "day" attempts to display days numerically indexed from the start of the
-            simulation with the first day being 0
-
-            If the system cannot convert to the requested time format, this argument
-            may be ignored.
-        transform :
-            Allows you to specify an arbitrary transform function for the source
-            dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per data series resulting from your
-            selections, with that data as the argument. You should return a dataframe
-            with the same format, where the values of the data column have been modified
-            for your purposes.
-
-            Dataframe columns:
-
-            - "realization": the realization index (same value per group)
-            - "time": the time series column
-            - "geo": the location label (same value per group)
-            - "quantity": the label of the quantity (same value per group)
-            - "value": the data column
-
-        Returns
-        -------
-        :
-            The list of `Line2D` objects for each line drawn.
-        """
-
-        if not isinstance(realization, RealizationSelection):
-            raise ValueError("Spaghetti plots only support RealizationSelection.")
-
-        line_kwargs = _normalize_kwargs(line_kwargs)
-
-        data_df = munge_pipeline_output(
-            output=self.output,
-            realization=realization,
-            geo=geo,
-            time=time,
-            quantity=quantity,
-        )
-
-        # Map time labels:
-        _, map_time_axis = self._time_format(time, time_format)
-        data_df["time"] = map_time_axis(data_df["time"])
-
-        # Map geo labels:
-        result_scope = geo.to_scope()
-        if (labels := result_scope.labels_option) is not None:
-            geo_map = dict(zip(result_scope.node_ids, labels))
-            data_df["geo"] = data_df["geo"].apply(lambda x: geo_map[x])
-
-        # Before melting, disambiguate any quantities with the same name.
-        q_mapping = quantity.disambiguate_groups()
-
-        geo_quantity_group_dfs = sorted(
-            (
-                data_df.set_axis(
-                    ["realization", "time", "geo", *q_mapping.keys()], axis=1
-                )
-                .melt(id_vars=["realization", "time", "geo"], var_name="quantity")
-                .groupby(["geo", "quantity"], sort=False)
-            ),
-            key=self._sorting(q_mapping, ordering),
-        )
-
-        lines = list[Line2D]()
-        for ((location, quantity_name), group_df), kwargs in zip(
-            geo_quantity_group_dfs,
-            cycle(line_kwargs),
-        ):
-            q_name = q_mapping[cast(str, quantity_name)]
-            label = label_format.format(n=location, q=q_name)
-            first_kwargs = {**kwargs, "label": label}
-            rest_kwargs = {**kwargs, "label": "_nolegend_"}
-
-            for index, (_, realization_df) in enumerate(
-                group_df.groupby("realization", sort=False)
-            ):
-                plot_kwargs = first_kwargs if index == 0 else rest_kwargs
-                if transform is not None:
-                    realization_df = transform(realization_df.assign(quantity=q_name))
-                line = ax.plot(
-                    realization_df["time"],
-                    realization_df["value"],
-                    **plot_kwargs,
-                )[0]
-                lines.append(line)
-
-                # Make sure all realizations in the same group share a color.
-                if index == 0:
-                    rest_kwargs["color"] = line.get_color()
-
-        return lines
-
     def quantiles(
         self,
         geo: GeoSelection | GeoAggregation,
@@ -475,7 +186,7 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Produces a quantile plot of a filter output, typically as a median line
+        Produces a quantile plot of a pipeline output, typically as a median line
         with one or more shaded credible intervals.
 
         The plot will either be immediately rendered by this function by calling
@@ -1060,12 +771,12 @@ class PlotRendererPipeline:
 
     def line(
         self,
-        realization: RealizationAggregation,
+        realization: RealizationSelection | RealizationAggregation,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        label_format: str = "{n}: {q}: {m}",
+        label_format: str = "{n} {q} {m}",
         legend: LegendOption = "auto",
         line_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
@@ -1075,12 +786,14 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Produces a line plot of a filter output, which may plot the time series of an
-        IPM quantity or a filter parameter.
+        Produces a line plot from pipeline output, which may plot the time series of an
+        IPM quantity or an unknown parameter.
 
-        Filter outputs typically contain many realizations of a simulation. In order to
-        condense the realization axis to a single time-series, you are required to
-        specify an aggregation method across realizations.
+        Pipeline outputs typically contain many realizations of a simulation. If you
+        provide an aggregation strategy for the realization axis, you will get a single
+        line per location/quantity group and aggregation method. Otherwise, all selected
+        realizations will be plotted (in "spaghetti plot" style), where realizations
+        from the same location/quantity group are rendered with the same line style.
 
         The plot will either be immediately rendered by this function by calling
         `plt.show()` or, if you specify the `to_file` argument, saved to a file.
@@ -1090,7 +803,7 @@ class PlotRendererPipeline:
         Parameters
         ----------
         realization :
-            A realization aggregation to make on the output data.
+            A realization selection or aggregation to make on the output data.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -1102,7 +815,9 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()`
             with the replacement variables `{n}` for the name of the geo node,
             `{q}` for the name of the quantity, and `{m}` for the aggregation name
-            corresponding to the realization aggregation.
+            corresponding to the realization aggregation. When realizations are not
+            aggregated, `{m}` is an empty string. Labels are stripped of surrounding
+            whitespace.
         legend :
             Whether and how to draw the plot legend.
 
@@ -1113,14 +828,15 @@ class PlotRendererPipeline:
             (instead of inside it)
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each line. The list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each line. For aggregated realizations the list cycles per
+            series; otherwise, all realizations in one group use the same set of kwargs.
+            The cycle order is defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
         ordering :
             Whether location or quantity takes priority when ordering groups.
             Locations are sorted by label and quantities follow selection order.
-            Within each group, lines are sorted by the order in which you specify the
-            aggregation functions.
+            For aggregated realizations, lines within each group follow the order in
+            which you specify the aggregation functions.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -1142,24 +858,22 @@ class PlotRendererPipeline:
             The function will be called once per data series resulting from your
             selections, with that data as the argument. You should return a dataframe
             with the same format, where the values of the data column have been modified
-            for your purposes.
+            for your purposes. Only the returned values are used; changes to the time
+            column do not affect the plot.
 
             Dataframe columns:
 
             - "time": the time series column
             - "geo": the location label (same value per series)
             - "quantity": the quantity label (same value per series)
-            - "metric": the aggregation method for the realizations
+            - "metric": the aggregation method (aggregated realizations only)
+            - "realization": the realization index (unaggregated realizations only)
             - "value": the data column
         """
-
-        if not isinstance(realization, RealizationAggregation):
-            raise ValueError("Line plots only support RealizationAggregation.")
-
         try:
             _, ax = plt.subplots(layout="constrained")
 
-            lines = self.line_plt(
+            self.line_plt(
                 ax,
                 realization,
                 geo,
@@ -1173,7 +887,8 @@ class PlotRendererPipeline:
             )
 
             # Y-axis
-            plt.ylabel("count")
+            y_label = "count" if isinstance(quantity, QuantityStrategy) else "value"
+            plt.ylabel(y_label)
 
             # X-axis
             _time_format, _ = self._time_format(time, time_format)
@@ -1194,13 +909,20 @@ class PlotRendererPipeline:
 
             # Legend
             if legend == "auto":
-                # auto: show a legend if there are at most 12 lines.
-                legend = "on" if len(lines) <= 12 else "off"
+                # auto: show a legend if there are at most 12 labeled lines.
+                count = len(ax.get_legend_handles_labels()[0])
+                legend = "on" if count <= 12 else "off"
 
             if legend == "on":
-                plt.legend()
+                ax.legend()
             elif legend == "outside":
-                plt.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+                ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5))
+
+            # Legend lines shoulld be fully opaque,
+            # even if the lines in the plot are transparent.
+            if (leg := ax.get_legend()) is not None:
+                for handle in leg.get_lines():
+                    handle.set_alpha(1)
 
             if title is not None:
                 plt.title(title)
@@ -1217,12 +939,12 @@ class PlotRendererPipeline:
     def line_plt(
         self,
         ax: Axes,
-        realization: RealizationAggregation,
+        realization: RealizationSelection | RealizationAggregation,
         geo: GeoSelection | GeoAggregation,
         time: TimeSelection | TimeAggregation,
         quantity: QuantityStrategy | ParameterStrategy,
         *,
-        label_format: str = "{n}: {q}: {m}",
+        label_format: str = "{n} {q} {m}",
         line_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
@@ -1239,7 +961,7 @@ class PlotRendererPipeline:
         ax :
             The plot axes on which to draw lines.
         realization :
-            A realization aggregation to make on the output data.
+            A realization selection or aggregation to make on the output data.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -1251,17 +973,20 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()`
             with the replacement variables `{n}` for the name of the geo node,
             `{q}` for the name of the quantity, and `{m}` for the aggregation name
-            corresponding to the realization aggregation.
+            corresponding to the realization aggregation. When realizations are not
+            aggregated, `{m}` is an empty string. Labels are stripped of surrounding
+            whitespace.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each line. The list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each line. For aggregated realizations the list cycles per
+            series; otherwise, all realizations in one group use the same set of kwargs.
+            The cycle order is defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
         ordering :
             Whether location or quantity takes priority when ordering groups.
             Locations are sorted by label and quantities follow selection order.
-            Within each group, lines are sorted by the order in which you specify the
-            aggregation functions.
+            For aggregated realizations, lines within each group follow the order in
+            which you specify the aggregation functions.
         time_format :
             Controls the formatting of the time axis (the horizontal axis);
 
@@ -1279,14 +1004,16 @@ class PlotRendererPipeline:
             The function will be called once per data series resulting from your
             selections, with that data as the argument. You should return a dataframe
             with the same format, where the values of the data column have been modified
-            for your purposes.
+            for your purposes. Only the returned values are used; changes to the time
+            column do not affect the plot.
 
             Dataframe columns:
 
             - "time": the time series column
             - "geo": the location label (same value per series)
             - "quantity": the quantity label (same value per series)
-            - "metric": the aggregation method for the realizations
+            - "metric": the aggregation method (aggregated realizations only)
+            - "realization": the realization index (unaggregated realizations only)
             - "value": the data column
 
         Returns
@@ -1294,12 +1021,7 @@ class PlotRendererPipeline:
         :
             The `Line2D` object for each line drawn; you can use this to have finer
             control over the presentation of the lines.
-
         """
-
-        if not isinstance(realization, RealizationAggregation):
-            raise ValueError("Line plots only support RealizationAggregation.")
-
         line_kwargs = _normalize_kwargs(line_kwargs)
 
         data_df = munge_pipeline_output(
@@ -1323,62 +1045,100 @@ class PlotRendererPipeline:
         # Before melting, disambiguate any quantities with the same name.
         q_mapping = quantity.disambiguate_groups()
 
-        quantity_names = (name for name in q_mapping for _ in realization.aggregation)
-        data_df.columns = pd.MultiIndex.from_tuples(
-            [("time", ""), ("geo", "")]
-            + [
-                (name, metric)
-                for name, (_, metric) in zip(
-                    quantity_names, data_df.columns[2:], strict=True
+        # There are effectively two modes of plotting:
+        # 1. Spaghetti plot: realizations are not aggregated, so we plot many
+        #    realizations per group
+        # 2. Aggregated plot: realizations are aggregated, so we plot one line per
+        #    aggregation method per group
+        # The munge call above returns a dataframe whose form is slightly different
+        # depending on this mode, so we need to handle them differently.
+        is_spaghetti = isinstance(realization, RealizationSelection)
+        if isinstance(realization, RealizationSelection):
+            # Spaghetti plot (RealizationSelection)
+            columns = ["realization", "time", "geo", *q_mapping.keys()]
+            data_df = (
+                data_df.set_axis(columns, axis=1)
+                .melt(
+                    id_vars=["realization", "time", "geo"],
+                    var_name="quantity",
                 )
-            ]
+                .rename(columns={"realization": "series"})
+            )
+        else:
+            # Aggregated plot (RealizationAggregation)
+            quantity_names = (
+                name for name in q_mapping for _ in realization.aggregation
+            )
+            columns = pd.MultiIndex.from_tuples(
+                [("time", ""), ("geo", "")]
+                + [
+                    (name, metric)
+                    for name, (_, metric) in zip(
+                        quantity_names, data_df.columns[2:], strict=True
+                    )
+                ],
+                names=["quantity", "series"],
+            )
+            data_df = (
+                data_df.set_axis(columns, axis=1)
+                .melt(
+                    id_vars=[("time", ""), ("geo", "")],
+                    ignore_index=False,
+                )
+                .rename(columns={("time", ""): "time", ("geo", ""): "geo"})
+            )
+
+        # Sort the groups according to the specified ordering.
+        groups = sorted(
+            data_df.groupby(["geo", "quantity"], sort=False),
+            key=self._sorting(q_mapping, ordering),
         )
+
+        styles = cycle(line_kwargs)
 
         lines = list[Line2D]()
-        geo_groups = data_df.groupby("geo", sort=False)
-        groups = (
-            ((location, quantity_name), group)
-            for location, group in geo_groups
-            for quantity_name in q_mapping
-        )
-        kwargs_cycle = cycle(line_kwargs)
-        for (location, quantity_name), group in sorted(
-            groups, key=self._sorting(q_mapping, ordering)
-        ):
-            metric_groups = (
-                group[quantity_name]
-                .melt(var_name="metric", ignore_index=False)
-                .groupby("metric", sort=False)
-            )
-            for metric_name, metric_data in metric_groups:
-                label = label_format.format(
-                    n=location,
-                    q=q_mapping[quantity_name],
-                    m=metric_name,
-                )
-                data = metric_data["value"]
-                if transform is not None:
-                    transformed = transform(
-                        pd.DataFrame(
-                            {
-                                "time": group["time"],
-                                "geo": location,
-                                "quantity": q_mapping[quantity_name],
-                                "metric": metric_name,
-                                "value": metric_data["value"],
-                            }
-                        )
-                    )
-                    data = transformed["value"]
+        for (location, quantity_name), group in groups:
+            quantity_name = str(quantity_name)
+            quantity_label = q_mapping[quantity_name]
 
-                lines.extend(
-                    ax.plot(
-                        group["time"],
-                        data,
-                        label=label,
-                        **next(kwargs_cycle),
-                    )
+            # In spaghetti mode, this group's style is fixed for all realizations.
+            # Otherwise we just keep cycling through the defined styles.
+            group_styles = repeat(next(styles)) if is_spaghetti else styles
+
+            # Render each series in the location/quantity group.
+            # In spaghetti mode, each realization is a series.
+            # In aggregated mode, each aggregation method is a series.
+            series_groups = group.groupby("series", sort=False)
+            for i, (series_name, data) in enumerate(series_groups):
+                label = (
+                    "_nolegend_"
+                    if is_spaghetti and i > 0
+                    else label_format.format(
+                        n=location,
+                        q=quantity_label,
+                        m="" if is_spaghetti else series_name,
+                    ).strip()
                 )
+                kwargs = {**next(group_styles), "label": label}
+
+                # Apply transform if specified.
+                value_data = data["value"]
+                if transform is not None:
+                    if is_spaghetti:
+                        transform_data = data.rename(
+                            columns={"series": "realization"}
+                        ).assign(quantity=quantity_label)
+                    else:
+                        transform_data = (
+                            data.rename(columns={"series": "metric"})
+                            .assign(quantity=quantity_label)
+                            .loc[:, ["time", "geo", "quantity", "metric", "value"]]
+                        )
+                    transformed = transform(transform_data)
+                    value_data = transformed["value"]
+
+                plotted_lines = ax.plot(data["time"], value_data, **kwargs)
+                lines.extend(plotted_lines)
 
         return lines
 
