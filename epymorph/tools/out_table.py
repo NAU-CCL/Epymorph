@@ -1,7 +1,7 @@
 """Tools for rendering tables from epymorph simulation output data."""
 
 import dataclasses
-from typing import Callable, Literal, Sequence, overload
+from typing import TYPE_CHECKING, Callable, Literal, Sequence, overload
 from warnings import warn
 
 import numpy as np
@@ -18,8 +18,11 @@ from epymorph.compartment_model import (
 )
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.time import NBins, TimeAggregation, TimeSelection
-from epymorph.tools.data import Output, munge
+from epymorph.tools.data import munge
 from epymorph.util import filter_unique
+
+if TYPE_CHECKING:
+    from epymorph.simulator.basic.output import Output
 
 OrderingOption = Literal["location", "quantity"]
 """Options for table row ordering."""
@@ -46,7 +49,7 @@ def _to_sparklines(values):
 
 
 def _process_output(
-    out: Output,
+    out: "Output",
     geo: GeoSelection | GeoAggregation,
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,
@@ -162,10 +165,10 @@ class TableRenderer:
         The output the renderer will use.
     """
 
-    output: Output
+    output: "Output"
     """The output the renderer will use."""
 
-    def __init__(self, output: Output):
+    def __init__(self, output: "Output"):
         self.output = output
 
     def _format_output(self, result_df: pd.DataFrame, result_format: FormatOption):
@@ -571,12 +574,3 @@ class TableRenderer:
             lambda df: df.agg(_to_sparklines).reset_index(),
         )
         return self._format_output(result_df, result_format)
-
-
-class TableRendererMixin(Output):
-    """Mixin class that adds a convenient method for rendering tables from an output."""
-
-    @property
-    def table(self) -> TableRenderer:
-        """Render a table from this output."""
-        return TableRenderer(self)

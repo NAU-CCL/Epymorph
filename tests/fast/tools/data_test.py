@@ -1,72 +1,22 @@
-from dataclasses import dataclass, replace
+import warnings
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from epymorph import initializer as init
 from epymorph.adrio.adrio import ADRIO, InspectResult
 from epymorph.adrio.validation import ResultFormat
 from epymorph.attribute import NamePattern
-from epymorph.data import ipm, mm
+from epymorph.data import ipm
 from epymorph.data_shape import Shapes
 from epymorph.geography.us_census import StateScope
-from epymorph.rume import RUME, SingleStrataRUME
 from epymorph.simulation import Context
 from epymorph.time import TimeFrame
-from epymorph.tools.data import Output, memoize_rume, munge
+from epymorph.tools.data import memoize_rume, munge
+from tests.fast.tools.conftest import HOME_COMPARTMENT_OFFSET, HOME_EVENT_OFFSET
 
-
-@pytest.fixture
-def rume() -> RUME[StateScope]:
-    """A very simple RUME with no external data requirements."""
-    return SingleStrataRUME.build(
-        ipm=ipm.SIRS(),
-        mm=mm.No(),
-        init=init.SingleLocation(location=0, seed_size=100),
-        scope=StateScope.in_states(["04", "35"], year=2020),
-        time_frame=TimeFrame.of("2021-01-01", 4),
-        params={
-            "beta": 0.4,
-            "gamma": 1 / 10,
-            "xi": 1 / 90,
-            "population": [200_000, 100_000],
-        },
-    )
-
-
-@pytest.fixture
-def output(rume: RUME[StateScope]) -> Output:
-    """A mock output so we don't have to run a sim."""
-
-    @dataclass
-    class MockOutput(Output):
-        rume: RUME
-        data_df: pd.DataFrame
-
-        @property
-        def dataframe(self) -> pd.DataFrame:
-            return self.data_df
-
-    return MockOutput(
-        rume,
-        pd.DataFrame(
-            {
-                "tick": np.repeat(np.arange(0, 4, dtype=np.int64), 2),
-                "date": np.repeat(
-                    np.arange("2021-01-01", "2021-01-05", dtype="datetime64[D]"),
-                    2,
-                ),
-                "node": np.tile(["04", "35"], 4),
-                "S": np.arange(3000, 3800, 100, dtype=np.int64),
-                "I": np.arange(2000, 2800, 100, dtype=np.int64),
-                "R": np.arange(1000, 1800, 100, dtype=np.int64),
-                "S → I": np.arange(300, 380, 10, dtype=np.int64),
-                "I → R": np.arange(200, 280, 10, dtype=np.int64),
-                "R → S": np.arange(100, 180, 10, dtype=np.int64),
-            }
-        ),
-    )
+# See conftest for RUME and Output fixtures
 
 
 def test_basic_munge(rume, output):
@@ -85,6 +35,37 @@ def test_basic_munge(rume, output):
             "S": np.array([3200, 3400], dtype=np.int64),
             "I": np.array([2200, 2400], dtype=np.int64),
             "R": np.array([1200, 1400], dtype=np.int64),
+        }
+    )
+
+    pd.testing.assert_frame_equal(actual.reset_index(drop=True), expected)
+
+
+@pytest.mark.parametrize(
+    ("data_mode", "c_offset", "e_offset"),
+    [
+        ("data_by_visit", 0, 0),
+        ("data_by_home", HOME_COMPARTMENT_OFFSET, HOME_EVENT_OFFSET),
+    ],
+)
+def test_basic_munge_data_mode(rume, output, data_mode, c_offset, e_offset):
+    actual = munge(
+        output=getattr(output, data_mode),
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(1, 2),
+        quantity=rume.ipm.select.all(),
+    )
+
+    expected = pd.DataFrame(
+        {
+            "time": np.array([1, 2], dtype=np.int64),
+            "geo": ["04", "04"],
+            "S": np.array([3200, 3400], dtype=np.int64) + c_offset,
+            "I": np.array([2200, 2400], dtype=np.int64) + c_offset,
+            "R": np.array([1200, 1400], dtype=np.int64) + c_offset,
+            "S → I": np.array([320, 340], dtype=np.int64) + e_offset,
+            "I → R": np.array([220, 240], dtype=np.int64) + e_offset,
+            "R → S": np.array([120, 140], dtype=np.int64) + e_offset,
         }
     )
 
@@ -165,40 +146,42 @@ def test_memoize_rume(tmp_path, rume):
     cache_path = tmp_path / "cache.npz"
     pop = NamePattern.of("gpm:all::init::population")
 
-    # First attempt: should evaluate params and save
-    rume1 = rume_with(population=np.array([42, 84]))
-    cached1 = memoize_rume(cache_path, rume1)
-    assert cached1 is not rume1  # returns a clone
-    assert cache_path.exists()  # cache file exists
-    assert adrio_evaluated == 1  # ADRIO gets evaluated
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        # First attempt: should evaluate params and save
+        rume1 = rume_with(population=np.array([42, 84]))
+        cached1 = memoize_rume(cache_path, rume1)
+        assert cached1 is not rume1  # returns a clone
+        assert cache_path.exists()  # cache file exists
+        assert adrio_evaluated == 1  # ADRIO gets evaluated
 
-    adrio_evaluated = 0  # reset counter
+        adrio_evaluated = 0  # reset counter
 
-    # Second attempt:
-    # Should load from cache, not evaluate params.
-    # Even though ADRIO values are different this time,
-    # the resulting RUME should still use the cached values.
-    rume2 = rume_with(population=np.array([11, 22]))
-    cached2 = memoize_rume(cache_path, rume2)
-    assert adrio_evaluated == 0  # ADRIO not eval'd
-    assert pop in cached1.params
-    assert pop in cached2.params
-    np.testing.assert_array_equal(cached1.params[pop], np.array([42, 84]))
-    np.testing.assert_array_equal(cached2.params[pop], np.array([42, 84]))
+        # Second attempt:
+        # Should load from cache, not evaluate params.
+        # Even though ADRIO values are different this time,
+        # the resulting RUME should still use the cached values.
+        rume2 = rume_with(population=np.array([11, 22]))
+        cached2 = memoize_rume(cache_path, rume2)
+        assert adrio_evaluated == 0  # ADRIO not eval'd
+        assert pop in cached1.params
+        assert pop in cached2.params
+        np.testing.assert_array_equal(cached1.params[pop], np.array([42, 84]))
+        np.testing.assert_array_equal(cached2.params[pop], np.array([42, 84]))
 
-    adrio_evaluated = 0  # reset counter
+        adrio_evaluated = 0  # reset counter
 
-    # Third attempt: refresh should overwrite the cached values
-    rume3 = rume_with(population=np.array([88, 99]))
-    cached3 = memoize_rume(cache_path, rume3, refresh=True)
-    assert adrio_evaluated == 1  # ADRIO gets evaluated
-    assert pop in cached3.params
-    # ensure both the RUME and the cache file have the new values
-    np.testing.assert_array_equal(
-        cached3.params[pop],
-        np.array([88, 99]),
-    )
-    np.testing.assert_array_equal(
-        np.load(cache_path)["gpm:all::init::population"],
-        np.array([88, 99]),
-    )
+        # Third attempt: refresh should overwrite the cached values
+        rume3 = rume_with(population=np.array([88, 99]))
+        cached3 = memoize_rume(cache_path, rume3, refresh=True)
+        assert adrio_evaluated == 1  # ADRIO gets evaluated
+        assert pop in cached3.params
+        # ensure both the RUME and the cache file have the new values
+        np.testing.assert_array_equal(
+            cached3.params[pop],
+            np.array([88, 99]),
+        )
+        np.testing.assert_array_equal(
+            np.load(cache_path)["gpm:all::init::population"],
+            np.array([88, 99]),
+        )

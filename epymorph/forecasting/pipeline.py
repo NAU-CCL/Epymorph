@@ -6,7 +6,7 @@ state/parameter fitting.
 import datetime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import Literal, Mapping, Self
+from typing import TYPE_CHECKING, Literal, Mapping, Self
 
 import numpy as np
 import pandas as pd
@@ -42,6 +42,9 @@ from epymorph.time import (
     TimeSelection,
 )
 from epymorph.tools.data import mask, munge
+
+if TYPE_CHECKING:
+    from epymorph.forecasting.filter_plot import PlotRendererPipeline
 
 _events = EventBus()
 
@@ -283,6 +286,13 @@ class PipelineOutput:
     """
 
     @property
+    def plot(self) -> "PlotRendererPipeline":
+        """Render a plot from this output."""
+        from epymorph.forecasting.filter_plot import PlotRendererPipeline
+
+        return PlotRendererPipeline(self)
+
+    @property
     def rume(self) -> RUME:
         return self.simulator.rume
 
@@ -360,14 +370,14 @@ class PipelineOutput:
         )
 
     @property
-    def select(self) -> RealizationSelector:
+    def select_realization(self) -> RealizationSelector:
         """
         Returns an instance of RealizationSelector.
         """
         return RealizationSelector(self.num_realizations)
 
     @property
-    def param_select(self) -> ParameterSelector:
+    def select_parameter(self) -> ParameterSelector:
         return ParameterSelector(self.unknown_params)
 
 
@@ -718,7 +728,7 @@ def munge_pipeline_output(
     time_mask = np.tile(np.repeat(mask(S, time.selection_ticks(taus)), N), NP)
     geo_mask = np.tile(np.tile(geo.selection, S), NP)
 
-    # columns are: ["realization","tick", "date", "node", *quantities, *parameters]
+    # columns are: ["realization", "tick", "date", "node", *quantities, *parameters]
 
     columns = [True, True, True, True]
     if isinstance(quantity, QuantityStrategy):
