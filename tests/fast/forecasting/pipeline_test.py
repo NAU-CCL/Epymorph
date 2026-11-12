@@ -2,98 +2,34 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from epymorph import initializer as init
 from epymorph.attribute import NamePattern
-from epymorph.data import ipm, mm
 from epymorph.data.ipm.sirh import SIRH
 from epymorph.data.mm.no import No
-from epymorph.data_type import SimDType
-from epymorph.forecasting.dynamic_params import BrownianMotion, GaussianPrior, Static
+from epymorph.forecasting.dynamic_params import Static
 from epymorph.forecasting.ensemble_kalman_filter import EnsembleKalmanFilterSimulator
 from epymorph.forecasting.filter import ModelLink, Observations
 from epymorph.forecasting.likelihood import GaussianLikelihood
 from epymorph.forecasting.pipeline import (
     PipelineConfig,
-    PipelineOutput,
-    PipelineSimulator,
     UnknownParam,
     munge_pipeline_output,
 )
 from epymorph.geography.us_census import StateScope
 from epymorph.initializer import Explicit
-from epymorph.rume import RUME, SingleStrataRUME
+from epymorph.rume import SingleStrataRUME
 from epymorph.simulator.basic.basic_simulator import BasicSimulator
 from epymorph.time import EveryNDays, TimeFrame
 from epymorph.tools.data import munge
 from epymorph.util import to_date_value_array
 
 
-@pytest.fixture
-def rume() -> RUME[StateScope]:
-    """A very simple RUME with no external data requirements."""
-    return SingleStrataRUME.build(
-        ipm=ipm.SIRS(),
-        mm=mm.No(),
-        init=init.SingleLocation(location=0, seed_size=100),
-        scope=StateScope.in_states(["04", "35"], year=2020),
-        time_frame=TimeFrame.of("2021-01-01", 4),
-        params={
-            "beta": 0.4,
-            "gamma": 1 / 10,
-            "xi": 1 / 90,
-            "population": [200_000, 100_000],
-        },
-    )
-
-
-@pytest.fixture
-def filter_output(rume):
-    """A mock filter output so we don't have to run a filter."""
-    R = 3  # noqa: N806
-    N = rume.scope.nodes
-    C = rume.ipm.num_compartments
-    E = rume.ipm.num_events
-    S = rume.num_ticks
-    T = rume.time_frame.duration_days
-    compartments = np.ones((R, S, N, C), dtype=SimDType)
-    param_names = [NamePattern.of("test_0")]
-
-    class TestSimulator(PipelineSimulator):
-        def run(self, rng):  # type: ignore
-            pass
-
-    simulator = TestSimulator(
-        config=PipelineConfig(
-            rume=rume,
-            num_realizations=R,
-            initial_values=compartments[:, 0, :, :],  # type: ignore
-            unknown_params={
-                param_name: UnknownParam(
-                    prior=GaussianPrior(mean=np.log(0.2), standard_deviation=0.5),
-                    dynamics=BrownianMotion(volatility=0.1),
-                )
-                for param_name in param_names
-            },
-        )
-    )
-    return PipelineOutput(
-        simulator=simulator,
-        final_compartments=compartments[:, -1, :, :],
-        final_params={param_name: np.ones((R, N)) for param_name in param_names},
-        compartments=compartments,
-        events=np.ones((R, S, N, E), dtype=SimDType),
-        initial=compartments[:, 0, :, :],
-        estimated_params={param_name: np.ones((R, T, N)) for param_name in param_names},
-    )
-
-
 def test_basic_pipeline_munge(rume, filter_output):
     # Test with a selection in each axis
     # and for parameters as well as compartments and events
-    realization = filter_output.select.all()
+    realization = filter_output.select_realization.all()
     time = rume.time_frame.select.days(0, 1)
     geo = rume.scope.select.all()
-    quantity = filter_output.param_select.by_name("test_0")
+    quantity = filter_output.select_parameter.by_name("test_0")
 
     # Test using munge on a parameter value
     actual = munge_pipeline_output(filter_output, realization, geo, time, quantity)
@@ -140,10 +76,10 @@ def test_aggregation_pipeline_munge(rume, filter_output):
 
     # Test aggregation for the mean
     # This primarily makes sure the multi-index is there with the correct labels.
-    realization = filter_output.select.all().agg(["mean"])
+    realization = filter_output.select_realization.all().agg(["mean"])
     time = rume.time_frame.select.days(0, 1)
     geo = rume.scope.select.all()
-    quantity = filter_output.param_select.by_name("test_0")
+    quantity = filter_output.select_parameter.by_name("test_0")
 
     actual = munge_pipeline_output(filter_output, realization, geo, time, quantity)
 
@@ -168,7 +104,7 @@ def test_aggregation_pipeline_munge(rume, filter_output):
 
     # Test aggregation for the std
     # This primarily makes sure the multi-index is there with the correct labels.
-    realization = filter_output.select.all().agg(["std"])
+    realization = filter_output.select_realization.all().agg(["std"])
     data["value"] = np.zeros(geo.scope.nodes * 2)
 
     actual = munge_pipeline_output(filter_output, realization, geo, time, quantity)
@@ -183,6 +119,64 @@ def test_aggregation_pipeline_munge(rume, filter_output):
     )
 
     pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
+
+
+@pytest.mark.parametrize("time_grouping", ["tick", "day", "epiweek"])
+@pytest.mark.parametrize("aggregate_geo", [False, True])
+@pytest.mark.parametrize("aggregate_realizations", [False, True])
+def test_pipeline_munge_preserves_temporal_order(
+    temporal_order_output, time_grouping, aggregate_geo, aggregate_realizations
+):
+    output = temporal_order_output
+    rume = output.rume
+    geo = rume.scope.select.all()
+    if aggregate_geo:
+        geo = geo.sum()
+    time = rume.time_frame.select.all()
+    if time_grouping != "tick":
+        time = time.group(time_grouping).agg()
+    realization = output.select_realization.all()
+    if aggregate_realizations:
+        realization = realization.mean()
+
+    actual = munge_pipeline_output(
+        output, realization, geo, time, rume.ipm.select.compartments("S", "I")
+    )
+    expected_time = {
+        "tick": [0, 1, 2, 3],
+        "day": list(pd.date_range("2021-03-05", periods=4)),
+        "epiweek": ["2021-9", "2021-10"],
+    }[time_grouping]
+    ticks = np.array([1, 3] if time_grouping == "epiweek" else [0, 1, 2, 3])
+    geo_nodes = [("*", 10)] if aggregate_geo else [("04", 0), ("35", 10)]
+    realizations = [1] if aggregate_realizations else range(3)
+
+    for location, node_offset in geo_nodes:
+        for realization_index in realizations:
+            if aggregate_realizations:
+                group = actual[actual[("geo", "")] == location]
+                times = group[("time", "")]
+                susceptible = group[("S", "mean")]
+                infectious = group[("I", "mean")]
+            else:
+                group = actual[
+                    (actual["geo"] == location)
+                    & (actual["realization"] == realization_index)
+                ]
+                times = group["time"]
+                susceptible = group["S"]
+                infectious = group["I"]
+
+            expected_values = 100 * realization_index + 3 * ticks
+            if aggregate_geo:
+                expected_values = 2 * expected_values + node_offset
+            else:
+                expected_values = expected_values + node_offset
+            np.testing.assert_array_equal(times, expected_time)
+            np.testing.assert_array_equal(susceptible, expected_values)
+            np.testing.assert_array_equal(
+                infectious, expected_values + (2 if aggregate_geo else 1)
+            )
 
 
 def test_ensemble_kalman_filter():

@@ -1,9 +1,8 @@
 """General tools for processing epymorph data."""
 
 import dataclasses
-from abc import abstractmethod
 from pathlib import Path
-from typing import Protocol, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -20,23 +19,12 @@ from epymorph.rume import RUME
 from epymorph.time import Dim, TimeAggregation, TimeSelection
 from epymorph.util import mask
 
-
-class Output(Protocol):
-    """A generic simulation result."""
-
-    # NOTE: this decouples us from concrete Output implementations.
-
-    rume: RUME
-    """The RUME used in the simulation that generated this output."""
-
-    @property
-    @abstractmethod
-    def dataframe(self) -> pd.DataFrame:
-        """The simulation results as a DataFrame."""
+if TYPE_CHECKING:
+    from epymorph.simulator.basic.output import Output
 
 
 def _validate(
-    output: Output,
+    output: "Output",
     geo: GeoSelection | GeoAggregation,
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,
@@ -83,7 +71,7 @@ def _validate(
 
 
 def munge(
-    output: Output,
+    output: "Output",
     geo: GeoSelection | GeoAggregation,
     time: TimeSelection | TimeAggregation,
     quantity: QuantitySelection | QuantityAggregation,

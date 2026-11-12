@@ -3,7 +3,7 @@
 from datetime import timedelta
 from itertools import cycle
 from pathlib import Path
-from typing import Callable, Literal, OrderedDict, cast
+from typing import TYPE_CHECKING, Callable, Literal, OrderedDict, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,8 +16,11 @@ from matplotlib.ticker import EngFormatter
 from epymorph.compartment_model import QuantityAggregation, QuantitySelection
 from epymorph.geography.scope import GeoAggregation, GeoSelection
 from epymorph.time import TimeAggregation, TimeSelection
-from epymorph.tools.data import Output, munge
+from epymorph.tools.data import munge
 from epymorph.util import identity
+
+if TYPE_CHECKING:
+    from epymorph.simulator.basic.output import Output
 
 OrderingOption = Literal["location", "quantity"]
 """Options for plot line ordering."""
@@ -47,10 +50,10 @@ class PlotRenderer:
     ```
     """
 
-    output: Output
+    output: "Output"
     """The output the renderer will use."""
 
-    def __init__(self, output: Output):
+    def __init__(self, output: "Output"):
         self.output = output
 
     def _sorting(
@@ -220,17 +223,15 @@ class PlotRenderer:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- once per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
         """
@@ -347,17 +348,15 @@ class PlotRenderer:
         transform :
             Allows you to specify an arbitrary transform function for the source
             dataframe before we plot it, e.g., to rescale the values.
-            The function will be called once per geo/quantity group -- one per line,
-            essentially -- with a dataframe that contains just the data for that group.
-            The dataframe given as the argument is the result of applying
-            all selections and the projection if specified.
+            The function will be called once per data series resulting from your
+            selections, with that data as the argument.
             You should return a dataframe with the same format, where the
             values of the data column have been modified for your purposes.
 
             Dataframe columns:
 
             - "time": the time series column
-            - "geo": the node ID (same value per group)
+            - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
 
@@ -408,12 +407,3 @@ class PlotRenderer:
             ls = ax.plot(data["time"], data["value"], **curr_kwargs)
             lines.extend(ls)
         return lines
-
-
-class PlotRendererMixin(Output):
-    """Mixin class that adds a convenient method for rendering plots from an output."""
-
-    @property
-    def plot(self) -> PlotRenderer:
-        """Render a plot from this output."""
-        return PlotRenderer(self)
