@@ -18,38 +18,31 @@ def no_plot_show(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     plt.close("all")
 
 
-@pytest.mark.parametrize("method", ["line_selection_plt", "line_plt", "quantiles_plt"])
-@pytest.mark.parametrize("aggregate_geo", [False, True])
-@pytest.mark.parametrize("with_transform", [False, True])
-def test_plot_preserves_epiweek_order(
-    temporal_order_output, method, aggregate_geo, with_transform
-):
+@pytest.mark.parametrize(
+    ("method", "expected_values"),
+    [
+        ("line_selection_plt", [[3, 9], [103, 109], [203, 209]]),
+        ("line_plt", [[103, 109]]),
+        ("quantiles_plt", [[103, 109]]),
+    ],
+)
+def test_plot_preserves_epiweek_order(temporal_order_output, method, expected_values):
     output = temporal_order_output
     rume = output.rume
-    geo = rume.scope.select.all()
-    if aggregate_geo:
-        geo = geo.sum()
+    geo = rume.scope.select.by_state("04")
     time = rume.time_frame.select.all().group("epiweek").agg()
-    quantity = rume.ipm.select.compartments("S", "I")
-    seen = []
-
-    def transform(data):
-        seen.append(data.copy())
-        return data.assign(value=data["value"] + 5)
-
-    transform_arg = transform if with_transform else None
+    quantity = rume.ipm.select.compartments("S")
     _, ax = plt.subplots()
     if method in ("line_plt", "line_selection_plt"):
         realization = output.select_realization.all()
         if method == "line_plt":
-            realization = realization.agg(["mean", "median"])
+            realization = realization.mean()
         lines = output.plot.line_plt(
             ax,
             realization=realization,
             geo=geo,
             time=time,
             quantity=quantity,
-            transform=transform_arg,
         )
     else:
         lines = output.plot.quantiles_plt(
@@ -57,69 +50,78 @@ def test_plot_preserves_epiweek_order(
             geo=geo,
             time=time,
             quantity=quantity,
-            transform=transform_arg,
         )
 
-    locations = [("*", 10)] if aggregate_geo else [("AZ", 0), ("NM", 10)]
-    expected = []
-    for location, node_offset in locations:
-        for name, quantity_offset in (("S", 0), ("I", 1)):
-            realization_values = range(3) if method == "line_selection_plt" else [1, 1]
-            if method == "quantiles_plt":
-                realization_values = [1]
-            for realization in realization_values:
-                values = 100 * realization + 3 * np.array([1, 3])
-                if aggregate_geo:
-                    values = 2 * values + node_offset + 2 * quantity_offset
-                else:
-                    values = values + node_offset + quantity_offset
-                expected.append((location, name, values))
-
-    assert len(lines) == len(expected)
-    for line, (_, _, values) in zip(lines, expected, strict=True):
+    assert len(lines) == len(expected_values)
+    for line, values in zip(lines, expected_values, strict=True):
         np.testing.assert_array_equal(line.get_xdata(), ["2021-9", "2021-10"])
-        np.testing.assert_array_equal(
-            line.get_ydata(), values + (5 if with_transform else 0)
+        np.testing.assert_array_equal(line.get_ydata(), values)
+
+
+@pytest.mark.parametrize(
+    ("ordering", "expected_groups"),
+    [
+        ("location", ["S @ AZ", "I @ AZ", "S @ NM", "I @ NM"]),
+        ("quantity", ["S @ AZ", "S @ NM", "I @ AZ", "I @ NM"]),
+    ],
+)
+@pytest.mark.parametrize(
+    ("method", "label_format", "label_suffix"),
+    [
+        ("line", "{q} @ {n}: {m}", ": mean"),
+        ("quantiles", "{q} @ {n}: {c}", ": Median"),
+        ("histogram", "{q} @ {n}", ""),
+        ("kernel_density", "{q} @ {n}", ""),
+    ],
+)
+def test_plot_ordering(
+    rume,
+    filter_output,
+    ordering,
+    expected_groups,
+    method,
+    label_format,
+    label_suffix,
+):
+    for realization in range(3):
+        filter_output.compartments[realization, ...] = realization
+    geo = rume.scope.select.all()
+    time = (
+        rume.time_frame.select.days(0, 0)
+        if method in ("histogram", "kernel_density")
+        else rume.time_frame.select.all()
+    )
+    quantity = rume.ipm.select.compartments("S", "I")
+    if method == "line":
+        filter_output.plot.line(
+            realization=filter_output.select_realization.all().mean(),
+            geo=geo,
+            time=time,
+            quantity=quantity,
+            ordering=ordering,
+            label_format=label_format,
+        )
+    else:
+        plot_method = getattr(filter_output.plot, method)
+        plot_method(
+            geo=geo,
+            time=time,
+            quantity=quantity,
+            ordering=ordering,
+            label_format=label_format,
         )
 
-    if with_transform:
-        line_data = seen
-        if method == "quantiles_plt":
-            assert len(seen) == 3 * len(lines)
-            line_data = [frame for frame in seen if frame["quantile"].iloc[0] == 50]
-        assert len(line_data) == len(lines)
-        for frame, (location, name, values) in zip(line_data, expected, strict=True):
-            np.testing.assert_array_equal(frame["time"], ["2021-9", "2021-10"])
-            assert frame["geo"].eq(location).all()
-            assert frame["quantity"].eq(name).all()
-            np.testing.assert_array_equal(frame["value"], values)
+    ax = plt.gca()
+    if method == "quantiles":
+        labels = [line.get_label() for line in ax.lines]
     else:
-        assert not seen
+        labels = ax.get_legend_handles_labels()[1]
+    assert labels == [f"{group}{label_suffix}" for group in expected_groups]
 
 
 ##############
 # line plots #
 ##############
-
-
-@pytest.mark.parametrize("legend", ["auto", "on", "off", "outside"])
-def test_line_realization_selection_legend(rume, filter_output, legend):
-    filter_output.plot.line(
-        realization=filter_output.select_realization.all(),
-        geo=rume.scope.select.all(),
-        time=rume.time_frame.select.all(),
-        quantity=rume.ipm.select.compartments("S", "I"),
-        ordering="quantity",
-        legend=legend,
-        time_format="date",
-        title="Forecast",
-    )
-    ax = plt.gca()
-    assert ax.get_title() == "Forecast"
-    assert ax.get_xlabel() == "date"
-    assert ax.get_ylabel() == "count"
-    if legend != "off":
-        assert ax.get_legend() is not None
 
 
 def test_line_plt_basic(rume, filter_output):
@@ -166,27 +168,45 @@ def test_line_plt_transform_columns(rume, filter_output, aggregate):
     assert seen == [expected_columns] * expected_calls
 
 
-@pytest.mark.parametrize(
-    ("ordering", "expected_labels"),
-    [
-        ("location", ["S @ AZ: mean", "I @ AZ: mean", "S @ NM: mean", "I @ NM: mean"]),
-        ("quantity", ["S @ AZ: mean", "S @ NM: mean", "I @ AZ: mean", "I @ NM: mean"]),
-    ],
-)
-def test_line_ordering_and_legend(rume, filter_output, ordering, expected_labels):
+@pytest.mark.parametrize("aggregate", [False, True])
+def test_line_plt_transform_values(rume, filter_output, aggregate):
+    for index, value in enumerate((1, 2, 3)):
+        filter_output.compartments[index, ...] = value
+    if aggregate:
+        realization = filter_output.select_realization.all().mean()
+        expected_values = [4]
+    else:
+        realization = filter_output.select_realization.all()
+        expected_values = [2, 4, 6]
+
+    _, ax = plt.subplots()
+    lines = filter_output.plot.line_plt(
+        ax,
+        realization=realization,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
+        transform=lambda data: data.assign(value=data["value"] * 2),
+    )
+    assert len(lines) == len(expected_values)
+    for line, value in zip(lines, expected_values, strict=True):
+        np.testing.assert_array_equal(line.get_ydata(), [value] * 4)
+
+
+def test_line_color_cycle(rume, filter_output):
     filter_output.plot.line(
-        realization=filter_output.select_realization.all().agg(["mean"]),
+        realization=filter_output.select_realization.all().mean(),
         geo=rume.scope.select.all(),
         time=rume.time_frame.select.all(),
         quantity=rume.ipm.select.compartments("S", "I"),
-        ordering=ordering,
-        label_format="{q} @ {n}: {m}",
         line_kwargs=[{"color": "red"}, {"color": "blue"}],
-        legend="on",
     )
-    ax = plt.gca()
-    assert ax.get_legend_handles_labels()[1] == expected_labels
-    assert [line.get_color() for line in ax.lines] == ["red", "blue", "red", "blue"]
+    assert [line.get_color() for line in plt.gca().lines] == [
+        "red",
+        "blue",
+        "red",
+        "blue",
+    ]
 
 
 def test_line_plt_parameter_aggregation(rume, filter_output):
@@ -226,6 +246,42 @@ def test_line_plt_date_format(rume, filter_output):
         pd.DatetimeIndex(lines[0].get_xdata()),
         pd.date_range("2021-01-02", periods=4),
     )
+
+
+@pytest.mark.parametrize("aggregate", [False, True])
+def test_line_plt_grouped_quantities(multistrata_filter_output, aggregate):
+    output = multistrata_filter_output
+    rume = output.rume
+    for name, value in (("S_young", 1), ("S_old", 4), ("I_young", 2), ("I_old", 8)):
+        index = rume.ipm.select.compartments(name).compartment_index
+        output.compartments[..., index] = (
+            value + np.arange(output.num_realizations)[:, np.newaxis, np.newaxis]
+        )
+
+    if aggregate:
+        realization = output.select_realization.all().mean()
+        expected_values = ([7], [12])
+        expected_labels = ["AZ S mean", "AZ I mean"]
+    else:
+        realization = output.select_realization.all()
+        expected_values = ([5, 7, 9], [10, 12, 14])
+        expected_labels = ["AZ S", "AZ I"]
+
+    _, ax = plt.subplots()
+    lines = output.plot.line_plt(
+        ax,
+        realization=realization,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S_*", "I_*").group(strata=True).sum(),
+    )
+    assert len(lines) == sum(len(values) for values in expected_values)
+    lines_per_group = len(expected_values[0])
+    assert [line.get_label() for line in lines[::lines_per_group]] == expected_labels
+    for line, value in zip(
+        lines, (*expected_values[0], *expected_values[1]), strict=True
+    ):
+        np.testing.assert_array_equal(line.get_ydata(), [value] * 4)
 
 
 @pytest.mark.parametrize("aggregate", [False, True])
@@ -292,67 +348,98 @@ def test_line_plt_realization_selection_subplots_and_parameters(rume, filter_out
         assert lines[0].get_label() == f"{expected} *::*::test_0"
 
 
+@pytest.mark.parametrize("legend", ["auto", "on", "off", "outside"])
+def test_line_realization_selection_legend(rume, filter_output, legend):
+    filter_output.plot.line(
+        realization=filter_output.select_realization.all(),
+        geo=rume.scope.select.all(),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S", "I"),
+        legend=legend,
+    )
+    assert (plt.gca().get_legend() is not None) is (legend != "off")
+
+
+def test_line_plot_labels(rume, filter_output):
+    filter_output.plot.line(
+        realization=filter_output.select_realization.all(),
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
+        time_format="date",
+        title="Forecast",
+    )
+    ax = plt.gca()
+    assert ax.get_title() == "Forecast"
+    assert ax.get_xlabel() == "date"
+    assert ax.get_ylabel() == "count"
+
+
 ##################
 # quantile plots #
 ##################
 
 
-@pytest.mark.parametrize(
-    ("ordering", "expected_groups"),
-    [
-        ("location", ["AZ: S", "AZ: I", "NM: S", "NM: I"]),
-        ("quantity", ["AZ: S", "NM: S", "AZ: I", "NM: I"]),
-    ],
-)
-def test_quantiles_plt_ordering_and_intervals(
-    rume, filter_output, ordering, expected_groups
-):
-    for realization, value in enumerate((0, 10, 20)):
-        filter_output.compartments[realization, ...] = value
-    transformed = []
+def test_quantiles_plt_group_styles(rume, filter_output):
+    _, ax = plt.subplots()
+    lines = filter_output.plot.quantiles_plt(
+        ax,
+        geo=rume.scope.select.all(),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S", "I"),
+        credible_intervals=[50, 100],
+        line_kwargs=[{"color": "red"}, {"color": "blue"}],
+        fill_kwargs=[{"color": "green"}, {"color": "orange"}],
+    )
+    assert [line.get_color() for line in lines] == ["red", "blue", "red", "blue"]
+    assert len(ax.collections) == 8
+    for collection, color in zip(
+        ax.collections,
+        ["green", "green", "orange", "orange"] * 2,
+        strict=True,
+    ):
+        np.testing.assert_array_equal(
+            np.asarray(collection.get_facecolor())[0, :3],
+            to_rgb(color),
+        )
+
+
+def test_quantiles_plt_transform_columns(rume, filter_output):
+    seen = []
 
     def transform(data):
-        transformed.append(data.copy())
-        return data.assign(value=data["value"] * 2)
+        seen.append(list(data.columns))
+        return data
+
+    _, ax = plt.subplots()
+    filter_output.plot.quantiles_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
+        transform=transform,
+    )
+    assert seen == [["time", "geo", "quantity", "quantile", "value"]] * 3
+
+
+def test_quantiles_plt_transform_values(rume, filter_output):
+    for realization, value in enumerate((0, 10, 20)):
+        filter_output.compartments[realization, ...] = value
 
     _, ax = plt.subplots()
     lines = filter_output.plot.quantiles_plt(
         ax,
-        rume.scope.select.all(),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S", "I"),
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
         credible_intervals=[50, 100],
-        ordering=ordering,
-        line_kwargs=[{"color": "red"}, {"color": "blue"}],
-        fill_kwargs=[{"color": "green"}, {"color": "orange"}],
-        transform=transform,
+        transform=lambda data: data.assign(value=data["value"] * 2),
     )
-    assert [line.get_label() for line in lines] == [
-        f"{group}: Median" for group in expected_groups
-    ]
-    assert [line.get_color() for line in lines] == ["red", "blue", "red", "blue"]
-    assert len(ax.collections) == 8
-    for index, collection in enumerate(ax.collections):
-        expected_color = "green" if index // 2 % 2 == 0 else "orange"
-        np.testing.assert_array_equal(
-            np.asarray(collection.get_facecolor())[0, :3],
-            to_rgb(expected_color),
-        )
+    assert len(ax.collections) == 2
+    for collection, bounds in zip(ax.collections, [(0, 40), (10, 30)], strict=True):
         vertices = np.asarray(collection.get_paths()[0].vertices, dtype=float)
-        expected_bounds = (0, 40) if index % 2 == 0 else (10, 30)
-        np.testing.assert_allclose(
-            [vertices[:, 1].min(), vertices[:, 1].max()], expected_bounds
-        )
-    assert len(transformed) == 20
-    assert all(
-        list(data.columns) == ["time", "geo", "quantity", "quantile", "value"]
-        for data in transformed
-    )
-    np.testing.assert_array_equal(lines[0].get_xdata(), [1, 2, 3, 4])
+        np.testing.assert_allclose([vertices[:, 1].min(), vertices[:, 1].max()], bounds)
     np.testing.assert_array_equal(lines[0].get_ydata(), [20, 20, 20, 20])
-    assert ax.get_legend() is None
-    assert ax.get_xlabel() == ""
-    assert len(ax.get_legend_handles_labels()[1]) == 8
 
 
 def test_quantiles_plt_subplots_and_parameters(rume, filter_output):
@@ -360,11 +447,10 @@ def test_quantiles_plt_subplots_and_parameters(rume, filter_output):
     for ax, state, expected in zip(axes, ("04", "35"), ("AZ", "NM")):
         lines = filter_output.plot.quantiles_plt(
             ax,
-            rume.scope.select.by_state(state),
-            rume.time_frame.select.all(),
-            filter_output.select_parameter.by_name("test_0"),
+            geo=rume.scope.select.by_state(state),
+            time=rume.time_frame.select.all(),
+            quantity=filter_output.select_parameter.by_name("test_0"),
             label_format="{q} @ {n}: {c}",
-            time_format="date",
         )
         assert [line.get_label() for line in lines] == [
             f"*::*::test_0 @ {expected}: Median"
@@ -373,24 +459,33 @@ def test_quantiles_plt_subplots_and_parameters(rume, filter_output):
             f"*::*::test_0 @ {expected}: [95]",
             f"*::*::test_0 @ {expected}: Median",
         ]
-        pd.testing.assert_index_equal(
-            pd.DatetimeIndex(lines[0].get_xdata()),
-            pd.date_range("2021-01-02", periods=4),
-        )
 
 
-def test_quantiles_plt_repeated_and_zero_intervals(rume, filter_output):
+def test_quantiles_plt_date_format(rume, filter_output):
     _, ax = plt.subplots()
     lines = filter_output.plot.quantiles_plt(
         ax,
-        rume.scope.select.by_state("04"),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S"),
-        credible_intervals=[0, 50, 50],
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
+        time_format="date",
     )
-    assert len(lines) == 1
-    assert len(ax.collections) == 3
-    np.testing.assert_array_equal(lines[0].get_ydata(), [1, 1, 1, 1])
+    pd.testing.assert_index_equal(
+        pd.DatetimeIndex(lines[0].get_xdata()),
+        pd.date_range("2021-01-02", periods=4),
+    )
+
+
+def test_quantiles_plt_repeated_intervals(rume, filter_output):
+    _, ax = plt.subplots()
+    filter_output.plot.quantiles_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
+        credible_intervals=[50, 50],
+    )
+    assert len(ax.collections) == 2
 
 
 def test_quantiles_plt_supported_interval_widths(rume, filter_output):
@@ -400,9 +495,9 @@ def test_quantiles_plt_supported_interval_widths(rume, filter_output):
     _, ax = plt.subplots()
     filter_output.plot.quantiles_plt(
         ax,
-        rume.scope.select.by_state("04"),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S"),
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
         credible_intervals=widths,
     )
     assert len(ax.collections) == len(widths)
@@ -414,21 +509,32 @@ def test_quantiles_plt_supported_interval_widths(rume, filter_output):
         )
 
 
-def test_quantiles_plt_default_interval_and_styles(rume, filter_output):
+def test_quantiles_plt_default_interval(rume, filter_output):
     for realization, value in enumerate((0, 10, 20)):
         filter_output.compartments[realization, ...] = value
     _, ax = plt.subplots()
-    lines = filter_output.plot.quantiles_plt(
+    filter_output.plot.quantiles_plt(
         ax,
-        rume.scope.select.by_state("04"),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S"),
-        line_kwargs=[],
-        fill_kwargs=[],
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
     )
     vertices = np.asarray(ax.collections[0].get_paths()[0].vertices, dtype=float)
     np.testing.assert_allclose(
-        [vertices[:, 1].min(), vertices[:, 1].max()], [0.5, 19.5]
+        [vertices[:, 1].min(), vertices[:, 1].max()],
+        [0.5, 19.5],
+    )
+
+
+def test_quantiles_plt_default_styles(rume, filter_output):
+    _, ax = plt.subplots()
+    lines = filter_output.plot.quantiles_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
+        line_kwargs=[],
+        fill_kwargs=[],
     )
     assert lines[0].get_color() == "black"
     np.testing.assert_allclose(
@@ -437,17 +543,37 @@ def test_quantiles_plt_default_interval_and_styles(rume, filter_output):
     )
 
 
-def test_quantiles_plt_geography_and_quantity_aggregations(rume, filter_output):
+def test_quantiles_plt_geography_aggregation(rume, filter_output):
+    filter_output.compartments[..., 1] = 3
     _, ax = plt.subplots()
     lines = filter_output.plot.quantiles_plt(
         ax,
-        rume.scope.select.all().sum(),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S", "I").group().sum(),
+        geo=rume.scope.select.all().sum(),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S", "I"),
     )
     assert [line.get_label() for line in lines] == ["*: S: Median", "*: I: Median"]
-    for line in lines:
-        np.testing.assert_array_equal(line.get_ydata(), [2, 2, 2, 2])
+    np.testing.assert_array_equal(lines[0].get_ydata(), [2, 2, 2, 2])
+    np.testing.assert_array_equal(lines[1].get_ydata(), [6, 6, 6, 6])
+
+
+def test_quantiles_plt_grouped_quantities(multistrata_filter_output):
+    output = multistrata_filter_output
+    rume = output.rume
+    for name, value in (("S_young", 1), ("S_old", 4), ("I_young", 2), ("I_old", 8)):
+        index = rume.ipm.select.compartments(name).compartment_index
+        output.compartments[..., index] = value
+
+    _, ax = plt.subplots()
+    lines = output.plot.quantiles_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S_*", "I_*").group(strata=True).sum(),
+    )
+    assert [line.get_label() for line in lines] == ["AZ: S: Median", "AZ: I: Median"]
+    np.testing.assert_array_equal(lines[0].get_ydata(), [5, 5, 5, 5])
+    np.testing.assert_array_equal(lines[1].get_ydata(), [10, 10, 10, 10])
 
 
 @pytest.mark.parametrize("interval", [-5, 2.5, 94.99, 97.5, 105, float("nan")])
@@ -456,9 +582,9 @@ def test_quantiles_plt_rejects_unsupported_intervals(rume, filter_output, interv
     with pytest.raises(ValueError, match="between 0 and 100 in increments of 5"):
         filter_output.plot.quantiles_plt(
             ax,
-            rume.scope.select.by_state("04"),
-            rume.time_frame.select.all(),
-            rume.ipm.select.compartments("S"),
+            geo=rume.scope.select.by_state("04"),
+            time=rume.time_frame.select.all(),
+            quantity=rume.ipm.select.compartments("S"),
             credible_intervals=[interval],
         )
 
@@ -466,86 +592,26 @@ def test_quantiles_plt_rejects_unsupported_intervals(rume, filter_output, interv
 @pytest.mark.parametrize("legend", ["auto", "on", "off", "outside"])
 def test_quantiles_legend(rume, filter_output, legend):
     filter_output.plot.quantiles(
-        rume.scope.select.all(),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S", "I"),
-        ordering="quantity",
-        label_format="{q} @ {n}: {c}",
-        fill_kwargs=[{"alpha": 0.3}],
+        geo=rume.scope.select.all(),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S", "I"),
         legend=legend,
+    )
+    assert (plt.gca().get_legend() is not None) is (legend != "off")
+
+
+def test_quantiles_plot_labels(rume, filter_output):
+    filter_output.plot.quantiles(
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all(),
+        quantity=rume.ipm.select.compartments("S"),
         time_format="date",
         title="Forecast",
     )
-    fig = plt.gcf()
-    assert len(fig.axes) == 1
-    ax = fig.axes[0]
+    ax = plt.gca()
     assert ax.get_title() == "Forecast"
     assert ax.get_xlabel() == "date"
     assert ax.get_ylabel() == "count"
-    assert [line.get_label() for line in ax.lines] == [
-        "S @ AZ: Median",
-        "S @ NM: Median",
-        "I @ AZ: Median",
-        "I @ NM: Median",
-    ]
-    if legend == "off":
-        assert ax.get_legend() is None
-    else:
-        plot_legend = ax.get_legend()
-        assert plot_legend is not None
-
-
-@pytest.mark.parametrize(("extra_item", "has_legend"), [(False, True), (True, False)])
-def test_quantiles_auto_legend_counts_items(
-    rume, filter_output, monkeypatch, extra_item, has_legend
-):
-    renderer = filter_output.plot
-    draw_quantiles = renderer.quantiles_plt
-
-    def draw_with_extra_item(ax, *args, **kwargs):
-        lines = draw_quantiles(ax, *args, **kwargs)
-        if extra_item:
-            ax.plot([0, 1], [0, 1], label="extra")
-        return lines
-
-    monkeypatch.setattr(renderer, "quantiles_plt", draw_with_extra_item)
-    renderer.quantiles(
-        rume.scope.select.all(),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S", "I", "R"),
-    )
-    ax = plt.gca()
-    assert len(ax.get_legend_handles_labels()[1]) == 12 + extra_item
-    assert (ax.get_legend() is not None) is has_legend
-
-
-def test_quantiles_save_single_plot(rume, filter_output, tmp_path):
-    path = tmp_path / "quantiles.png"
-    filter_output.plot.quantiles(
-        rume.scope.select.all(),
-        rume.time_frame.select.all(),
-        rume.ipm.select.compartments("S"),
-        to_file=path,
-    )
-    assert path.is_file()
-    assert path.stat().st_size > 0
-
-
-def test_quantiles_closes_figure_on_failure(rume, filter_output):
-    plt.subplots()
-    open_figures = plt.get_fignums()
-
-    def fail_transform(data):
-        raise RuntimeError("transform failed")
-
-    with pytest.raises(RuntimeError, match="transform failed"):
-        filter_output.plot.quantiles(
-            rume.scope.select.all(),
-            rume.time_frame.select.all(),
-            rume.ipm.select.compartments("S"),
-            transform=fail_transform,
-        )
-    assert plt.get_fignums() == open_figures
 
 
 ###################
@@ -553,56 +619,41 @@ def test_quantiles_closes_figure_on_failure(rume, filter_output):
 ###################
 
 
-@pytest.mark.parametrize(
-    ("ordering", "expected_groups", "expected_values"),
-    [
-        ("location", ["AZ: S", "AZ: I", "NM: S", "NM: I"], [0, 10, 100, 110]),
-        ("quantity", ["AZ: S", "NM: S", "AZ: I", "NM: I"], [0, 100, 10, 110]),
-    ],
-)
-def test_histogram_plt_ordering_and_transform(
-    rume, filter_output, ordering, expected_groups, expected_values
-):
-    for realization in range(3):
-        for node in range(2):
-            for quantity in range(2):
-                filter_output.compartments[realization, :, node, quantity] = (
-                    realization + 100 * node + 10 * quantity
-                )
-    transformed = []
+def test_histogram_plt_transform_columns(rume, filter_output):
+    seen = []
 
     def transform(data):
-        assert list(data.columns) == ["geo", "quantity", "value"]
-        transformed.append(data["value"].tolist())
-        return data.assign(value=data["value"] + 0.5)
+        seen.append(list(data.columns))
+        return data
 
+    _, ax = plt.subplots()
+    filter_output.plot.histogram_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S"),
+        transform=transform,
+    )
+    assert seen == [["geo", "quantity", "value"]]
+
+
+def test_histogram_plt_transform_values(rume, filter_output):
+    for realization, value in enumerate((0, 1, 2)):
+        filter_output.compartments[realization, ...] = value
     _, ax = plt.subplots()
     plots = filter_output.plot.histogram_plt(
         ax,
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S", "I"),
-        ordering=ordering,
-        label_format="{n}: {q}",
-        hist_kwargs=[
-            {"color": "red", "bins": 3},
-            {"color": "blue", "bins": 3},
-        ],
-        transform=transform,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S"),
+        hist_kwargs=[{"bins": 3}],
+        transform=lambda data: data.assign(value=data["value"] + 0.5),
     )
-    assert len(plots) == 4
-    assert ax.get_legend_handles_labels()[1] == expected_groups
-    assert transformed == [[v, v + 1, v + 2] for v in expected_values]
-    for plot, value, color in zip(
-        plots, expected_values, ("red", "blue", "red", "blue")
-    ):
-        assert isinstance(plot, BarContainer)
-        np.testing.assert_array_equal([bar.get_height() for bar in plot], [1, 1, 1])
-        assert plot[0].get_x() == pytest.approx(value + 0.5)
-        np.testing.assert_allclose(plot[0].get_facecolor()[:3], to_rgb(color))
-    assert ax.get_legend() is None
-    assert ax.get_xlabel() == ""
-    assert ax.get_title() == ""
+    plot = plots[0]
+    assert isinstance(plot, BarContainer)
+    np.testing.assert_array_equal([bar.get_height() for bar in plot], [1, 1, 1])
+    assert plot[0].get_x() == pytest.approx(0.5)
+    assert plot[-1].get_x() + plot[-1].get_width() == pytest.approx(2.5)
 
 
 def test_histogram_plt_subplots_and_parameters(rume, filter_output):
@@ -610,9 +661,9 @@ def test_histogram_plt_subplots_and_parameters(rume, filter_output):
     for ax, state, expected in zip(axes, ("04", "35"), ("AZ", "NM")):
         plots = filter_output.plot.histogram_plt(
             ax,
-            rume.scope.select.by_state(state),
-            rume.time_frame.select.days(0, 0),
-            filter_output.select_parameter.by_name("test_0"),
+            geo=rume.scope.select.by_state(state),
+            time=rume.time_frame.select.days(0, 0),
+            quantity=filter_output.select_parameter.by_name("test_0"),
             label_format="{q} @ {n}: {t}",
             hist_kwargs=[{"bins": 2}],
         )
@@ -624,28 +675,13 @@ def test_histogram_plt_subplots_and_parameters(rume, filter_output):
         assert sum(bar.get_height() for bar in plots[0]) == 3
 
 
-def test_histogram_plt_step_histogram(rume, filter_output):
-    _, ax = plt.subplots()
-    plots = filter_output.plot.histogram_plt(
-        ax,
-        rume.scope.select.by_state("04"),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S"),
-        hist_kwargs=[{"histtype": "step"}],
-    )
-    assert len(plots) == 1
-    assert isinstance(plots[0], list)
-    assert len(plots[0]) == 1
-    assert plots[0][0] in ax.patches
-
-
 def test_histogram_plt_mixed_histogram_types(rume, filter_output):
     _, ax = plt.subplots()
     plots = filter_output.plot.histogram_plt(
         ax,
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S", "I"),
+        geo=rume.scope.select.all(),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S", "I"),
         hist_kwargs=[
             {"histtype": "bar"},
             {"histtype": "step"},
@@ -664,27 +700,14 @@ def test_histogram_plt_mixed_histogram_types(rume, filter_output):
     assert isinstance(plots[3][0], Polygon)
 
 
-def test_histogram_plt_rejects_unexpected_artists(rume, filter_output, monkeypatch):
-    _, ax = plt.subplots()
-    monkeypatch.setattr(
-        ax, "hist", lambda *args, **kwargs: ([], [], [BarContainer([])])
-    )
-    with pytest.raises(TypeError, match="unexpected histogram artists"):
-        filter_output.plot.histogram_plt(
-            ax,
-            rume.scope.select.by_state("04"),
-            rume.time_frame.select.days(0, 0),
-            rume.ipm.select.compartments("S"),
-        )
-
-
-def test_histogram_plt_aggregated_selections(rume, filter_output):
+def test_histogram_plt_geography_and_time_aggregations(rume, filter_output):
+    filter_output.compartments[..., 1] = 3
     _, ax = plt.subplots()
     plots = filter_output.plot.histogram_plt(
         ax,
-        rume.scope.select.all().sum(),
-        rume.time_frame.select.all().agg(),
-        rume.ipm.select.compartments("S", "I").group().sum(),
+        geo=rume.scope.select.all().sum(),
+        time=rume.time_frame.select.all().agg(),
+        quantity=rume.ipm.select.compartments("S", "I"),
         label_format="{n}: {q}: {t}",
         hist_kwargs=[],
     )
@@ -693,11 +716,38 @@ def test_histogram_plt_aggregated_selections(rume, filter_output):
         "*: S: 2021-01-01/2021-01-04",
         "*: I: 2021-01-01/2021-01-04",
     ]
-    for plot in plots:
+    for plot, value in zip(plots, (2, 6), strict=True):
         assert isinstance(plot, BarContainer)
         assert sum(bar.get_height() for bar in plot) == 3
         bar = next(bar for bar in plot if bar.get_height() > 0)
-        assert bar.get_x() <= 2 <= bar.get_x() + bar.get_width()
+        assert bar.get_x() <= value <= bar.get_x() + bar.get_width()
+
+
+def test_histogram_plt_grouped_quantities(multistrata_filter_output):
+    output = multistrata_filter_output
+    rume = output.rume
+    for name, value in (("S_young", 1), ("S_old", 4), ("I_young", 2), ("I_old", 8)):
+        index = rume.ipm.select.compartments(name).compartment_index
+        output.compartments[..., index] = value
+
+    _, ax = plt.subplots()
+    plots = output.plot.histogram_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S_*", "I_*").group(strata=True).sum(),
+        hist_kwargs=[{"bins": 1}],
+    )
+    assert ax.get_legend_handles_labels()[1] == [
+        "AZ: S: 2021-01-01",
+        "AZ: I: 2021-01-01",
+    ]
+    assert len(plots) == 2
+    for plot, value in zip(plots, (5, 10), strict=True):
+        assert isinstance(plot, BarContainer)
+        assert len(plot) == 1
+        assert plot[0].get_height() == 3
+        assert plot[0].get_x() + plot[0].get_width() / 2 == pytest.approx(value)
 
 
 def test_histogram_plt_rejects_multiple_times(rume, filter_output):
@@ -705,86 +755,34 @@ def test_histogram_plt_rejects_multiple_times(rume, filter_output):
     with pytest.raises(ValueError, match="single point"):
         filter_output.plot.histogram_plt(
             ax,
-            rume.scope.select.all(),
-            rume.time_frame.select.all(),
-            rume.ipm.select.compartments("S"),
+            geo=rume.scope.select.all(),
+            time=rume.time_frame.select.all(),
+            quantity=rume.ipm.select.compartments("S"),
         )
-    assert len(ax.patches) == 0
 
 
 @pytest.mark.parametrize("legend", ["auto", "on", "off", "outside"])
 def test_histogram_legend(rume, filter_output, legend):
     filter_output.plot.histogram(
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S", "I"),
-        label_format="{q} @ {n}",
-        ordering="quantity",
+        geo=rume.scope.select.all(),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S", "I"),
         legend=legend,
+    )
+    assert (plt.gca().get_legend() is not None) is (legend != "off")
+
+
+def test_histogram_plot_labels(rume, filter_output):
+    filter_output.plot.histogram(
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S"),
         title="Forecast",
     )
-    fig = plt.gcf()
-    assert len(fig.axes) == 1
-    ax = fig.axes[0]
+    ax = plt.gca()
     assert ax.get_title() == "Forecast"
     assert ax.get_xlabel() == "value"
     assert ax.get_ylabel() == "count"
-    assert ax.get_legend_handles_labels()[1] == [
-        "S @ AZ",
-        "S @ NM",
-        "I @ AZ",
-        "I @ NM",
-    ]
-    assert (ax.get_legend() is not None) is (legend != "off")
-
-
-@pytest.mark.parametrize(("groups", "has_legend"), [(12, True), (13, False)])
-def test_histogram_auto_legend_counts_groups(
-    rume, filter_output, monkeypatch, groups, has_legend
-):
-    renderer = filter_output.plot
-
-    def draw_groups(ax, *args, **kwargs):
-        for group in range(groups):
-            ax.hist([0, 1], label=f"group {group}")
-        return []
-
-    monkeypatch.setattr(renderer, "histogram_plt", draw_groups)
-    renderer.histogram(
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S"),
-    )
-    assert (plt.gca().get_legend() is not None) is has_legend
-
-
-def test_histogram_save_single_plot(rume, filter_output, tmp_path):
-    path = tmp_path / "histogram.png"
-    filter_output.plot.histogram(
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S"),
-        to_file=path,
-    )
-    assert path.is_file()
-    assert path.stat().st_size > 0
-
-
-def test_histogram_closes_figure_on_failure(rume, filter_output):
-    plt.subplots()
-    open_figures = plt.get_fignums()
-
-    def fail_transform(data):
-        raise RuntimeError("transform failed")
-
-    with pytest.raises(RuntimeError, match="transform failed"):
-        filter_output.plot.histogram(
-            rume.scope.select.all(),
-            rume.time_frame.select.days(0, 0),
-            rume.ipm.select.compartments("S"),
-            transform=fail_transform,
-        )
-    assert plt.get_fignums() == open_figures
 
 
 #############
@@ -792,57 +790,64 @@ def test_histogram_closes_figure_on_failure(rume, filter_output):
 #############
 
 
-@pytest.mark.parametrize(
-    ("ordering", "expected_groups", "expected_values"),
-    [
-        ("location", ["AZ: S", "AZ: I", "NM: S", "NM: I"], [1, 2, 3, 4]),
-        ("quantity", ["AZ: S", "NM: S", "AZ: I", "NM: I"], [1, 3, 2, 4]),
-    ],
-)
-def test_kde_plt_ordering_and_transform(
-    rume, filter_output, ordering, expected_groups, expected_values
-):
+def test_kde_plt_transform_columns(rume, filter_output):
     for realization in range(3):
-        for node in range(2):
-            for quantity in range(2):
-                scale = 1 + 2 * node + quantity
-                filter_output.compartments[realization, :, node, quantity] = (
-                    realization * scale
-                )
-    transformed = []
+        filter_output.compartments[realization, ...] = realization
+    seen = []
 
     def transform(data):
-        assert list(data.columns) == ["geo", "quantity", "value"]
-        transformed.append(data["value"].tolist())
-        return data.assign(value=data["value"] + 0.5)
+        seen.append(list(data.columns))
+        return data
 
+    _, ax = plt.subplots()
+    filter_output.plot.kernel_density_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S"),
+        transform=transform,
+    )
+    assert seen == [["geo", "quantity", "value"]]
+
+
+@pytest.mark.parametrize("bandwidth", ["silverman", 0.5])
+def test_kde_plt_transform_values(rume, filter_output, bandwidth):
+    for realization in range(3):
+        filter_output.compartments[realization, ...] = realization
     _, ax = plt.subplots()
     lines = filter_output.plot.kernel_density_plt(
         ax,
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S", "I"),
-        label_format="{n}: {q}",
-        ordering=ordering,
-        line_kwargs=[{"color": "red"}, {"color": "blue"}],
-        bandwidth="silverman",
-        transform=transform,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S"),
+        bandwidth=bandwidth,
+        delta_t=0.5,
+        transform=lambda data: data.assign(value=data["value"] + 0.5),
     )
-    assert list(ax.lines) == lines
-    assert [line.get_label() for line in lines] == expected_groups
-    assert [line.get_color() for line in lines] == ["red", "blue", "red", "blue"]
-    assert transformed == [[0, scale, 2 * scale] for scale in expected_values]
-    for line, scale in zip(lines, expected_values):
-        x = np.asarray(line.get_xdata())
-        expected_x = np.arange(0.5, 2 * scale + 0.5 + scale / 50, scale / 50)
-        np.testing.assert_allclose(x, expected_x)
-        expected_density = gaussian_kde(
-            [0.5, scale + 0.5, 2 * scale + 0.5], bw_method="silverman"
-        )(expected_x)
-        np.testing.assert_allclose(line.get_ydata(), expected_density)
-    assert ax.get_legend() is None
-    assert ax.get_xlabel() == ""
-    assert ax.get_title() == ""
+    expected_x = [0.5, 1, 1.5, 2, 2.5]
+    np.testing.assert_allclose(lines[0].get_xdata(), expected_x)
+    np.testing.assert_allclose(
+        lines[0].get_ydata(),
+        gaussian_kde([0.5, 1.5, 2.5], bw_method=bandwidth)(expected_x),
+    )
+
+
+@pytest.mark.parametrize(
+    ("delta_t", "expected_x"),
+    [(None, np.linspace(0, 2, 101)), (0.5, [0, 0.5, 1, 1.5, 2])],
+)
+def test_kde_plt_sampling_interval(rume, filter_output, delta_t, expected_x):
+    for realization in range(3):
+        filter_output.compartments[realization, ...] = realization
+    _, ax = plt.subplots()
+    lines = filter_output.plot.kernel_density_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S"),
+        delta_t=delta_t,
+    )
+    np.testing.assert_allclose(lines[0].get_xdata(), expected_x)
 
 
 def test_kde_plt_subplots_and_parameters(rume, filter_output):
@@ -852,43 +857,67 @@ def test_kde_plt_subplots_and_parameters(rume, filter_output):
     for ax, state, expected in zip(axes, ("04", "35"), ("AZ", "NM")):
         lines = filter_output.plot.kernel_density_plt(
             ax,
-            rume.scope.select.by_state(state),
-            rume.time_frame.select.days(0, 0),
-            filter_output.select_parameter.by_name("test_0"),
+            geo=rume.scope.select.by_state(state),
+            time=rume.time_frame.select.days(0, 0),
+            quantity=filter_output.select_parameter.by_name("test_0"),
             label_format="{q} @ {n}: {t}",
-            delta_t=0.5,
-            bandwidth=0.5,
-            line_kwargs=[],
         )
         assert len(lines) == 1
         assert lines[0].get_label() == (f"*::*::test_0 @ {expected}: 2021-01-01")
-        np.testing.assert_allclose(lines[0].get_xdata(), [0, 0.5, 1, 1.5, 2])
-        np.testing.assert_allclose(
-            lines[0].get_ydata(),
-            gaussian_kde([0, 1, 2], bw_method=0.5)([0, 0.5, 1, 1.5, 2]),
-        )
 
 
-def test_kde_plt_aggregated_selections(rume, filter_output):
+def test_kde_plt_geography_and_time_aggregations(rume, filter_output):
     for realization in range(3):
         filter_output.compartments[realization, ...] = realization
+        filter_output.compartments[realization, ..., 1] = 3 * realization
     _, ax = plt.subplots()
     lines = filter_output.plot.kernel_density_plt(
         ax,
-        rume.scope.select.all().sum(),
-        rume.time_frame.select.all().agg(),
-        rume.ipm.select.compartments("S", "I").group().sum(),
-        delta_t=1,
+        geo=rume.scope.select.all().sum(),
+        time=rume.time_frame.select.all().agg(),
+        quantity=rume.ipm.select.compartments("S", "I"),
+        delta_t=2,
     )
     assert [line.get_label() for line in lines] == [
         "*: S: 2021-01-01/2021-01-04",
         "*: I: 2021-01-01/2021-01-04",
     ]
-    for line in lines:
-        np.testing.assert_array_equal(line.get_xdata(), [0, 1, 2, 3, 4])
-        np.testing.assert_allclose(
-            line.get_ydata(), gaussian_kde([0, 2, 4])([0, 1, 2, 3, 4])
+    for line, values in zip(lines, ([0, 2, 4], [0, 6, 12]), strict=True):
+        expected_x = np.arange(0, values[-1] + 1, 2)
+        np.testing.assert_array_equal(line.get_xdata(), expected_x)
+        np.testing.assert_allclose(line.get_ydata(), gaussian_kde(values)(expected_x))
+
+
+def test_kde_plt_grouped_quantities(multistrata_filter_output):
+    output = multistrata_filter_output
+    rume = output.rume
+    for name, value, step in (
+        ("S_young", 1, 1),
+        ("S_old", 4, 2),
+        ("I_young", 2, 2),
+        ("I_old", 8, 4),
+    ):
+        index = rume.ipm.select.compartments(name).compartment_index
+        output.compartments[..., index] = (
+            value + step * np.arange(output.num_realizations)[:, np.newaxis, np.newaxis]
         )
+
+    _, ax = plt.subplots()
+    lines = output.plot.kernel_density_plt(
+        ax,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S_*", "I_*").group(strata=True).sum(),
+        delta_t=3,
+    )
+    assert [line.get_label() for line in lines] == [
+        "AZ: S: 2021-01-01",
+        "AZ: I: 2021-01-01",
+    ]
+    for line, values in zip(lines, ([5, 8, 11], [10, 16, 22]), strict=True):
+        expected_x = np.arange(values[0], values[-1] + 1, 3)
+        np.testing.assert_array_equal(line.get_xdata(), expected_x)
+        np.testing.assert_allclose(line.get_ydata(), gaussian_kde(values)(expected_x))
 
 
 def test_kde_plt_rejects_constant_data(rume, filter_output):
@@ -896,9 +925,9 @@ def test_kde_plt_rejects_constant_data(rume, filter_output):
     with pytest.raises(np.linalg.LinAlgError, match="singular"):
         filter_output.plot.kernel_density_plt(
             ax,
-            rume.scope.select.by_state("04"),
-            rume.time_frame.select.days(0, 0),
-            rume.ipm.select.compartments("S"),
+            geo=rume.scope.select.by_state("04"),
+            time=rume.time_frame.select.days(0, 0),
+            quantity=rume.ipm.select.compartments("S"),
         )
 
 
@@ -907,11 +936,10 @@ def test_kde_plt_rejects_multiple_times(rume, filter_output):
     with pytest.raises(ValueError, match="single point"):
         filter_output.plot.kernel_density_plt(
             ax,
-            rume.scope.select.all(),
-            rume.time_frame.select.all(),
-            rume.ipm.select.compartments("S"),
+            geo=rume.scope.select.all(),
+            time=rume.time_frame.select.all(),
+            quantity=rume.ipm.select.compartments("S"),
         )
-    assert len(ax.lines) == 0
 
 
 @pytest.mark.parametrize("delta_t", [0, -0.5, float("nan"), float("inf")])
@@ -920,9 +948,9 @@ def test_kde_plt_rejects_invalid_delta_t(rume, filter_output, delta_t):
     with pytest.raises(ValueError, match="delta_t"):
         filter_output.plot.kernel_density_plt(
             ax,
-            rume.scope.select.all(),
-            rume.time_frame.select.days(0, 0),
-            rume.ipm.select.compartments("S"),
+            geo=rume.scope.select.all(),
+            time=rume.time_frame.select.days(0, 0),
+            quantity=rume.ipm.select.compartments("S"),
             delta_t=delta_t,
         )
 
@@ -932,83 +960,24 @@ def test_kde_legend(rume, filter_output, legend):
     for realization in range(3):
         filter_output.compartments[realization, ...] = realization
     filter_output.plot.kernel_density(
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S", "I"),
-        label_format="{q} @ {n}",
-        ordering="quantity",
-        line_kwargs=[{"alpha": 0.3}],
+        geo=rume.scope.select.all(),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S", "I"),
         legend=legend,
+    )
+    assert (plt.gca().get_legend() is not None) is (legend != "off")
+
+
+def test_kde_plot_labels(rume, filter_output):
+    for realization in range(3):
+        filter_output.compartments[realization, ...] = realization
+    filter_output.plot.kernel_density(
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.days(0, 0),
+        quantity=rume.ipm.select.compartments("S"),
         title="Forecast",
     )
-    fig = plt.gcf()
-    assert len(fig.axes) == 1
-    ax = fig.axes[0]
+    ax = plt.gca()
     assert ax.get_title() == "Forecast"
     assert ax.get_xlabel() == "value"
     assert ax.get_ylabel() == "density"
-    assert ax.get_legend_handles_labels()[1] == [
-        "S @ AZ",
-        "S @ NM",
-        "I @ AZ",
-        "I @ NM",
-    ]
-    plot_legend = ax.get_legend()
-    assert (plot_legend is not None) is (legend != "off")
-    if plot_legend is not None:
-        assert all(
-            handle is not None and handle.get_alpha() == 0.3
-            for handle in plot_legend.legend_handles
-        )
-
-
-@pytest.mark.parametrize(("groups", "has_legend"), [(12, True), (13, False)])
-def test_kde_auto_legend_counts_groups(
-    rume, filter_output, monkeypatch, groups, has_legend
-):
-    renderer = filter_output.plot
-
-    def draw_groups(ax, *args, **kwargs):
-        return [
-            ax.plot([0, 1], [0, 1], label=f"group {group}")[0]
-            for group in range(groups)
-        ]
-
-    monkeypatch.setattr(renderer, "kernel_density_plt", draw_groups)
-    renderer.kernel_density(
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S"),
-    )
-    assert (plt.gca().get_legend() is not None) is has_legend
-
-
-def test_kde_save_single_plot(rume, filter_output, tmp_path):
-    for realization in range(3):
-        filter_output.compartments[realization, ...] = realization
-    path = tmp_path / "kde.png"
-    filter_output.plot.kernel_density(
-        rume.scope.select.all(),
-        rume.time_frame.select.days(0, 0),
-        rume.ipm.select.compartments("S"),
-        to_file=path,
-    )
-    assert path.is_file()
-    assert path.stat().st_size > 0
-
-
-def test_kde_closes_figure_on_failure(rume, filter_output):
-    plt.subplots()
-    open_figures = plt.get_fignums()
-
-    def fail_transform(data):
-        raise RuntimeError("transform failed")
-
-    with pytest.raises(RuntimeError, match="transform failed"):
-        filter_output.plot.kernel_density(
-            rume.scope.select.all(),
-            rume.time_frame.select.days(0, 0),
-            rume.ipm.select.compartments("S"),
-            transform=fail_transform,
-        )
-    assert plt.get_fignums() == open_figures

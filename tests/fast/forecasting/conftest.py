@@ -15,7 +15,7 @@ from epymorph.forecasting.pipeline import (
     UnknownParam,
 )
 from epymorph.geography.us_census import StateScope
-from epymorph.rume import RUME, SingleStrataRUME
+from epymorph.rume import GPM, RUME, MultiStrataRUME, SingleStrataRUME
 from epymorph.time import TimeFrame
 
 
@@ -40,6 +40,10 @@ def rume() -> RUME[StateScope]:
 @pytest.fixture
 def filter_output(rume) -> PipelineOutput:
     """A mock filter output so we don't have to run a filter."""
+    return _make_filter_output(rume)
+
+
+def _make_filter_output(rume: RUME) -> PipelineOutput:
     R = 3  # noqa: N806
     N = rume.scope.nodes
     C = rume.ipm.num_compartments
@@ -76,6 +80,28 @@ def filter_output(rume) -> PipelineOutput:
         initial=compartments[:, 0, :, :],
         estimated_params={param_name: np.ones((R, T, N)) for param_name in param_names},
     )
+
+
+@pytest.fixture
+def multistrata_filter_output(rume) -> PipelineOutput:
+    """A mock filter output with two SIRS strata."""
+    multistrata_rume = MultiStrataRUME.build(
+        strata=[
+            GPM(
+                name=name,
+                ipm=ipm.SIRS(),
+                mm=mm.No(),
+                init=init.SingleLocation(location=0, seed_size=100),
+            )
+            for name in ("young", "old")
+        ],
+        meta_requirements=[],
+        meta_edges=lambda _: [],
+        scope=rume.scope,
+        time_frame=rume.time_frame,
+        params={},
+    )
+    return _make_filter_output(multistrata_rume)
 
 
 @pytest.fixture
