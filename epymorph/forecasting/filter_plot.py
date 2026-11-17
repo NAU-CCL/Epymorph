@@ -33,11 +33,12 @@ def _normalize_kwargs(
     *,
     default: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    default = default or {}
     if mpl_kwargs is None or len(mpl_kwargs) == 0:
-        mpl_kwargs = [default or {}]
+        mpl_kwargs = [default]
     else:
         # copy to avoid mutating caller's dicts
-        mpl_kwargs = [{**kwargs} for kwargs in mpl_kwargs]
+        mpl_kwargs = [{**default, **kwargs} for kwargs in mpl_kwargs]
 
     for kwargs in mpl_kwargs:
         if "c" in kwargs:
