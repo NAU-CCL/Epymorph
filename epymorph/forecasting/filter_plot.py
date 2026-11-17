@@ -177,6 +177,7 @@ class PlotRendererPipeline:
         *,
         label_format: str = "{n}: {q}: {c}",
         legend: LegendOption = "auto",
+        style: Literal["fill", "bar"] = "fill",
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
@@ -220,16 +221,25 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
+        style :
+            How the quantiles are represented. "fill" will represent the quantiles using
+            matplotlib `fill_between()` to produce continuous shaded areas. "bar" will
+            use `bar()` producing individual shaded bars for each data point.
         fill_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each shaded interval. Each dictionary applies to all intervals
-            in one location/quantity group; the list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each shaded interval. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `fill_between()` or
+            `bar()`. Each dictionary applies to all intervals in one location/quantity
+            group; the list cycles in the order defined by the `ordering` parameter.
+            In the "bar" plotting mode, the width keyword argument will be used to set
+            the width of the horizontal median lines.
             See matplotlib documentation for the supported options.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each median line. The list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each median line. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `plot()` or
+            `errorbar()` (the latter of which is used to achieve the horizontal median
+            lines.) The list cycles in the order defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
         ordering :
             Whether location or quantity takes priority when ordering groups.
@@ -275,6 +285,7 @@ class PlotRendererPipeline:
                 quantity,
                 credible_intervals=credible_intervals,
                 label_format=label_format,
+                style=style,
                 fill_kwargs=fill_kwargs,
                 line_kwargs=line_kwargs,
                 ordering=ordering,
@@ -326,6 +337,7 @@ class PlotRendererPipeline:
         credible_intervals: Sequence[float] | None = None,
         *,
         label_format: str = "{n}: {q}: {c}",
+        style: Literal["fill", "bar"] = "fill",
         fill_kwargs: list[dict] | None = None,
         line_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
@@ -357,16 +369,25 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{c}` for the list of credible intervals or "Median".
+        style :
+            How the quantiles are represented. "fill" will represent the quantiles using
+            matplotlib `fill_between()` to produce continuous shaded areas. "bar" will
+            use `bar()` producing individual shaded bars for each data point.
         fill_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each shaded interval. Each dictionary applies to all intervals
-            in one location/quantity group; the list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each shaded interval. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `fill_between()` or
+            `bar()`. Each dictionary applies to all intervals in one location/quantity
+            group; the list cycles in the order defined by the `ordering` parameter.
+            In the "bar" plotting mode, the width keyword argument will be used to set
+            the width of the horizontal median lines.
             See matplotlib documentation for the supported options.
         line_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each median line. The list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each median line. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `plot()` or
+            `errorbar()` (the latter of which is used to achieve the horizontal median
+            lines.) The list cycles in the order defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
         ordering :
             Whether location or quantity takes priority when ordering groups.
@@ -404,13 +425,19 @@ class PlotRendererPipeline:
             The list of `Line2D` objects for each median line drawn. Shaded intervals
             can be accessed through the axes' collections.
         """
+
+        if style == "bar":
+            line_default = {"color": "black", "linestyle": "none"}
+        else:
+            line_default = {"color": "black"}
+
         line_kwargs = _normalize_kwargs(
             line_kwargs,
-            default={"color": "black"},
+            default=line_default,
         )
         fill_kwargs = _normalize_kwargs(
             fill_kwargs,
-            default={"color": "tab:blue", "alpha": 0.3},
+            default={"facecolor": "tab:blue", "edgecolor": "tab:blue", "alpha": 0.3},
         )
 
         if credible_intervals is None or len(credible_intervals) == 0:
@@ -497,12 +524,21 @@ class PlotRendererPipeline:
                 plot_kwargs = {"label": label, **f_kwargs}
                 if index != len(quantile_list) - 1:
                     plot_kwargs["label"] = "_nolegend_"
-                ax.fill_between(
-                    group["time"],
-                    data_lower,
-                    data_upper,
-                    **plot_kwargs,
-                )
+
+                if style == "bar":
+                    ax.bar(
+                        group["time"],
+                        height=data_upper - data_lower,
+                        bottom=data_lower,
+                        **plot_kwargs,
+                    )
+                else:
+                    ax.fill_between(
+                        group["time"],
+                        data_lower,
+                        data_upper,
+                        **plot_kwargs,
+                    )
 
             data_median = apply_transform(group, quantity_name, "quantile_50.0")
             label = label_format.format(
@@ -510,13 +546,29 @@ class PlotRendererPipeline:
                 q=quantity_label,
                 c="Median",
             )
-            lines.extend(
-                ax.plot(
-                    group["time"],
-                    data_median,
-                    **{"label": label, "zorder": 100, **l_kwargs},
+
+            if style == "bar":
+                # The xerr argument of errorbar behaves strangely with units. Therefore
+                # it is easier to convert both x and xerr to unitless data coordinates.
+
+                # Using the same width as bar() with the same default of 0.8.
+                width = f_kwargs.get("width", 0.8)
+                lines.extend(
+                    ax.errorbar(
+                        ax.convert_xunits(group["time"]),
+                        data_median,
+                        xerr=0.5 * ax.convert_xunits(width),
+                        **{"label": label, "zorder": 100, **l_kwargs},
+                    )
                 )
-            )
+            else:
+                lines.extend(
+                    ax.plot(
+                        group["time"],
+                        data_median,
+                        **{"label": label, "zorder": 100, **l_kwargs},
+                    )
+                )
 
         return lines
 
