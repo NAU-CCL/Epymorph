@@ -428,9 +428,9 @@ class PlotRendererPipeline:
         """
 
         if style == "bar":
-            median_default = {"color": "black", "linestyle": "none"}
+            median_default = {"linestyle": "none"}
         else:
-            median_default = {"color": "black"}
+            median_default = {}
 
         median_kwargs = _normalize_kwargs(
             median_kwargs,
@@ -438,7 +438,7 @@ class PlotRendererPipeline:
         )
         interval_kwargs = _normalize_kwargs(
             interval_kwargs,
-            default={"facecolor": "tab:blue", "edgecolor": "tab:blue", "alpha": 0.3},
+            default={"alpha": 0.3},
         )
 
         if credible_intervals is None or len(credible_intervals) == 0:
@@ -514,6 +514,14 @@ class PlotRendererPipeline:
             cycle(interval_kwargs),
         ):
             quantity_label = q_mapping[quantity_name]
+
+            # For each location/quantity group, one interval is plotted first, then the
+            # actual facecolor and edgecolor are saved and reused to subsequent
+            # intervals. This is done to utilize matplotlib's default colors and
+            # maintain compatibility with styles while avoiding incrementing
+            # matplotlib's internal color cycles when plotting multiple intervals.
+            facecolor = None
+            edgecolor = None
             for index, (lower, upper) in enumerate(quantile_list):
                 data_lower = apply_transform(group, quantity_name, lower)
                 data_upper = apply_transform(group, quantity_name, upper)
@@ -522,25 +530,43 @@ class PlotRendererPipeline:
                     q=quantity_label,
                     c=credible_intervals,
                 )
+
                 plot_kwargs = {"label": label, **i_kwargs}
-                if index != len(quantile_list) - 1:
+                if index != 0:
                     plot_kwargs["label"] = "_nolegend_"
 
+                if facecolor is not None:
+                    plot_kwargs["facecolor"] = facecolor
+
+                if edgecolor is not None:
+                    plot_kwargs["edgecolor"] = edgecolor
+
                 if style == "bar":
-                    ax.bar(
+                    bar_result = ax.bar(
                         group["time"],
                         height=data_upper - data_lower,
                         bottom=data_lower,
                         **plot_kwargs,
                     )
+
+                    facecolor = bar_result.patches[0].get_facecolor()
+                    edgecolor = bar_result.patches[0].get_edgecolor()
+
+                    # If there is no edge color, an RGBA 4-tuple of zeros is returned.
+                    # However if this is passed to bar() then the alpha keyword argument
+                    # overwrites this alpha value, yielding an unwanted black edge.
+                    if edgecolor == (0.0, 0.0, 0.0, 0.0):
+                        edgecolor = "none"
                 else:
-                    ax.fill_between(
+                    fill_result = ax.fill_between(
                         group["time"],
                         data_lower,
                         data_upper,
                         **plot_kwargs,
                     )
 
+                    facecolor = fill_result.get_facecolor()
+                    edgecolor = fill_result.get_edgecolor()
             data_median = apply_transform(group, quantity_name, "quantile_50.0")
             label = label_format.format(
                 n=location,
