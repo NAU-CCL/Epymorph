@@ -388,8 +388,8 @@ def test_quantiles_plt_group_styles(rume, filter_output):
         time=rume.time_frame.select.all(),
         quantity=rume.ipm.select.compartments("S", "I"),
         credible_intervals=[50, 100],
-        line_kwargs=[{"color": "red"}, {"color": "blue"}],
-        fill_kwargs=[{"color": "green"}, {"color": "orange"}],
+        median_kwargs=[{"color": "red"}, {"color": "blue"}],
+        interval_kwargs=[{"color": "green"}, {"color": "orange"}],
     )
     assert [line.get_color() for line in lines] == ["red", "blue", "red", "blue"]
     assert len(ax.collections) == 8
@@ -533,13 +533,16 @@ def test_quantiles_plt_default_styles(rume, filter_output):
         geo=rume.scope.select.by_state("04"),
         time=rume.time_frame.select.all(),
         quantity=rume.ipm.select.compartments("S"),
-        line_kwargs=[],
-        fill_kwargs=[],
+        median_kwargs=[],
+        interval_kwargs=[],
     )
-    assert lines[0].get_color() == "black"
+
+    first_color = plt.rcParams["axes.prop_cycle"].by_key()["color"][0]
+
+    assert lines[0].get_color() == first_color
     np.testing.assert_allclose(
         np.asarray(ax.collections[0].get_facecolor())[0],
-        (*to_rgb("tab:blue"), 0.3),
+        (*first_color, 0.3),
     )
 
 
