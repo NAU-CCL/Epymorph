@@ -178,8 +178,8 @@ class PlotRendererPipeline:
         label_format: str = "{n}: {q}: {c}",
         legend: LegendOption = "auto",
         style: Literal["fill", "bar"] = "fill",
-        fill_kwargs: list[dict] | None = None,
-        line_kwargs: list[dict] | None = None,
+        interval_kwargs: list[dict] | None = None,
+        median_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
@@ -225,7 +225,7 @@ class PlotRendererPipeline:
             How the quantiles are represented. "fill" will represent the quantiles using
             matplotlib `fill_between()` to produce continuous shaded areas. "bar" will
             use `bar()` producing individual shaded bars for each data point.
-        fill_kwargs :
+        interval_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each shaded interval. Depending on the `style` argument these
             keyword arguments will be passed to either matplotlib `fill_between()` or
@@ -234,7 +234,7 @@ class PlotRendererPipeline:
             In the "bar" plotting mode, the width keyword argument will be used to set
             the width of the horizontal median lines.
             See matplotlib documentation for the supported options.
-        line_kwargs :
+        median_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each median line. Depending on the `style` argument these
             keyword arguments will be passed to either matplotlib `plot()` or
@@ -286,8 +286,8 @@ class PlotRendererPipeline:
                 credible_intervals=credible_intervals,
                 label_format=label_format,
                 style=style,
-                fill_kwargs=fill_kwargs,
-                line_kwargs=line_kwargs,
+                interval_kwargs=interval_kwargs,
+                median_kwargs=median_kwargs,
                 ordering=ordering,
                 time_format=time_format,
                 transform=transform,
@@ -338,8 +338,8 @@ class PlotRendererPipeline:
         *,
         label_format: str = "{n}: {q}: {c}",
         style: Literal["fill", "bar"] = "fill",
-        fill_kwargs: list[dict] | None = None,
-        line_kwargs: list[dict] | None = None,
+        interval_kwargs: list[dict] | None = None,
+        median_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
@@ -373,7 +373,7 @@ class PlotRendererPipeline:
             How the quantiles are represented. "fill" will represent the quantiles using
             matplotlib `fill_between()` to produce continuous shaded areas. "bar" will
             use `bar()` producing individual shaded bars for each data point.
-        fill_kwargs :
+        interval_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each shaded interval. Depending on the `style` argument these
             keyword arguments will be passed to either matplotlib `fill_between()` or
@@ -382,7 +382,7 @@ class PlotRendererPipeline:
             In the "bar" plotting mode, the width keyword argument will be used to set
             the width of the horizontal median lines.
             See matplotlib documentation for the supported options.
-        line_kwargs :
+        median_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each median line. Depending on the `style` argument these
             keyword arguments will be passed to either matplotlib `plot()` or
@@ -427,16 +427,16 @@ class PlotRendererPipeline:
         """
 
         if style == "bar":
-            line_default = {"color": "black", "linestyle": "none"}
+            median_default = {"color": "black", "linestyle": "none"}
         else:
-            line_default = {"color": "black"}
+            median_default = {"color": "black"}
 
-        line_kwargs = _normalize_kwargs(
-            line_kwargs,
-            default=line_default,
+        median_kwargs = _normalize_kwargs(
+            median_kwargs,
+            default=median_default,
         )
-        fill_kwargs = _normalize_kwargs(
-            fill_kwargs,
+        interval_kwargs = _normalize_kwargs(
+            interval_kwargs,
             default={"facecolor": "tab:blue", "edgecolor": "tab:blue", "alpha": 0.3},
         )
 
@@ -507,10 +507,10 @@ class PlotRendererPipeline:
             return transformed_df["value"]
 
         lines = list[Line2D]()
-        for ((location, quantity_name), group), l_kwargs, f_kwargs in zip(
+        for ((location, quantity_name), group), m_kwargs, i_kwargs in zip(
             sorted(groups, key=self._sorting(q_mapping, ordering)),
-            cycle(line_kwargs),
-            cycle(fill_kwargs),
+            cycle(median_kwargs),
+            cycle(interval_kwargs),
         ):
             quantity_label = q_mapping[quantity_name]
             for index, (lower, upper) in enumerate(quantile_list):
@@ -521,7 +521,7 @@ class PlotRendererPipeline:
                     q=quantity_label,
                     c=credible_intervals,
                 )
-                plot_kwargs = {"label": label, **f_kwargs}
+                plot_kwargs = {"label": label, **i_kwargs}
                 if index != len(quantile_list) - 1:
                     plot_kwargs["label"] = "_nolegend_"
 
@@ -552,13 +552,13 @@ class PlotRendererPipeline:
                 # it is easier to convert both x and xerr to unitless data coordinates.
 
                 # Using the same width as bar() with the same default of 0.8.
-                width = f_kwargs.get("width", 0.8)
+                width = i_kwargs.get("width", 0.8)
                 lines.extend(
                     ax.errorbar(
                         ax.convert_xunits(group["time"]),
                         data_median,
                         xerr=0.5 * ax.convert_xunits(width),
-                        **{"label": label, "zorder": 100, **l_kwargs},
+                        **{"label": label, "zorder": 100, **m_kwargs},
                     )
                 )
             else:
@@ -566,7 +566,7 @@ class PlotRendererPipeline:
                     ax.plot(
                         group["time"],
                         data_median,
-                        **{"label": label, "zorder": 100, **l_kwargs},
+                        **{"label": label, "zorder": 100, **m_kwargs},
                     )
                 )
 
