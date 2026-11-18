@@ -1,4 +1,33 @@
-# Builds and releases to GitHub and PyPI whenever a "v" tag is added.
+# Builds and releases on "v" tags, or rehearses a release when run manually.
+#
+# Before running this workflow, make sure the CHANGELOG.md file has been
+# updated with the notes for the release version.
+#
+# == For a production release:
+# Push a tag with a `v` prefix, such as `v2.0.0`. The workflow will run tests,
+# build the package, publish to PyPI, and create a GitHub Release with the
+# changelog and build artifacts. The workflow will fail if any step fails, and
+# the release will not be published
+#
+# == Rehearsal releases:
+# This workflow can also be run manually to test the process. It will publish
+# to TestPyPI and create a draft GitHub Release. Note: TestPyPI uploads are
+# public and versions cannot be reused even if deleted, so use a new version
+# for subsequent rehearsals.
+#
+# For a rehearsal release:
+# Choose an appropriate and unique test version such as `2.0.0rc1`. Prepare a
+# commit containing this workflow and a changelog section for test version,
+# such as `## [2.0.0rc1] - YYYY-MM-DD`.
+# Create and push a tag matching the version, **without** the `v` prefix.
+# Run the workflow against that tag, for example from the command line:
+#
+#   git tag 2.0.0rc1
+#   git push origin refs/tags/2.0.0rc1
+#   gh workflow run release.yml --ref 2.0.0rc1
+#
+# After the workflow, check TestPyPI and the draft GitHub Release, then delete
+# the draft and the test tag.
 
 # Useful docs:
 # https://docs.astral.sh/uv/concepts/projects/build/
@@ -13,11 +42,20 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions: {}
 
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # First job: run unit tests on OS/Python matrix.
+  # 1. Run unit tests on OS/Python matrix.
   test-matrix:
     name: Test matrix
 
@@ -28,44 +66,29 @@ jobs:
         python-version: ["3.11", "3.12"]
 
     runs-on: ${{ matrix.os }}
+    env:
+      EPYMORPH_CACHE_PATH: ${{ github.workspace }}/.cache
 
     permissions:
       id-token: write  # for aws-actions/configure-aws-credentials
       contents: read  # for actions/checkout
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
       - name: Install uv
-        # zizmor: ignore[cache-poisoning] (cache usage is for testing only and cannot poison build job)
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ vars.UV_VERSION }}
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
-          cache-suffix: testing-cache  # isolate this cache for testing purposes
+          enable-cache: false
 
-      - name: Setup cache folder (bash)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          mkdir -p .cache
-          echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
-
-      - name: Setup cache folder (PowerShell)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path .cache | Out-Null
-          $cachePath = Resolve-Path .cache
-          echo "EPYMORPH_CACHE_PATH=$cachePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         if: vars.SIDELOAD_CACHE == 'true'
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_OIDC_ROLE }}
           aws-region: us-west-2
@@ -73,70 +96,163 @@ jobs:
       - name: Download cache files from S3
         if: vars.SIDELOAD_CACHE == 'true'
         run: |
-          # sync just the geography summary files, which should be sufficient for fast tests
-          aws s3 sync s3://epymorph-gha-cache .cache --exclude "*" --include "geography/us_tiger/*.tgz"
+          # Pre-warm epymorph's cache from S3 so we don't have to fetch them from source.
+          # We sync just the geography summary files, which should be sufficient for fast tests.
+          aws s3 sync s3://epymorph-gha-cache "$EPYMORPH_CACHE_PATH" --exclude "*" --include "geography/us_tiger/*.tgz"
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 
       - name: Run unit tests
-        run: uv run pytest tests/fast --vcr-mode=replay
+        run: uv run pytest tests/fast --vcr-mode=replay -W ignore::DeprecationWarning
 
-  # Second job: iff tests succeed, build and publish the release (not matrixed).
-  build-release:
-    name: Build and release
+  # 2. Build, iff tests succeed.
+  build:
+    name: Build
     runs-on: ubuntu-latest
     needs: test-matrix
-    
+
     permissions:
-      contents: write  # for actions/checkout and `gh release`
-      id-token: write  # for PyPI publishing via OIDC
+      contents: read  # for actions/checkout
 
     steps:
+      - name: Validate test tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ "$GITHUB_REF_TYPE" != "tag" || "$GITHUB_REF_NAME" == v* ]]; then
+            echo "::error::Manual runs require a non-v version tag."
+            exit 1
+          fi
+
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       
       - name: Install uv
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: false
           version: ${{ vars.UV_VERSION }}
-      
+
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 
       - name: Build project
         run: uv build
-
-      - name: Get version and extract CHANGELOG.md section
+      
+      - name: Extract version and CHANGELOG.md
         run: |
-          set -euo pipefail
-          version="$(uv run python -m setuptools_scm)"
-          echo "EPYMORPH_VERSION=$version" >> $GITHUB_ENV
+          uv run python -m setuptools_scm > ./dist/version.txt
+          version=$(cat ./dist/version.txt)
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF_NAME" != "$version" ]]; then
+            echo "::error::The test tag must match the normalized package version ($version)."
+            exit 1
+          fi
           uv run scripts/extract_changelog.py "$version" > ./dist/changelog.md
 
       - name: Build and package docs
         run: |
-          version="$EPYMORPH_VERSION"
+          version=$(cat ./dist/version.txt)
           uv run mkdocs build --site-dir "./site/${version}"
           mkdir -p dist
           tar -czf "./dist/epymorph-docs-${version}.tar.gz" -C site "${version}"
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/*
+    
+  # 3a. After build, publish to PyPI or TestPyPI.
+  publish-pypi:
+    name: Publish (PyPI / TestPyPI)
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      IS_TEST_RELEASE: ${{ github.event_name == 'workflow_dispatch' }}
+
+    environment:
+      name: release
+
+    permissions:
+      id-token: write  # for PyPI publishing via OIDC
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+          version: ${{ vars.UV_VERSION }}
+      
+      - name: Generate package attestations
+        uses: astral-sh/attest-action@39b6ce43875c196a579e31635b11aa2a2036384a # v0.0.7
+
       - name: Create PyPI Release
-        run: |  # zizmor: ignore[use-trusted-publishing] (this *is* trusted publishing)
-          version="$EPYMORPH_VERSION"
-          uv publish "dist/epymorph-${version}-py3-none-any.whl" "dist/epymorph-${version}.tar.gz"
+        if: env.IS_TEST_RELEASE != 'true'
+        run: |
+          version=$(cat ./dist/version.txt)
+          uv publish --trusted-publishing always \
+            "dist/epymorph-${version}-py3-none-any.whl" "dist/epymorph-${version}.tar.gz"
+
+      - name: Create TestPyPI Release
+        if: env.IS_TEST_RELEASE == 'true'
+        run: |
+          version=$(cat ./dist/version.txt)
+          uv publish --trusted-publishing always --publish-url https://test.pypi.org/legacy/ \
+            "dist/epymorph-${version}-py3-none-any.whl" "dist/epymorph-${version}.tar.gz"
+
+  # 3b. After build, publish as a GitHub Release.
+  publish-github:
+    name: Publish (GitHub)
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      IS_TEST_RELEASE: ${{ github.event_name == 'workflow_dispatch' }}
+
+    environment:
+      name: release
+
+    permissions:
+      contents: write  # for `gh release`
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
 
       - name: Create GitHub Release
+        if: env.IS_TEST_RELEASE != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          version="$EPYMORPH_VERSION"
+          version=$(cat ./dist/version.txt)
           notes_file="./dist/changelog.md"
           wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
           source_file="./dist/epymorph-${version}.tar.gz"
           docs_file="./dist/epymorph-docs-${version}.tar.gz"
-          gh release create "v${version}" --notes-file $notes_file $wheel_file $source_file $docs_file
+          tag="v${version}"
+          gh release create "$tag" --notes-file "$notes_file" "$wheel_file" "$source_file" "$docs_file"
+
+      - name: Create draft GitHub Release
+        if: env.IS_TEST_RELEASE == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(cat ./dist/version.txt)
+          notes_file="./dist/changelog.md"
+          wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
+          source_file="./dist/epymorph-${version}.tar.gz"
+          docs_file="./dist/epymorph-docs-${version}.tar.gz"
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --notes-file "$notes_file" "$wheel_file" "$source_file" "$docs_file"

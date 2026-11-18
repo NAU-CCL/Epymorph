@@ -6,6 +6,10 @@ on: workflow_dispatch
 
 permissions: {}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test-matrix:
     name: Test matrix
@@ -17,6 +21,8 @@ jobs:
         python-version: ["3.11", "3.12"]
 
     runs-on: ${{ matrix.os }}
+    env:
+      EPYMORPH_CACHE_PATH: ${{ github.workspace }}/.cache
 
     permissions:
       id-token: write  # for aws-actions/configure-aws-credentials
@@ -24,46 +30,34 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ vars.UV_VERSION }}
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-suffix: testing-cache  # isolate this cache for testing purposes
 
-      - name: Setup cache folder (bash)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          mkdir -p .cache
-          echo "EPYMORPH_CACHE_PATH=$(realpath .cache)" >> $GITHUB_ENV
-
-      - name: Setup cache folder (PowerShell)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path .cache | Out-Null
-          $cachePath = Resolve-Path .cache
-          echo "EPYMORPH_CACHE_PATH=$cachePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Configure AWS Credentials
         if: vars.SIDELOAD_CACHE == 'true'
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_OIDC_ROLE }}
           aws-region: us-west-2
 
       - name: Download cache files from S3
         if: vars.SIDELOAD_CACHE == 'true'
-        run: aws s3 sync s3://epymorph-gha-cache .cache
+        run: |
+          # Pre-warm epymorph's cache from S3 so we don't have to fetch them from source.
+          # We sync just the geography summary files, which should be sufficient for fast tests.
+          aws s3 sync s3://epymorph-gha-cache "$EPYMORPH_CACHE_PATH" --exclude "*" --include "geography/us_tiger/*.tgz"
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 
       - name: Run unit tests
-        run: uv run pytest tests/fast --vcr-mode=replay
+        run: uv run pytest tests/fast --vcr-mode=replay -W ignore::DeprecationWarning
