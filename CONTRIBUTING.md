@@ -81,3 +81,31 @@ Post release tasks:
 
 - Trigger a build and deploy of the documentation site to bring in the new API reference docs
 - Announce the release!
+
+## Rehearsing a release
+
+The release workflow can also be run manually to publish to TestPyPI and create
+a draft GitHub Release (which can then be manually deleted). Note: TestPyPI uploads
+are public and versions cannot be reused even if deleted, so use a new version for
+subsequent rehearsals.
+
+Required setup includes registering the package with TestPyPI and setting up
+the appropriate trusted publisher configuration.
+
+For each rehearsal:
+
+1. Choose an appropriate and unique test version, such as `2.0.0rc1`.
+1. Prepare a commit containing the workflow and a changelog section for that
+   version, such as `## [2.0.0rc1] - YYYY-MM-DD`.
+1. Create and push a tag matching that exact normalized version, **without**
+   a `v` prefix. (A `v`-prefixed tag triggers the production release workflow.)
+1. Run the workflow against that tag, for example:
+
+   ```sh
+   git tag 2.0.0rc1
+   git push origin refs/tags/2.0.0rc1
+   gh workflow run release.yml --ref 2.0.0rc1
+   ```
+
+1. Check results in TestPyPI and the draft GitHub Release, then delete the draft
+   and the test tag.
