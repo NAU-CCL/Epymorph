@@ -74,17 +74,17 @@ jobs:
       contents: read  # for actions/checkout
 
     steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Install uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ vars.UV_VERSION }}
           python-version: ${{ matrix.python-version }}
           enable-cache: false
-
-      - name: Check out code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
 
       - name: Configure AWS Credentials
         if: vars.SIDELOAD_CACHE == 'true'
@@ -239,8 +239,8 @@ jobs:
           wheel_file="./dist/epymorph-${version}-py3-none-any.whl"
           source_file="./dist/epymorph-${version}.tar.gz"
           docs_file="./dist/epymorph-docs-${version}.tar.gz"
-          tag="v${version}"
-          gh release create "$tag" --notes-file "$notes_file" "$wheel_file" "$source_file" "$docs_file"
+          gh release create "v${version}" --verify-tag \
+            --notes-file "$notes_file" "$wheel_file" "$source_file" "$docs_file"
 
       - name: Create draft GitHub Release
         if: env.IS_TEST_RELEASE == 'true'

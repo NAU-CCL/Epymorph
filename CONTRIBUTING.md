@@ -50,62 +50,93 @@ CENSUS_API_KEY=abcd1234
 
 You may need to reload VS Code first, but otherwise the values in this file will be used automatically. Of course you can set other environment variables here as well.
 
+## Versioning practices
+
+epymorph uses three-part versions such as `1.2.3` (semantic versioning). Choose
+the next version based on the most significant change since the previous stable
+release:
+
+- **Major:** `1.2.3` to `2.0.0` for breaking changes, such as removing a
+  documented API or dropping support for a Python version.
+- **Minor:** `1.2.3` to `1.3.0` for backward-compatible features.
+- **Patch:** `1.2.3` to `1.2.4` for backward-compatible fixes.
+
+Compatibility applies to documented Python APIs, command-line interfaces, and
+data formats. Consider changes to simulation behavior as well as code
+interfaces. A bug fix can change numerical results; describe such changes in
+the release notes so users can assess their impact.
+
+### Pre-releases
+
+Use beta releases to share work for testing, and release candidates when
+preparing a stable release. For example:
+
+`2.0.0b1` -> `2.0.0b2` -> `2.0.0rc1` -> `2.0.0`
+
+Pre-releases may include breaking changes between versions; call these out in
+the release notes.
+
+### Tagging release versions
+
+All release versions must be tagged in the git repository. Use the normalized
+Python version with a `v` prefix for release tags: e.g., `v2.0.0b1` or
+`v2.0.0`. Pushing a `v` tag starts the production release workflow, including
+for pre-release versions. To perform a TestPyPI rehearsal, see
+[Rehearsing a release](CONTRIBUTING.md#rehearsing-a-release).
+
+Python tools treat spellings such as `2.0.0-beta1` and `2.0.0b1` as the same
+version; using the normalized form in tags keeps release artifacts and
+automation consistent.
+
 ## Version release checklist
 
 Pre-release tasks:
 
-- Ensure all intended PRs/commits are merged to `main`
-- Ensure your local main is up to date: `git pull origin main`
-- Check for linting issues: `uv run ruff check --no-fix .`
-- Check for formatting issues: `uv run ruff format --check`
-- Check for data export issues: `uv run scripts/data_exports.py`
-- Check for dependency issues: `uv run scripts/dep_check.py`
-- Check fast tests: `uv run pytest tests/fast`
-- Check slow tests: `uv run pytest tests/slow`
-- Review docstrings for accuracy (especially anything new)
-- Check for doc build issues: `uv run mkdocs build`
-- Run numerical consistency checks including the release candidate branch
-- Add and commit the release notes to `CHANGELOG.md` under an exact
-  `## [X.Y.Z] - YYYY-MM-DD` heading
+1. Ensure all intended PRs/commits are merged to `main`
+2. Ensure your local main is up to date: `git pull origin main`
+3. Check for linting issues: `uv run ruff check --no-fix .`
+4. Check for formatting issues: `uv run ruff format --check`
+5. Check for data export issues: `uv run scripts/data_exports.py`
+6. Check for dependency issues: `uv run scripts/dep_check.py`
+7. Check fast tests: `uv run pytest tests/fast`
+8. Check slow tests: `uv run pytest tests/slow`
+9. Review docstrings for accuracy (especially anything new)
+10. Check for doc build issues: `uv run mkdocs build`
+11. Run numerical consistency checks including the release candidate branch
+12. Add and commit the release notes to `CHANGELOG.md` under an exact
+    `## [X.Y.Z] - YYYY-MM-DD` heading
 
 Release process:
 
-- Create the version tag, e.g.: `git tag v1.2.0`
-- Push the tag (to trigger the release workflow), e.g.: `git push origin v1.2.0`
-- Monitor GitHub Actions release workflow (`release.yml`)
-- Confirm the GitHub Release appears at https://github.com/NAU-CCL/Epymorph/releases
-- Confirm the PyPI release appears at https://pypi.org/project/epymorph/
-- Verify pip install epymorph==1.2.0 works in a clean environment (or trigger the installation matrix workflow)
+1. Create the version tag, e.g.: `git tag v1.2.0`
+2. Push the tag (to trigger the release workflow), e.g.: `git push origin v1.2.0`
+3. Monitor GitHub Actions release workflow (`release.yml`)
+4. Confirm the GitHub Release appears at https://github.com/NAU-CCL/Epymorph/releases
+5. Confirm the PyPI release appears at https://pypi.org/project/epymorph/
+6. Verify pip install epymorph==1.2.0 works in a clean environment
+   (or trigger the installation matrix workflow)
 
 Post release tasks:
 
-- Trigger a build and deploy of the documentation site to bring in the new API reference docs
-- Announce the release!
+1. Trigger a build and deploy of the documentation site to bring in the new API
+   reference docs.
+2. Announce the release!
 
 ## Rehearsing a release
 
-The release workflow can also be run manually to publish to TestPyPI and create
+The release workflow can be run manually, to publish to TestPyPI and create
 a draft GitHub Release (which can then be manually deleted). Note: TestPyPI uploads
 are public and versions cannot be reused even if deleted, so use a new version for
 subsequent rehearsals.
 
-Required setup includes registering the package with TestPyPI and setting up
-the appropriate trusted publisher configuration.
-
 For each rehearsal:
 
 1. Choose an appropriate and unique test version, such as `2.0.0rc1`.
-1. Prepare a commit containing the workflow and a changelog section for that
+2. Prepare a commit containing the workflow and a changelog section for that
    version, such as `## [2.0.0rc1] - YYYY-MM-DD`.
-1. Create and push a tag matching that exact normalized version, **without**
+3. Create and push a tag matching that exact normalized version, **without**
    a `v` prefix. (A `v`-prefixed tag triggers the production release workflow.)
-1. Run the workflow against that tag, for example:
-
-   ```sh
-   git tag 2.0.0rc1
-   git push origin refs/tags/2.0.0rc1
-   gh workflow run release.yml --ref 2.0.0rc1
-   ```
-
-1. Check results in TestPyPI and the draft GitHub Release, then delete the draft
-   and the test tag.
+4. Run the workflow against that tag (either in the GitHub Actions UI or the
+   github CLI).
+5. Check results in TestPyPI and the draft GitHub Release, then delete the
+   draft and the test tag.
