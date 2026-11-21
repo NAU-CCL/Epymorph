@@ -89,6 +89,25 @@ def test_basic_munge(rume, output):
     pd.testing.assert_frame_equal(actual.reset_index(drop=True), expected)
 
 
+def test_munge_weekly_event_totals(rume, output):
+    actual = munge(
+        output=output,
+        geo=rume.scope.select.by_state("04"),
+        time=rume.time_frame.select.all().group("week").agg(),
+        quantity=rume.ipm.select.events("S->I"),
+    )
+
+    expected = pd.DataFrame(
+        {
+            "time": np.array(["2020-12-28", "2021-01-04"], dtype="datetime64[s]"),
+            "geo": ["04", "04"],
+            "S → I": np.array([960, 360], dtype=np.int64),
+        }
+    )
+
+    pd.testing.assert_frame_equal(actual, expected)
+
+
 def test_munge_errors(rume, output):
     # Bad object correlation, geo
     wrong_geo = StateScope.in_states(["08"], year=2021)

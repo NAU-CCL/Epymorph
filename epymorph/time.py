@@ -640,8 +640,9 @@ class ByWeek(TimeGrouping[np.datetime64]):
 
     @override
     def map(self, dim, ticks, dates) -> NDArray[np.datetime64]:
-        delta = ByWeek._NP_START_OF_WEEK - self.start_of_week
-        result = (dates + delta).astype("datetime64[W]").astype("datetime64[D]") - delta
+        days = dates.astype("datetime64[D]", copy=False)
+        delta = np.timedelta64(ByWeek._NP_START_OF_WEEK - self.start_of_week, "D")
+        result = (days + delta).astype("datetime64[W]").astype("datetime64[D]") - delta
         return result  # type: ignore
 
 

@@ -9,6 +9,7 @@ import pytest
 from numpy.testing import assert_array_equal
 
 from epymorph.time import (
+    ByWeek,
     DateRange,
     Dim,
     EpiWeek,
@@ -221,6 +222,35 @@ class EpiWeeksTest(unittest.TestCase):
         self.assertEqual(epi_week(date(2024, 12, 28)), EpiWeek(2024, 52))
         self.assertEqual(epi_week(date(2024, 12, 29)), EpiWeek(2025, 1))
         self.assertEqual(epi_week(date(2024, 12, 31)), EpiWeek(2025, 1))
+
+
+@pytest.mark.parametrize("unit", ["D", "h", "s", "ns"])
+def test_by_week_monday_boundary(unit):
+    dates = np.array(
+        ["2026-01-04T23:59", "2026-01-05T00:00"],
+        dtype=f"datetime64[{unit}]",
+    )
+    actual = ByWeek().map(
+        dim=Dim(1, 2, 1),
+        ticks=np.arange(2, dtype=np.int64),
+        dates=dates,
+    )
+    expected = np.array(["2025-12-29", "2026-01-05"], dtype="datetime64[D]")
+    assert_array_equal(actual, expected, strict=True)
+
+
+def test_by_week_sunday_boundary():
+    dates = np.array(
+        ["2026-01-03T23:59", "2026-01-04T00:00"],
+        dtype="datetime64[s]",
+    )
+    actual = ByWeek(start_of_week=6).map(
+        dim=Dim(1, 2, 1),
+        ticks=np.arange(2, dtype=np.int64),
+        dates=dates,
+    )
+    expected = np.array(["2025-12-28", "2026-01-04"], dtype="datetime64[D]")
+    assert_array_equal(actual, expected, strict=True)
 
 
 class TestNBins(unittest.TestCase):
