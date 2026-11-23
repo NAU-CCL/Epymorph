@@ -1364,7 +1364,7 @@ class PlotRendererPipeline:
         bandwidth: float | str = "scott",
         delta_t: float | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ) -> list[Line2D]:
+    ) -> None:
         """
         Draw KDE lines onto one matplotlib `Axes`. This is a variant of the method
         `kernel_density()` that gives you more control over the rendering of a plot by
@@ -1468,7 +1468,6 @@ class PlotRendererPipeline:
             .groupby(["geo", "quantity"], sort=False)
         )
 
-        lines = list[Line2D]()
         for (group_key, group), kwargs in zip(
             sorted(groups_df, key=self._sorting(q_mapping, ordering)),
             cycle(density_kwargs),
@@ -1509,12 +1508,10 @@ class PlotRendererPipeline:
                     **{"label": label, **kwargs},
                 )
             else:
-                lines.extend(
-                    ax.plot(
-                        eval_range,
-                        values,
-                        **{"label": label, **kwargs},
-                    )
+                ax.plot(
+                    eval_range,
+                    values,
+                    **{"label": label, **kwargs},
                 )
 
-        return lines
+        return
