@@ -223,9 +223,12 @@ class PlotRendererPipeline:
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
         style :
-            How the quantiles are represented. "fill" will represent the quantiles using
-            matplotlib `fill_between()` to produce continuous shaded areas. "bar" will
-            use `bar()` producing individual shaded bars for each data point.
+            How the quantiles are represented.
+
+            - "fill" will represent the quantiles using
+            matplotlib `fill_between()` to produce continuous shaded areas.
+            - "bar" will use `bar()` producing individual shaded bars for each data
+            point.
         interval_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each shaded interval. Depending on the `style` argument these
@@ -371,9 +374,12 @@ class PlotRendererPipeline:
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{c}` for the list of credible intervals or "Median".
         style :
-            How the quantiles are represented. "fill" will represent the quantiles using
-            matplotlib `fill_between()` to produce continuous shaded areas. "bar" will
-            use `bar()` producing individual shaded bars for each data point.
+            How the quantiles are represented.
+
+            - "fill" will represent the quantiles using
+            matplotlib `fill_between()` to produce continuous shaded areas.
+            - "bar" will use `bar()` producing individual shaded bars for each data
+            point.
         interval_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each shaded interval. Depending on the `style` argument these
@@ -1239,9 +1245,9 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Produces a kernel density plot of pipeline output. The plotted line estimates
-        the probability density function of the distribution of the selected quantity
-        at a particular time among the realizations in the output. If multiple
+        Produces a kernel density plot of pipeline output. The plotted function
+        estimates the probability density function of the distribution of the selected
+        quantity at a particular time among the realizations in the output. If multiple
         quantities and/or geographies are selected, multiple densities will be plotted
         corresponding to each combination. Only a single time point or a single
         aggregation of the time axis can be used.
@@ -1269,6 +1275,12 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{t}` for the selected date range.
+        style :
+            How the probability densities are represented.
+
+            - "line" plots a line for each probability density function.
+            - "fill" produced continuous shaded areas between the horizontal axis and
+            the probability density function.
         legend :
             Whether and how to draw the plot legend.
 
@@ -1366,15 +1378,15 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Draw KDE lines onto one matplotlib `Axes`. This is a variant of the method
-        `kernel_density()` that gives you more control over the rendering of a plot by
-        letting you do most of the work with matplotlib's API. To use subplots, call
-        this method for each axes with narrowed selections.
+        Draw kernel density estimate (KDE) plots onto one matplotlib `Axes`. This is a
+        variant of the method `kernel_density()` that gives you more control over the
+        rendering of a plot by letting you do most of the work with matplotlib's API. To
+        use subplots, call this method for each axes with narrowed selections.
 
         Parameters
         ----------
         ax :
-            The plot axes on which to draw lines.
+            The plot axes on which to draw the densities.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -1390,6 +1402,12 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{t}` for the selected date range.
+        style :
+            How the probability densities are represented.
+
+            - "line" plots a line for each probability density function.
+            - "fill" produced continuous shaded areas between the horizontal axis and
+            the probability density function.
         density_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each line. The list cycles in the order defined by
@@ -1420,11 +1438,6 @@ class PlotRendererPipeline:
             - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
-
-        Returns
-        -------
-        :
-            The list of `Line2D` objects for each line drawn.
         """
 
         if delta_t is not None and (not np.isfinite(delta_t) or delta_t <= 0):
