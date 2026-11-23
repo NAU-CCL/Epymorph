@@ -9,7 +9,7 @@ from shutil import rmtree
 from sys import modules
 from tarfile import TarInfo, is_tarfile
 from tarfile import open as open_tarfile
-from typing import Callable, NamedTuple, Sequence
+from typing import Callable, NamedTuple, Sequence, TypeVar, overload
 from warnings import warn
 
 import requests
@@ -425,7 +425,33 @@ def load_file_from_cache(from_path: str | PathLike[str]) -> BytesIO:
         raise CacheMissError() from e
 
 
-def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
+FileT = TypeVar("FileT")
+
+
+@overload
+def load_or_fetch(
+    cache_path: Path,
+    fetch: Callable[[], BytesIO],
+    *,
+    map_fn: None = None,
+) -> BytesIO: ...
+
+
+@overload
+def load_or_fetch(
+    cache_path: Path,
+    fetch: Callable[[], BytesIO],
+    *,
+    map_fn: Callable[[BytesIO], FileT],
+) -> FileT: ...
+
+
+def load_or_fetch(
+    cache_path: Path,
+    fetch: Callable[[], BytesIO],
+    *,
+    map_fn: Callable[[BytesIO], FileT] | None = None,
+) -> BytesIO | FileT:
     """
     Attempt to load a file from the cache.
 
@@ -442,43 +468,83 @@ def load_or_fetch(cache_path: Path, fetch: Callable[[], BytesIO]) -> BytesIO:
         The path to the file, relative to the cache folder.
     fetch :
         The function to load the file if it's not in the cache.
+    map_fn :
+        An optional function to map the file bytes to a different type.
+        If not provided, the raw file bytes are returned.
+        If the function raises an exception, the file will not be saved to the cache.
 
     Returns
     -------
     :
-        The file bytes.
+        The file bytes or the mapped file.
     """
     cache_disabled = EPYMORPH_CACHE_DISABLED.get() or any(
         cache_path.is_relative_to(p)  # is the file's cache path in a disabled path?
         for p in EPYMORPH_CACHE_DISABLED_PATHS.get()
     )
 
+    file_bytes: BytesIO | None = None
+    is_in_cache = False
     if not cache_disabled:
         # Try to load from cache.
         try:
-            return load_file_from_cache(cache_path)
+            file_bytes = load_file_from_cache(cache_path)
+            is_in_cache = True
         except CacheMissError:
             # passing through the exception context means the cache miss
             # doesn't clutter up the exception stack if fetching the file
             # from source fails.
             pass
 
-    # On cache miss, fetch file contents.
-    file = fetch()
+    if file_bytes is None:
+        # On cache miss, fetch file contents.
+        file_bytes = fetch()
 
-    if not cache_disabled:
+    # If a mapping function was provided, apply it to the file contents.
+    result: BytesIO | FileT = file_bytes
+    if map_fn is not None:
+        try:
+            result = map_fn(file_bytes)
+        except Exception as e:
+            msg = "Unable to read file, so it will not be saved to the cache."
+            raise FileReadError(msg) from e
+
+    if not is_in_cache and not cache_disabled:
         # And attempt to save the file to the cache for next time.
         try:
-            save_file_to_cache(cache_path, file)
+            save_file_to_cache(cache_path, file_bytes)
         except FileWriteError as e:
             # Failure to save to the cache is not worth stopping the program.
             wrn = f"Unable to save file to the cache ({cache_path}). Cause:\n{e}"
             warn(wrn, CacheWarning)
 
-    return file
+    return result
 
 
-def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
+@overload
+def load_or_fetch_url(
+    url: str,
+    cache_path: Path,
+    *,
+    map_fn: None = None,
+) -> BytesIO: ...
+
+
+@overload
+def load_or_fetch_url(
+    url: str,
+    cache_path: Path,
+    *,
+    map_fn: Callable[[BytesIO], FileT],
+) -> FileT: ...
+
+
+def load_or_fetch_url(
+    url: str,
+    cache_path: Path,
+    *,
+    map_fn: Callable[[BytesIO], FileT] | None = None,
+) -> BytesIO | FileT:
     """
     Attempt to load a file from the cache.
 
@@ -495,11 +561,15 @@ def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
         The url to locate the file if it's not in the cache.
     cache_path :
         The path to the file, relative to the cache folder.
+    map_fn :
+        An optional function to map the file bytes to a different type.
+        If not provided, the raw file bytes are returned.
+        If the function raises an exception, the file will not be saved to the cache.
 
     Returns
     -------
     :
-        The file bytes.
+        The file bytes or the mapped file.
     """
 
     def fetch_url():
@@ -514,7 +584,7 @@ def load_or_fetch_url(url: str, cache_path: Path) -> BytesIO:
         response.raise_for_status()
         return BytesIO(response.content)
 
-    return load_or_fetch(cache_path, fetch_url)
+    return load_or_fetch(cache_path, fetch_url, map_fn=map_fn)
 
 
 def save_bundle_to_cache(
