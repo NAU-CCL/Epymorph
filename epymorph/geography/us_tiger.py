@@ -172,14 +172,11 @@ def _load_tiger_data(
     processing_steps = len(urls) + 1  # add one to account for the post-processing
 
     def read_file(file_bytes: BytesIO) -> pd.DataFrame | gpd.GeoDataFrame:
-        try:
-            df = gpd.read_file(
-                file_bytes,
-                ignore_geometry=ignore_geometry,
-                columns=source_fields,
-            )
-        except Exception:
-            raise
+        df = gpd.read_file(
+            file_bytes,
+            ignore_geometry=ignore_geometry,
+            columns=source_fields,
+        )
         missing_fields = sorted(set(source_fields).difference(df.columns))
         if missing_fields:
             raise GeographyError(f"Missing TIGER fields: {', '.join(missing_fields)}.")
