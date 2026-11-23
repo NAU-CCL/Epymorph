@@ -1228,8 +1228,9 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         *,
         label_format: str = "{n}: {q}: {t}",
+        style: Literal["line", "fill"] = "line",
         legend: LegendOption = "auto",
-        line_kwargs: list[dict] | None = None,
+        density_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         bandwidth: float | str = "scott",
         delta_t: float | None = None,
@@ -1276,7 +1277,7 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-        line_kwargs :
+        density_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each line. The list cycles in the order defined by
             the `ordering` parameter.
@@ -1319,7 +1320,8 @@ class PlotRendererPipeline:
                 time,
                 quantity,
                 label_format=label_format,
-                line_kwargs=line_kwargs,
+                style=style,
+                density_kwargs=density_kwargs,
                 ordering=ordering,
                 delta_t=delta_t,
                 bandwidth=bandwidth,
@@ -1356,7 +1358,8 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         *,
         label_format: str = "{n}: {q}: {t}",
-        line_kwargs: list[dict] | None = None,
+        style: Literal["line", "fill"] = "line",
+        density_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         bandwidth: float | str = "scott",
         delta_t: float | None = None,
@@ -1387,7 +1390,7 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{t}` for the selected date range.
-        line_kwargs :
+        density_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each line. The list cycles in the order defined by
             the `ordering` parameter.
@@ -1427,7 +1430,12 @@ class PlotRendererPipeline:
         if delta_t is not None and (not np.isfinite(delta_t) or delta_t <= 0):
             raise ValueError("delta_t must be positive and finite.")
 
-        line_kwargs = _normalize_kwargs(line_kwargs)
+        if style == "fill":
+            density_default = {"alpha": 0.3}
+        else:
+            density_default = {}
+
+        density_kwargs = _normalize_kwargs(density_kwargs, default=density_default)
 
         data_df = munge_pipeline_output(
             output=self.output,
@@ -1463,7 +1471,7 @@ class PlotRendererPipeline:
         lines = list[Line2D]()
         for (group_key, group), kwargs in zip(
             sorted(groups_df, key=self._sorting(q_mapping, ordering)),
-            cycle(line_kwargs),
+            cycle(density_kwargs),
         ):
             location, quantity_name = cast(tuple[str, str], group_key)
             label = label_format.format(
@@ -1491,12 +1499,22 @@ class PlotRendererPipeline:
             d_max = data.max()
             step = delta_t if delta_t is not None else (d_max - d_min) / 100
             eval_range = np.arange(d_min, d_max + step, step)
-            lines.extend(
-                ax.plot(
+
+            values = density.evaluate(eval_range)
+            if style == "fill":
+                ax.fill_between(
                     eval_range,
-                    density.evaluate(eval_range),
+                    np.zeros_like(values),
+                    values,
                     **{"label": label, **kwargs},
                 )
-            )
+            else:
+                lines.extend(
+                    ax.plot(
+                        eval_range,
+                        values,
+                        **{"label": label, **kwargs},
+                    )
+                )
 
         return lines
