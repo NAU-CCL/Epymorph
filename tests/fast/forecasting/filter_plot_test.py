@@ -818,7 +818,7 @@ def test_kde_plt_transform_values(rume, filter_output, bandwidth):
     for realization in range(3):
         filter_output.compartments[realization, ...] = realization
     _, ax = plt.subplots()
-    lines = filter_output.plot.kernel_density_plt(
+    filter_output.plot.kernel_density_plt(
         ax,
         geo=rume.scope.select.by_state("04"),
         time=rume.time_frame.select.days(0, 0),
@@ -827,6 +827,7 @@ def test_kde_plt_transform_values(rume, filter_output, bandwidth):
         delta_t=0.5,
         transform=lambda data: data.assign(value=data["value"] + 0.5),
     )
+    lines = np.array(ax.lines)
     expected_x = [0.5, 1, 1.5, 2, 2.5]
     np.testing.assert_allclose(lines[0].get_xdata(), expected_x)
     np.testing.assert_allclose(
@@ -843,13 +844,14 @@ def test_kde_plt_sampling_interval(rume, filter_output, delta_t, expected_x):
     for realization in range(3):
         filter_output.compartments[realization, ...] = realization
     _, ax = plt.subplots()
-    lines = filter_output.plot.kernel_density_plt(
+    filter_output.plot.kernel_density_plt(
         ax,
         geo=rume.scope.select.by_state("04"),
         time=rume.time_frame.select.days(0, 0),
         quantity=rume.ipm.select.compartments("S"),
         delta_t=delta_t,
     )
+    lines = np.array(ax.lines)
     np.testing.assert_allclose(lines[0].get_xdata(), expected_x)
 
 
@@ -858,13 +860,14 @@ def test_kde_plt_subplots_and_parameters(rume, filter_output):
     values[:, :, :] = np.arange(3)[:, np.newaxis, np.newaxis]
     _, axes = plt.subplots(1, 2)
     for ax, state, expected in zip(axes, ("04", "35"), ("AZ", "NM")):
-        lines = filter_output.plot.kernel_density_plt(
+        filter_output.plot.kernel_density_plt(
             ax,
             geo=rume.scope.select.by_state(state),
             time=rume.time_frame.select.days(0, 0),
             quantity=filter_output.select_parameter.by_name("test_0"),
             label_format="{q} @ {n}: {t}",
         )
+        lines = np.array(ax.lines)
         assert len(lines) == 1
         assert lines[0].get_label() == (f"*::*::test_0 @ {expected}: 2021-01-01")
 
@@ -874,13 +877,14 @@ def test_kde_plt_geography_and_time_aggregations(rume, filter_output):
         filter_output.compartments[realization, ...] = realization
         filter_output.compartments[realization, ..., 1] = 3 * realization
     _, ax = plt.subplots()
-    lines = filter_output.plot.kernel_density_plt(
+    filter_output.plot.kernel_density_plt(
         ax,
         geo=rume.scope.select.all().sum(),
         time=rume.time_frame.select.all().agg(),
         quantity=rume.ipm.select.compartments("S", "I"),
         delta_t=2,
     )
+    lines = np.array(ax.lines)
     assert [line.get_label() for line in lines] == [
         "*: S: 2021-01-01/2021-01-04",
         "*: I: 2021-01-01/2021-01-04",
@@ -906,13 +910,14 @@ def test_kde_plt_grouped_quantities(multistrata_filter_output):
         )
 
     _, ax = plt.subplots()
-    lines = output.plot.kernel_density_plt(
+    output.plot.kernel_density_plt(
         ax,
         geo=rume.scope.select.by_state("04"),
         time=rume.time_frame.select.days(0, 0),
         quantity=rume.ipm.select.compartments("S_*", "I_*").group(strata=True).sum(),
         delta_t=3,
     )
+    lines = np.array(ax.lines)
     assert [line.get_label() for line in lines] == [
         "AZ: S: 2021-01-01",
         "AZ: I: 2021-01-01",
