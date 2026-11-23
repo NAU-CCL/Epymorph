@@ -22,11 +22,9 @@ from typing import (
     overload,
 )
 
+import geopandas as gpd
 import numpy as np
-from geopandas import GeoDataFrame
-from geopandas import read_file as gp_read_file
-from pandas import DataFrame
-from pandas import concat as pd_concat
+import pandas as pd
 from typing_extensions import override
 
 from epymorph.adrio.adrio import ProgressCallback
@@ -147,7 +145,7 @@ def _load_tiger_data(
     *,
     ignore_geometry: Literal[True],
     progress: ProgressCallback | None = None,
-) -> DataFrame: ...
+) -> pd.DataFrame: ...
 
 
 @overload
@@ -156,7 +154,7 @@ def _load_tiger_data(
     *,
     ignore_geometry: Literal[False],
     progress: ProgressCallback | None = None,
-) -> GeoDataFrame: ...
+) -> gpd.GeoDataFrame: ...
 
 
 def _load_tiger_data(
@@ -164,36 +162,52 @@ def _load_tiger_data(
     *,
     ignore_geometry: bool,
     progress: ProgressCallback | None = None,
-) -> DataFrame | GeoDataFrame:
+) -> pd.DataFrame | gpd.GeoDataFrame:
     """
     Load TIGER files either from disk cache or the network.
     The result is processed and returned as one large DataFrame.
     """
     _, urls, columns, _ = config
+    source_fields = [name for name, _ in columns]
     processing_steps = len(urls) + 1  # add one to account for the post-processing
+
+    def read_file(file_bytes: BytesIO) -> pd.DataFrame | gpd.GeoDataFrame:
+        try:
+            df = gpd.read_file(
+                file_bytes,
+                ignore_geometry=ignore_geometry,
+                columns=source_fields,
+            )
+        except Exception:
+            raise
+        missing_fields = sorted(set(source_fields).difference(df.columns))
+        if missing_fields:
+            raise GeographyError(f"Missing TIGER fields: {', '.join(missing_fields)}.")
+        return df
+
     try:
         # Fetch the contents of each file and read them as a DataFrame.
-        dfs = list[DataFrame]()
+        dfs = list[pd.DataFrame]()
         for i, u in enumerate(urls):
-            u_df = gp_read_file(
-                load_or_fetch_url(u, _url_to_cache_path(u)),
-                ignore_geometry=ignore_geometry,
-                include_fields=[c for c, _ in columns],
+            df = load_or_fetch_url(
+                url=u,
+                cache_path=_url_to_cache_path(u),
+                map_fn=read_file,
             )
-            dfs.append(u_df)
+            dfs.append(df)
             if progress is not None:
                 progress((i + 1) / processing_steps, None)
 
         # Concat the DataFrames, fix column names, and data quality checks.
         combined_df = (
-            pd_concat(dfs, ignore_index=True)
+            pd.concat(dfs, ignore_index=True)
             .rename(columns=dict(columns))
             .drop_duplicates()
         )
         # Drop records that aren't in our supported set of states.
         selection = combined_df["GEOID"].apply(STATE.truncate).isin(_SUPPORTED_STATES)
         selected_df = combined_df[selection]
-        return selected_df if ignore_geometry else GeoDataFrame(selected_df)
+        return selected_df if ignore_geometry else gpd.GeoDataFrame(selected_df)
     except Exception as e:
         msg = "Unable to retrieve TIGER files for US Census geography."
         raise GeographyError(msg) from e
@@ -354,7 +368,7 @@ def _get_states_config(year: int) -> _DataConfig:
 def get_states_geo(
     year: int,
     progress: ProgressCallback | None = None,
-) -> GeoDataFrame:
+) -> gpd.GeoDataFrame:
     """
     Get all supported US states and territories for the given census year, with
     geography.
@@ -378,7 +392,7 @@ def get_states_geo(
 def get_states_info(
     year: int,
     progress: ProgressCallback | None = None,
-) -> DataFrame:
+) -> pd.DataFrame:
     """
     Get all US states and territories for the given census year, without geography.
 
@@ -541,7 +555,7 @@ def _get_counties_config(year: int) -> _DataConfig:
 def get_counties_geo(
     year: int,
     progress: ProgressCallback | None = None,
-) -> GeoDataFrame:
+) -> gpd.GeoDataFrame:
     """
     Get all supported US counties and county-equivalents for the given census year,
     with geography.
@@ -565,7 +579,7 @@ def get_counties_geo(
 def get_counties_info(
     year: int,
     progress: ProgressCallback | None = None,
-) -> DataFrame:
+) -> pd.DataFrame:
     """
     Get all US counties and county-equivalents for the given census year,
     without geography.
@@ -744,7 +758,7 @@ def get_tracts_geo(
     year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
-) -> GeoDataFrame:
+) -> gpd.GeoDataFrame:
     """
     Get all supported US census tracts for the given census year, with geography.
 
@@ -770,7 +784,7 @@ def get_tracts_info(
     year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
-) -> DataFrame:
+) -> pd.DataFrame:
     """
     Get all US census tracts for the given census year, without geography.
 
@@ -893,7 +907,7 @@ def get_block_groups_geo(
     year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
-) -> GeoDataFrame:
+) -> gpd.GeoDataFrame:
     """
     Get all supported US census block groups for the given census year, with geography.
 
@@ -920,7 +934,7 @@ def get_block_groups_info(
     year: int,
     state_id: Sequence[str] | None = None,
     progress: ProgressCallback | None = None,
-) -> DataFrame:
+) -> pd.DataFrame:
     """
     Get all US census block groups for the given census year, without geography.
 
