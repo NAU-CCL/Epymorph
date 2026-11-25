@@ -33,11 +33,12 @@ def _normalize_kwargs(
     *,
     default: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    default = default or {}
     if mpl_kwargs is None or len(mpl_kwargs) == 0:
-        mpl_kwargs = [default or {}]
+        mpl_kwargs = [default]
     else:
         # copy to avoid mutating caller's dicts
-        mpl_kwargs = [{**kwargs} for kwargs in mpl_kwargs]
+        mpl_kwargs = [{**default, **kwargs} for kwargs in mpl_kwargs]
 
     for kwargs in mpl_kwargs:
         if "c" in kwargs:
@@ -177,8 +178,9 @@ class PlotRendererPipeline:
         *,
         label_format: str = "{n}: {q}: {c}",
         legend: LegendOption = "auto",
-        fill_kwargs: list[dict] | None = None,
-        line_kwargs: list[dict] | None = None,
+        style: Literal["fill", "bar"] = "fill",
+        interval_kwargs: list[dict] | None = None,
+        median_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         title: str | None = None,
@@ -220,16 +222,28 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-        fill_kwargs :
+        style :
+            How the quantiles are represented.
+
+            - "fill" will represent the quantiles using
+            matplotlib `fill_between()` to produce continuous shaded areas.
+            - "bar" will use `bar()` producing individual shaded bars for each data
+            point.
+        interval_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each shaded interval. Each dictionary applies to all intervals
-            in one location/quantity group; the list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each shaded interval. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `fill_between()` or
+            `bar()`. Each dictionary applies to all intervals in one location/quantity
+            group; the list cycles in the order defined by the `ordering` parameter.
+            In the "bar" plotting mode, the width keyword argument will be used to set
+            the width of the horizontal median lines.
             See matplotlib documentation for the supported options.
-        line_kwargs :
+        median_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each median line. The list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each median line. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `plot()` or
+            `errorbar()` (the latter of which is used to achieve the horizontal median
+            lines.) The list cycles in the order defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
         ordering :
             Whether location or quantity takes priority when ordering groups.
@@ -275,8 +289,9 @@ class PlotRendererPipeline:
                 quantity,
                 credible_intervals=credible_intervals,
                 label_format=label_format,
-                fill_kwargs=fill_kwargs,
-                line_kwargs=line_kwargs,
+                style=style,
+                interval_kwargs=interval_kwargs,
+                median_kwargs=median_kwargs,
                 ordering=ordering,
                 time_format=time_format,
                 transform=transform,
@@ -326,8 +341,9 @@ class PlotRendererPipeline:
         credible_intervals: Sequence[float] | None = None,
         *,
         label_format: str = "{n}: {q}: {c}",
-        fill_kwargs: list[dict] | None = None,
-        line_kwargs: list[dict] | None = None,
+        style: Literal["fill", "bar"] = "fill",
+        interval_kwargs: list[dict] | None = None,
+        median_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         time_format: TimeFormatOption = "auto",
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
@@ -357,16 +373,28 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{c}` for the list of credible intervals or "Median".
-        fill_kwargs :
+        style :
+            How the quantiles are represented.
+
+            - "fill" will represent the quantiles using
+            matplotlib `fill_between()` to produce continuous shaded areas.
+            - "bar" will use `bar()` producing individual shaded bars for each data
+            point.
+        interval_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each shaded interval. Each dictionary applies to all intervals
-            in one location/quantity group; the list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each shaded interval. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `fill_between()` or
+            `bar()`. Each dictionary applies to all intervals in one location/quantity
+            group; the list cycles in the order defined by the `ordering` parameter.
+            In the "bar" plotting mode, the width keyword argument will be used to set
+            the width of the horizontal median lines.
             See matplotlib documentation for the supported options.
-        line_kwargs :
+        median_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
-            that draws each median line. The list cycles in the order defined by
-            the `ordering` parameter.
+            that draws each median line. Depending on the `style` argument these
+            keyword arguments will be passed to either matplotlib `plot()` or
+            `errorbar()` (the latter of which is used to achieve the horizontal median
+            lines.) The list cycles in the order defined by the `ordering` parameter.
             See matplotlib documentation for the supported options.
         ordering :
             Whether location or quantity takes priority when ordering groups.
@@ -404,13 +432,19 @@ class PlotRendererPipeline:
             The list of `Line2D` objects for each median line drawn. Shaded intervals
             can be accessed through the axes' collections.
         """
-        line_kwargs = _normalize_kwargs(
-            line_kwargs,
-            default={"color": "black"},
+
+        if style == "bar":
+            median_default = {"linestyle": "none"}
+        else:
+            median_default = {}
+
+        median_kwargs = _normalize_kwargs(
+            median_kwargs,
+            default=median_default,
         )
-        fill_kwargs = _normalize_kwargs(
-            fill_kwargs,
-            default={"color": "tab:blue", "alpha": 0.3},
+        interval_kwargs = _normalize_kwargs(
+            interval_kwargs,
+            default={"alpha": 0.3},
         )
 
         if credible_intervals is None or len(credible_intervals) == 0:
@@ -480,12 +514,20 @@ class PlotRendererPipeline:
             return transformed_df["value"]
 
         lines = list[Line2D]()
-        for ((location, quantity_name), group), l_kwargs, f_kwargs in zip(
+        for ((location, quantity_name), group), m_kwargs, i_kwargs in zip(
             sorted(groups, key=self._sorting(q_mapping, ordering)),
-            cycle(line_kwargs),
-            cycle(fill_kwargs),
+            cycle(median_kwargs),
+            cycle(interval_kwargs),
         ):
             quantity_label = q_mapping[quantity_name]
+
+            # For each location/quantity group, one interval is plotted first, then the
+            # actual facecolor and edgecolor are saved and reused to subsequent
+            # intervals. This is done to utilize matplotlib's default colors and
+            # maintain compatibility with styles while avoiding incrementing
+            # matplotlib's internal color cycles when plotting multiple intervals.
+            facecolor = None
+            edgecolor = None
             for index, (lower, upper) in enumerate(quantile_list):
                 data_lower = apply_transform(group, quantity_name, lower)
                 data_upper = apply_transform(group, quantity_name, upper)
@@ -494,29 +536,72 @@ class PlotRendererPipeline:
                     q=quantity_label,
                     c=credible_intervals,
                 )
-                plot_kwargs = {"label": label, **f_kwargs}
-                if index != len(quantile_list) - 1:
-                    plot_kwargs["label"] = "_nolegend_"
-                ax.fill_between(
-                    group["time"],
-                    data_lower,
-                    data_upper,
-                    **plot_kwargs,
-                )
 
+                plot_kwargs = {"label": label, **i_kwargs}
+                if index != 0:
+                    plot_kwargs["label"] = "_nolegend_"
+
+                if facecolor is not None:
+                    plot_kwargs["facecolor"] = facecolor
+
+                if edgecolor is not None:
+                    plot_kwargs["edgecolor"] = edgecolor
+
+                if style == "bar":
+                    bar_result = ax.bar(
+                        group["time"],
+                        height=data_upper - data_lower,
+                        bottom=data_lower,
+                        **plot_kwargs,
+                    )
+
+                    facecolor = bar_result.patches[0].get_facecolor()
+                    edgecolor = bar_result.patches[0].get_edgecolor()
+
+                    # If there is no edge color, an RGBA 4-tuple of zeros is returned.
+                    # However if this is passed to bar() then the alpha keyword argument
+                    # overwrites this alpha value, yielding an unwanted black edge.
+                    if edgecolor == (0.0, 0.0, 0.0, 0.0):
+                        edgecolor = "none"
+                else:
+                    fill_result = ax.fill_between(
+                        group["time"],
+                        data_lower,
+                        data_upper,
+                        **plot_kwargs,
+                    )
+
+                    facecolor = fill_result.get_facecolor()
+                    edgecolor = fill_result.get_edgecolor()
             data_median = apply_transform(group, quantity_name, "quantile_50.0")
             label = label_format.format(
                 n=location,
                 q=quantity_label,
                 c="Median",
             )
-            lines.extend(
-                ax.plot(
-                    group["time"],
-                    data_median,
-                    **{"label": label, "zorder": 100, **l_kwargs},
+
+            if style == "bar":
+                # The xerr argument of errorbar behaves strangely with units. Therefore
+                # it is easier to convert both x and xerr to unitless data coordinates.
+
+                # Using the same width as bar() with the same default of 0.8.
+                width = i_kwargs.get("width", 0.8)
+                lines.extend(
+                    ax.errorbar(
+                        ax.convert_xunits(group["time"]),
+                        data_median,
+                        xerr=0.5 * ax.convert_xunits(width),
+                        **{"label": label, "zorder": 100, **m_kwargs},
+                    )
                 )
-            )
+            else:
+                lines.extend(
+                    ax.plot(
+                        group["time"],
+                        data_median,
+                        **{"label": label, "zorder": 100, **m_kwargs},
+                    )
+                )
 
         return lines
 
@@ -1149,8 +1234,9 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         *,
         label_format: str = "{n}: {q}: {t}",
+        style: Literal["line", "fill"] = "line",
         legend: LegendOption = "auto",
-        line_kwargs: list[dict] | None = None,
+        density_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         bandwidth: float | str = "scott",
         delta_t: float | None = None,
@@ -1159,9 +1245,9 @@ class PlotRendererPipeline:
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     ) -> None:
         """
-        Produces a kernel density plot of pipeline output. The plotted line estimates
-        the probability density function of the distribution of the selected quantity
-        at a particular time among the realizations in the output. If multiple
+        Produces a kernel density plot of pipeline output. The plotted function
+        estimates the probability density function of the distribution of the selected
+        quantity at a particular time among the realizations in the output. If multiple
         quantities and/or geographies are selected, multiple densities will be plotted
         corresponding to each combination. Only a single time point or a single
         aggregation of the time axis can be used.
@@ -1189,6 +1275,12 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{t}` for the selected date range.
+        style :
+            How the probability densities are represented.
+
+            - "line" plots a line for each probability density function.
+            - "fill" produced continuous shaded areas between the horizontal axis and
+            the probability density function.
         legend :
             Whether and how to draw the plot legend.
 
@@ -1197,7 +1289,7 @@ class PlotRendererPipeline:
             - "off" forces the legend to not be drawn
             - "outside" forces the legend to be drawn next to the plot area
             (instead of inside it)
-        line_kwargs :
+        density_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each line. The list cycles in the order defined by
             the `ordering` parameter.
@@ -1240,7 +1332,8 @@ class PlotRendererPipeline:
                 time,
                 quantity,
                 label_format=label_format,
-                line_kwargs=line_kwargs,
+                style=style,
+                density_kwargs=density_kwargs,
                 ordering=ordering,
                 delta_t=delta_t,
                 bandwidth=bandwidth,
@@ -1277,22 +1370,23 @@ class PlotRendererPipeline:
         quantity: QuantityStrategy | ParameterStrategy,
         *,
         label_format: str = "{n}: {q}: {t}",
-        line_kwargs: list[dict] | None = None,
+        style: Literal["line", "fill"] = "line",
+        density_kwargs: list[dict] | None = None,
         ordering: OrderingOption = "location",
         bandwidth: float | str = "scott",
         delta_t: float | None = None,
         transform: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-    ) -> list[Line2D]:
+    ) -> None:
         """
-        Draw KDE lines onto one matplotlib `Axes`. This is a variant of the method
-        `kernel_density()` that gives you more control over the rendering of a plot by
-        letting you do most of the work with matplotlib's API. To use subplots, call
-        this method for each axes with narrowed selections.
+        Draw kernel density estimate (KDE) plots onto one matplotlib `Axes`. This is a
+        variant of the method `kernel_density()` that gives you more control over the
+        rendering of a plot by letting you do most of the work with matplotlib's API. To
+        use subplots, call this method for each axes with narrowed selections.
 
         Parameters
         ----------
         ax :
-            The plot axes on which to draw lines.
+            The plot axes on which to draw the densities.
         geo :
             The geographic selection to make on the output data.
         time :
@@ -1308,7 +1402,13 @@ class PlotRendererPipeline:
             the string will be used in a call to `format()` with the replacement
             variables `{n}` for the name of the geo node, `{q}` for the name of the
             quantity, and `{t}` for the selected date range.
-        line_kwargs :
+        style :
+            How the probability densities are represented.
+
+            - "line" plots a line for each probability density function.
+            - "fill" produced continuous shaded areas between the horizontal axis and
+            the probability density function.
+        density_kwargs :
             A list of keyword arguments to be passed to the matplotlib function
             that draws each line. The list cycles in the order defined by
             the `ordering` parameter.
@@ -1338,17 +1438,17 @@ class PlotRendererPipeline:
             - "geo": the location label (same value per group)
             - "quantity": the label of the quantity (same value per group)
             - "value": the data column
-
-        Returns
-        -------
-        :
-            The list of `Line2D` objects for each line drawn.
         """
 
         if delta_t is not None and (not np.isfinite(delta_t) or delta_t <= 0):
             raise ValueError("delta_t must be positive and finite.")
 
-        line_kwargs = _normalize_kwargs(line_kwargs)
+        if style == "fill":
+            density_default = {"alpha": 0.3}
+        else:
+            density_default = {}
+
+        density_kwargs = _normalize_kwargs(density_kwargs, default=density_default)
 
         data_df = munge_pipeline_output(
             output=self.output,
@@ -1381,10 +1481,9 @@ class PlotRendererPipeline:
             .groupby(["geo", "quantity"], sort=False)
         )
 
-        lines = list[Line2D]()
         for (group_key, group), kwargs in zip(
             sorted(groups_df, key=self._sorting(q_mapping, ordering)),
-            cycle(line_kwargs),
+            cycle(density_kwargs),
         ):
             location, quantity_name = cast(tuple[str, str], group_key)
             label = label_format.format(
@@ -1412,12 +1511,20 @@ class PlotRendererPipeline:
             d_max = data.max()
             step = delta_t if delta_t is not None else (d_max - d_min) / 100
             eval_range = np.arange(d_min, d_max + step, step)
-            lines.extend(
-                ax.plot(
+
+            values = density.evaluate(eval_range)
+            if style == "fill":
+                ax.fill_between(
                     eval_range,
-                    density.evaluate(eval_range),
+                    np.zeros_like(values),
+                    values,
                     **{"label": label, **kwargs},
                 )
-            )
+            else:
+                ax.plot(
+                    eval_range,
+                    values,
+                    **{"label": label, **kwargs},
+                )
 
-        return lines
+        return
