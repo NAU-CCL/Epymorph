@@ -192,6 +192,40 @@ class TestProportionalInitializer(unittest.TestCase):
         actual = init.Proportional(ratios).with_context(*_eval_context()).evaluate()
         np.testing.assert_array_equal(actual, expected)
 
+    def test_shape_adapt_n_equals_c(self):
+        # Regression test for #242: C-length ratios when N == C must broadcast
+        # across the N-axis (rows), not the C-axis (columns).
+        scope = CustomScope(["A", "B", "C"])
+        name = AbsoluteName("gpm:all", "init", "init")
+        params = {"population": np.array([100, 200, 300], dtype=SimDType)}
+        time_frame = TimeFrame.of("2020-01-01", 10)
+        ipm = MagicMock(spec=BaseCompartmentModel)
+        ipm.num_compartments = 3
+        ipm.num_events = 2
+        ipm.compartments = quick_compartments("S I R")
+        ipm.select = QuantitySelector(ipm)
+        ctx = (name, params, scope, time_frame, ipm, np.random.default_rng(1))
+
+        actual_zero = init.Proportional([0.9, 0.1, 0.0]).with_context(*ctx).evaluate()
+        expected_zero = np.array([[90, 10, 0], [180, 20, 0], [270, 30, 0]])
+        np.testing.assert_array_equal(actual_zero, expected_zero)
+
+        actual_pos = init.Proportional([0.5, 0.3, 0.2]).with_context(*ctx).evaluate()
+        expected_pos = np.array([[50, 30, 20], [100, 60, 40], [150, 90, 60]])
+        np.testing.assert_array_equal(actual_pos, expected_pos)
+
+    def test_bad_shapes(self):
+        # N-length array when N != C, scalar, wrong 2D shape, and booleans must fail.
+        for bad_ratios in (
+            [0.2, 0.2, 0.2, 0.2, 0.2],
+            0.5,
+            [[0.5, 0.5]] * 5,
+            [True, False, True],
+        ):
+            with self.assertRaises(InitError) as cm:
+                init.Proportional(bad_ratios).with_context(*_eval_context()).evaluate()
+            self.assertIn("float64", str(cm.exception))
+
     def test_bad_args(self):
         with self.assertRaises(InitError):
             # row sums to zero!

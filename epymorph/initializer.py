@@ -20,7 +20,14 @@ from epymorph.error import InitError
 from epymorph.simulation import (
     SimulationFunction,
 )
-from epymorph.util import Matcher, NumpyTypeError, check_ndarray, dtype_name, match
+from epymorph.util import (
+    Matcher,
+    NumpyTypeError,
+    check_ndarray,
+    dtype_name,
+    is_numeric,
+    match,
+)
 
 
 class Initializer(SimulationFunction[SimArray], ABC):
@@ -116,7 +123,7 @@ class Initializer(SimulationFunction[SimArray], ABC):
                 f"Initializer {self.__class__.__name__} `{arg_name}` is not valid, "
                 "check that you have provided the expected number and type of values "
                 "for this simulation.\n"
-                f"Expected: {shape}-shaped array of {dtype_name(np.dtype(SimDType))}"
+                f"Expected: {shape}-shaped array of {dtype_name(np.dtype(dtype))}"
             )
             raise InitError(err)
 
@@ -250,13 +257,29 @@ class Proportional(Initializer):
         :
             The initial populations for each node and IPM compartment.
         """
-        ratios = self._condition_input_array(
-            self.ratios,
-            "ratios",
-            dtype=np.float64,
-            shape=Shapes.NxC,
-            exact=False,
-        )
+        N, C = self._nxc
+        try:
+            raw = np.array(self.ratios)
+            if not is_numeric(raw):
+                raise TypeError()
+            ratios = raw.astype(
+                dtype=np.float64,
+                copy=True,
+                casting="safe",
+            )
+            if ratios.shape == (C,):
+                ratios = np.broadcast_to(ratios, (N, C))
+            elif ratios.shape != (N, C):
+                raise ValueError()
+        except (ValueError, TypeError):
+            err = (
+                f"Initializer {self.__class__.__name__} `ratios` is not valid, "
+                "check that you have provided the expected number and type of values "
+                "for this simulation.\n"
+                f"Expected: ({C},)- or ({N}, {C})-shaped array of "
+                f"{dtype_name(np.dtype(np.float64))}"
+            )
+            raise InitError(err)
 
         row_sums = cast(NDArray[np.float64], np.sum(ratios, axis=1, dtype=np.float64))
         if np.any(row_sums <= 0):
